@@ -1,23 +1,18 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "openr/common/OpenrEventBase.h"
-
 #include <folly/fibers/FiberManagerMap.h>
+#include <folly/logging/xlog.h>
+
+#include <openr/common/OpenrEventBase.h>
 
 namespace openr {
 
 namespace {
-std::chrono::seconds
-getElapsedSeconds() {
-  return std::chrono::duration_cast<std::chrono::seconds>(
-      std::chrono::system_clock::now().time_since_epoch());
-}
-
 int
 getZmqSocketFd(uintptr_t socketPtr) {
   int socketFd{-1};
@@ -38,12 +33,17 @@ getFmOptions() {
 } // namespace
 
 EventBaseStopSignalHandler::EventBaseStopSignalHandler(folly::EventBase* evb)
-    : folly::AsyncSignalHandler(evb) {}
+    : folly::AsyncSignalHandler(evb) {
+  registerSignalHandler(SIGINT);
+  registerSignalHandler(SIGQUIT);
+  registerSignalHandler(SIGTERM);
+}
 
 void
 EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
-  LOG(INFO) << "Caught signal: " << signal << ". Stopping event base ...";
+  XLOG(INFO) << "Caught signal: " << signal << ". Stopping openr event-base...";
   getEventBase()->terminateLoopSoon();
+  XLOG(INFO) << "Openr event-base stopped";
 }
 
 OpenrEventBase::ZmqEventHandler::ZmqEventHandler(
@@ -182,8 +182,7 @@ OpenrEventBase::scheduleTimeoutAt(
 }
 
 void
-OpenrEventBase::addSocketFd(
-    int socketFd, int events, fbzmq::SocketCallback callback) {
+OpenrEventBase::addSocketFd(int socketFd, int events, SocketCallback callback) {
   if (fdHandlers_.count(socketFd)) {
     throw std::runtime_error("Socket-fd is already registered");
   }

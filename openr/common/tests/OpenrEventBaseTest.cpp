@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,8 +7,6 @@
 
 #include <sys/eventfd.h>
 
-#include <fbzmq/zmq/Context.h>
-#include <fbzmq/zmq/Socket.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
 #include <folly/synchronization/Baton.h>
@@ -51,9 +49,8 @@ TEST(OpenrEventBaseTest, FiberTest) {
   folly::Promise<folly::Unit> p1;
   auto sf = p1.getSemiFuture();
   OpenrEventBase evb;
-  evb.addFiberTask([p = std::move(p1)]() mutable noexcept {
-    p.setValue(folly::Unit());
-  });
+  evb.addFiberTask(
+      [p = std::move(p1)]() mutable noexcept { p.setValue(folly::Unit()); });
   evb.getEvb()->loopOnce();
   EXPECT_TRUE(sf.valid());
   EXPECT_TRUE(sf.isReady());
@@ -62,9 +59,8 @@ TEST(OpenrEventBaseTest, FiberTest) {
   // test addFiberTaskAndGetFuture()
   folly::Promise<folly::Unit> p2;
   folly::Future<folly::Unit> f;
-  f = evb.addFiberTaskFuture([p = std::move(p2)]() mutable noexcept {
-    p.setValue(folly::Unit());
-  });
+  f = evb.addFiberTaskFuture(
+      [p = std::move(p2)]() mutable noexcept { p.setValue(folly::Unit()); });
   EXPECT_TRUE(f.valid());
   EXPECT_FALSE(f.isReady());
 
@@ -227,7 +223,7 @@ TEST_F(OpenrEventBaseTestFixture, SocketFdPollTest) {
   // create signalfd and register for polling. unblock baton on successful poll
   int testFd = eventfd(0 /* initial value */, 0 /* flags */);
   evb.getEvb()->runInEventBaseThreadAndWait([&]() {
-    evb.addSocketFd(testFd, ZMQ_POLLIN, [&](int revents) {
+    evb.addSocketFd(testFd, ZMQ_POLLIN, [&](uint32_t revents) {
       EXPECT_TRUE(revents & ZMQ_POLLIN);
       waitBaton.post();
       uint64_t buf;

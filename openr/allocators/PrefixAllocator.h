@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -10,24 +10,20 @@
 #include <chrono>
 #include <string>
 
-#include <fbzmq/service/monitor/ZmqMonitorClient.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/allocators/RangeAllocator.h>
 #include <openr/common/Constants.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/OpenrEventBase.h>
-#include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
-#include <openr/if/gen-cpp2/PrefixManager_types.h>
-#include <openr/kvstore/KvStore.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/messaging/ReplicateQueue.h>
-#include <openr/platform/NetlinkSystemHandler.h>
+#include <openr/monitor/LogSample.h>
+#include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
 /**
@@ -38,13 +34,16 @@ namespace openr {
 class PrefixAllocator : public OpenrEventBase {
  public:
   PrefixAllocator(
+      AreaId const& area,
       std::shared_ptr<const Config> config,
-      std::shared_ptr<NetlinkSystemHandler> nlSystemHandler,
+      // raw ptr for modules
+      fbnl::NetlinkProtocolSocket* nlSock,
       KvStore* kvStore,
-      messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQ,
-      const MonitorSubmitUrl& monitorSubmitUrl,
       PersistentStore* configStore,
-      fbzmq::Context& zmqContext,
+      // producer queue
+      messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQ,
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       std::chrono::milliseconds syncInterval);
 
   PrefixAllocator(PrefixAllocator const&) = delete;
@@ -66,11 +65,24 @@ class PrefixAllocator : public OpenrEventBase {
   static uint32_t getPrefixCount(
       PrefixAllocationParams const& allocParams) noexcept;
 
- private:
-  //
-  // Private methods
-  //
+  /*
+   * [Netlink Platform] util functions to add/del iface address
+   */
+  folly::SemiFuture<folly::Unit> semifuture_syncIfAddrs(
+      std::string iface,
+      int16_t family,
+      int16_t scope,
+      std::vector<folly::CIDRNetwork> newAddrs);
 
+  folly::SemiFuture<folly::Unit> semifuture_addRemoveIfAddr(
+      const bool isAdd,
+      const std::string& ifName,
+      const std::vector<folly::CIDRNetwork>& networks);
+
+  folly::SemiFuture<std::vector<folly::CIDRNetwork>> semifuture_getIfAddrs(
+      std::string ifName, int16_t family, int16_t scope);
+
+ private:
   // 3 different ways to initialize PrefixAllocator.
   void staticAllocation();
   void dynamicAllocationLeafNode();
@@ -124,19 +136,12 @@ class PrefixAllocator : public OpenrEventBase {
       std::optional<PrefixAllocationParams> const& oldParams = std::nullopt,
       std::optional<PrefixAllocationParams> const& newParams = std::nullopt);
 
-  void syncIfaceAddrs(
-      const std::string& ifName,
-      int family,
-      int scope,
-      const std::vector<folly::CIDRNetwork>& prefixes);
-
-  void delIfaceAddr(
-      const std::string& ifName, const folly::CIDRNetwork& prefix);
-
-  void getIfacePrefixes(
-      const std::string& iface,
-      int family,
-      std::vector<folly::CIDRNetwork>& addrs);
+  /*
+   * Synchronous API to query interface index from kernel.
+   * NOTE: We intentionally don't use cache to optimize this call as APIs of
+   * this handlers for add/remove/sync addresses are rarely invoked.
+   */
+  std::optional<int> getIfIndex(const std::string& ifName);
 
   //
   // Const private variables
@@ -151,8 +156,8 @@ class PrefixAllocator : public OpenrEventBase {
   // hash node ID into prefix space
   const std::hash<std::string> hasher{};
 
-  // netlink system handler
-  const std::shared_ptr<NetlinkSystemHandler> nlSystemHandler_{nullptr};
+  // config knob for enabling key-val request queue for range allocator
+  const bool enableKvRequestQueue_;
 
   //
   // Non-const private variables
@@ -165,8 +170,8 @@ class PrefixAllocator : public OpenrEventBase {
   thrift::PrefixForwardingType prefixForwardingType_;
   thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
 
-  // areas
-  std::string area_;
+  // area in which to allocate prefix
+  AreaId area_;
 
   // Allocation parameters e.g., fc00:cafe::/56, 64
   std::optional<PrefixAllocationParams> allocParams_;
@@ -180,17 +185,26 @@ class PrefixAllocator : public OpenrEventBase {
   // and get and set my assigned prefix
   std::unique_ptr<KvStoreClientInternal> kvStoreClient_{nullptr};
 
+  // raw ptr for netlinkProtocolSocket for addr add/del
+  fbnl::NetlinkProtocolSocket* nlSock_{nullptr};
+
+  // raw ptr to KvStore for retrieving key-vals and subscribe keys
+  KvStore* const kvStore_{nullptr};
+
   // module ptr to interact with ConfigStore
   PersistentStore* configStore_{nullptr};
 
   // RangAlloctor to get unique prefix index for this node
   std::unique_ptr<RangeAllocator<uint32_t>> rangeAllocator_;
 
-  // Queue to send prefix update request to PrefixManager
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest>& prefixUpdatesQueue_;
+  // Queue to send prefix event to PrefixManager
+  messaging::ReplicateQueue<PrefixEvent>& prefixUpdatesQueue_;
 
-  // Monitor client for submitting counters/logs
-  fbzmq::ZmqMonitorClient zmqMonitorClient_;
+  // Queue to publish the event log
+  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
+
+  // Queue to send key-value update requests to KvStore
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // AsyncTimeout for initialization
   std::unique_ptr<folly::AsyncTimeout> initTimer_;

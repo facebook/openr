@@ -1,29 +1,39 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <fbzmq/zmq/Zmq.h>
-#include <folly/Format.h>
+#include <folly/IPAddress.h>
+#include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/NetworkUtil.h>
+#include <openr/common/Util.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
+#include <openr/decision/RibEntry.h>
+#include <openr/if/gen-cpp2/BgpConfig_types.h>
+#include <openr/if/gen-cpp2/Network_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <openr/tests/utils/Utils.h>
 
 using namespace openr;
 
 using apache::thrift::CompactSerializer;
 
 namespace {
+
+const std::chrono::milliseconds kRouteUpdateTimeout =
+    std::chrono::milliseconds(500);
 
 const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
 const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
@@ -35,6 +45,8 @@ const auto addr7 = toIpPrefix("ffff:10:3:7::0/64");
 const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
 const auto addr9 = toIpPrefix("ffff:10:4:9::/64");
 const auto addr10 = toIpPrefix("ffff:10:4:10::/64");
+const uint32_t label1 = 65001;
+const uint32_t label2 = 65002;
 
 const auto prefixEntry1 = createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
 const auto prefixEntry2 =
@@ -45,75 +57,116 @@ const auto prefixEntry4 =
 const auto prefixEntry5 = createPrefixEntry(addr5, thrift::PrefixType::DEFAULT);
 const auto prefixEntry6 =
     createPrefixEntry(addr6, thrift::PrefixType::PREFIX_ALLOCATOR);
-const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::DEFAULT);
+const auto prefixEntry7 = createPrefixEntry(addr7, thrift::PrefixType::BGP);
 const auto prefixEntry8 =
     createPrefixEntry(addr8, thrift::PrefixType::PREFIX_ALLOCATOR);
-const auto ephemeralPrefixEntry9 = createPrefixEntry(
-    addr9,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    true);
+const auto prefixEntry9 = createPrefixEntry(addr9, thrift::PrefixType::VIP);
+const auto prefixEntry1Bgp = createPrefixEntry(addr1, thrift::PrefixType::BGP);
+const auto prefixEntry1WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr1, label1);
+const auto prefixEntry1WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr1, label2);
+const auto prefixEntry2WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr2, label1);
+const auto prefixEntry3WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr3, label2);
+const auto prefixEntry4WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr4, label1);
+const auto prefixEntry5WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr5, label2);
+const auto prefixEntry6WithLabel1 =
+    createPrefixEntryWithPrependLabel(addr6, label1);
+const auto prefixEntry7WithLabel2 =
+    createPrefixEntryWithPrependLabel(addr7, label2);
 
-const auto persistentPrefixEntry9 = createPrefixEntry(
-    addr9,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    false);
-const auto ephemeralPrefixEntry10 = createPrefixEntry(
-    addr10,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    true);
-const auto persistentPrefixEntry10 = createPrefixEntry(
-    addr10,
-    thrift::PrefixType::BGP,
-    {},
-    thrift::PrefixForwardingType::IP,
-    thrift::PrefixForwardingAlgorithm::SP_ECMP,
-    false);
 } // namespace
 
 class PrefixManagerTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
-    // spin up a config store
-    storageFilePath = folly::sformat(
-        "/tmp/pm_ut_config_store.bin.{}",
-        std::hash<std::thread::id>{}(std::this_thread::get_id()));
-    configStore = std::make_unique<PersistentStore>(
-        storageFilePath, true /*dryrun*/, false /*periodicallySaveToDisk*/);
-
-    configStoreThread = std::make_unique<std::thread>([this]() noexcept {
-      LOG(INFO) << "ConfigStore thread starting";
-      configStore->run();
-      LOG(INFO) << "ConfigStore thread finishing";
-    });
-    configStore->waitUntilRunning();
+    // Register the read in the beginning of the test
+    earlyStaticRoutesReaderPtr =
+        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
+            staticRouteUpdatesQueue.getReader());
 
     // create config
     config = std::make_shared<Config>(createConfig());
 
     // spin up a kvstore
-    kvStoreWrapper = std::make_shared<KvStoreWrapper>(context, config);
+    kvStoreWrapper = std::make_shared<KvStoreWrapper>(
+        context, /* zmq context */
+        config->getAreaIds(), /* areaId collection */
+        config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
+        std::nullopt, /* peerUpdatesQueue */
+        kvRequestQueue.getReader() /* kvRequestQueue */);
     kvStoreWrapper->run();
     LOG(INFO) << "The test KV store is running";
 
+    // spin up a prefix-mgr
+    createPrefixManager(config);
+  }
+
+  void
+  TearDown() override {
+    // Close queues
+    closeQueue();
+
+    // cleanup kvStoreClient
+    if (kvStoreClient) {
+      kvStoreClient.reset();
+    }
+
+    prefixManager->stop();
+    prefixManagerThread->join();
+    prefixManager.reset();
+
+    // stop the kvStore
+    kvStoreWrapper->stop();
+    kvStoreWrapper.reset();
+
+    // stop evbThread
+    if (evb.isRunning()) {
+      evb.stop();
+      evb.waitUntilStopped();
+      evbThread.join();
+    }
+  }
+
+  void
+  closeQueue() {
+    kvRequestQueue.close();
+    prefixUpdatesQueue.close();
+    prefixMgrRouteUpdatesQueue.close();
+    prefixMgrInitializationEventsQueue.close();
+    staticRouteUpdatesQueue.close();
+    fibRouteUpdatesQueue.close();
+    kvStoreWrapper->closeQueue();
+  }
+
+  void
+  openQueue() {
+    kvRequestQueue.open();
+    prefixUpdatesQueue.open();
+    prefixMgrRouteUpdatesQueue.open();
+    prefixMgrInitializationEventsQueue.open();
+    staticRouteUpdatesQueue.open();
+    fibRouteUpdatesQueue.open();
+    kvStoreWrapper->openQueue();
+  }
+
+  void
+  createPrefixManager(std::shared_ptr<Config> cfg) {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
+        staticRouteUpdatesQueue,
+        kvRequestQueue,
+        prefixMgrRouteUpdatesQueue,
+        prefixMgrInitializationEventsQueue,
+        kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
-        routeUpdatesQueue.getReader(),
-        config,
-        configStore.get(),
-        kvStoreWrapper->getKvStore(),
-        true /* prefix-mananger perf measurement */,
-        std::chrono::seconds{0});
+        fibRouteUpdatesQueue.getReader(),
+        cfg);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "PrefixManager thread starting";
@@ -123,85 +176,77 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixManager->waitUntilRunning();
   }
 
-  void
-  TearDown() override {
-    // Close queues
-    prefixUpdatesQueue.close();
-    routeUpdatesQueue.close();
-    kvStoreWrapper->closeQueue();
-
-    // cleanup kvStoreClient
-    if (kvStoreClient) {
-      kvStoreClient.reset();
-    }
-
-    // this will be invoked before linkMonitorThread's d-tor
-    LOG(INFO) << "Stopping prefixMgr thread";
-    prefixManager->stop();
-    prefixManagerThread->join();
-    prefixManager.reset();
-
-    // Erase data from config store
-    configStore->erase("prefix-manager-config").get();
-
-    // stop config store
-    configStore->stop();
-    configStoreThread->join();
-    configStore.reset();
-
-    // stop the kvStore
-    kvStoreWrapper->stop();
-    kvStoreWrapper.reset();
-
-    // stop evlThread
-    if (evl.isRunning()) {
-      evl.stop();
-      evl.waitUntilStopped();
-      evlThread.join();
-    }
-  }
-
   virtual thrift::OpenrConfig
   createConfig() {
-    auto tConfig = getBasicOpenrConfig("node-1");
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.enable_fib_ack_ref() = true;
     return tConfig;
   }
 
-  // In case of separate IP prefix keys, collect all the prefix Entries
-  // (advertised from a specific node) and return as a list
-  std::vector<thrift::PrefixEntry>
-  getPrefixDb(const std::string& keyPrefix) {
-    std::vector<thrift::PrefixEntry> prefixEntries{};
-    auto marker = PrefixDbMarker{Constants::kPrefixDbMarker.toString()};
-    auto keyPrefixDbs = kvStoreClient->dumpAllWithPrefix(keyPrefix);
-    for (const auto& pkey : keyPrefixDbs.value()) {
-      if (pkey.first.find(marker) == 0) {
-        auto prefixDb = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            pkey.second.value_ref().value(), serializer);
-        // skip prefixes marked for delete
-        if (!prefixDb.deletePrefix) {
-          prefixEntries.insert(
-              prefixEntries.begin(),
-              prefixDb.prefixEntries.begin(),
-              prefixDb.prefixEntries.end());
-        }
+  // Get number of `advertised` prefixes
+  uint32_t
+  getNumPrefixes(const std::string& keyPrefix) {
+    uint32_t count = 0;
+    auto keyVals = kvStoreWrapper->dumpAll(
+        kTestingAreaName, KvStoreFilters({keyPrefix}, {} /* originatorIds */));
+    for (const auto& [_, val] : keyVals) {
+      if (not val.value_ref()) {
+        continue;
       }
+
+      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
+          *val.value_ref(), serializer);
+      if (*prefixDb.deletePrefix_ref()) {
+        // skip prefixes marked for delete
+        continue;
+      }
+      count += 1;
     }
-    return prefixEntries;
+    return count;
   }
 
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+  getEarlyStaticRoutesReaderPtr() {
+    return earlyStaticRoutesReaderPtr;
+  }
+
+  std::optional<thrift::RouteDatabaseDelta>
+  waitForRouteUpdate(
+      messaging::RQueue<DecisionRouteUpdate>& reader,
+      std::optional<thrift::PrefixType> expectedPrefixType = std::nullopt,
+      std::chrono::milliseconds timeout = kRouteUpdateTimeout) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (not reader.size()) {
+      // break of timeout occurs
+      auto now = std::chrono::steady_clock::now();
+      if (now - startTime > timeout) {
+        return std::nullopt;
+      }
+      // Yield the thread
+      std::this_thread::yield();
+    }
+    auto readValue = reader.get().value();
+    if (expectedPrefixType.has_value()) {
+      EXPECT_EQ(readValue.prefixType, expectedPrefixType.value());
+    }
+    return readValue.toThrift();
+  }
+
+  // NodeId to initialize
+  const std::string nodeId_{"node-1"};
+
   fbzmq::Context context;
-  OpenrEventBase evl;
-  std::thread evlThread;
+  OpenrEventBase evb;
+  std::thread evbThread;
 
   // Queue for publishing entries to PrefixManager
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-
-  std::string storageFilePath;
-  std::unique_ptr<PersistentStore> configStore;
-  std::unique_ptr<std::thread> configStoreThread;
+  messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
+  messaging::ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
   // Create the serializer for write/read
   CompactSerializer serializer;
@@ -210,6 +255,10 @@ class PrefixManagerTestFixture : public testing::Test {
   std::unique_ptr<std::thread> prefixManagerThread{nullptr};
   std::shared_ptr<KvStoreWrapper> kvStoreWrapper{nullptr};
   std::unique_ptr<KvStoreClientInternal> kvStoreClient{nullptr};
+
+ private:
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+      earlyStaticRoutesReaderPtr;
 };
 
 TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
@@ -235,8 +284,8 @@ TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   EXPECT_FALSE(
       prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get());
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
-  EXPECT_TRUE(prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get());
-  EXPECT_TRUE(prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
 }
 
 TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
@@ -248,6 +297,7 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry6}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry7}).get());
   EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry8}).get());
+  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry9}).get());
 
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry1}).get());
   EXPECT_TRUE(
@@ -259,13 +309,13 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   // all the DEFAULT type should be gone
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry3}).get());
   EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry5}).get());
-  EXPECT_FALSE(prefixManager->withdrawPrefixes({prefixEntry7}).get());
 
   // The PREFIX_ALLOCATOR type should still be there to be withdrawed
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry2}).get());
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry4}).get());
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry6}).get());
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
+  EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry9}).get());
 
   EXPECT_FALSE(
       prefixManager
@@ -294,72 +344,33 @@ TEST_F(PrefixManagerTestFixture, RemoveUpdateType) {
   EXPECT_TRUE(prefixManager->withdrawPrefixes({prefixEntry8}).get());
 }
 
-TEST_F(PrefixManagerTestFixture, RemoveInvalidType) {
-  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry1}).get());
-  EXPECT_TRUE(prefixManager->advertisePrefixes({prefixEntry2}).get());
-
-  // Verify that prefix type has to match for withdrawing prefix
-  auto prefixEntryError = prefixEntry1;
-  prefixEntryError.type = thrift::PrefixType::PREFIX_ALLOCATOR;
-
-  auto resp1 =
-      prefixManager->withdrawPrefixes({prefixEntryError, prefixEntry2}).get();
-  EXPECT_FALSE(resp1);
-
-  // Verify that all prefixes are still present
-  auto resp2 = prefixManager->getPrefixes().get();
-  EXPECT_TRUE(resp2);
-  EXPECT_EQ(2, resp2->size());
-
-  // Verify withdrawing of multiple prefixes
-  auto resp3 =
-      prefixManager->withdrawPrefixes({prefixEntry1, prefixEntry2}).get();
-  EXPECT_TRUE(resp3);
-
-  // Verify that there are no prefixes
-  auto resp4 = prefixManager->getPrefixes().get();
-  EXPECT_TRUE(resp4);
-  EXPECT_EQ(0, resp4->size());
-}
-
 TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
-  folly::Baton waitBaton;
-  auto scheduleAt = std::chrono::milliseconds{0}.count();
-  thrift::PrefixDatabase db;
-
-  std::string keyStr{"prefix:node-1"};
+  int scheduleAt{0};
   auto prefixKey = PrefixKey(
-      "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-      thrift::KvStore_constants::kDefaultArea());
-  keyStr = prefixKey.getPrefixKey();
+      nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName);
+  auto keyStr = prefixKey.getPrefixKeyV2();
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
 
-  // start kvStoreClientInternal separately with different thread
-  kvStoreClient = std::make_unique<KvStoreClientInternal>(
-      &evl, "node-1", kvStoreWrapper->getKvStore());
+  // Schedule callbacks to run sequentially
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+      });
 
-  prefixManager->advertisePrefixes({prefixEntry1}).get();
-
-  evl.scheduleTimeout(
+  // Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistKey()` inside `KvStoreClientInternal`
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
-        auto maybeValue = kvStoreClient->getKey(keyStr);
+        auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        EXPECT_EQ(db.prefixEntries.size(), 1);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
-
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-        }
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
 
         prefixManager->withdrawPrefixes({prefixEntry1}).get();
         prefixManager->advertisePrefixes({prefixEntry2}).get();
@@ -369,84 +380,40 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         prefixManager->advertisePrefixes({prefixEntry6}).get();
         prefixManager->advertisePrefixes({prefixEntry7}).get();
         prefixManager->advertisePrefixes({prefixEntry8}).get();
-        prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
+        prefixManager->advertisePrefixes({prefixEntry9}).get();
       });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += Constants::kPrefixMgrKvThrottleTimeout.count() / 2),
-      [&]() {
-        // Verify that before throttle expires, we don't see any update
-        auto maybeValue1 = kvStoreClient->getKey(keyStr);
-        EXPECT_TRUE(maybeValue1.has_value());
-        auto db1 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
-            maybeValue1.value().value_ref().value(), serializer);
-        auto prefixDb = getPrefixDb("prefix:node-1");
-        EXPECT_EQ(prefixDb.size(), 1);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-        }
-      });
-
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
-        auto maybeValue2 = kvStoreClient->getKey(keyStr);
+        auto maybeValue2 = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        auto db2 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db2 = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
-        auto prefixDb = getPrefixDb("prefix:node-1");
-        EXPECT_EQ(prefixDb.size(), 8);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-        }
+        EXPECT_EQ(8, getNumPrefixes(prefixDbMarker));
         // now make a change and check again
         prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT)
             .get();
       });
 
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // Wait for throttled update to announce to kvstore
-        auto maybeValue3 = kvStoreClient->getKey(keyStr);
+        auto maybeValue3 = kvStoreWrapper->getKey(kTestingAreaName, keyStr);
         EXPECT_TRUE(maybeValue3.has_value());
-        auto db3 = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db3 = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue3.value().value_ref().value(), serializer);
-        auto prefixDb = getPrefixDb("prefix:node-1");
-        EXPECT_EQ(prefixDb.size(), 5);
-        ASSERT_TRUE(db.perfEvents_ref().has_value());
-        ASSERT_FALSE(db.perfEvents_ref()->events.empty());
-        {
-          const auto& perfEvent = db.perfEvents_ref()->events.back();
-          EXPECT_EQ("UPDATE_KVSTORE_THROTTLED", perfEvent.eventDescr);
-          EXPECT_EQ("node-1", perfEvent.nodeName);
-          EXPECT_LT(0, perfEvent.unixTs); // Non zero timestamp
-        }
+        EXPECT_EQ(6, getNumPrefixes(prefixDbMarker));
 
-        // Synchronization primitive
-        waitBaton.post();
+        evb.stop();
       });
 
-  // Start the event loop and wait until it is finished execution.
-  evlThread = std::thread([&]() { evl.run(); });
-  evl.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
+  // let magic happen
+  evb.run();
 }
 
 /**
@@ -455,21 +422,22 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
  * 1. Inject prefix1 with client-bgp - Verify KvStore
  * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
  * 3. Withdraw prefix1 with client-loopback - Verify KvStore
- * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+ * 4. Withdraw prefix1 with client-bgp - Verify KvStore
+ * 5. Withdraw prefix1 with client-default - Verify KvStore
  */
 TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
-  const auto loopback_prefix =
-      createPrefixEntry(addr1, thrift::PrefixType::LOOPBACK);
-  const auto default_prefix =
-      createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
-  const auto bgp_prefix = createPrefixEntry(addr1, thrift::PrefixType::BGP);
+  //
+  // Order of prefix-entries -> loopback > bgp > default
+  //
+  const auto loopback_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
+  const auto default_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
+  const auto bgp_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
 
-  std::string keyStr{"prefix:node-1"};
-  keyStr = PrefixKey(
-               "node-1",
-               toIPNetwork(addr1),
-               thrift::KvStore_constants::kDefaultArea())
-               .getPrefixKey();
+  auto keyStr =
+      PrefixKey(nodeId_, toIPNetwork(addr1), kTestingAreaName).getPrefixKeyV2();
 
   // Synchronization primitive
   folly::Baton baton;
@@ -478,23 +446,26 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
 
   // start kvStoreClientInternal separately with different thread
   kvStoreClient = std::make_unique<KvStoreClientInternal>(
-      &evl, "node-1", kvStoreWrapper->getKvStore());
+      &evb, nodeId_, kvStoreWrapper->getKvStore());
 
+  // TODO - reevaluate subscribeKey + folly::Baton for pushing along the UTs
   kvStoreClient->subscribeKey(
+      kTestingAreaName,
       keyStr,
       [&](std::string const&, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
-        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             val->value_ref().value(), serializer);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        if (expectedPrefix.has_value() and db.prefixEntries.size() != 0) {
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        if (expectedPrefix.has_value() and
+            db.prefixEntries_ref()->size() != 0) {
           // we should always be advertising one prefix until we withdraw all
-          EXPECT_EQ(db.prefixEntries.size(), 1);
+          EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
           EXPECT_EQ(expectedPrefix, db.prefixEntries_ref()->at(0));
           gotExpected = true;
         } else {
-          EXPECT_TRUE(db.deletePrefix);
-          EXPECT_TRUE(db.prefixEntries.size() == 1);
+          EXPECT_TRUE(*db.deletePrefix_ref());
+          EXPECT_TRUE(db.prefixEntries_ref()->size() == 1);
         }
 
         // Signal verification
@@ -504,8 +475,8 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   // Start event loop in it's own thread
-  evlThread = std::thread([&]() { evl.run(); });
-  evl.waitUntilRunning();
+  evbThread = std::thread([&]() { evb.run(); });
+  evb.waitUntilRunning();
 
   //
   // 1. Inject prefix1 with client-bgp - Verify KvStore
@@ -528,18 +499,27 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   //
   // 3. Withdraw prefix1 with client-loopback - Verify KvStore
   //
-  expectedPrefix = default_prefix;
+  expectedPrefix = bgp_prefix;
   gotExpected = false;
   prefixManager->withdrawPrefixes({loopback_prefix}).get();
   baton.wait();
   baton.reset();
 
   //
-  // 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+  // 4. Withdraw prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = default_prefix;
+  gotExpected = true;
+  prefixManager->withdrawPrefixes({bgp_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 4. Withdraw prefix1 with client-default - Verify KvStore
   //
   expectedPrefix = std::nullopt;
   gotExpected = true;
-  prefixManager->withdrawPrefixes({bgp_prefix, default_prefix}).get();
+  prefixManager->withdrawPrefixes({default_prefix}).get();
   baton.wait();
   baton.reset();
 }
@@ -550,390 +530,295 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
  * the old key format
  */
 TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
-  folly::Baton waitBaton;
-  int waitDuration{0};
-
+  int scheduleAt{0};
   auto prefixKey1 = PrefixKey(
-      "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-      thrift::KvStore_constants::kDefaultArea());
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(*prefixEntry1.prefix_ref())),
+      kTestingAreaName);
   auto prefixKey2 = PrefixKey(
-      "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
-      thrift::KvStore_constants::kDefaultArea());
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix_ref())),
+      kTestingAreaName);
 
-  kvStoreClient = std::make_unique<KvStoreClientInternal>(
-      &evl, "node-1", kvStoreWrapper->getKvStore());
-
-  // Schedule callback to set keys from client1 (this will be executed first)
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        prefixManager->advertisePrefixes({prefixEntry1});
+  // Schedule callbacks to run at fixes timestamp
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
-  evl.scheduleTimeout(
+  // Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistKey()` inside `KvStoreClientInternal`
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
-      });
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
-  // add another key
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept {
+        // add another key
         prefixManager->advertisePrefixes({prefixEntry2}).get();
       });
 
   // version of first key should still be 1
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 4 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 4 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
-        prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        prefixKeyStr = prefixKey2.getPrefixKeyV2();
+        auto maybeValue2 =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        EXPECT_EQ(maybeValue2.value().version, 1);
-      });
+        EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
 
-  // withdraw prefixEntry2
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept {
+        // withdraw prefixEntry2
         prefixManager->withdrawPrefixes({prefixEntry2}).get();
       });
 
   // version of prefixEntry1 should still be 1
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
         // verify key is withdrawn
-        prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        prefixKeyStr = prefixKey2.getPrefixKeyV2();
+        auto maybeValue2 =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue2.value().value_ref().value(), serializer);
-        EXPECT_NE(db.prefixEntries.size(), 0);
-        EXPECT_TRUE(db.deletePrefix);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(*db.deletePrefix_ref());
 
-        // Synchronization primitive
-        waitBaton.post();
+        evb.stop();
       });
 
-  // Start the event loop and wait until it is finished execution.
-  evlThread = std::thread([&]() { evl.run(); });
-  evl.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
+  // let magic happen
+  evb.run();
 }
 
 /**
- * Test prefix key subscription callback from Kvstore client.
+ * Test prefix key subscription callback from `KvstoreClientInternal`.
  * The test verifies the callback takes the action that reflects the current
- * state of prefix in the prefix manager (either exists or does not exist) and
- * appropriately udpates Kvstore
+ * state of prefix(existence/disappearance) in the `PrefixManager` and
+ * appropriately updates `KvStore`.
  */
-TEST_F(PrefixManagerTestFixture, PrefixKeySubscribtion) {
-  int waitDuration{0};
+TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
+  int scheduleAt{0};
   int keyVersion{0};
-  folly::Baton waitBaton;
-
-  std::string prefixKeyStr{"prefix:node-1"};
+  int staleKeyVersion{100};
   const auto prefixEntry =
       createPrefixEntry(toIpPrefix("5001::/64"), thrift::PrefixType::DEFAULT);
-  auto prefixKey = PrefixKey(
-      "node-1",
-      folly::IPAddress::createNetwork(toString(prefixEntry.prefix)),
-      thrift::KvStore_constants::kDefaultArea());
-  prefixKeyStr = prefixKey.getPrefixKey();
-
-  kvStoreClient = std::make_unique<KvStoreClientInternal>(
-      &evl, "node-1", kvStoreWrapper->getKvStore());
+  auto prefixKeyStr =
+      PrefixKey(
+          nodeId_, toIPNetwork(*prefixEntry.prefix_ref()), kTestingAreaName)
+          .getPrefixKeyV2();
 
   // Schedule callback to set keys from client1 (this will be executed first)
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
         prefixManager->advertisePrefixes({prefixEntry}).get();
       });
 
   // Wait for throttled update to announce to kvstore
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
-        EXPECT_TRUE(maybeValue.has_value());
-        keyVersion = maybeValue.value().version;
-        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        ASSERT_TRUE(maybeValue.has_value());
+        keyVersion = *maybeValue.value().version_ref();
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        EXPECT_EQ(db.prefixEntries.size(), 1);
-        EXPECT_EQ(db.prefixEntries[0], prefixEntry);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0], prefixEntry);
       });
 
-  thrift::PrefixDatabase emptyPrefxDb;
-  emptyPrefxDb.thisNodeName = "node-1";
-  emptyPrefxDb.prefixEntries = {};
-  const auto emptyPrefxDbStr =
-      fbzmq::util::writeThriftObjStr(emptyPrefxDb, serializer);
-
-  // increment the key version in kvstore and set empty value. kvstoreClient
-  // will detect value changed, and retain the value present in peristent DB,
+  // increment the key version in kvstore and set empty value. `PrefixManager`
+  // will detect value changed, and retain the value present in persistent DB,
   // and advertise with higher key version.
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 10), [&]() noexcept {
-        kvStoreClient->setKey(
-            prefixKeyStr,
-            emptyPrefxDbStr,
-            keyVersion + 1,
-            Constants::kKvStoreDbTtl);
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
+        auto emptyPrefixDb = createPrefixDb(nodeId_, {});
+        kvStoreWrapper->setKey(
+            kTestingAreaName, /* areaId */
+            prefixKeyStr, /* key */
+            createThriftValue(
+                keyVersion + 1, /* key version */
+                nodeId_, /* originatorId */
+                writeThriftObjStr(emptyPrefixDb, serializer), /* value */
+                Constants::kKvStoreDbTtl.count()));
       });
 
   // Wait for throttled update to announce to kvstore
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(maybeValue.value().version, keyVersion + 2);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        EXPECT_EQ(db.prefixEntries.size(), 1);
-        EXPECT_EQ(db.prefixEntries[0], prefixEntry);
+        EXPECT_EQ(*maybeValue.value().version_ref(), keyVersion + 2);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0], prefixEntry);
       });
 
   // Clear key from prefix DB map, which will delete key from persistent
   // store and update kvstore with empty prefix entry list
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept { prefixManager->withdrawPrefixes({prefixEntry}).get(); });
 
   // verify key is withdrawn from kvstore
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(maybeValue.value().version, keyVersion + 3);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        // delete prefix must be set to TRUE, applies only when per prefix key
-        // is enabled
-        EXPECT_NE(db.prefixEntries.size(), 0);
-        EXPECT_TRUE(db.deletePrefix);
+        EXPECT_EQ(*maybeValue.value().version_ref(), keyVersion + 3);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(*db.deletePrefix_ref());
       });
-
-  thrift::PrefixDatabase nonEmptyPrefxDb;
-  nonEmptyPrefxDb.thisNodeName = "node-1";
-  nonEmptyPrefxDb.prefixEntries = {prefixEntry};
-  const auto nonEmptyPrefxDbStr =
-      fbzmq::util::writeThriftObjStr(nonEmptyPrefxDb, serializer);
 
   // Insert same key in kvstore with any higher version, and non empty value
   // Prefix manager should get the update and re-advertise with empty Prefix
   // with higher key version.
-  int staleKeyVersion{100};
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        kvStoreClient->setKey(
-            prefixKeyStr,
-            nonEmptyPrefxDbStr,
-            staleKeyVersion,
-            Constants::kKvStoreDbTtl);
+        auto prefixDb = createPrefixDb(nodeId_, {prefixEntry});
+        kvStoreWrapper->setKey(
+            kTestingAreaName, /* areaId */
+            prefixKeyStr, /* key */
+            createThriftValue(
+                staleKeyVersion, /* key version */
+                nodeId_, /* originatorId */
+                writeThriftObjStr(prefixDb, serializer), /* value */
+                Constants::kKvStoreDbTtl.count()));
       });
 
   // prefix manager will override the key inserted above with higher key
   // version and empty prefix DB
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
             maybeValue.value().value_ref().value(), serializer);
-        EXPECT_EQ(maybeValue.value().version, staleKeyVersion + 1);
-        EXPECT_EQ(db.thisNodeName, "node-1");
-        // delete prefix must be set to TRUE, applies only when per prefix key
-        // is enabled
-        EXPECT_NE(db.prefixEntries.size(), 0);
-        EXPECT_TRUE(db.deletePrefix);
+        EXPECT_EQ(*maybeValue.value().version_ref(), staleKeyVersion + 1);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(*db.deletePrefix_ref());
 
-        // Synchronization primitive
-        waitBaton.post();
+        evb.stop();
       });
 
-  // Start the event loop and wait until it is finished execution.
-  evlThread = std::thread([&]() { evl.run(); });
-  evl.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
+  // let magic happen
+  evb.run();
 }
 
-TEST_F(PrefixManagerTestFixture, PrefixWithdrawExpiry) {
-  folly::Baton waitBaton;
-  int waitDuration{0};
-  std::chrono::milliseconds ttl{100};
+class PrefixManagerSmallTtlTestFixture : public PrefixManagerTestFixture {
+ public:
+  virtual thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerTestFixture::createConfig();
+    tConfig.kvstore_config_ref()->key_ttl_ms_ref() = ttl_.count();
+    return tConfig;
+  }
 
-  kvStoreClient = std::make_unique<KvStoreClientInternal>(
-      &evl, "node-1", kvStoreWrapper->getKvStore());
+ protected:
+  std::chrono::milliseconds ttl_{2000};
+};
 
-  auto tConfig = getBasicOpenrConfig("node-2");
-  tConfig.kvstore_config.key_ttl_ms = ttl.count();
-  auto config = std::make_shared<Config>(tConfig);
-  // spin up a new PrefixManager add verify that it loads the config
-  auto prefixManager2 = std::make_unique<PrefixManager>(
-      prefixUpdatesQueue.getReader(),
-      routeUpdatesQueue.getReader(),
-      config,
-      configStore.get(),
-      kvStoreWrapper->getKvStore(),
-      false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0));
-
-  auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
-    LOG(INFO) << "PrefixManager thread starting";
-    prefixManager2->run();
-    LOG(INFO) << "PrefixManager thread finishing";
-  });
-  prefixManager2->waitUntilRunning();
+TEST_F(PrefixManagerSmallTtlTestFixture, PrefixWithdrawExpiry) {
+  int scheduleAt{0};
 
   auto prefixKey1 = PrefixKey(
-      "node-2",
-      folly::IPAddress::createNetwork(toString(prefixEntry1.prefix)),
-      thrift::KvStore_constants::kDefaultArea());
+      nodeId_, toIPNetwork(*prefixEntry1.prefix_ref()), kTestingAreaName);
   auto prefixKey2 = PrefixKey(
-      "node-2",
-      folly::IPAddress::createNetwork(toString(prefixEntry2.prefix)),
-      thrift::KvStore_constants::kDefaultArea());
+      nodeId_, toIPNetwork(*prefixEntry2.prefix_ref()), kTestingAreaName);
 
   // insert two prefixes
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(waitDuration += 0), [&]() noexcept {
-        prefixManager2->advertisePrefixes({prefixEntry1}).get();
-        prefixManager2->advertisePrefixes({prefixEntry2}).get();
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+        prefixManager->advertisePrefixes({prefixEntry2}).get();
       });
 
   // check both prefixes are in kvstore
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());
-        EXPECT_EQ(maybeValue.value().version, 1);
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
 
-        prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        prefixKeyStr = prefixKey2.getPrefixKeyV2();
+        auto maybeValue2 =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        EXPECT_EQ(maybeValue2.value().version, 1);
+        EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
+
+        // withdraw prefixEntry1
+        prefixManager->withdrawPrefixes({prefixEntry1}).get();
       });
 
-  // withdraw prefixEntry1
-  evl.scheduleTimeout(
-      std::chrono::milliseconds(
-          waitDuration += 2 * Constants::kPrefixMgrKvThrottleTimeout.count()),
-      [&]() noexcept {
-        prefixManager2->withdrawPrefixes({prefixEntry1}).get();
-      });
-
-  // check prefix entry1 should have been expired, prefix 2 should be there
+  // check `prefixEntry1` should have been expired, prefix 2 should be there
   // with same version
-  evl.scheduleTimeout(
+  evb.scheduleTimeout(
       std::chrono::milliseconds(
-          waitDuration +=
-          2 * Constants::kPrefixMgrKvThrottleTimeout.count() + ttl.count()),
+          scheduleAt +=
+          2 * Constants::kKvStoreSyncThrottleTimeout.count() + ttl_.count()),
       [&]() noexcept {
-        auto prefixKeyStr = prefixKey1.getPrefixKey();
-        auto maybeValue = kvStoreClient->getKey(prefixKeyStr);
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_FALSE(maybeValue.has_value());
 
-        prefixKeyStr = prefixKey2.getPrefixKey();
-        auto maybeValue2 = kvStoreClient->getKey(prefixKeyStr);
+        prefixKeyStr = prefixKey2.getPrefixKeyV2();
+        auto maybeValue2 =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue2.has_value());
-        EXPECT_EQ(maybeValue2.value().version, 1);
+        EXPECT_EQ(*maybeValue2.value().version_ref(), 1);
 
-        // Synchronization primitive
-        waitBaton.post();
+        evb.stop();
       });
 
-  // Start the event loop and wait until it is finished execution.
-  evlThread = std::thread([&]() { evl.run(); });
-  evl.waitUntilRunning();
-
-  // Synchronization primitive
-  waitBaton.wait();
-
-  // cleanup
-  prefixUpdatesQueue.close();
-  routeUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
-  prefixManager2->stop();
-  prefixManagerThread2->join();
-}
-
-TEST_F(PrefixManagerTestFixture, CheckReload) {
-  prefixManager->advertisePrefixes({prefixEntry1}).get();
-  prefixManager->advertisePrefixes({prefixEntry2}).get();
-  prefixManager->advertisePrefixes({ephemeralPrefixEntry9}).get();
-
-  auto tConfig = getBasicOpenrConfig("node-2");
-  auto config = std::make_shared<Config>(tConfig);
-  // spin up a new PrefixManager add verify that it loads the config
-  auto prefixManager2 = std::make_unique<PrefixManager>(
-      prefixUpdatesQueue.getReader(),
-      routeUpdatesQueue.getReader(),
-      config,
-      configStore.get(),
-      kvStoreWrapper->getKvStore(),
-      false /* prefix-mananger perf measurement */,
-      std::chrono::seconds(0));
-
-  auto prefixManagerThread2 = std::make_unique<std::thread>([&]() {
-    LOG(INFO) << "PrefixManager thread starting";
-    prefixManager2->run();
-    LOG(INFO) << "PrefixManager thread finishing";
-  });
-  prefixManager2->waitUntilRunning();
-
-  // verify that the new manager has only persistent prefixes.
-  // Ephemeral prefixes will not be reloaded.
-  EXPECT_TRUE(prefixManager2->withdrawPrefixes({prefixEntry1}).get());
-  EXPECT_TRUE(prefixManager2->withdrawPrefixes({prefixEntry2}).get());
-  EXPECT_FALSE(prefixManager2->withdrawPrefixes({ephemeralPrefixEntry9}).get());
-
-  // cleanup
-  prefixUpdatesQueue.close();
-  routeUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
-  prefixManager2->stop();
-  prefixManagerThread2->join();
+  // let magic happen
+  evb.run();
 }
 
 TEST_F(PrefixManagerTestFixture, GetPrefixes) {
@@ -944,29 +829,30 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
   prefixManager->advertisePrefixes({prefixEntry5});
   prefixManager->advertisePrefixes({prefixEntry6});
   prefixManager->advertisePrefixes({prefixEntry7});
+  prefixManager->advertisePrefixes({prefixEntry9});
 
   auto resp1 = prefixManager->getPrefixes().get();
   ASSERT_TRUE(resp1);
   auto& prefixes1 = *resp1;
-  EXPECT_EQ(7, prefixes1.size());
+  EXPECT_EQ(8, prefixes1.size());
   EXPECT_NE(
-      std::find(prefixes1.begin(), prefixes1.end(), prefixEntry4),
-      prefixes1.end());
+      std::find(prefixes1.cbegin(), prefixes1.cend(), prefixEntry4),
+      prefixes1.cend());
   EXPECT_EQ(
-      std::find(prefixes1.begin(), prefixes1.end(), prefixEntry8),
-      prefixes1.end());
+      std::find(prefixes1.cbegin(), prefixes1.cend(), prefixEntry8),
+      prefixes1.cend());
 
   auto resp2 =
       prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
   ASSERT_TRUE(resp2);
   auto& prefixes2 = *resp2;
-  EXPECT_EQ(4, prefixes2.size());
+  EXPECT_EQ(3, prefixes2.size());
   EXPECT_NE(
-      std::find(prefixes2.begin(), prefixes2.end(), prefixEntry3),
-      prefixes2.end());
+      std::find(prefixes2.cbegin(), prefixes2.cend(), prefixEntry3),
+      prefixes2.cend());
   EXPECT_EQ(
-      std::find(prefixes2.begin(), prefixes2.end(), prefixEntry2),
-      prefixes2.end());
+      std::find(prefixes2.cbegin(), prefixes2.cend(), prefixEntry2),
+      prefixes2.cend());
 
   auto resp3 =
       prefixManager->withdrawPrefixesByType(thrift::PrefixType::DEFAULT).get();
@@ -976,205 +862,57 @@ TEST_F(PrefixManagerTestFixture, GetPrefixes) {
       prefixManager->getPrefixesByType(thrift::PrefixType::DEFAULT).get();
   EXPECT_TRUE(resp4);
   EXPECT_EQ(0, resp4->size());
-}
 
-TEST(PrefixManagerTest, HoldTimeout) {
-  fbzmq::Context context;
-  messaging::ReplicateQueue<thrift::PrefixUpdateRequest> prefixUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  auto resp5 = prefixManager->getPrefixesByType(thrift::PrefixType::VIP).get();
+  ASSERT_TRUE(resp5);
+  auto& prefixes5 = *resp5;
+  EXPECT_EQ(1, prefixes5.size());
+  EXPECT_NE(
+      std::find(prefixes5.cbegin(), prefixes5.cend(), prefixEntry9),
+      prefixes5.cend());
 
-  // spin up a config store
-  auto configStore = std::make_unique<PersistentStore>(
-      folly::sformat(
-          "/tmp/pm_ut_config_store.bin.{}",
-          std::hash<std::thread::id>{}(std::this_thread::get_id())),
-      true);
-  std::thread configStoreThread([&]() noexcept {
-    LOG(INFO) << "ConfigStore thread starting";
-    configStore->run();
-    LOG(INFO) << "ConfigStore thread finishing";
-  });
-  configStore->waitUntilRunning();
+  auto resp6 =
+      prefixManager->withdrawPrefixesByType(thrift::PrefixType::VIP).get();
+  EXPECT_TRUE(resp6);
 
-  // spin up a kvstore
-  auto tConfig = getBasicOpenrConfig("node-1");
-  tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
-  auto config = std::make_shared<Config>(tConfig);
-  auto kvStoreWrapper = std::make_unique<KvStoreWrapper>(context, config);
-  kvStoreWrapper->run();
-  LOG(INFO) << "The test KV store is running";
-
-  // start a prefix manager with timeout
-  const std::chrono::seconds holdTime{2};
-  const auto startTime = std::chrono::steady_clock::now();
-  auto prefixManager = std::make_unique<PrefixManager>(
-      prefixUpdatesQueue.getReader(),
-      routeUpdatesQueue.getReader(),
-      config,
-      configStore.get(),
-      kvStoreWrapper->getKvStore(),
-      false /* prefix-mananger perf measurement */,
-      holdTime,
-      false /* perPrefixKeys */);
-  std::thread prefixManagerThread([&]() {
-    LOG(INFO) << "PrefixManager thread starting";
-    prefixManager->run();
-    LOG(INFO) << "PrefixManager thread finishing";
-  });
-  prefixManager->waitUntilRunning();
-
-  // We must receive publication after holdTime
-  auto publication = kvStoreWrapper->recvPublication();
-  const auto elapsedTime =
-      std::chrono::duration_cast<std::chrono::milliseconds>(
-          std::chrono::steady_clock::now() - startTime);
-  EXPECT_GE(
-      elapsedTime.count() + 10 /* error buffer */,
-      std::chrono::duration_cast<std::chrono::milliseconds>(holdTime).count());
-  EXPECT_EQ(1, publication.keyVals.size());
-  EXPECT_EQ(1, publication.keyVals.count("prefix:node-1"));
-
-  // Stop the test
-  prefixUpdatesQueue.close();
-  routeUpdatesQueue.close();
-  kvStoreWrapper->closeQueue();
-  prefixManager->stop();
-  prefixManagerThread.join();
-  kvStoreWrapper->stop();
-  configStore->stop();
-  configStoreThread.join();
-}
-
-// Verify that persist store is updated only when
-// non-ephemeral types are effected
-TEST_F(PrefixManagerTestFixture, CheckPersistStoreUpdate) {
-  ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
-  // Verify that any action on persistent entries leads to update of store
-  prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2, prefixEntry3})
-      .get();
-  // 3 prefixes leads to 1 write
-  ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixes({prefixEntry1}).get();
-  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager
-      ->syncPrefixesByType(
-          thrift::PrefixType::PREFIX_ALLOCATOR, {prefixEntry2, prefixEntry4})
-      .get();
-  ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::PREFIX_ALLOCATOR)
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  // Verify that any actions on ephemeral entries does not lead to update of
-  // store
-  prefixManager
-      ->advertisePrefixes({ephemeralPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager
-      ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::BGP).get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-}
-
-// Verify that persist store is update properly when both persistent
-// and ephemeral entries are mixed for same prefix type
-TEST_F(PrefixManagerTestFixture, CheckEphemeralAndPersistentUpdate) {
-  ASSERT_EQ(0, configStore->getNumOfDbWritesToDisk());
-  // Verify that any action on persistent entries leads to update of store
-  prefixManager
-      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(1, configStore->getNumOfDbWritesToDisk());
-
-  // Change persistance characterstic. Expect disk update
-  prefixManager
-      ->syncPrefixesByType(
-          thrift::PrefixType::BGP,
-          {ephemeralPrefixEntry9, persistentPrefixEntry10})
-      .get();
-  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
-
-  // Only ephemeral entry withdrawn, so no update to disk
-  prefixManager->withdrawPrefixes({ephemeralPrefixEntry9}).get();
-  ASSERT_EQ(2, configStore->getNumOfDbWritesToDisk());
-
-  // Persistent entry withdrawn, expect update to disk
-  prefixManager->withdrawPrefixes({persistentPrefixEntry10}).get();
-  ASSERT_EQ(3, configStore->getNumOfDbWritesToDisk());
-
-  // Restore the state to mix of ephemeral and persistent of a type
-  prefixManager
-      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(4, configStore->getNumOfDbWritesToDisk());
-
-  // Verify that withdraw by type, updates disk
-  prefixManager->withdrawPrefixesByType(thrift::PrefixType::BGP).get();
-  ASSERT_EQ(5, configStore->getNumOfDbWritesToDisk());
-
-  // Restore the state to mix of ephemeral and persistent of a type
-  prefixManager
-      ->advertisePrefixes({persistentPrefixEntry9, ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(6, configStore->getNumOfDbWritesToDisk());
-
-  // Verify that entry in DB being deleted is persistent so file is update
-  prefixManager
-      ->syncPrefixesByType(thrift::PrefixType::BGP, {ephemeralPrefixEntry10})
-      .get();
-  ASSERT_EQ(7, configStore->getNumOfDbWritesToDisk());
+  auto resp7 = prefixManager->getPrefixesByType(thrift::PrefixType::VIP).get();
+  EXPECT_TRUE(resp7);
+  EXPECT_EQ(0, resp7->size());
 }
 
 TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
-  // Helper function to receive expected number of updates from KvStore
-  auto recvPublication = [this](int num) {
-    for (int i = 0; i < num; ++i) {
-      EXPECT_NO_THROW(kvStoreWrapper->recvPublication());
-    }
-  };
-
-  // Receive initial empty prefix database from KvStore when per-prefix key is
-  recvPublication(0);
-
   // ADD_PREFIXES
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::ADD_PREFIXES;
-    request.prefixes = {prefixEntry1, persistentPrefixEntry9};
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::ADD_PREFIXES,
+        thrift::PrefixType::BGP,
+        {prefixEntry1, prefixEntry7});
+    prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(2);
+    // Wait for update in KvStore
+    // ATTN: both prefixes should be updated via throttle
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(2, pub.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
     EXPECT_EQ(2, prefixes->size());
-    EXPECT_THAT(*prefixes, testing::Contains(prefixEntry1));
-    EXPECT_THAT(*prefixes, testing::Contains(persistentPrefixEntry9));
+    EXPECT_THAT(
+        *prefixes, testing::UnorderedElementsAre(prefixEntry1, prefixEntry7));
   }
 
   // WITHDRAW_PREFIXES_BY_TYPE
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES_BY_TYPE;
-    request.type_ref() = thrift::PrefixType::BGP;
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE, thrift::PrefixType::BGP);
+    prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(1);
+    // Wait for update in KvStore
+    // ATTN: ONLY `prefixEntry7` will be removed as its type is BGP
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -1185,14 +923,21 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // SYNC_PREFIXES_BY_TYPE
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::SYNC_PREFIXES_BY_TYPE;
-    request.type_ref() = thrift::PrefixType::DEFAULT;
-    request.prefixes = {prefixEntry3};
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::SYNC_PREFIXES_BY_TYPE,
+        thrift::PrefixType::DEFAULT,
+        {prefixEntry3});
+    prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(2);
+    // Wait for update in KvStore
+    // ATTN: 1st pub is withdrawn notification of existing `prefixEntry1`
+    //       `KvStoreClientInternal` won't throttle the change
+    auto pub1 = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub1.keyVals_ref()->size());
+
+    // ATTN: 2nd pub is advertisement notification of `prefixEntry3`
+    auto pub2 = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub2.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -1203,13 +948,121 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // WITHDRAW_PREFIXES
   {
     // Send update request in queue
-    thrift::PrefixUpdateRequest request;
-    request.cmd = thrift::PrefixUpdateCommand::WITHDRAW_PREFIXES;
-    request.prefixes = {prefixEntry3};
-    prefixUpdatesQueue.push(std::move(request));
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES,
+        thrift::PrefixType::DEFAULT,
+        {prefixEntry3});
+    prefixUpdatesQueue.push(std::move(event));
 
     // Wait for update in KvStore (PrefixManager has processed the update)
-    recvPublication(1);
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+    // Verify
+    auto prefixes = prefixManager->getPrefixes().get();
+    EXPECT_EQ(0, prefixes->size());
+  }
+
+  // Test VIP prefixes add and withdraw
+  // Add prefixEntry9 with 2 nexthops, withdraw 1 nexthop, then withdraw the
+  // other one
+  PrefixEntry cPrefixEntry(
+      std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
+  std::unordered_set<thrift::NextHopThrift> nexthops;
+  nexthops.insert(createNextHop(toBinaryAddress("::1")));
+  nexthops.insert(createNextHop(toBinaryAddress("::2")));
+  cPrefixEntry.nexthops = nexthops;
+
+  // ADD_PREFIXES
+  {
+    int scheduleAt{0};
+    auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
+
+    auto prefixKey9 = PrefixKey(
+                          nodeId_,
+                          toIPNetwork(*prefixEntry9.prefix_ref()),
+                          Constants::kDefaultArea.toString())
+                          .getPrefixKeyV2();
+
+    evb.scheduleTimeout(
+        std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+          // Send prefix update request in queue
+          PrefixEvent event(
+              PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP, {}, {});
+          event.prefixEntries.push_back(cPrefixEntry);
+          prefixUpdatesQueue.push(std::move(event));
+
+          // Unicast route of VIP prefixEntry9 is sent to Decision/Fib for
+          // programming.
+          auto update = waitForRouteUpdate(*staticRoutesReaderPtr);
+          EXPECT_TRUE(update.has_value());
+
+          const auto& updatedRoutes =
+              *update.value().unicastRoutesToUpdate_ref();
+          const auto& deletedRoutes =
+              *update.value().unicastRoutesToDelete_ref();
+          EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+          EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+          const auto& route = updatedRoutes.back();
+          EXPECT_EQ(*route.dest_ref(), addr9);
+          EXPECT_EQ(route.nextHops_ref().value().size(), 2); // Two next hops.
+        });
+
+    evb.scheduleTimeout(
+        std::chrono::milliseconds(
+            scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+        [&]() {
+          // prefixEntry9 is not injected into KvStore.
+          EXPECT_FALSE(
+              kvStoreWrapper->getKey(kTestingAreaName, prefixKey9).has_value());
+
+          // Unicast route of prefixEntry9 is programmed.
+          DecisionRouteUpdate routeUpdate;
+          routeUpdate.addRouteToUpdate(RibUnicastEntry(
+              toIPNetwork(addr9),
+              nexthops,
+              prefixEntry9,
+              Constants::kDefaultArea.toString()));
+          fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+          // Wait for prefix update in KvStore
+          auto pub = kvStoreWrapper->recvPublication();
+          EXPECT_EQ(1, pub.keyVals_ref()->size());
+          auto maybeValue =
+              kvStoreWrapper->getKey(kTestingAreaName, prefixKey9);
+          EXPECT_TRUE(maybeValue.has_value());
+          auto db = readThriftObjStr<thrift::PrefixDatabase>(
+              maybeValue.value().value_ref().value(), serializer);
+          EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+          EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+          // Area stack should not be set for originated VIP.
+          EXPECT_TRUE(db.prefixEntries_ref()[0].area_stack_ref()->empty());
+          EXPECT_EQ(
+              db.prefixEntries_ref()[0].type_ref(), thrift::PrefixType::VIP);
+
+          // Verify prefixEntry9 exists in PrefixManager.
+          auto prefixes = prefixManager->getPrefixes().get();
+          EXPECT_EQ(1, prefixes->size());
+          EXPECT_THAT(*prefixes, testing::Contains(prefixEntry9));
+
+          evb.stop();
+        });
+
+    // let magic happen
+    evb.run();
+  }
+
+  // WITHDRAW_PREFIXES
+  {
+    // Send update request in queue
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES, thrift::PrefixType::VIP, {}, {});
+    event.prefixEntries.push_back(cPrefixEntry);
+    prefixUpdatesQueue.push(std::move(event));
+
+    // Wait for update in KvStore (PrefixManager has processed the update)
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->size());
 
     // Verify
     auto prefixes = prefixManager->getPrefixes().get();
@@ -1217,7 +1070,427 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   }
 }
 
+/**
+ * Validate PrefixManager does not advertise prefixes with prepend labels to
+ * KvStore, until receiving from Fib that associated label routes are already
+ * programmed. Both FULL_SYNC and INCREMENTAL route update types are tested.
+ * 1. Prefixes with prepend labels are advertised after FULL_SYNC route updates
+ *    of all labels are received.
+ * 2. INCREMENTAL delete of label route updates blocks the advertisement of
+ *    follow-up prefix updates with deleted label routes.
+ * 3. In follow-up prefix updates, those with programmed label routes were
+ *    advertised; those with programmed-then-deleted label routes were not
+ *    advertised.
+ * 4. Next INCREMENTAL route update for previously deleted label triggers the
+ *    advertisement of above cached prefixes with the prepend label.
+ * 5. Follow-up FULL_SYNC route updates reset previously stored programmed
+ *    labels in PrefixManager. Only prefixes with newly programmed label routes
+ *    will be advertised.
+ */
+
+TEST_F(PrefixManagerTestFixture, FibAckForPrefixesWithMultiLabels) {
+  int scheduleAt{0};
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // 1.1 PrefixManager received prefix updates with prepend labels.
+        PrefixEvent prefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1WithLabel1,
+             prefixEntry2WithLabel1,
+             prefixEntry3WithLabel2});
+        prefixUpdatesQueue.push(std::move(prefixEvent));
+
+        // 1.2 Full sync of programmed routes for label1/2 arrived.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.mplsRoutesToUpdate = {
+            {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 1.3 Advertised prefixEntry1WithLabel1, prefixEntry2WithLabel1,
+        // prefixEntry3WithLabel2
+        EXPECT_EQ(3, getNumPrefixes(prefixDbMarker));
+
+        // 2.1 INCREMENTAL delete of label route for label1.
+        DecisionRouteUpdate deletedRoutes;
+        deletedRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+        deletedRoutes.mplsRoutesToDelete = {label1};
+        fibRouteUpdatesQueue.push(std::move(deletedRoutes));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 2.2. Withdrew prefixEntry1WithLabel1, prefixEntry2WithLabel1
+        EXPECT_EQ(1, getNumPrefixes(prefixDbMarker));
+
+        // 3.1 PrefixManager received prefix updates with prepend labels.
+        PrefixEvent prefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry4WithLabel1, prefixEntry5WithLabel2});
+        prefixUpdatesQueue.push(std::move(prefixEvent));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 3.2 Advertised prefixEntry5WithLabel2
+        EXPECT_EQ(2, getNumPrefixes(prefixDbMarker));
+
+        // 4.1 INCREMENTAL update of programmed routes for label1.
+        DecisionRouteUpdate updateRoutes;
+        updateRoutes.type = DecisionRouteUpdate::INCREMENTAL;
+        updateRoutes.mplsRoutesToUpdate = {{label1, RibMplsEntry(label1)}};
+        fibRouteUpdatesQueue.push(std::move(updateRoutes));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 4.2 Readvertised prefixEntry1WithLabel1, prefixEntry2WithLabel1;
+        // Advertised prefixEntry4WithLabel1.
+        EXPECT_EQ(5, getNumPrefixes(prefixDbMarker));
+
+        // 5.1 FULL_SYNC update of programmed routes for label2.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.mplsRoutesToUpdate = {{label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 5.2 Withdrew prefixEntry1WithLabel1, prefixEntry2WithLabel1,
+        // prefixEntry4WithLabel1.
+        EXPECT_EQ(2, getNumPrefixes(prefixDbMarker));
+
+        evb.stop();
+      });
+
+  // let magic happen
+  evb.run();
+}
+
+/**
+ * Validate PrefixManager does not advertise one prefix with prepend labels to
+ * KvStore, until receiving from Fib that associated label routes are already
+ * programmed.
+ * 1. Advertise <Prefix, Label=none>
+ * 2. Donot advertise prefix update of <Prefix, Label1>
+ * 3. Received Label1 route programmed signal; <Prefix, Label1> gets advertised.
+ * 4. Prefix Update <Prefix, Label2> not advertised
+ * 5. Received Label1 routes deleted signal; <Prefix, Label1> gets removed.
+ * 6. Received Label2 route programmed signal; <Prefix, Label2> gets advertised.
+ * 7. Prefix Update <Prefix, Label=none> gets updated again.
+ */
+TEST_F(PrefixManagerTestFixture, FibAckForOnePrefixWithMultiLabels) {
+  int scheduleAt{0};
+
+  auto prefixKey = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
+  auto prefixKeyStr = prefixKey.getPrefixKeyV2();
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // 1. PrefixManager receives updates of one prefix without label.
+        PrefixEvent prefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1Bgp});
+        prefixUpdatesQueue.push(std::move(prefixEvent));
+
+        // Wait for update in KvStore
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // ATTN: prefixes without label should be updated via throttle.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
+
+        // 2.1. PrefixManager receives <Prefix, Label1>.
+        prefixUpdatesQueue.push(PrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1WithLabel1}));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 2.2. Donot advertise prefix update of <Prefix, Label1> since label
+        // routes has not programmed yet.
+        // Note: previously advertised prefix with null label still persists.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        // Prepend label is still unset.
+        EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
+
+        // 3.1. Received route programmed signal of Label1.
+        DecisionRouteUpdate routeUpdates;
+        routeUpdates.type = DecisionRouteUpdate::INCREMENTAL;
+        routeUpdates.mplsRoutesToUpdate = {{label1, RibMplsEntry(label1)}};
+        fibRouteUpdatesQueue.push(std::move(routeUpdates));
+
+        // Wait for update in KvStore
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // 3.2. <Prefix, Label1> gets advertised.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label1);
+
+        // 4.1. PrefixManager receives <Prefix, Label2>.
+        prefixUpdatesQueue.push(PrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1WithLabel2}));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // 4.2. Donot advertise prefix update of <Prefix, Label2> since label
+        // routes has not programmed yet.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        // Prepend label is still label1.
+        EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label1);
+
+        // 5.1. Received route delete signal of Label1.
+        DecisionRouteUpdate deleteRouteUpdates;
+        deleteRouteUpdates.type = DecisionRouteUpdate::INCREMENTAL;
+        deleteRouteUpdates.mplsRoutesToDelete = {label1};
+        fibRouteUpdatesQueue.push(std::move(deleteRouteUpdates));
+
+        // Wait for update in KvStore
+        auto pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // 5.2. <Prefix, Label1> gets deleted.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_TRUE(db.get_deletePrefix()); // Prefix is indicated as deleted.
+
+        // 6.1. Received route programmed signal of Label2.
+        DecisionRouteUpdate addRouteUpdates;
+        addRouteUpdates.type = DecisionRouteUpdate::INCREMENTAL;
+        addRouteUpdates.mplsRoutesToUpdate = {{label2, RibMplsEntry(label2)}};
+        fibRouteUpdatesQueue.push(std::move(addRouteUpdates));
+
+        // Wait for update in KvStore
+        pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+        // 6.2. <Prefix, Label2> gets advertised.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_EQ(db.prefixEntries_ref()[0].prependLabel_ref().value(), label2);
+        EXPECT_FALSE(db.get_deletePrefix());
+
+        pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size()); // ttl update.
+
+        // 7.1. PrefixManager receives <Prefix, Label=none>.
+        prefixUpdatesQueue.push(PrefixEvent(
+            PrefixEventType::ADD_PREFIXES,
+            thrift::PrefixType::BGP,
+            {prefixEntry1Bgp}));
+
+        // Wait for update in KvStore
+        pub = kvStoreWrapper->recvPublication();
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+
+        // 7.2. <Prefix, Label=none> gets advertised.
+        maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+        EXPECT_FALSE(db.prefixEntries_ref()[0].prependLabel_ref().has_value());
+
+        evb.stop();
+      });
+
+  // let magic happen
+  evb.run();
+}
+
+/**
+ * Verifies `getAdvertisedRoutesFiltered` with all filter combinations
+ */
+TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
+  //
+  // Add prefixes, prefix1 -> DEFAULT, LOOPBACK
+  //
+  auto const prefix = toIpPrefix("10.0.0.0/8");
+  {
+    PrefixEvent event1(
+        PrefixEventType::ADD_PREFIXES,
+        thrift::PrefixType::DEFAULT,
+        {createPrefixEntry(prefix, thrift::PrefixType::DEFAULT)});
+    PrefixEvent event2(
+        PrefixEventType::ADD_PREFIXES,
+        thrift::PrefixType::LOOPBACK,
+        {createPrefixEntry(prefix, thrift::PrefixType::LOOPBACK)});
+    prefixUpdatesQueue.push(std::move(event1));
+    prefixUpdatesQueue.push(std::move(event2));
+  }
+
+  //
+  // Empty filter
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    auto attempts = 0;
+    if (routes->size() == 0 && attempts < 3) {
+      routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+      attempts++;
+    }
+
+    ASSERT_EQ(1, routes->size());
+    auto& routeDetail = routes->at(0);
+    EXPECT_EQ(prefix, *routeDetail.prefix_ref());
+    EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
+    EXPECT_EQ(2, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(2, routeDetail.routes_ref()->size());
+  }
+
+  //
+  // Filter on prefix
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixes_ref() = std::vector<thrift::IpPrefix>({prefix});
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(1, routes->size());
+
+    auto& routeDetail = routes->at(0);
+    EXPECT_EQ(prefix, *routeDetail.prefix_ref());
+    EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
+    EXPECT_EQ(2, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(2, routeDetail.routes_ref()->size());
+  }
+
+  //
+  // Filter on non-existing prefix
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixes_ref() =
+        std::vector<thrift::IpPrefix>({toIpPrefix("11.0.0.0/8")});
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+
+  //
+  // Filter on empty prefix list. Should return empty list
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixes_ref() = std::vector<thrift::IpPrefix>();
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+
+  //
+  // Filter on type
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixType_ref() = thrift::PrefixType::DEFAULT;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(1, routes->size());
+
+    auto& routeDetail = routes->at(0);
+    EXPECT_EQ(prefix, *routeDetail.prefix_ref());
+    EXPECT_EQ(thrift::PrefixType::LOOPBACK, *routeDetail.bestKey_ref());
+    EXPECT_EQ(2, routeDetail.bestKeys_ref()->size());
+    EXPECT_EQ(1, routeDetail.routes_ref()->size());
+
+    auto& route = routeDetail.routes_ref()->at(0);
+    EXPECT_EQ(thrift::PrefixType::DEFAULT, route.key_ref());
+  }
+
+  //
+  // Filter on non-existing type (BGP)
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixType_ref() = thrift::PrefixType::BGP;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+
+  //
+  // Filter on non-existing type (VIP)
+  //
+  {
+    thrift::AdvertisedRouteFilter filter;
+    filter.prefixType_ref() = thrift::PrefixType::VIP;
+    auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
+    ASSERT_EQ(0, routes->size());
+  }
+}
+
+/**
+ * Verifies the test case with empty entries. Other cases are exercised above
+ */
+TEST(PrefixManager, FilterAdvertisedRoutes) {
+  std::vector<thrift::AdvertisedRouteDetail> routes;
+  std::unordered_map<thrift::PrefixType, PrefixEntry> entries;
+  thrift::AdvertisedRouteFilter filter;
+  PrefixManager::filterAndAddAdvertisedRoute(
+      routes, filter.prefixType_ref(), folly::CIDRNetwork(), entries);
+  EXPECT_TRUE(routes.empty());
+}
+
 class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
+ protected:
   thrift::OpenrConfig
   createConfig() override {
     // config three areas A B C without policy
@@ -1225,9 +1498,7 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
     auto B = createAreaConfig("B", {"FSW.*"}, {".*"});
     auto C = createAreaConfig("C", {"SSW.*"}, {".*"});
 
-    auto tConfig = getBasicOpenrConfig("node-1", "domain", {A, B, C});
-    tConfig.kvstore_config_ref()->sync_interval_s_ref() = 1;
-
+    auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A, B, C});
     return tConfig;
   }
 
@@ -1236,8 +1507,12 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
   bool
   readPublication(
       thrift::Publication const& pub,
-      std::map<std::string, thrift::PrefixEntry>& got,
-      std::map<std::string, thrift::PrefixEntry>& gotDeleted) {
+      std::map<
+          std::pair<std::string /* prefixStr */, std::string /* area */>,
+          thrift::PrefixEntry>& got,
+      std::map<
+          std::pair<std::string /* prefixStr */, std::string /* area */>,
+          thrift::PrefixEntry>& gotDeleted) {
     EXPECT_EQ(1, pub.keyVals_ref()->size());
     auto kv = pub.keyVals_ref()->begin();
 
@@ -1247,73 +1522,95 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
       return false;
     }
 
-    auto db = fbzmq::util::readThriftObjStr<thrift::PrefixDatabase>(
+    auto db = readThriftObjStr<thrift::PrefixDatabase>(
         kv->second.value_ref().value(), serializer);
     EXPECT_EQ(1, db.prefixEntries_ref()->size());
     auto prefix = db.prefixEntries_ref()->at(0);
+    auto prefixKeyWithArea = std::make_pair(kv->first, pub.get_area());
     if (*db.deletePrefix_ref()) {
-      gotDeleted.emplace(kv->first, prefix);
+      gotDeleted.emplace(prefixKeyWithArea, prefix);
     } else {
-      got.emplace(kv->first, prefix);
+      got.emplace(prefixKeyWithArea, prefix);
     }
     return true;
   }
 };
 
 /**
- * Test prefix advertisement in KvStore with multiple clients.
- * NOTE: Priority LOOPBACK > DEFAULT > BGP
- * 1. Inject prefix1 with client-bgp - Verify KvStore
- * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
- * 3. Withdraw prefix1 with client-loopback - Verify KvStore
- * 4. Withdraw prefix1 with client-bgp, client-default - Verify KvStore
+ * Test cross-AREA route redistribution for Decision RIB/VIP routes with:
+ *  - prefix update
  */
 TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
-  auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
+  const auto areaStrA{"A"};
+  const auto areaStrB{"B"};
+  const auto areaStrC{"C"};
+  const auto prefixStr =
+      PrefixKey(nodeId_, toIPNetwork(addr1), areaStrA).getPrefixKeyV2();
+  const auto prefixKeyAreaA = std::make_pair(prefixStr, areaStrA);
+  const auto prefixKeyAreaB = std::make_pair(prefixStr, areaStrB);
+  const auto prefixKeyAreaC = std::make_pair(prefixStr, areaStrC);
 
   auto path1_2_1 = createNextHop(
       toBinaryAddress(folly::IPAddress("fe80::2")),
       std::string("iface_1_2_1"),
       1);
-  path1_2_1.area_ref() = "A";
+  path1_2_1.area_ref() = areaStrA;
   auto path1_2_2 = createNextHop(
       toBinaryAddress(folly::IPAddress("fe80::2")),
       std::string("iface_1_2_2"),
       2);
-  path1_2_2.area_ref() = "B";
-
-  // prefix key for addr1 in area A, B, C
-  auto keyStrA = PrefixKey("node-1", toIPNetwork(addr1), "A").getPrefixKey();
-  auto keyStrB = PrefixKey("node-1", toIPNetwork(addr1), "B").getPrefixKey();
-  auto keyStrC = PrefixKey("node-1", toIPNetwork(addr1), "C").getPrefixKey();
+  path1_2_2.area_ref() = areaStrB;
 
   //
-  // 1. Inject prefix1 from area A, B and C should receive announcement
+  // 1. Inject prefix1 from area A, {B, C} should receive announcement
   //
-
-  // create unicast route for addr1 from area "A"
-  auto prefixEntry1A = prefixEntry1;
-  prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
-  auto unicast1A = RibUnicastEntry(
-      toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, "A", false);
-  // expected kvstore announcement to other area, append "A" in area stack
-  auto expectedPrefixEntry1A = prefixEntry1A;
-  expectedPrefixEntry1A.area_stack_ref()->push_back("A");
-  expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
 
   {
+    auto prefixEntry1A = prefixEntry1;
+    auto expectedPrefixEntry1A = prefixEntry1;
+
+    // append area_stack after area redistibution
+    prefixEntry1A.area_stack_ref() = {"65000"};
+    expectedPrefixEntry1A.area_stack_ref() = {"65000", areaStrA};
+
+    // increase metrics.distance by 1 after area redistribution
+    prefixEntry1A.metrics_ref()->distance_ref() = 1;
+    expectedPrefixEntry1A.metrics_ref()->distance_ref() = 2;
+
+    // PrefixType being overridden with RIB type after area redistribution
+    prefixEntry1A.type_ref() = thrift::PrefixType::DEFAULT;
+    expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
+
+    // Set non-transitive attributes
+    prefixEntry1A.forwardingAlgorithm_ref() =
+        thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
+    prefixEntry1A.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+    prefixEntry1A.minNexthop_ref() = 10;
+    prefixEntry1A.prependLabel_ref() = 70000;
+
+    // Non-transitive attributes should be reset after redistribution.
+    expectedPrefixEntry1A.forwardingAlgorithm_ref() =
+        thrift::PrefixForwardingAlgorithm();
+    expectedPrefixEntry1A.forwardingType_ref() = thrift::PrefixForwardingType();
+    expectedPrefixEntry1A.minNexthop_ref().reset();
+    expectedPrefixEntry1A.prependLabel_ref().reset();
+
+    auto unicast1A = RibUnicastEntry(
+        toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, areaStrA, false);
+
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    routeUpdate.addRouteToUpdate(unicast1A);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
-    expected.emplace(keyStrB, expectedPrefixEntry1A);
-    expected.emplace(keyStrC, expectedPrefixEntry1A);
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
+        got, gotDeleted;
+    expected.emplace(prefixKeyAreaB, expectedPrefixEntry1A);
+    expected.emplace(prefixKeyAreaC, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value();
+    auto pub2 = kvStoreWrapper->recvPublication();
     readPublication(pub2, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1321,91 +1618,114 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
   }
 
   //
-  // 2. Inject prefix1 from area B
-  //    A, C receive announcement, B withdraw old prefix from A
+  // 2. Inject prefix1 of VIP type from area B, {A, C} should receive
+  // announcement. B withdraw old prefix from A
   //
 
-  // create unicast route for addr1 from area "B"
-  auto prefixEntry1B = prefixEntry1;
-  prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
-  auto unicast1B = RibUnicastEntry(
-      toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);
-  // expected kvstore announcement to other area, append "B" in area stack
-  auto expectedPrefixEntry1B = prefixEntry1B;
-  expectedPrefixEntry1B.area_stack_ref()->push_back("B");
-  expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
-
   {
+    // build prefixEntry for addr1 from area "B"
+    auto prefixEntry1B = prefixEntry1;
+    prefixEntry1B.type_ref() = thrift::PrefixType::VIP;
+    auto expectedPrefixEntry1B = prefixEntry1B;
+
+    // append area_stack after area redistibution
+    prefixEntry1B.area_stack_ref() = {"65000"};
+    expectedPrefixEntry1B.area_stack_ref() = {"65000", areaStrB};
+
+    // increase metrics.distance by 1 after area redistribution
+    prefixEntry1B.metrics_ref()->distance_ref() = 1;
+    expectedPrefixEntry1B.metrics_ref()->distance_ref() = 2;
+    // PrefixType being overridden with RIB type after area redistribution
+    expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
+
+    // Set non-transitive attributes
+    prefixEntry1B.prependLabel_ref() = 70001;
+
+    // Non-transitive attributes should NOT be reset after redistribution.
+    expectedPrefixEntry1B.prependLabel_ref().reset();
+
+    auto unicast1B = RibUnicastEntry(
+        toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, areaStrB, false);
+
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1B);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    routeUpdate.addRouteToUpdate(unicast1B);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
-    expected.emplace(keyStrA, expectedPrefixEntry1B);
-    expected.emplace(keyStrC, expectedPrefixEntry1B);
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
+        got, gotDeleted;
+    expected.emplace(prefixKeyAreaA, expectedPrefixEntry1B);
+    expected.emplace(prefixKeyAreaC, expectedPrefixEntry1B);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value();
+    auto pub2 = kvStoreWrapper->recvPublication();
     readPublication(pub2, got, gotDeleted);
 
-    auto pub3 = kvStoreUpdatesQueue.get().value();
+    auto pub3 = kvStoreWrapper->recvPublication();
     readPublication(pub3, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
 
     EXPECT_EQ(1, gotDeleted.size());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrB).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaB).prefix_ref());
   }
 
   //
-  // 3. Withdraw prefix1, A, C receive prefix withdrawal
+  // 3. Withdraw prefix1, {A, C} receive prefix withdrawal
   //
+
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
+        got, gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
-    auto pub2 = kvStoreUpdatesQueue.get().value();
+    auto pub2 = kvStoreWrapper->recvPublication();
     readPublication(pub2, got, gotDeleted);
 
     EXPECT_EQ(0, got.size());
 
     EXPECT_EQ(2, gotDeleted.size());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrA).prefix_ref());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaA).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaC).prefix_ref());
   }
 }
 
+/**
+ * Test cross-AREA route redistribution for Decision RIB routes with:
+ *  - nexthop updates
+ */
 TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
-  auto kvStoreUpdatesQueue = kvStoreWrapper->getReader();
+  const auto areaStrA{"A"};
+  const auto areaStrB{"B"};
+  const auto areaStrC{"C"};
+  const auto prefixStr =
+      PrefixKey(nodeId_, toIPNetwork(addr1), areaStrA).getPrefixKeyV2();
+  const auto prefixKeyAreaA = std::make_pair(prefixStr, areaStrA);
+  const auto prefixKeyAreaB = std::make_pair(prefixStr, areaStrB);
+  const auto prefixKeyAreaC = std::make_pair(prefixStr, areaStrC);
 
   auto path1_2_1 = createNextHop(
       toBinaryAddress(folly::IPAddress("fe80::2")),
       std::string("iface_1_2_1"),
       1);
-  path1_2_1.area_ref() = "A";
+  path1_2_1.area_ref() = areaStrA;
   auto path1_2_2 = createNextHop(
       toBinaryAddress(folly::IPAddress("fe80::2")),
       std::string("iface_1_2_2"),
       2);
-  path1_2_2.area_ref() = "B";
+  path1_2_2.area_ref() = areaStrB;
   auto path1_2_3 = createNextHop(
       toBinaryAddress(folly::IPAddress("fe80::2")),
       std::string("iface_1_2_3"),
       2);
-  path1_2_3.area_ref() = "C";
-
-  // prefix key for addr1 in area A, B, C
-  auto keyStrA = PrefixKey("node-1", toIPNetwork(addr1), "A").getPrefixKey();
-  auto keyStrB = PrefixKey("node-1", toIPNetwork(addr1), "B").getPrefixKey();
-  auto keyStrC = PrefixKey("node-1", toIPNetwork(addr1), "C").getPrefixKey();
+  path1_2_3.area_ref() = areaStrC;
 
   //
   // 1. Inject prefix1 with ecmp areas = [A, B], best area = A
@@ -1414,28 +1734,37 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
   // create unicast route for addr1 from area "A"
   auto prefixEntry1A = prefixEntry1;
-  prefixEntry1A.metrics_ref()->source_preference_ref() = 90;
-  auto unicast1A = RibUnicastEntry(
-      toIPNetwork(addr1), {path1_2_1, path1_2_2}, prefixEntry1A, "A", false);
+  auto expectedPrefixEntry1A = prefixEntry1;
 
-  // expected kvstore announcement to other area, append "A" in area stack
-  auto expectedPrefixEntry1A = prefixEntry1A;
-  expectedPrefixEntry1A.area_stack_ref()->push_back("A");
+  // append area_stack after area redistibution
+  expectedPrefixEntry1A.area_stack_ref() = {areaStrA};
+
+  // increase metrics.distance by 1 after area redistribution
+  expectedPrefixEntry1A.metrics_ref()->distance_ref() = 1;
+
+  // PrefixType being overridden with RIB type after area redistribution
   expectedPrefixEntry1A.type_ref() = thrift::PrefixType::RIB;
+
+  auto unicast1A = RibUnicastEntry(
+      toIPNetwork(addr1),
+      {path1_2_1, path1_2_2},
+      prefixEntry1A,
+      areaStrA,
+      false);
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    routeUpdate.addRouteToUpdate(unicast1A);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
-    expected.emplace(keyStrC, expectedPrefixEntry1A);
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
+        got, gotDeleted;
+    expected.emplace(prefixKeyAreaC, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
-
     EXPECT_EQ(0, gotDeleted.size());
   }
 
@@ -1446,17 +1775,18 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   unicast1A.nexthops.emplace(path1_2_3);
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    routeUpdate.addRouteToUpdate(unicast1A);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> got,
+        gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(0, got.size());
     EXPECT_EQ(1, gotDeleted.size());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaC).prefix_ref());
   }
 
   //
@@ -1466,13 +1796,14 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   unicast1A.nexthops.erase(path1_2_2);
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1A);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    routeUpdate.addRouteToUpdate(unicast1A);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
-    expected.emplace(keyStrB, expectedPrefixEntry1A);
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
+        got, gotDeleted;
+    expected.emplace(prefixKeyAreaB, expectedPrefixEntry1A);
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
+    auto pub1 = kvStoreWrapper->recvPublication();
     readPublication(pub1, got, gotDeleted);
 
     EXPECT_EQ(expected, got);
@@ -1481,75 +1812,1881 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
   //
   // 4. change ecmp group to [B], best area = B
-  //    => B receive withdraw, A, C receive update
+  //    => B receive withdraw, {A, C} receive update
   //
 
   // create unicast route for addr1 from area "B"
   auto prefixEntry1B = prefixEntry1;
-  prefixEntry1B.metrics_ref()->source_preference_ref() = 100;
-  auto unicast1B = RibUnicastEntry(
-      toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, "B", false);
+  auto expectedPrefixEntry1B = prefixEntry1;
 
-  // expected kvstore announcement to other area, append "B" in area stack
-  auto expectedPrefixEntry1B = prefixEntry1B;
-  expectedPrefixEntry1B.area_stack_ref()->push_back("B");
+  // append area_stack after area redistibution
+  expectedPrefixEntry1B.area_stack_ref() = {areaStrB};
+
+  // increase metrics.distance by 1 after area redistribution
+  expectedPrefixEntry1B.metrics_ref()->distance_ref() = 1;
+
+  // PrefixType being overridden with RIB type after area redistribution
   expectedPrefixEntry1B.type_ref() = thrift::PrefixType::RIB;
 
+  auto unicast1B = RibUnicastEntry(
+      toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, areaStrB, false);
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToUpdate.emplace_back(unicast1B);
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    routeUpdate.addRouteToUpdate(unicast1B);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> expected, got, gotDeleted;
-    expected.emplace(keyStrA, expectedPrefixEntry1B);
-    expected.emplace(keyStrC, expectedPrefixEntry1B);
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
+        got, gotDeleted;
+    expected.emplace(prefixKeyAreaA, expectedPrefixEntry1B);
+    expected.emplace(prefixKeyAreaC, expectedPrefixEntry1B);
 
     // this test is long, we might hit ttl updates
     // here skip ttl updates
     int expectedPubCnt{3}, gotPubCnt{0};
     while (gotPubCnt < expectedPubCnt) {
-      auto pub = kvStoreUpdatesQueue.get().value();
+      auto pub = kvStoreWrapper->recvPublication();
       gotPubCnt += readPublication(pub, got, gotDeleted);
     }
 
     EXPECT_EQ(expected, got);
 
     EXPECT_EQ(1, gotDeleted.size());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrB).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaB).prefix_ref());
   }
 
   //
   // 5. Withdraw prefix1
-  //    => A, C receive prefix withdrawal
+  //    => {A, C} receive prefix withdrawal
   //
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
-    routeUpdatesQueue.push(std::move(routeUpdate));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    std::map<std::string, thrift::PrefixEntry> got, gotDeleted;
+    std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> got,
+        gotDeleted;
 
-    auto pub1 = kvStoreUpdatesQueue.get().value();
-    readPublication(pub1, got, gotDeleted);
-
-    auto pub2 = kvStoreUpdatesQueue.get().value();
-    readPublication(pub2, got, gotDeleted);
+    while (gotDeleted.size() < 2) {
+      auto pub = kvStoreWrapper->recvPublication();
+      readPublication(pub, got, gotDeleted);
+    }
 
     EXPECT_EQ(0, got.size());
-
     EXPECT_EQ(2, gotDeleted.size());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrA).prefix_ref());
-    EXPECT_EQ(addr1, *gotDeleted.at(keyStrC).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaA).prefix_ref());
+    EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaC).prefix_ref());
   }
+}
+
+class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
+ public:
+  void
+  SetUp() override {
+    PrefixManagerMultiAreaTestFixture::SetUp();
+  }
+
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = minSupportingRouteV4_;
+    originatedPrefixV4.install_to_fib_ref() = true;
+    originatedPrefixV6.prefix_ref() = v6Prefix_;
+    originatedPrefixV6.minimum_supporting_routes_ref() = minSupportingRouteV6_;
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
+    return tConfig;
+  }
+
+  std::unordered_map<std::string, thrift::OriginatedPrefixEntry>
+  getOriginatedPrefixDb() {
+    std::unordered_map<std::string, thrift::OriginatedPrefixEntry> mp;
+    while (mp.size() < 2) {
+      auto prefixEntries = *prefixManager->getOriginatedPrefixes().get();
+      for (auto const& prefixEntry : prefixEntries) {
+        if (prefixEntry.prefix_ref()->prefix_ref() == v4Prefix_) {
+          mp[v4Prefix_] = prefixEntry;
+        }
+        if (prefixEntry.prefix_ref()->prefix_ref() == v6Prefix_) {
+          mp[v6Prefix_] = prefixEntry;
+        }
+      }
+      std::this_thread::yield();
+    }
+    return mp;
+  }
+
+  // return false if publication is tll update.
+  void
+  waitForKvStorePublication(
+      messaging::RQueue<KvStorePublication>& reader,
+      std::unordered_map<
+          std::pair<std::string /* prefixStr */, std::string /* areaStr */>,
+          thrift::PrefixEntry>& exp,
+      std::unordered_set<std::pair<std::string, std::string>>& expDeleted) {
+    while (exp.size() or expDeleted.size()) {
+      auto maybePub = reader.get().value();
+      if (auto* pub = std::get_if<thrift::Publication>(&maybePub)) {
+        for (const auto& [key, thriftVal] : pub->get_keyVals()) {
+          if (not thriftVal.value_ref().has_value()) {
+            // skip TTL update
+            continue;
+          }
+
+          auto db = readThriftObjStr<thrift::PrefixDatabase>(
+              thriftVal.value_ref().value(), serializer);
+          auto isDeleted = *db.deletePrefix_ref();
+          auto prefixEntry = db.prefixEntries_ref()->at(0);
+          auto prefixKeyWithArea = std::make_pair(key, pub->get_area());
+          if (isDeleted and expDeleted.count(prefixKeyWithArea)) {
+            VLOG(2) << fmt::format(
+                "Withdraw of prefix: {} in area: {} received",
+                prefixKeyWithArea.first,
+                prefixKeyWithArea.second);
+            expDeleted.erase(prefixKeyWithArea);
+          }
+          if ((not isDeleted) and exp.count(prefixKeyWithArea) and
+              prefixEntry == exp.at(prefixKeyWithArea)) {
+            VLOG(2) << fmt::format(
+                "Advertising of prefix: {} in area: {} received",
+                prefixKeyWithArea.first,
+                prefixKeyWithArea.second);
+            exp.erase(prefixKeyWithArea);
+          }
+        }
+      }
+
+      // no hogging of CPU cycle
+      std::this_thread::yield();
+    }
+  }
+
+ protected:
+  const std::string v4Prefix_ = "192.108.0.1/24";
+  const std::string v6Prefix_ = "2001:1:2:3::1/64";
+
+  const uint64_t minSupportingRouteV4_ = 1;
+  const uint64_t minSupportingRouteV6_ = 2;
+
+  const thrift::NextHopThrift nh_v4 = createNextHop(
+      toBinaryAddress(Constants::kLocalRouteNexthopV4.toString()));
+  const thrift::NextHopThrift nh_v6 = createNextHop(
+      toBinaryAddress(Constants::kLocalRouteNexthopV6.toString()));
+
+  const folly::CIDRNetwork v4Network_ =
+      folly::IPAddress::createNetwork(v4Prefix_);
+  const folly::CIDRNetwork v6Network_ =
+      folly::IPAddress::createNetwork(v6Prefix_);
+
+  const std::string areaStrA{"A"};
+  const std::string areaStrB{"B"};
+  const std::string areaStrC{"C"};
+
+  const std::string prefixStrV4_ =
+      PrefixKey(nodeId_, v4Network_, areaStrA).getPrefixKeyV2();
+  const std::string prefixStrV6_ =
+      PrefixKey(nodeId_, v6Network_, areaStrA).getPrefixKeyV2();
+
+  const std::pair<std::string, std::string> prefixKeyV4AreaA_ =
+      std::make_pair(prefixStrV4_, areaStrA);
+  const std::pair<std::string, std::string> prefixKeyV4AreaB_ =
+      std::make_pair(prefixStrV4_, areaStrB);
+  const std::pair<std::string, std::string> prefixKeyV4AreaC_ =
+      std::make_pair(prefixStrV4_, areaStrC);
+  const std::pair<std::string, std::string> prefixKeyV6AreaA_ =
+      std::make_pair(prefixStrV6_, areaStrA);
+  const std::pair<std::string, std::string> prefixKeyV6AreaB_ =
+      std::make_pair(prefixStrV6_, areaStrB);
+  const std::pair<std::string, std::string> prefixKeyV6AreaC_ =
+      std::make_pair(prefixStrV6_, areaStrC);
+};
+
+class RouteOriginationOverrideFixture : public RouteOriginationFixture {
+ public:
+  void
+  SetUp() override {
+    // Other set ups
+    RouteOriginationFixture::SetUp();
+
+    // Install route for v4Prefix_ since install_to_fib is true.
+    DecisionRouteUpdate routeUpdate;
+    auto addressV4 = toIpPrefix(v4Prefix_);
+    const auto entryV4 =
+        createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
+    routeUpdate.addRouteToUpdate(RibUnicastEntry(
+        toIPNetwork(addressV4),
+        {},
+        entryV4,
+        Constants::kDefaultArea.toString()));
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+  }
+
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV6.prefix_ref() = v6Prefix_;
+
+    // ATTN: specify supporting route cnt to be 0 for immediate advertisement
+    originatedPrefixV4.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV6.minimum_supporting_routes_ref() = 0;
+
+    // Make sure we install the prefixes to FIB
+    originatedPrefixV4.install_to_fib_ref() = true;
+    originatedPrefixV6.install_to_fib_ref() = false; // we can check both cases
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
+    return tConfig;
+  }
+};
+
+TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
+  auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
+
+  auto update =
+      waitForRouteUpdate(*staticRoutesReaderPtr, thrift::PrefixType::CONFIG);
+  EXPECT_TRUE(update.has_value());
+
+  auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+  auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+  EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+  EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+  // Verify that the destination is the v4 address
+  const auto& route = updatedRoutes.back();
+  EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+  // Verify the next hop list is empty
+  const auto& nhs = *route.nextHops_ref();
+  EXPECT_THAT(nhs, testing::SizeIs(0));
+
+  // Static route for the same config originated prefix is published once.
+  update = waitForRouteUpdate(*staticRoutesReaderPtr);
+  EXPECT_FALSE(update.has_value());
+}
+
+//
+// Test case to verify prefix/attributes aligns with config read from
+// `thrift::OpenrConfig`. This is the sanity check.
+//
+// Test also verifies that route with min_supporting_route=0 will be directly
+// advertised to `KvStore`.
+//
+TEST_F(RouteOriginationOverrideFixture, ReadFromConfig) {
+  // RQueue interface to read KvStore update
+  auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
+
+  // read via public API
+  auto mp = getOriginatedPrefixDb();
+  auto& prefixEntryV4 = mp.at(v4Prefix_);
+  auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+  // verify attributes from originated prefix config
+  EXPECT_EQ(0, prefixEntryV4.supporting_prefixes_ref()->size());
+  EXPECT_EQ(0, prefixEntryV6.supporting_prefixes_ref()->size());
+  EXPECT_TRUE(*prefixEntryV4.installed_ref());
+  EXPECT_TRUE(*prefixEntryV6.installed_ref());
+  EXPECT_EQ(v4Prefix_, *prefixEntryV4.prefix_ref()->prefix_ref());
+  EXPECT_EQ(v6Prefix_, *prefixEntryV6.prefix_ref()->prefix_ref());
+  EXPECT_EQ(0, *prefixEntryV4.prefix_ref()->minimum_supporting_routes_ref());
+  EXPECT_EQ(0, *prefixEntryV6.prefix_ref()->minimum_supporting_routes_ref());
+
+  // prefixes originated have specific thrift::PrefixType::CONFIG
+  const auto bestPrefixEntryV4_ =
+      createPrefixEntry(toIpPrefix(v4Prefix_), thrift::PrefixType::CONFIG);
+  const auto bestPrefixEntryV6_ =
+      createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
+
+  // v4Prefix_ is advertised to ALL areas configured
+  std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+      exp({
+          {prefixKeyV4AreaA_, bestPrefixEntryV4_},
+          {prefixKeyV4AreaB_, bestPrefixEntryV4_},
+          {prefixKeyV4AreaC_, bestPrefixEntryV4_},
+          {prefixKeyV6AreaA_, bestPrefixEntryV6_},
+          {prefixKeyV6AreaB_, bestPrefixEntryV6_},
+          {prefixKeyV6AreaC_, bestPrefixEntryV6_},
+      });
+  std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+
+  // wait for condition to be met for KvStore publication
+  waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+}
+
+TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
+  // RQueue interface to read route updates
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
+
+  // dummy nexthop
+  auto nh_3 = createNextHop(toBinaryAddress("fe80::1"));
+  nh_3.area_ref().reset(); // empty area
+
+  // supporting prefixes
+  const std::string v4Prefix_1 = "192.108.0.8/30";
+  const std::string v6Prefix_1 = "2001:1:2:3::1/70";
+  const std::string v4Prefix_2 = "192.108.1.2/32";
+  const std::string v6Prefix_2 = "2001:1:2:3::1/128";
+  const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
+  const auto v6Network_1 = folly::IPAddress::createNetwork(v6Prefix_1);
+  const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
+  const auto v6Network_2 = folly::IPAddress::createNetwork(v6Prefix_2);
+
+  // prefixes originated have specific thrift::PrefixType::CONFIG
+  const auto bestPrefixEntryV4_ =
+      createPrefixEntry(toIpPrefix(v4Prefix_), thrift::PrefixType::CONFIG);
+  const auto bestPrefixEntryV6_ =
+      createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
+
+  // ATTN: PrefixType is unrelated for supporting routes
+  const auto prefixEntryV4_1 =
+      createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
+  const auto prefixEntryV6_1 =
+      createPrefixEntry(toIpPrefix(v6Prefix_1), thrift::PrefixType::DEFAULT);
+  const auto prefixEntryV4_2 =
+      createPrefixEntry(toIpPrefix(v4Prefix_2), thrift::PrefixType::RIB);
+  const auto prefixEntryV6_2 =
+      createPrefixEntry(toIpPrefix(v6Prefix_2), thrift::PrefixType::RIB);
+  auto unicastEntryV4_1 = RibUnicastEntry(
+      v4Network_1,
+      {nh_v4},
+      prefixEntryV4_1,
+      Constants::kDefaultArea.toString());
+  auto unicastEntryV6_1 = RibUnicastEntry(
+      v6Network_1,
+      {nh_v6},
+      prefixEntryV6_1,
+      Constants::kDefaultArea.toString());
+  auto unicastEntryV4_2 = RibUnicastEntry(
+      v4Network_2,
+      {nh_v4, nh_3},
+      prefixEntryV4_2,
+      Constants::kDefaultArea.toString());
+  auto unicastEntryV6_2 = RibUnicastEntry(
+      v6Network_2,
+      {nh_v6, nh_3},
+      prefixEntryV6_2,
+      Constants::kDefaultArea.toString());
+
+  auto addressV4 = toIpPrefix(v4Prefix_);
+  const auto entryV4 = createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
+  auto unicastEntryV4 = RibUnicastEntry(
+      toIPNetwork(addressV4), {}, entryV4, Constants::kDefaultArea.toString());
+  //
+  // Step1: this tests:
+  //  - originated prefix whose supporting routes passed across threshold
+  //    will be advertised(v4);
+  //  - otherwise it will NOT be advertised;
+  //
+  // Inject:
+  //  - 1 supporting route for v4Prefix;
+  //  - 1 supporting route for v6Prefix;
+  // Expect:
+  //  - v4Prefix_ will be advertised as `min_supporting_route=1`;
+  //  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+  //
+
+  {
+    // 0. Decision receives the v4 published in initialization process.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+    // no v6 route update received
+    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
+  }
+
+  VLOG(1) << "Starting test step 1...";
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.addRouteToUpdate(unicastEntryV4);
+    routeUpdate.addRouteToUpdate(unicastEntryV4_1);
+    routeUpdate.addRouteToUpdate(unicastEntryV6_1);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+    // Verify 1): PrefixManager -> KvStore update
+    {
+      // v4Prefix_ is advertised to ALL areas configured
+      std::unordered_map<
+          std::pair<std::string, std::string>,
+          thrift::PrefixEntry>
+          exp({
+              {prefixKeyV4AreaA_, bestPrefixEntryV4_},
+              {prefixKeyV4AreaB_, bestPrefixEntryV4_},
+              {prefixKeyV4AreaC_, bestPrefixEntryV4_},
+          });
+      std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+
+      // wait for condition to be met for KvStore publication
+      LOG(INFO) << "before waitForKvStorePublication";
+      waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+      LOG(INFO) << "after waitForKvStorePublication";
+    }
+
+    // Verify 3): PrefixManager's public API
+    {
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+      // v4Prefix - advertised, v6Prefix - NOT advertised
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+
+      EXPECT_THAT(
+          *prefixEntryV4.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v4Network_1)));
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_1)));
+    }
+  }
+
+  //
+  // Step2: this tests:
+  //  - unrelated prefix will be ignored;
+  //  - route deletion followed with addition will make no change
+  //    although threshold has been bypassed in the middle;
+  //
+  // Inject:
+  //  - 1 route which is NOT subnet of v4Prefix;
+  //  - 1 supporting route for v6Prefix;
+  // Withdraw:
+  //  - 1 different supporting route for v6Prefix;
+  // Expect:
+  //  - # of supporting prefix for v4Prefix_ won't change;
+  //  - # of supporting prefix for v6Prefix_ won't change;
+  //
+  VLOG(1) << "Starting test step 2...";
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.addRouteToUpdate(unicastEntryV4_2);
+    routeUpdate.addRouteToUpdate(unicastEntryV6_2);
+    routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_2);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // no more route update received
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
+    }
+
+    // Verify 2): PrefixManager's public API
+    {
+      // verificaiton via public API
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+      // v4Prefix - advertised, v6Prefix - withdrawn
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+
+      EXPECT_THAT(
+          *prefixEntryV4.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v4Network_1)));
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_1)));
+    }
+  }
+
+  //
+  // Step3: this tests:
+  //  - existing supporting prefix will be ignored;
+  //  - originated prefix whose supporting routes passed across threshold
+  //    will be advertised(v6);
+  //
+  // Inject:
+  //  - exactly the same supporting route as previously for v4Prefix;
+  //  - 1 supporting route for v6Prefix;
+  // Expect:
+  //  - v4Prefix_'s supporting routes doesn't change as same update is ignored
+  //  - v6Prefix_ will be advertised to `KvStore` as `min_supporting_route=2`
+  //  - v6Prefix_ will NOT be advertised to `Decision` as `install_to_fib=false`
+  //
+  VLOG(1) << "Starting test step 3...";
+  {
+    DecisionRouteUpdate routeUpdate;
+    // ATTN: change ribEntry attributes to make sure no impact on ref-count
+    auto tmpEntryV4 = unicastEntryV4_1;
+    tmpEntryV4.nexthops = {createNextHop(toBinaryAddress("192.168.0.1"))};
+    routeUpdate.addRouteToUpdate(tmpEntryV4);
+    routeUpdate.addRouteToUpdate(unicastEntryV6_2);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // no more route update received
+      EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
+    }
+
+    // Verify 2): PrefixManager -> KvStore update
+    {
+      // v6Prefix_ is advertised to ALL areas configured
+      std::unordered_map<
+          std::pair<std::string, std::string>,
+          thrift::PrefixEntry>
+          exp({
+              {prefixKeyV6AreaA_, bestPrefixEntryV6_},
+              {prefixKeyV6AreaB_, bestPrefixEntryV6_},
+              {prefixKeyV6AreaC_, bestPrefixEntryV6_},
+          });
+      std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+
+      // wait for condition to be met for KvStore publication
+      waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+    }
+
+    // Verify 3): PrefixManager's public API
+    {
+      // verificaiton via public API
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+      // v4Prefix - advertised, v6Prefix - advertised
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == true and
+                        i.supporting_prefixes_ref()->size() == 2;
+                  }));
+
+      EXPECT_THAT(
+          *prefixEntryV4.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v4Network_1)));
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_1),
+              folly::IPAddress::networkToString(v6Network_2)));
+    }
+  }
+
+  // Step4: Withdraw:
+  //  - 1 supporting route of v4Prefix;
+  //  - 1 supporting route of v6Prefix;
+  // Expect:
+  //  - v4Prefix_ is withdrawn as `supporting_route_cnt=0`;
+  //  - v6Prefix_ is withdrawn as `supporting_route_cnt=1`;
+  //  - `Decision` won't receive routeUpdate for `v6Prefix_`
+  //    since it has `install_to_fib=false`;
+  //
+  VLOG(1) << "Starting test step 4...";
+  {
+    DecisionRouteUpdate routeUpdate;
+    routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
+    routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+    // Verify 1): PrefixManager -> Decision update
+    {
+      // ONLY v4 route withdrawn updates received
+      auto update = waitForRouteUpdate(staticRoutesReader);
+      EXPECT_TRUE(update.has_value());
+
+      auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+      auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+      EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
+      EXPECT_THAT(deletedRoutes, testing::SizeIs(1));
+      EXPECT_THAT(
+          deletedRoutes, testing::UnorderedElementsAre(toIpPrefix(v4Prefix_)));
+    }
+
+    // Verify 2): PrefixManager -> KvStore update
+    {
+      // both v4Prefix_ + v6Prefix_ are withdrawn from ALL areas configured
+      std::unordered_set<std::pair<std::string, std::string>> expDeleted{
+          prefixKeyV4AreaA_,
+          prefixKeyV4AreaB_,
+          prefixKeyV4AreaC_,
+          prefixKeyV6AreaA_,
+          prefixKeyV6AreaB_,
+          prefixKeyV6AreaC_};
+      std::unordered_map<
+          std::pair<std::string, std::string>,
+          thrift::PrefixEntry>
+          exp{};
+
+      // wait for condition to be met for KvStore publication
+      waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+    }
+
+    // Verify 3): PrefixManager's public API
+    {
+      auto mp = getOriginatedPrefixDb();
+      auto& prefixEntryV4 = mp.at(v4Prefix_);
+      auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+      // v4Prefix - withdrawn, v6Prefix - withdrawn
+      EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 0;
+                  }));
+      EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                    return *i.installed_ref() == false and
+                        i.supporting_prefixes_ref()->size() == 1;
+                  }));
+
+      // verify attributes
+      EXPECT_THAT(
+          *prefixEntryV6.supporting_prefixes_ref(),
+          testing::UnorderedElementsAre(
+              folly::IPAddress::networkToString(v6Network_2)));
+    }
+  }
+}
+
+class RouteOriginationV4OverV6ZeroSupportFixture
+    : public RouteOriginationFixture {
+ public:
+  void
+  SetUp() override {
+    // We register the read in the beginning of the test
+    earlyStaticRoutesReaderPtr =
+        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
+            staticRouteUpdatesQueue.getReader());
+
+    // Other set ups
+    RouteOriginationFixture::SetUp();
+  }
+
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV4.install_to_fib_ref() = true;
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {originatedPrefixV4};
+    // Enable v4 over v6 nexthop feature
+    tConfig.v4_over_v6_nexthop_ref() = true;
+    tConfig_ = tConfig;
+    return tConfig;
+  }
+
+  const openr::thrift::OpenrConfig
+  getConfig() const {
+    return tConfig_;
+  }
+
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+  getEarlyStaticRoutesReaderPtr() {
+    return earlyStaticRoutesReaderPtr;
+  }
+
+ private:
+  thrift::OpenrConfig tConfig_;
+  std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
+      earlyStaticRoutesReaderPtr;
+};
+
+TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, ConfigVerification) {
+  const auto tConfig = getConfig();
+  EXPECT_TRUE(tConfig.v4_over_v6_nexthop_ref());
+}
+
+TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, StateRouteAnnounce) {
+  auto staticRoutesReaderPtr = getEarlyStaticRoutesReaderPtr();
+
+  auto update = waitForRouteUpdate(*staticRoutesReaderPtr);
+  EXPECT_TRUE(update.has_value());
+
+  auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+  auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+  EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+  EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+  // verify thrift::NextHopThrift struct
+  const auto& route = updatedRoutes.back();
+  EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+
+  const auto& nhs = *route.nextHops_ref();
+  EXPECT_THAT(nhs, testing::SizeIs(0));
+}
+
+class RouteOriginationV4OverV6NonZeroSupportFixture
+    : public RouteOriginationFixture {
+ public:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = 2; // 2 support pfxs
+    originatedPrefixV4.install_to_fib_ref() = true;
+
+    auto tConfig = PrefixManagerMultiAreaTestFixture::createConfig();
+    tConfig.originated_prefixes_ref() = {originatedPrefixV4};
+    // Enable v4 over v6 nexthop feature
+    tConfig.v4_over_v6_nexthop_ref() = true;
+    tConfig_ = tConfig;
+    return tConfig;
+  }
+
+  const openr::thrift::OpenrConfig
+  getConfig() const {
+    return tConfig_;
+  }
+
+ private:
+  thrift::OpenrConfig tConfig_;
+};
+
+TEST_F(
+    RouteOriginationV4OverV6NonZeroSupportFixture,
+    StaticRoutesAnnounceNeedsSupport) {
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto v4PrefixKey = PrefixKey(
+      nodeId_, folly::IPAddress::createNetwork(v4Prefix_), kTestingAreaName);
+  auto v4PrefixKeyStr = v4PrefixKey.getPrefixKeyV2();
+  {
+    // Static route for prefix with `install_to_fib=true` should be published in
+    // OpenR initialization process.
+    // v4Prefix_ has install_to_fib set as true.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    // verify thrift::NextHopThrift struct
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+  }
+
+  {
+    // First Fib route updates include v4 and one supporting prefix.
+    // Note the v4Prefix is 192.108.0.1/24 :-)
+    auto addressV4 = toIpPrefix(v4Prefix_);
+    const auto entryV4 =
+        createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
+    const auto unicastEntryV4 = RibUnicastEntry(
+        toIPNetwork(addressV4),
+        {},
+        entryV4,
+        Constants::kDefaultArea.toString());
+    const std::string v4Prefix_1 = "192.108.0.11/30";
+    const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
+    const auto prefixEntryV4_1 =
+        createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
+    auto unicastEntryV4_1 = RibUnicastEntry(
+        v4Network_1,
+        {nh_v6}, // doesn't matter but we are enabling v6 nexthop only :-)
+        prefixEntryV4_1,
+        Constants::kDefaultArea.toString());
+    DecisionRouteUpdate routeUpdate1;
+    routeUpdate1.addRouteToUpdate(unicastEntryV4);
+    routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate1));
+
+    // After first Fib route updates, minimum_supporting_routes=2 is not
+    // fulfilled for config originated v4Prefix_. As a result, previously
+    // published unicast route should be removed.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(1));
+    EXPECT_EQ(deletedRoutes.back(), toIpPrefix(v4Prefix_));
+
+    // v4Prefix_ is not advertised yet.
+    auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, v4PrefixKeyStr);
+    EXPECT_FALSE(maybeValue.has_value());
+  }
+
+  {
+    // Supporting prefix number 2
+    // Note the v4Prefix is 192.108.0.1/24 :-)
+    const std::string v4Prefix_2 = "192.108.0.22/30";
+    const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
+    const auto prefixEntryV4_2 =
+        createPrefixEntry(toIpPrefix(v4Prefix_2), thrift::PrefixType::DEFAULT);
+    auto unicastEntryV4_2 = RibUnicastEntry(
+        v4Network_2,
+        {nh_v6}, // doesn't matter but we are enabling v6 nexhop only :-)
+        prefixEntryV4_2,
+        Constants::kDefaultArea.toString());
+    DecisionRouteUpdate routeUpdate2;
+    routeUpdate2.addRouteToUpdate(unicastEntryV4_2);
+    fibRouteUpdatesQueue.push(std::move(routeUpdate2));
+
+    // Two supporting routes are received. v4Prefix_ should be advertised.
+    auto pub = kvStoreWrapper->recvPublication();
+    EXPECT_EQ(1, pub.keyVals_ref()->count(v4PrefixKeyStr));
+
+    // minimum_supporting_routes=2 is fulfilled, same static route for v4Prefix_
+    // should not be published again.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    // verify thrift::NextHopThrift struct
+    const auto& route2 = updatedRoutes.back();
+    EXPECT_EQ(*route2.dest_ref(), toIpPrefix(v4Prefix_));
+    EXPECT_THAT(*route2.nextHops_ref(), testing::SizeIs(0));
+  }
+}
+
+TEST(PrefixManagerPendingUpdates, updatePrefixes) {
+  detail::PrefixManagerPendingUpdates updates;
+
+  // verify initial state
+  EXPECT_TRUE(updates.getChangedPrefixes().empty());
+
+  // non-empty change
+  auto network1 = toIPNetwork(addr1);
+  auto network2 = toIPNetwork(addr2);
+  updates.addPrefixChange(network1);
+  updates.addPrefixChange(network2);
+  EXPECT_THAT(
+      updates.getChangedPrefixes(),
+      testing::UnorderedElementsAre(network1, network2));
+
+  // cleanup
+  updates.clear();
+  EXPECT_TRUE(updates.getChangedPrefixes().empty());
+}
+
+class RouteOriginationKnobTestFixture : public PrefixManagerTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.prefer_openr_originated_routes_ref() = true;
+    return tConfig;
+  }
+};
+
+// Verify that thrift::PrefixType::CONFIG prefixes (Open/R originated)
+// take precedence over thrift::PrefixType::BGP prefixes when they both
+// both have the same metrics, and when prefer_openr_originated_routes KNOB
+// is turned ON
+// Also verify that this KNOB does not interfere with any other
+// thrift::PrefixType prefixes, like thrift::PrefixType::LOOPBACK
+// This ensures that no other existing functionality has changed
+TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
+  /*
+   * Order of prefix-entries without config knob:
+   *    loopback > bgp > config > default
+   *
+   * With knob turned on, just BGP and CONFIG get swapped:
+   *    loopback > config > bgp > default
+   */
+  const auto loopback_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
+  const auto default_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
+  const auto bgp_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
+  const auto openr_prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::CONFIG, createMetrics(200, 0, 0));
+
+  auto keyStr =
+      PrefixKey(nodeId_, toIPNetwork(addr1), kTestingAreaName).getPrefixKeyV2();
+
+  // Synchronization primitive
+  folly::Baton baton;
+  std::optional<thrift::PrefixEntry> expectedPrefix;
+  bool gotExpected = true;
+
+  // start kvStoreClientInternal separately with different thread
+  kvStoreClient = std::make_unique<KvStoreClientInternal>(
+      &evb, nodeId_, kvStoreWrapper->getKvStore());
+
+  kvStoreClient->subscribeKey(
+      kTestingAreaName,
+      keyStr,
+      [&](std::string const&, std::optional<thrift::Value> val) mutable {
+        ASSERT_TRUE(val.has_value());
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            val->value_ref().value(), serializer);
+        EXPECT_EQ(*db.thisNodeName_ref(), nodeId_);
+        if (expectedPrefix.has_value() and
+            db.prefixEntries_ref()->size() != 0) {
+          // we should always be advertising one prefix until we withdraw all
+          EXPECT_EQ(db.prefixEntries_ref()->size(), 1);
+          EXPECT_EQ(expectedPrefix, db.prefixEntries_ref()->at(0));
+          gotExpected = true;
+        } else {
+          EXPECT_TRUE(*db.deletePrefix_ref());
+          EXPECT_TRUE(db.prefixEntries_ref()->size() == 1);
+        }
+
+        // Signal verification
+        if (gotExpected) {
+          baton.post();
+        }
+      });
+
+  // Start event loop in it's own thread
+  evbThread = std::thread([&]() { evb.run(); });
+  evb.waitUntilRunning();
+
+  //
+  // 1. Inject prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = bgp_prefix;
+  gotExpected = false;
+  prefixManager->advertisePrefixes({bgp_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 2. Inject prefix1 with client-loopback, default and config - Verify KvStore
+  //
+  expectedPrefix = loopback_prefix; // lowest client-id will win
+  gotExpected = false;
+  prefixManager
+      ->advertisePrefixes({loopback_prefix, default_prefix, openr_prefix})
+      .get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 3. Withdraw prefix1 with client-loopback - Verify KvStore
+  // with loopback gone, BGP will become lowest client_id.
+  // Since config KNOB is turned on, and CONFIG is present, CONFIG will win
+  //
+  expectedPrefix = openr_prefix;
+  gotExpected = false;
+  prefixManager->withdrawPrefixes({loopback_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 4. Withdraw prefix1 with client-config - Verify KvStore
+  //
+  expectedPrefix = bgp_prefix;
+  gotExpected = false;
+  prefixManager->withdrawPrefixes({openr_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 5. Withdraw prefix1 with client-bgp - Verify KvStore
+  //
+  expectedPrefix = default_prefix;
+  gotExpected = false;
+  prefixManager->withdrawPrefixes({bgp_prefix}).get();
+  baton.wait();
+  baton.reset();
+
+  //
+  // 6. Withdraw prefix1 with client-default - Verify KvStore
+  //
+  expectedPrefix = std::nullopt;
+  gotExpected = true;
+  prefixManager->withdrawPrefixes({default_prefix}).get();
+  baton.wait();
+  baton.reset();
+}
+
+// Verify that the PrefixMgr API getAreaAdvertisedRoutes() returns the
+// correct preferred prefixes. Specifically, thrift::PrefixType::CONFIG
+// take precedence over thrift::PrefixType::BGP prefixes when they both
+// both have the same metrics, and when prefer_openr_originated_routes KNOB
+// is turned ON
+// Also verify that this API's output does not interfere with any other
+// thrift::PrefixType prefixes, like thrift::PrefixType::DEFAULT below.
+// This ensures that no other existing functionality has changed.
+
+TEST_F(RouteOriginationKnobTestFixture, VerifyCLIWithMultipleClients) {
+  const auto defaultPrefixLower = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
+  const auto bgpPrefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
+  const auto openrPrefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::CONFIG, createMetrics(200, 0, 0));
+  const auto defaultPrefixHigher = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
+
+  thrift::AdvertisedRouteFilter emptyFilter;
+  {
+    // With only the BGP prefix, this will be advertised
+    prefixManager->advertisePrefixes({bgpPrefix});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::BGP, *route.key_ref());
+  }
+  {
+    // Between BGP and CONFIG prefix, CONFIG will be advertised
+    prefixManager->advertisePrefixes({openrPrefix});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::CONFIG, *route.key_ref());
+  }
+  {
+    // Even though DEFAULT prefix is higher preference, its metrics are lower
+    prefixManager->advertisePrefixes({defaultPrefixLower});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::CONFIG, *route.key_ref());
+  }
+  {
+    // with higher/same metrics, DEFFAULT prefix will be preferred over CONFIG
+    prefixManager->advertisePrefixes({defaultPrefixHigher});
+    const auto routes = prefixManager
+                            ->getAreaAdvertisedRoutes(
+                                kTestingAreaName,
+                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
+                                emptyFilter)
+                            .get();
+
+    EXPECT_EQ(1, routes->size());
+    const auto& route = routes->at(0);
+    EXPECT_EQ(thrift::PrefixType::DEFAULT, *route.key_ref());
+  }
+}
+
+class RouteOriginationSingleAreaFixture : public RouteOriginationFixture {
+ public:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
+    originatedPrefixV4.prefix_ref() = v4Prefix_;
+    originatedPrefixV4.minimum_supporting_routes_ref() = minSupportingRouteV4_;
+    originatedPrefixV4.install_to_fib_ref() = true;
+    originatedPrefixV6.prefix_ref() = v6Prefix_;
+    originatedPrefixV6.minimum_supporting_routes_ref() = minSupportingRouteV6_;
+    originatedPrefixV6.install_to_fib_ref() = false;
+
+    // create a single area config
+    auto A = createAreaConfig("A", {"RSW.*"}, {".*"});
+    auto tConfig = getBasicOpenrConfig(nodeId_, "domain", {A});
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
+    return tConfig;
+  }
+};
+
+TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
+  // RQueue interface to read route updates sent by PrefixManager to
+  // Decision. This queue is expressly used for originated routes
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+  auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
+  auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
+
+  // dummy nexthop
+  auto nh_3 = createNextHop(toBinaryAddress("fe80::1"));
+  nh_3.area_ref().reset(); // empty area
+
+  auto addressV4 = toIpPrefix(v4Prefix_);
+  const auto entryV4 = createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
+  const auto unicastEntryV4 = RibUnicastEntry(
+      toIPNetwork(addressV4), {}, entryV4, Constants::kDefaultArea.toString());
+
+  // supporting V4 prefix and related structs
+  const std::string v4Prefix_1 = "192.108.0.8/30";
+  const auto v4Network_1 = folly::IPAddress::createNetwork(v4Prefix_1);
+  const auto prefixEntryV4_1 =
+      createPrefixEntry(toIpPrefix(v4Prefix_1), thrift::PrefixType::DEFAULT);
+  auto unicastEntryV4_1 = RibUnicastEntry(
+      v4Network_1,
+      {nh_v4},
+      prefixEntryV4_1,
+      Constants::kDefaultArea.toString());
+
+  // supporting V6 prefix #1 and related RIB structs
+  const std::string v6Prefix_1 = "2001:1:2:3::1/70";
+  const auto v6Network_1 = folly::IPAddress::createNetwork(v6Prefix_1);
+  const auto prefixEntryV6_1 =
+      createPrefixEntry(toIpPrefix(v6Prefix_1), thrift::PrefixType::DEFAULT);
+  auto unicastEntryV6_1 = RibUnicastEntry(
+      v6Network_1,
+      {nh_v6},
+      prefixEntryV6_1,
+      Constants::kDefaultArea.toString());
+
+  // supporting V6 prefix #2 and related RIB structs
+  const std::string v6Prefix_2 = "2001:1:2:3::1/120";
+  const auto v6Network_2 = folly::IPAddress::createNetwork(v6Prefix_2);
+  const auto prefixEntryV6_2 =
+      createPrefixEntry(toIpPrefix(v6Prefix_2), thrift::PrefixType::RIB);
+  auto unicastEntryV6_2 = RibUnicastEntry(
+      v6Network_2,
+      {nh_v6, nh_3},
+      prefixEntryV6_2,
+      Constants::kDefaultArea.toString());
+
+  // Originated prefixes have specific thrift::PrefixType::CONFIG
+  const auto bestPrefixEntryV4_ =
+      createPrefixEntry(toIpPrefix(v4Prefix_), thrift::PrefixType::CONFIG);
+  const auto bestPrefixEntryV6_ =
+      createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
+
+  //
+  // This test case tests the following:
+  //  - originated prefix whose supporting routes passed across threshold
+  //    will be advertised (v4, and eventually v6);
+  //  - otherwise it will NOT be advertised (initially v6);
+  //  - Route Advertisement to KvStore happens with single area configured
+  //
+  // Steps, briefly:
+  //
+  // 1. Inject the following into the fibRouteUpdatesQueue (simulating Fib to
+  //    Prefixmgr interaction):
+  //    - 1st supporting route for v4Prefix_;
+  //    - 1st supporting route for v6Prefix_;
+  // Verification:
+  //    a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
+  //       the install_to_fib bit is set for v4Prefix_)
+  //    b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
+  //       (since min_supporting_route is not met for v6Prefix_, plus the
+  //       install_to_fib bit is NOT set for v6Prefix_)
+  //    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
+  //    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+  //    e. Config values and supporting routes count is as expected for both
+  //       v4Prefix_ and v6Prefix_
+  //
+  // 2. Inject the following into the fibRouteUpdatesQueue (simulating Fib
+  //    to Prefixmgr interaction):
+  //    - 2nd supporting route for v6Prefix_;
+  // Verification:
+  //    a. v6Prefix_ will STILL NOT be sent to Decision on
+  //       staticRouteUpdatesQueue since, while min_supporting_route is now met
+  //       for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
+  //    b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
+  //    c. Config values and supporting routes count is as expected for both
+  //       v4Prefix_ and v6Prefix_
+  //
+  // 3. Withdraw 1 supporting route from both v4Prefix_ and v6Prefix_
+  //    - this will break the min_supporting_routes condition for both
+  //      the prefixes.
+  // Verification:
+  //    a. delete only for the v4Prefix_ gets sent to Decision
+  //    b. Both prefixes will be withdrawn from KvStore
+  //    c. Supporting routes count for both prefixes will decrement by 1
+
+  {
+    // 0. Decision receives the v4 published in initialization process.
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+  }
+
+  // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
+  DecisionRouteUpdate routeUpdate;
+  routeUpdate.addRouteToUpdate(unicastEntryV4);
+  routeUpdate.addRouteToUpdate(unicastEntryV4_1);
+  routeUpdate.addRouteToUpdate(unicastEntryV6_1);
+  fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+  // Verify 1a and 1b: PrefixManager -> forward fib routes to Bgp/Plugin
+  // routeUpdate;
+  {
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(3));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto prefixes = {
+        updatedRoutes.at(0).get_dest(),
+        updatedRoutes.at(1).get_dest(),
+        updatedRoutes.at(2).get_dest()};
+    EXPECT_THAT(
+        prefixes,
+        testing::UnorderedElementsAre(
+            addressV4, toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
+
+    // Does not originate v4 because install_to_fib = true
+    EXPECT_FALSE(waitForRouteUpdate(prefixMgrRouteUpdatesReader).has_value());
+  }
+
+  // Verify 1c and 1d: PrefixManager -> Decision staticRouteupdate
+  {
+    // 1d. no v6 route update received
+    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
+  }
+
+  // Verify 1e and 1f: PrefixManager -> KvStore update
+  {
+    // v4Prefix_ is advertised to ALL areas configured, while v6Prefix_ is NOT
+    std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+        exp({
+            {prefixKeyV4AreaA_, bestPrefixEntryV4_},
+        });
+    std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+
+    // wait for condition to be met for KvStore publication
+    waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+  }
+
+  // Verify 1g: Via PrefixManager's public API, verify the values for # of
+  //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(1)
+  {
+    auto mp = getOriginatedPrefixDb();
+    auto& prefixEntryV4 = mp.at(v4Prefix_);
+    auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+    // v4Prefix - advertised, v6Prefix - NOT advertised
+    EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == true and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+    EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == false and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+
+    EXPECT_THAT(
+        *prefixEntryV4.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v4Network_1)));
+    EXPECT_THAT(
+        *prefixEntryV6.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v6Network_1)));
+  }
+
+  // Step 2 - inject 1 v6 supporting prefix into fibRouteUpdatesQueue
+  routeUpdate.addRouteToUpdate(unicastEntryV6_2);
+  fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+  // Verify 2a: PrefixManager -> Decision staticRouteUpdate
+  {
+    // 2a. NO v6 route update received
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_FALSE(update.has_value());
+  }
+
+  // Verify 2b: PrefixManager -> KvStore update
+  {
+    // v6Prefix_ is advertised to the SINGLE area configured
+    std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+        exp({
+            {prefixKeyV6AreaA_, bestPrefixEntryV6_},
+        });
+    std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+
+    // 2b. wait for condition to be met for KvStore publication
+    waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+  }
+
+  // Verify 2c: Via PrefixManager's public API, verify the values for # of
+  //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(2 now)
+  {
+    auto mp = getOriginatedPrefixDb();
+    auto& prefixEntryV4 = mp.at(v4Prefix_);
+    auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+    // v4Prefix - advertised, v6Prefix - advertised
+    EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == true and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+    EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == true and
+                      i.supporting_prefixes_ref()->size() == 2;
+                }));
+
+    EXPECT_THAT(
+        *prefixEntryV4.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v4Network_1)));
+    EXPECT_THAT(
+        *prefixEntryV6.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v6Network_1),
+            folly::IPAddress::networkToString(v6Network_2)));
+  }
+
+  // Verify 2d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
+  {
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto& route = updatedRoutes.back();
+
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v6Prefix_2));
+  }
+
+  // Verify 2f: PrefixMgr publish v6 route to prefixMgrRouteUpdateQueue despite
+  // of install_to_fib=false
+  {
+    // Publish v6 because install_to_fib = false and min_supporting_routes
+    // reached
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+
+    const auto& route = updatedRoutes.back();
+
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v6Prefix_));
+
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+  }
+
+  // Step 3 - withdraw 1 v4 and 1 v6 supporting prefix
+  routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
+  routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
+  fibRouteUpdatesQueue.push(std::move(routeUpdate));
+
+  // Verify 3a PrefixManager -> Decision staticRouteupdate
+  {
+    // ONLY v4 route withdrawn updates are sent to Decision
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(
+        deletedRoutes, testing::UnorderedElementsAre(toIpPrefix(v4Prefix_)));
+  }
+
+  // Verify 3b: PrefixManager -> KvStore update: both prefixes withdrawn
+  {
+    // both v4Prefix_ + v6Prefix_ are withdrawn from the single area configured
+    std::unordered_set<std::pair<std::string, std::string>> expDeleted{
+        prefixKeyV4AreaA_,
+        prefixKeyV6AreaA_,
+    };
+    std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+        exp{};
+
+    waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
+  }
+
+  // Verify 3c: Via PrefixManager's public API, verify that that supporting
+  // routes count for v6Prefix_ is now 1 (and 0 for v4Prefix_)
+  {
+    auto mp = getOriginatedPrefixDb();
+    auto& prefixEntryV4 = mp.at(v4Prefix_);
+    auto& prefixEntryV6 = mp.at(v6Prefix_);
+
+    // v4Prefix - withdrawn, v6Prefix - withdrawn
+    EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == false and
+                      i.supporting_prefixes_ref()->size() == 0;
+                }));
+    EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
+                  return *i.installed_ref() == false and
+                      i.supporting_prefixes_ref()->size() == 1;
+                }));
+
+    EXPECT_THAT(
+        *prefixEntryV6.supporting_prefixes_ref(),
+        testing::UnorderedElementsAre(
+            folly::IPAddress::networkToString(v6Network_2)));
+  }
+
+  // Verify 3d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
+  {
+    // both route withdrawn updates are sent to Bgp/plugin
+    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
+    EXPECT_TRUE(update.has_value());
+
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(2));
+    EXPECT_THAT(
+        deletedRoutes,
+        testing::UnorderedElementsAre(
+            toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
+  }
+}
+
+TEST_F(PrefixManagerTestFixture, BasicKeyValueRequestQueue) {
+  const auto prefixKey = "prefixKeyStr";
+  const auto prefixVal = "prefixDbStr";
+  const auto prefixDeletedVal = "prefixDeletedStr";
+  int scheduleAt{0};
+  // Persist key.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        auto persistPrefixKeyVal =
+            PersistKeyValueRequest(kTestingAreaName, prefixKey, prefixVal);
+        kvRequestQueue.push(std::move(persistPrefixKeyVal));
+      });
+
+  // Check that key was correctly persisted. Wait for throttling in KvStore.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKey);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_version(), 1);
+      });
+
+  // Send an unset key request.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        auto unsetPrefixRequest = ClearKeyValueRequest(
+            kTestingAreaName, prefixKey, prefixDeletedVal, true);
+        kvRequestQueue.push(std::move(unsetPrefixRequest));
+      });
+
+  // Check that key was unset properly. Key is still in KvStore because TTL has
+  // not expired yet. TTL refreshing has stopped so TTL version remains at 0.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        auto maybeValue = kvStoreWrapper->getKey(kTestingAreaName, prefixKey);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_version(), 2);
+        EXPECT_EQ(maybeValue.value().get_ttlVersion(), 0);
+        evb.stop();
+      });
+
+  evb.run();
+}
+
+TEST_F(PrefixManagerTestFixture, AdvertisePrefixes) {
+  int scheduleAt{0};
+  auto prefixKey1 = PrefixKey(
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(prefixEntry1.get_prefix())),
+      kTestingAreaName);
+  auto prefixKey2 = PrefixKey(
+      nodeId_,
+      folly::IPAddress::createNetwork(toString(prefixEntry2.get_prefix())),
+      kTestingAreaName);
+
+  // 1. Advertise prefix entry.
+  // 2. Check that prefix entry is in KvStore.
+  // 3. Advertise two prefix entries: previously advertised one and new one.
+  // 4. Check that both prefixes are in KvStore. Neither's version are bumped.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+      });
+
+  // Wait for throttling. Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistSelfOriginatedKey()` inside `KvStore`
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // Check that prefix entry is in KvStore.
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(*maybeValue.value().version_ref(), 1);
+
+        // Advertise one previously advertised prefix and one new prefix.
+        prefixManager->advertisePrefixes({prefixEntry1, prefixEntry2}).get();
+      });
+
+  // Check that both prefixes are in KvStore. Wait for throttling.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // First prefix was re-advertised with same value. Version should not
+        // have been bumped.
+        auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_version(), 1);
+
+        // Verify second prefix was advertised.
+        prefixKeyStr = prefixKey2.getPrefixKeyV2();
+        auto maybeValue2 =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue2.has_value());
+        EXPECT_EQ(maybeValue2.value().get_version(), 1);
+        evb.stop();
+      });
+
+  evb.run();
+}
+
+TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
+  int scheduleAt{0};
+  auto prefixKeyStr =
+      PrefixKey(
+          nodeId_,
+          folly::IPAddress::createNetwork(toString(prefixEntry1.get_prefix())),
+          kTestingAreaName)
+          .getPrefixKeyV2();
+
+  // 1. Advertise prefix entry.
+  // 2. Check that prefix entry is in KvStore.
+  // 3. Withdraw prefix entry.
+  // 4. Check that prefix is withdrawn.
+
+  // Advertise prefix entry.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        prefixManager->advertisePrefixes({prefixEntry1}).get();
+      });
+
+  // Wait for throttling. Throttling can come from:
+  //  - `syncKvStore()` inside `PrefixManager`
+  //  - `persistSelfOriginatedKey()` inside `KvStore`
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // Check that prefix is in KvStore.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+
+        // Withdraw prefix.
+        prefixManager->withdrawPrefixes({prefixEntry1}).get();
+      });
+
+  // Wait for throttling. Verify key is withdrawn.
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() noexcept {
+        // Key is still in KvStore because TTL has not expired yet. TTL
+        // refreshing has stopped so TTL version remains at 0.
+        auto maybeValue =
+            kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
+        EXPECT_TRUE(maybeValue.has_value());
+        EXPECT_EQ(maybeValue.value().get_ttlVersion(), 0);
+        auto db = readThriftObjStr<thrift::PrefixDatabase>(
+            maybeValue.value().value_ref().value(), serializer);
+        EXPECT_NE(db.prefixEntries_ref()->size(), 0);
+        EXPECT_TRUE(db.get_deletePrefix());
+
+        evb.stop();
+      });
+
+  evb.run();
+}
+
+class PrefixManagerInitialKvStoreSyncTestFixture
+    : public PrefixManagerTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = getBasicOpenrConfig(nodeId_);
+    tConfig.enable_fib_ack_ref() = true;
+    tConfig.enable_initialization_process_ref() = true;
+    return tConfig;
+  }
+};
+
+class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
+    : public PrefixManagerInitialKvStoreSyncTestFixture,
+      public ::testing::WithParamInterface<bool> {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
+    // Enable BGP peering.
+    tConfig.enable_bgp_peering_ref() = true;
+    tConfig.bgp_config_ref() = thrift::BgpConfig();
+
+    const bool v4_install_to_fib = GetParam();
+    // Set originated prefixes.
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix_ref() = toString(addr4);
+    originatedPrefixV4.install_to_fib_ref() = v4_install_to_fib;
+    thrift::OriginatedPrefix originatedPrefixV6;
+    originatedPrefixV6.prefix_ref() = toString(addr6);
+    originatedPrefixV6.minimum_supporting_routes_ref() = 0;
+    originatedPrefixV6.install_to_fib_ref() = false;
+    tConfig.originated_prefixes_ref() = {
+        originatedPrefixV4, originatedPrefixV6};
+
+    return tConfig;
+  }
+};
+
+/**
+ * Verifies that in OpenR initialization procedure, initial syncKvStore() is
+ * triggered after all dependent signals are received.
+ */
+TEST_P(
+    PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
+    TriggerInitialKvStoreTest) {
+  const bool v4_install_to_fib = GetParam();
+  // Expect to publish static routes for config originated prefixes with
+  // install_to_fib set.
+  auto update = waitForRouteUpdate(
+      *getEarlyStaticRoutesReaderPtr(), thrift::PrefixType::CONFIG);
+  EXPECT_TRUE(update.has_value());
+  if (v4_install_to_fib) {
+    EXPECT_EQ(update.value().get_unicastRoutesToUpdate().size(), 1);
+  } else {
+    // Always send CONFIG type empty static routes to Decision, even there are
+    // none unicast routes generated.
+    EXPECT_TRUE(update.value().get_unicastRoutesToUpdate().empty());
+  }
+
+  auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
+
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
+  auto prefixKey = PrefixKey(
+      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix_ref()), kTestingAreaName);
+
+  // Initial prefix updates from BGP
+  PrefixEvent bgpPrefixEvent(
+      PrefixEventType::ADD_PREFIXES, thrift::PrefixType::BGP, {prefixEntry7});
+  prefixUpdatesQueue.push(std::move(bgpPrefixEvent));
+
+  // wait for kvstore sync throttle time and check no prefixes are advertised
+  // into KvStore, waiting for FIB + KvStore Synced signal
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(
+      2 * Constants::kKvStoreSyncThrottleTimeout.count()));
+  EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+  EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
+
+  // Publish initial kvStoreSynced signal.
+  kvStoreWrapper->publishKvStoreSynced();
+  kvStoreWrapper->recvKvStoreSyncedSignal();
+
+  // wait for kvstore sync throttle time and check no prefixes are advertised
+  // into KvStore, waiting for full fib sync
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(
+      2 * Constants::kKvStoreSyncThrottleTimeout.count()));
+  EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+  EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
+
+  // Initial full Fib sync.
+  DecisionRouteUpdate fullSyncUpdates;
+  fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+  fullSyncUpdates.mplsRoutesToUpdate = {
+      {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
+  fullSyncUpdates.addRouteToUpdate(RibUnicastEntry(
+      toIPNetwork(addr4),
+      {},
+      prefixEntry4,
+      Constants::kDefaultArea.toString()));
+  fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+
+  // kvstore should receive publication with 3 routes 2 config + 1 bgp
+  auto pub = kvStoreWrapper->recvPublication();
+  EXPECT_EQ(3, pub.keyVals_ref()->size());
+
+  // first update to bgp rib should include all routes programmed by fib.
+  {
+    auto msg = prefixMgrRouteUpdatesReader.get();
+    auto update = msg.value();
+    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
+
+    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
+    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+    EXPECT_EQ(
+        folly::IPAddress::createNetwork(toString(addr4)),
+        update.unicastRoutesToUpdate.begin()->first);
+  }
+
+  // second update to bgp rib should include all config routes with
+  // install_to_fib = false
+  {
+    auto msg = prefixMgrRouteUpdatesReader.get();
+    auto update = msg.value();
+    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
+    if (v4_install_to_fib) {
+      // Only v4 prefix with install_to_fib = false
+      EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
+    } else {
+      // Both v4 and v6 prefixes with install_to_fib = false
+      EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(2));
+    }
+    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+
+    EXPECT_EQ(
+        folly::IPAddress::createNetwork(toString(addr6)),
+        update.unicastRoutesToUpdate.begin()->first);
+  }
+
+  // third update with full_sync signal and empty route
+  {
+    auto msg = prefixMgrRouteUpdatesReader.get();
+    auto update = msg.value();
+    EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, update.type);
+
+    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(0));
+    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
+  }
+}
+
+INSTANTIATE_TEST_CASE_P(
+    PrefixManagerInitialKvStoreSyncBgpEnabledTest,
+    PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
+    ::testing::Values(false, true));
+
+class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
+    : public PrefixManagerInitialKvStoreSyncTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
+    // Enable Vip service.
+    tConfig.enable_vip_service_ref() = true;
+    tConfig.vip_service_config_ref() = vipconfig::config::VipServiceConfig();
+    return tConfig;
+  }
+};
+
+/**
+ * Verifies that in OpenR initialization procedure, initial syncKvStore() is
+ * triggered after all dependent signals are received.
+ */
+TEST_F(
+    PrefixManagerInitialKvStoreSyncVipEnabledTestFixture,
+    TriggerInitialKvStoreTest) {
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+
+  int scheduleAt{0};
+  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
+
+  PrefixEntry vipPrefixEntry(
+      std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
+  std::unordered_set<thrift::NextHopThrift> nexthops;
+  nexthops.insert(createNextHop(toBinaryAddress("::1")));
+  nexthops.insert(createNextHop(toBinaryAddress("::2")));
+  vipPrefixEntry.nexthops = nexthops;
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // Initial prefix updates from VipRouteManager
+        PrefixEvent vipPrefixEvent(
+            PrefixEventType::ADD_PREFIXES, thrift::PrefixType::VIP);
+        vipPrefixEvent.prefixEntries.emplace_back(vipPrefixEntry);
+        prefixUpdatesQueue.push(std::move(vipPrefixEvent));
+
+        // Expect initial static routes to be published for VIPs.
+        auto update =
+            waitForRouteUpdate(staticRoutesReader, thrift::PrefixType::VIP);
+        EXPECT_EQ(update.value().unicastRoutesToUpdate_ref()->size(), 1);
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // No prefixes advertised into KvStore.
+        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+
+        // Initial full Fib sync.
+        DecisionRouteUpdate fullSyncUpdates;
+        fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+        fullSyncUpdates.addRouteToUpdate(RibUnicastEntry(
+            toIPNetwork(addr9),
+            nexthops,
+            prefixEntry9,
+            Constants::kDefaultArea.toString()));
+        fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // No pprefixes advertised into KvStore.
+        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
+
+        // Publish initial kvStoreSynced signal.
+        kvStoreWrapper->publishKvStoreSynced();
+        kvStoreWrapper->recvKvStoreSyncedSignal();
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
+      [&]() {
+        // Initial KvStore sync happens after initial full Fib updates and all
+        // prefix updates are received.
+        auto prefixKey9 = PrefixKey(
+            nodeId_, toIPNetwork(*prefixEntry9.prefix_ref()), kTestingAreaName);
+
+        auto pub = kvStoreWrapper->recvPublication();
+        // VIP and config originated prefix are both advertised.
+        EXPECT_EQ(1, pub.keyVals_ref()->size());
+        EXPECT_EQ(1, pub.keyVals_ref()->count(prefixKey9.getPrefixKeyV2()));
+
+        evb.stop();
+      });
+  // let magic happen
+  evb.run();
 }
 
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
+  folly::init(&argc, &argv);
 
   // Run the tests
   return RUN_ALL_TESTS();

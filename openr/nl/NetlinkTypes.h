@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,23 +7,15 @@
 
 #pragma once
 
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
-#include <folly/Optional.h>
-#include <thrift/lib/cpp2/Thrift.h>
-#include <thrift/lib/cpp2/protocol/Serializer.h>
 
-#include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/Lsdb_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
+#include <thrift/lib/cpp/util/EnumUtils.h>
 
 extern "C" {
 #include <linux/rtnetlink.h>
-#include <net/if.h>
 }
 
 namespace openr::fbnl {
@@ -31,18 +23,11 @@ namespace openr::fbnl {
 class NlException : public std::runtime_error {
  public:
   explicit NlException(const std::string& msg, int err = 0)
-      : std::runtime_error(folly::sformat(
+      : std::runtime_error(fmt::format(
             "Error({}) - {}. {} ", err, folly::errnoStr(std::abs(err)), msg)) {}
 };
 
 const uint8_t DEFAULT_PROTOCOL_ID = 99;
-
-enum NetlinkEventType {
-  LINK_EVENT = 0,
-  NEIGH_EVENT,
-  ADDR_EVENT,
-  MAX_EVENT_TYPE // sentinel
-};
 
 class NextHop;
 class NextHopBuilder final {
@@ -54,35 +39,33 @@ class NextHopBuilder final {
 
   void reset();
 
+  // ifIndex related methods
   NextHopBuilder& setIfIndex(int ifIndex);
-
-  NextHopBuilder& setGateway(const folly::IPAddress& gateway);
-  NextHopBuilder&
-  unsetGateway() {
-    gateway_.reset();
-    return *this;
-  }
-
-  NextHopBuilder& setWeight(uint8_t weight);
-
-  NextHopBuilder& setLabelAction(thrift::MplsActionCode);
-
-  NextHopBuilder& setSwapLabel(uint32_t swapLabel);
-
-  NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
-
   std::optional<int> getIfIndex() const;
 
+  // gateway related methods
+  NextHopBuilder& setGateway(const folly::IPAddress& gateway);
+  NextHopBuilder& unsetGateway();
   std::optional<folly::IPAddress> getGateway() const;
 
+  // weight related methods
+  NextHopBuilder& setWeight(uint8_t weight);
   uint8_t getWeight() const;
 
+  // MPLS label action related methods
+  NextHopBuilder& setLabelAction(thrift::MplsActionCode);
   std::optional<thrift::MplsActionCode> getLabelAction() const;
 
+  // SWAP label related methods
+  NextHopBuilder& setSwapLabel(uint32_t swapLabel);
   std::optional<uint32_t> getSwapLabel() const;
 
+  // PUSH label related methods
+  NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
   std::optional<std::vector<int32_t>> getPushLabels() const;
 
+  // ATTN: `family_` will be set based on `gateway_` family.
+  // No explicit mutator method provided.
   uint8_t getFamily() const;
 
  private:
@@ -153,8 +136,9 @@ using NextHopSet = std::unordered_set<NextHop, NextHopHash>;
  * RT_SCOPE_NOWHERE
  * ============================
  * 'type_':
- * RTN_UNICAST (default)
- * RTN_MULTICAST
+ *  RTN_UNICAST       a gateway or direct route(default)
+ *  RTN_MULTICAST     a multicast route
+ *  RTN_UNSPEC        unknown route
  * ============================
  * 'protocolId_'
  * 99 (default)
@@ -178,94 +162,78 @@ class RouteBuilder {
    */
   Route build() const;
 
-  /**
-   * Build multicast route
-   * @required parameter:
-   * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw fbnl::NlException on failed
-   */
-  Route buildMulticastRoute() const;
-
-  /**
-   * Build link route
-   * @required parameter:
-   * ProtocolId, Destination, Iface Name, Iface Index
-   * @throw fbnl::NlException on failed
-   */
-  Route buildLinkRoute() const;
-
-  // Required
+  // [REQUIRED] destination related methods
   RouteBuilder& setDestination(const folly::CIDRNetwork& dst);
-
   const folly::CIDRNetwork& getDestination() const;
 
-  RouteBuilder& setMplsLabel(uint32_t mplsLabel);
-
-  std::optional<uint32_t> getMplsLabel() const;
-  // Required, default RTN_UNICAST
+  // [REQUIRED] rtm type related methods, default RTN_UNICAST
   RouteBuilder& setType(uint8_t type = RTN_UNICAST);
-
   uint8_t getType() const;
 
-  // Required, default RT_TABLE_MAIN
-  RouteBuilder& setRouteTable(uint8_t routeTable = RT_TABLE_MAIN);
+  // [REQUIRED] rtm/rta routeTable_ related methods, default RT_TABLE_MAIN
+  RouteBuilder& setRouteTable(uint32_t routeTable = RT_TABLE_MAIN);
+  uint32_t getRouteTable() const;
 
-  uint8_t getRouteTable() const;
-
-  // Required, default 99
+  // [REQUIRED] rtm protocolId_ related methods, default 99
   RouteBuilder& setProtocolId(uint8_t protocolId = DEFAULT_PROTOCOL_ID);
-
   uint8_t getProtocolId() const;
 
-  // Required, default RT_SCOPE_UNIVERSE
+  // [REQUIRED] rtm scope_ related methods, default RT_SCOPE_UNIVERSE
   RouteBuilder& setScope(uint8_t scope = RT_SCOPE_UNIVERSE);
-
-  RouteBuilder& setValid(bool isValid);
-
-  bool isValid() const;
-
   uint8_t getScope() const;
 
-  RouteBuilder& setFlags(uint32_t flags);
-
-  std::optional<uint32_t> getFlags() const;
-
-  RouteBuilder& setPriority(uint32_t priority);
-
-  std::optional<uint32_t> getPriority() const;
-
-  RouteBuilder& setTos(uint8_t tos);
-
-  std::optional<uint8_t> getTos() const;
-
-  RouteBuilder& setMtu(uint32_t mtu);
-
-  std::optional<uint32_t> getMtu() const;
-
-  RouteBuilder& setAdvMss(uint32_t tos);
-
-  std::optional<uint32_t> getAdvMss() const;
-
+  // [REQUIRED] unicast routes nexthop related methods
   RouteBuilder& addNextHop(const NextHop& nextHop);
-
-  RouteBuilder& setRouteIfName(const std::string& ifName);
-
-  std::optional<std::string> getRouteIfName() const;
-
-  // Multicast/Link route only need ifIndex in nexthop
-  RouteBuilder& setRouteIfIndex(int ifIndex);
-
-  std::optional<int> getRouteIfIndex() const;
-
   const NextHopSet& getNextHops() const;
 
+  // [REQUIRED] mpls routes label related methods
+  RouteBuilder& setMplsLabel(uint32_t mplsLabel);
+  std::optional<uint32_t> getMplsLabel() const;
+
+  // route valid flag to differentiate route add/delete
+  RouteBuilder& setValid(bool isValid);
+  bool isValid() const;
+
+  // rtm flag related methods
+  //
+  // rtm_flags have the following value and meaning:
+  //    RTM_F_NOTIFY     if the route changes, notify the user via rtnetlink
+  //    RTM_F_CLONED     route is cloned from another route
+  //    RTM_F_EQUALIZE   a multipath equalizer (not yet implemented)
+  RouteBuilder& setFlags(uint32_t flags);
+  std::optional<uint32_t> getFlags() const;
+
+  // Open/R use this as admin-distance for route programmed
+  RouteBuilder& setPriority(uint32_t priority);
+  std::optional<uint32_t> getPriority() const;
+
+  // TOS related methods
+  RouteBuilder& setTos(uint8_t tos);
+  std::optional<uint8_t> getTos() const;
+
+  // MTU related methods
+  RouteBuilder& setMtu(uint32_t mtu);
+  std::optional<uint32_t> getMtu() const;
+
+  // advMss related methods
+  RouteBuilder& setAdvMss(uint32_t tos);
+  std::optional<uint32_t> getAdvMss() const;
+
+  // ATTN: `family_` will be set when:
+  //    UNICAST: `dst_` is set;
+  //    MPLS: `mplsLabel_` is set;
+  //
+  // No explicit mutator method provided.
   uint8_t getFamily() const;
+
+  RouteBuilder& setMultiPath(bool isMultiPath);
+  bool isMultiPath() const;
 
   void reset();
 
  private:
   uint8_t type_{RTN_UNICAST};
-  uint8_t routeTable_{RT_TABLE_MAIN};
+  uint32_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
   uint8_t family_{AF_UNSPEC};
@@ -277,9 +245,8 @@ class RouteBuilder {
   std::optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
-  std::optional<int> routeIfIndex_; // for multicast or link route
-  std::optional<std::string> routeIfName_; // for multicast or linkroute
   std::optional<uint32_t> mplsLabel_;
+  bool isMultiPath_{true};
 };
 
 class Route final {
@@ -302,7 +269,7 @@ class Route final {
 
   uint8_t getType() const;
 
-  uint8_t getRouteTable() const;
+  uint32_t getRouteTable() const;
 
   uint8_t getProtocolId() const;
 
@@ -322,7 +289,7 @@ class Route final {
 
   bool isValid() const;
 
-  std::optional<std::string> getRouteIfName() const;
+  bool isMultiPath() const;
 
   void setPriority(uint32_t priority);
 
@@ -332,7 +299,7 @@ class Route final {
 
  private:
   uint8_t type_{RTN_UNICAST};
-  uint8_t routeTable_{RT_TABLE_MAIN};
+  uint32_t routeTable_{RT_TABLE_MAIN};
   uint8_t protocolId_{DEFAULT_PROTOCOL_ID};
   uint8_t scope_{RT_SCOPE_UNIVERSE};
   uint8_t family_{AF_UNSPEC};
@@ -344,8 +311,8 @@ class Route final {
   std::optional<uint32_t> advMss_;
   NextHopSet nextHops_;
   folly::CIDRNetwork dst_;
-  std::optional<std::string> routeIfName_;
   std::optional<uint32_t> mplsLabel_;
+  bool isMultiPath_{true};
 };
 
 bool operator==(const Route& lhs, const Route& rhs);
@@ -382,6 +349,10 @@ class IfAddressBuilder final {
 
   IfAddressBuilder& setValid(bool isValid);
 
+  std::optional<uint32_t> getPreferredLft() const;
+
+  IfAddressBuilder& setPreferredLft(uint32_t preferredLft);
+
   bool isValid() const;
 
   // Reset builder, all the required fields need to be set again
@@ -394,6 +365,7 @@ class IfAddressBuilder final {
   std::optional<uint8_t> scope_;
   std::optional<uint8_t> flags_;
   std::optional<uint8_t> family_;
+  std::optional<uint32_t> preferredLft_;
 };
 
 class IfAddress final {
@@ -424,6 +396,8 @@ class IfAddress final {
 
   std::string str() const;
 
+  std::optional<uint32_t> getPreferredLft() const;
+
  private:
   std::optional<folly::CIDRNetwork> prefix_;
   int ifIndex_{0};
@@ -431,6 +405,7 @@ class IfAddress final {
   std::optional<uint8_t> scope_;
   std::optional<uint8_t> flags_;
   std::optional<uint8_t> family_;
+  std::optional<uint32_t> preferredLft_;
 };
 
 bool operator==(const IfAddress& lhs, const IfAddress& rhs);
@@ -524,6 +499,39 @@ class Neighbor final {
 bool operator==(const Neighbor& lhs, const Neighbor& rhs);
 bool isNeighborReachable(int state);
 
+class GreInfo final {
+ public:
+  GreInfo(
+      const folly::IPAddress& localAddr,
+      const folly::IPAddress& remoteAddr,
+      uint8_t ttl);
+  ~GreInfo();
+
+  // Copy+Move constructor and assignment operator
+  GreInfo(GreInfo&&) noexcept;
+  GreInfo& operator=(GreInfo&&) noexcept;
+  GreInfo(const GreInfo&);
+  GreInfo& operator=(const GreInfo&);
+
+  folly::IPAddress getLocalAddr() const;
+
+  folly::IPAddress getRemoteAddr() const;
+
+  uint8_t getTtl() const;
+
+  std::string str() const;
+
+ private:
+  // local address
+  folly::IPAddress localAddr_;
+  // remote address
+  folly::IPAddress remoteAddr_;
+  // ttl, default value is 0 (inherit for IPv4)
+  uint8_t ttl_{0};
+};
+
+bool operator==(const GreInfo& lhs, const GreInfo& rhs);
+
 class Link;
 class LinkBuilder final {
  public:
@@ -544,10 +552,20 @@ class LinkBuilder final {
 
   uint32_t getFlags() const;
 
+  LinkBuilder& setLinkKind(const std::string& linkKind);
+
+  std::optional<std::string> getLinkKind() const;
+
+  LinkBuilder& setGreInfo(const GreInfo& greInfo);
+
+  std::optional<GreInfo> getGreInfo() const;
+
  private:
   std::string linkName_;
   int ifIndex_{0};
   uint32_t flags_{0};
+  std::optional<std::string> linkKind_;
+  std::optional<GreInfo> greInfo_;
 };
 
 class Link final {
@@ -572,61 +590,63 @@ class Link final {
 
   bool isLoopback() const;
 
+  std::optional<std::string> getLinkKind() const;
+
+  std::optional<GreInfo> getGreInfo() const;
+
   std::string str() const;
 
  private:
   std::string linkName_;
   int ifIndex_{0};
   uint32_t flags_{0};
+  std::optional<std::string> linkKind_;
+  std::optional<GreInfo> greInfo_;
 };
 
 bool operator==(const Link& lhs, const Link& rhs);
 
-// Link helper class that records Link attributes on the fly
-struct LinkAttribute final {
-  bool isUp{false};
-  int ifIndex{0};
-  std::unordered_set<folly::CIDRNetwork> networks;
+class Rule final {
+ public:
+  Rule(
+      uint16_t family,
+      uint8_t action,
+      uint32_t table,
+      std::optional<uint32_t> fwmark = std::nullopt,
+      std::optional<uint32_t> priority = std::nullopt);
+
+  uint16_t getFamily() const;
+
+  uint8_t getAction() const;
+
+  uint32_t getTable() const;
+
+  std::optional<uint32_t> getFwmark() const;
+
+  std::optional<uint32_t> getPriority() const;
+
+  // FRA_TABLE can override table
+  void setTable(uint32_t table);
+
+  // set methods for optional fields
+  void setFwmark(uint32_t fwmark);
+
+  void setPriority(uint32_t priority);
+
+  std::string str() const;
+
+ private:
+  uint16_t family_{AF_UNSPEC};
+  // FR_ACT_*
+  uint8_t action_{0};
+  // table id
+  uint32_t table_{0};
+
+  // optional attributs
+  std::optional<uint32_t> fwmark_;
+  std::optional<uint32_t> priority_;
 };
 
-// Route => prefix and its possible nextHops
-using NlUnicastRoutes = std::unordered_map<folly::CIDRNetwork, Route>;
-
-// protocolId=>routes
-using NlUnicastRoutesDb = std::unordered_map<uint8_t, NlUnicastRoutes>;
-
-// MPLS => label and its possible nextHops
-using NlMplsRoutes = std::unordered_map<int32_t, Route>;
-
-// protocolId=>label routes
-using NlMplsRoutesDb = std::unordered_map<uint8_t, NlMplsRoutes>;
-
-/**
- * Multicast and link routes do not have nextHop IP
- * key => (destination, ifName)
- * value => route object
- */
-using NlMulticastRoutes =
-    std::unordered_map<std::pair<folly::CIDRNetwork, std::string>, Route>;
-
-// protocolId => routes
-using NlMulticastRoutesDb = std::unordered_map<uint8_t, NlMulticastRoutes>;
-
-using NlLinkRoutes =
-    std::unordered_map<std::pair<folly::CIDRNetwork, std::string>, Route>;
-
-// protocolId => routes
-using NlLinkRoutesDb = std::unordered_map<uint8_t, NlLinkRoutes>;
-
-/**
- * Neighbor Object Helpers
- * Map of neighbors that are reachable
- * link name, destination IP and link Address
- */
-using NlNeighbors =
-    std::unordered_map<std::pair<std::string, folly::IPAddress>, Neighbor>;
-
-// keyed by link name
-using NlLinks = std::unordered_map<std::string, LinkAttribute>;
+bool operator==(const Rule& lhs, const Rule& rhs);
 
 } // namespace openr::fbnl

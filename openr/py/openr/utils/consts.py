@@ -1,22 +1,24 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import re
-from builtins import object
 
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 
-class Consts(object):
+class Consts:
+    # Defaults for OpenrCtrlCmd
+    DEFAULT_AREA_ID = "0"
+    DEFAULT_HOST = "::1"
+    DEFAULT_TIMEOUT = 2  # seconds
+    DEFAULT_FIB_AGENT_PORT = 5909
+
     TIMEOUT_MS = 10000  # 10 seconds
-    CONST_TTL_INF = -2 ** 31
+    CONST_TTL_INF = -(2 ** 31)
     IP_TOS = 192
     ADJ_DB_MARKER = "adj:"
     PREFIX_DB_MARKER = "prefix:"
@@ -50,5 +52,7 @@ class Consts(object):
         + r"(?P<plen>[0-9]{1,3})\]"
     )
 
-    # Openr version at which area feature was added
-    OPENR_AREA_VERSION = 20191122
+    # Source/Segment Routing Constants
+    SR_GLOBAL_RANGE = (101, 49999)
+    SR_LOCAL_RANGE = (50000, 59999)
+    SR_STATIC_RANGE = (60000, 69999)

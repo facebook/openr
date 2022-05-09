@@ -1,20 +1,18 @@
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 cmake_minimum_required(VERSION 3.2)
 project(openr)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wall -Wextra")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-noexcept-type")
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-maybe-uninitialized")
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-deprecated-declarations")
+# Disable all warnings. Warnings can vary across toolchains. We rely on
+# internaly configured CI (lint and compile) to raise the warnings we find
+# useful
+set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -w")
 
 # Optionally build with LTO
 option(BUILD_WITH_LTO "BUILD_WITH_LTO" OFF)
@@ -35,8 +33,16 @@ set(
 include(FBThriftCppLibrary)
 include(FBGenCMakeBuildInfo)
 
+set(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system thread context filesystem program_options regex)
+
+# Compile Open/R and omit modules not used by Terragraph
+option(OPENR_TG_OPTIMIZED_BUILD "OPENR_TG_OPTIMIZED_BUILD" OFF)
+if(OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -DOPENR_TG_OPTIMIZED_BUILD")
+endif()
+
 find_library(ASYNC async PATHS)
-find_package(Boost REQUIRED COMPONENTS system context)
+find_package(Boost REQUIRED COMPONENTS ${REQ_BOOST_COMPONENTS})
 find_library(CONCURRENCY concurrency PATHS)
 find_library(DOUBLE-CONVERSION double-conversion)
 find_package(fbzmq REQUIRED)
@@ -46,7 +52,6 @@ find_package(fizz REQUIRED)
 find_package(fmt REQUIRED)
 find_package(Gflags REQUIRED)
 find_package(Glog REQUIRED)
-find_library(PROTOCOL protocol PATHS)
 find_library(RE2 re2)
 find_library(SODIUM sodium)
 find_package(FBThrift REQUIRED)
@@ -55,6 +60,7 @@ find_package(Threads REQUIRED)
 find_library(ZMQ zmq)
 find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
+find_package(range-v3 REQUIRED)
 
 find_path(RE2_INCLUDE_DIR re2/re2.h)
 find_path(ZMQ_INCLUDE_DIR zmq.h)
@@ -63,6 +69,9 @@ set(FOLLY_EXCEPTION_TRACER)
 if (TARGET Folly::folly_exception_tracer)
   set(FOLLY_EXCEPTION_TRACER Folly::folly_exception_tracer)
 endif()
+
+
+add_compile_definitions(NO_FOLLY_EXCEPTION_TRACER)
 
 include_directories(
   ${Boost_INCLUDE_DIR}
@@ -73,7 +82,13 @@ include_directories(
   ${ZMQ_INCLUDE_DIR}
 )
 
+#
+# Build thrift libs
+#
+
 SET(OPENR_THRIFT_LIBS)
+
+if(NOT OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
 
 add_fbthrift_cpp_library(
   bgp_config_cpp2
@@ -84,22 +99,49 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} bgp_config_cpp2)
 
 add_fbthrift_cpp_library(
+  routing_policy_cpp2
+  configerator/structs/neteng/config/routing_policy.thrift
+  OPTIONS
+    json
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} routing_policy_cpp2)
+
+add_fbthrift_cpp_library(
+  vip_service_config_cpp2
+  configerator/structs/neteng/config/vip_service_config.thrift
+  OPTIONS
+    json
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} vip_service_config_cpp2)
+
+endif()
+
+if(NOT OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
+
+add_fbthrift_cpp_library(
   openr_config_cpp2
   openr/if/OpenrConfig.thrift
   OPTIONS
     json
   DEPENDS
     bgp_config_cpp2
+    routing_policy_cpp2
+    vip_service_config_cpp2
 )
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_config_cpp2)
+
+else()
 
 add_fbthrift_cpp_library(
-  dual_cpp2
-  openr/if/Dual.thrift
+  openr_config_cpp2
+  openr/if/tg/OpenrConfig.thrift
+  INCLUDE_PREFIX "openr/if"
+  OUTPUT_DIR "${CMAKE_BINARY_DIR}/openr/if"
   OPTIONS
     json
 )
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} dual_cpp2)
+
+endif()
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_config_cpp2)
 
 add_fbthrift_cpp_library(
   network_cpp2
@@ -108,70 +150,6 @@ add_fbthrift_cpp_library(
     json
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} network_cpp2)
-
-add_fbthrift_cpp_library(
-  persistent_store_cpp2
-  openr/if/PersistentStore.thrift
-  OPTIONS
-    json
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} persistent_store_cpp2)
-
-add_fbthrift_cpp_library(
-  kv_store_cpp2
-  openr/if/KvStore.thrift
-  OPTIONS
-    json
-  DEPENDS
-    dual_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
-
-add_fbthrift_cpp_library(
-  lsdb_cpp2
-  openr/if/Lsdb.thrift
-  OPTIONS
-    json
-  DEPENDS
-    openr_config_cpp2
-    kv_store_cpp2
-    network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} lsdb_cpp2)
-
-add_fbthrift_cpp_library(
-  fib_cpp2
-  openr/if/Fib.thrift
-  OPTIONS
-    json
-  DEPENDS
-    openr_config_cpp2
-    network_cpp2
-    lsdb_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} fib_cpp2)
-
-add_fbthrift_cpp_library(
-  spark_cpp2
-  openr/if/Spark.thrift
-  OPTIONS
-    json
-  DEPENDS
-    network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} spark_cpp2)
-
-add_fbthrift_cpp_library(
-  link_monitor_cpp2
-  openr/if/LinkMonitor.thrift
-  OPTIONS
-    json
-  DEPENDS
-    openr_config_cpp2
-    lsdb_cpp2
-    spark_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} link_monitor_cpp2)
 
 add_fbthrift_cpp_library(
   platform_cpp2
@@ -184,40 +162,32 @@ add_fbthrift_cpp_library(
   DEPENDS
     fb303::fb303_thrift_cpp
     network_cpp2
+    types_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} platform_cpp2)
 
 add_fbthrift_cpp_library(
-  alloc_prefix_cpp2
-  openr/if/AllocPrefix.thrift
+  kv_store_cpp2
+  openr/if/KvStore.thrift
+  OPTIONS
+    json
+  DEPENDS
+    fb303::fb303_thrift_cpp
+  SERVICES
+    KvStoreService
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} kv_store_cpp2)
+
+add_fbthrift_cpp_library(
+  types_cpp2
+  openr/if/Types.thrift
   OPTIONS
     json
   DEPENDS
     network_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} alloc_prefix_cpp2)
-
-add_fbthrift_cpp_library(
-  prefix_manager_cpp2
-  openr/if/PrefixManager.thrift
-  OPTIONS
-    json
-  DEPENDS
     openr_config_cpp2
-    lsdb_cpp2
-    network_cpp2
 )
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} prefix_manager_cpp2)
-
-add_fbthrift_cpp_library(
-  decision_cpp2
-  openr/if/Decision.thrift
-  OPTIONS
-    json
-  DEPENDS
-    lsdb_cpp2
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} decision_cpp2)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} types_cpp2)
 
 add_fbthrift_cpp_library(
   openr_ctrl_cpp2
@@ -228,17 +198,14 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     openr_config_cpp2
-    decision_cpp2
-    dual_cpp2
-    fib_cpp2
     kv_store_cpp2
-    link_monitor_cpp2
-    lsdb_cpp2
+    types_cpp2
     network_cpp2
     fb303::fb303_thrift_cpp
-    fbzmq::monitor_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp2)
+
+if(NOT OPENR_TG_OPTIMIZED_BUILD STREQUAL ON)
 
 add_fbthrift_cpp_library(
   openr_ctrl_cpp_cpp2
@@ -252,8 +219,11 @@ add_fbthrift_cpp_library(
   DEPENDS
     openr_ctrl_cpp2
     kv_store_cpp2
+    types_cpp2
 )
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)
+
+endif()
 
 add_build_info(build_info)
 
@@ -262,52 +232,63 @@ install(TARGETS
   DESTINATION lib
 )
 
-add_library(openrlib
+add_library(openrlib SHARED
   openr/allocators/PrefixAllocator.cpp
   openr/common/AsyncThrottle.cpp
   openr/common/BuildInfo.cpp
   openr/common/Constants.cpp
   openr/common/ExponentialBackoff.cpp
+  openr/common/Flags.cpp
+  openr/common/FileUtil.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
-  openr/common/ThriftUtil.cpp
+  openr/common/OpenrThriftCtrlServer.cpp
+  openr/common/Types.cpp
   openr/common/Util.cpp
+  openr/common/LsdbTypes.cpp
+  openr/common/LsdbUtil.cpp
   openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
-  openr/config-store/PersistentStoreWrapper.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/config-store/PersistentStoreWrapper.cpp>
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
-  openr/decision/tests/RoutingBenchmarkUtils.cpp
-  openr/dual/Dual.cpp
+  openr/decision/SpfSolver.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/decision/tests/DecisionTestUtils.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/decision/tests/RoutingBenchmarkUtils.cpp>
+  openr/kvstore/Dual.cpp
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
   openr/kvstore/KvStore.cpp
   openr/kvstore/KvStorePublisher.cpp
-  openr/kvstore/KvStoreWrapper.cpp
+  openr/kvstore/KvStoreUtil.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/kvstore/KvStoreWrapper.cpp>
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
-  openr/nl/NetlinkMessage.cpp
+  openr/nl/NetlinkAddrMessage.cpp
+  openr/nl/NetlinkLinkMessage.cpp
+  openr/nl/NetlinkNeighborMessage.cpp
+  openr/nl/NetlinkRouteMessage.cpp
+  openr/nl/NetlinkRuleMessage.cpp
+  openr/nl/NetlinkMessageBase.cpp
   openr/nl/NetlinkProtocolSocket.cpp
-  openr/nl/NetlinkRoute.cpp
-  openr/nl/NetlinkSocket.cpp
   openr/nl/NetlinkTypes.cpp
   openr/monitor/LogSample.cpp
   openr/monitor/Monitor.cpp
   openr/monitor/MonitorBase.cpp
   openr/monitor/SystemMetrics.cpp
   openr/platform/NetlinkFibHandler.cpp
-  openr/platform/NetlinkSystemHandler.cpp
-  openr/plugin/Plugin.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/plugin/Plugin.cpp>
+  openr/policy/PolicyManager.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
-  openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
-  openr/tests/mocks/MockNetlinkProtocolSocket.cpp
-  openr/tests/mocks/PrefixGenerator.cpp
-  openr/tests/OpenrThriftServerWrapper.cpp
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/mocks/MockNetlinkProtocolSocket.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/mocks/PrefixGenerator.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/OpenrThriftServerWrapper.cpp>
+  $<$<NOT:$<STREQUAL:${OPENR_TG_OPTIMIZED_BUILD},ON>>:openr/tests/utils/Utils.cpp>
   openr/watchdog/Watchdog.cpp
 )
 
@@ -320,7 +301,6 @@ target_link_libraries(openrlib
   ${BENCHMARK}
   ${OPENR_THRIFT_LIBS}
   fbzmq::fbzmq
-  fbzmq::monitor_cpp2
   ${DOUBLE-CONVERSION}
   ${ZMQ}
   glog::glog
@@ -328,7 +308,6 @@ target_link_libraries(openrlib
   FBThrift::thriftcpp2
   fb303::fb303
   ${ASYNC}
-  ${PROTOCOL}
   ${CONCURRENCY}
   ${ZSTD}
   Folly::folly
@@ -339,6 +318,7 @@ target_link_libraries(openrlib
   -lpthread
   -lcrypto
   stdc++fs
+  range-v3
 )
 
 install(TARGETS
@@ -348,7 +328,6 @@ install(TARGETS
 
 add_executable(openr_bin
   openr/Main.cpp
-  openr/common/Flags.cpp
 )
 
 target_link_libraries(openr_bin
@@ -362,7 +341,6 @@ target_link_libraries(openr_bin
   ${ZSTD}
   FBThrift::thriftcpp2
   ${ASYNC}
-  ${PROTOCOL}
   ${CONCURRENCY}
   Folly::folly
   ${FOLLY_EXCEPTION_TRACER}
@@ -370,6 +348,7 @@ target_link_libraries(openr_bin
   ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
+  -ljemalloc
 )
 
 install(TARGETS
@@ -393,7 +372,6 @@ if(BUILD_TOOLS)
     ${ZSTD}
     ${THRIFTCPP2}
     ${ASYNC}
-    ${PROTOCOL}
     ${TRANSPORT}
     ${CONCURRENCY}
     ${THRIFTPROTOCOL}
@@ -414,7 +392,6 @@ endif()
 add_executable(platform_linux
   openr/platform/LinuxPlatformMain.cpp
   openr/platform/NetlinkFibHandler.cpp
-  openr/platform/NetlinkSystemHandler.cpp
 )
 
 target_link_libraries(platform_linux
@@ -428,7 +405,6 @@ target_link_libraries(platform_linux
   FBThrift::thriftcpp2
   ${ZSTD}
   ${ASYNC}
-  ${PROTOCOL}
   ${CONCURRENCY}
   ${SODIUM}
   ${ZMQ}
@@ -444,12 +420,6 @@ install(TARGETS
 #
 # Install files
 #
-
-# scripts
-install(PROGRAMS
-  ${CMAKE_CURRENT_SOURCE_DIR}/openr/scripts/run_openr.sh
-  DESTINATION sbin
-)
 
 # headers
 install(
@@ -494,25 +464,6 @@ if(BUILD_TESTS)
     ${GMOCK_INCLUDE_DIRS}
   )
 
-  add_executable(netlink_socket_sample
-    openr/nl/examples/NetlinkSocketSample.cpp
-  )
-
-  target_link_libraries(netlink_socket_sample
-    openrlib
-    ${OPENR_THRIFT_LIBS}
-    ${GLOG}
-    ${GFLAGS}
-    Folly::folly
-    ${FOLLY_EXCEPTION_TRACER}
-    -lpthread
-  )
-
-  install(TARGETS
-    netlink_socket_sample
-    DESTINATION sbin
-  )
-
   # function that adds tests, typical usage example:
   # add_openr_test(TestName test_bin_name
   #   SOURCES Feature1Test.cpp Feature2Test.cpp
@@ -554,14 +505,14 @@ if(BUILD_TESTS)
     SOURCES
       openr/tests/OpenrSystemTest.cpp
       openr/tests/OpenrWrapper.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
       openr/tests/mocks/MockIoProvider.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/MockIoProviderUtils.cpp
     LIBRARIES
       fbzmq::fbzmq
       ${ZMQ}
       ${GLOG}
       ${GFLAGS}
-      ${PROTOCOL}
       FBThrift::thriftcpp2
       ${ZSTD}
       Folly::folly
@@ -573,14 +524,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr
   )
 
-  if(ADD_ROOT_TESTS)
-    add_openr_test(PrefixAllocatorTest prefix_allocator_test
-      SOURCES
-        openr/allocators/tests/PrefixAllocatorTest.cpp
-        openr/tests/mocks/MockNetlinkSystemHandler.cpp
-      DESTINATION sbin/tests/openr/allocators
-    )
-  endif()
+  add_openr_test(PrefixAllocatorTest prefix_allocator_test
+    SOURCES
+      openr/allocators/tests/PrefixAllocatorTest.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
+    DESTINATION sbin/tests/openr/allocators
+  )
 
   add_openr_test(RangeAllocatorTest range_allocator_test
     SOURCES
@@ -591,7 +540,7 @@ if(BUILD_TESTS)
   add_openr_test(OpenrCtrlHandlerTest openr_ctrl_handler_test
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
@@ -645,14 +594,13 @@ if(BUILD_TESTS)
 
   add_openr_test(DualTest dual_test
     SOURCES
-      openr/dual/tests/DualTest.cpp
-    DESTINATION sbin/tests/openr/dual
+      openr/kvstore/tests/DualTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
   )
 
   add_openr_test(LinkStateTest link_state_test
     SOURCES
       openr/decision/tests/LinkStateTest.cpp
-      openr/decision/tests/DecisionTestUtils.cpp
     DESTINATION sbin/tests/openr/decision
   )
 
@@ -668,9 +616,27 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/decision
   )
 
+  add_openr_test(RibEntryTest rib_entry_test
+    SOURCES
+      openr/decision/tests/RibEntryTest.cpp
+    DESTINATION sbin/tests/openr/decision
+  )
+
   add_openr_test(KvStoreTest kvstore_test
     SOURCES
       openr/kvstore/tests/KvStoreTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
+  )
+
+  add_openr_test(KvStoreTtlTest kvstore_ttl_test
+    SOURCES
+      openr/kvstore/tests/KvStoreTtlTest.cpp
+    DESTINATION sbin/tests/openr/kvstore
+  )
+
+  add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
+    SOURCES
+      openr/kvstore/tests/KvStoreSelfOriginatedKeyTest.cpp
     DESTINATION sbin/tests/openr/kvstore
   )
 
@@ -689,7 +655,7 @@ if(BUILD_TESTS)
  add_openr_test(LinkMonitorTest link_monitor_test
     SOURCES
       openr/link-monitor/tests/LinkMonitorTest.cpp
-      openr/tests/mocks/MockNetlinkSystemHandler.cpp
+      openr/tests/mocks/NetlinkEventsInjector.cpp
     DESTINATION sbin/tests/openr/link-monitor
   )
 
@@ -716,19 +682,6 @@ if(BUILD_TESTS)
         openr/nl/tests/NetlinkProtocolSocketTest.cpp
       DESTINATION sbin/tests/openr/nl
     )
-
-    add_openr_test(NetlinkSocketTest netlink_socket_test
-      SOURCES
-        openr/nl/tests/NetlinkSocketTest.cpp
-      DESTINATION sbin/tests/openr/nl
-    )
-
-    add_openr_test(NetlinkSocketSubscribeTest netlink_socket_subscribe_test
-      SOURCES
-        openr/nl/tests/NetlinkSocketSubscribeTest.cpp
-      DESTINATION sbin/tests/openr/nl
-    )
-
   endif()
 
   add_openr_test(PrefixManagerTest prefix_manager_test
@@ -737,17 +690,11 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/prefix-manager
   )
 
-  add_openr_test(SparkTest spark_test
-    SOURCES
-      openr/spark/tests/SparkTest.cpp
-      openr/tests/mocks/MockIoProvider.cpp
-    DESTINATION sbin/tests/openr/spark
-  )
-
   add_openr_test(MockIoProviderTest mock_io_provider_test
     SOURCES
       openr/tests/MockIoProviderTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
+      openr/tests/mocks/MockIoProviderUtils.cpp
     DESTINATION sbin/tests/openr/spark
   )
 
@@ -773,10 +720,10 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/platform
   )
 
-  add_openr_test(NetlinkSystemHandlerTest netlink_system_handler_test
+  add_openr_test(WatchdogTest watchdog_test
     SOURCES
-      openr/platform/tests/NetlinkSystemHandlerTest.cpp
-    DESTINATION sbin/tests/openr/platform
+      openr/watchdog/tests/WatchdogTest.cpp
+    DESTINATION sbin/tests/openr/watchdog
   )
 
   #
@@ -840,13 +787,18 @@ if(BUILD_TESTS)
   )
 
   add_executable(decision_benchmark
-    openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
+    openr/decision/tests/DecisionBenchmark.cpp
   )
 
   target_link_libraries(decision_benchmark
     openrlib
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST_BOTH_LIBRARIES}
+    ${GTEST_MAIN}
+    ${THRIFTCPP2}
     ${BENCHMARK}
   )
 

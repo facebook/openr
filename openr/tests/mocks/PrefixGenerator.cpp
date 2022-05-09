@@ -1,11 +1,12 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
 #include <openr/tests/mocks/PrefixGenerator.h>
+
 #include <folly/Random.h>
 
 namespace openr {
@@ -57,8 +58,8 @@ PrefixGenerator::getRandomNextHops(
 
   for (uint32_t index = 0; index < numOfNextHops; index++) {
     // Random local IPV6
-    auto ipv6Addr = folly::IPAddress(folly::sformat(
-        "fe80::{}", folly::sformat("{:02x}", folly::Random::rand32() >> 16)));
+    auto ipv6Addr = folly::IPAddress(fmt::format(
+        "fe80::{}", fmt::format("{:02x}", folly::Random::rand32() >> 16)));
 
     // Create nexthop
     const auto path = createNextHop(toBinaryAddress(ipv6Addr), ifname, 1);

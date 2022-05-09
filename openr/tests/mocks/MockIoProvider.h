@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -43,8 +43,13 @@ class MockIoProvider final : public IoProvider {
   MockIoProvider() = default;
 
   void
+  setIsRunning(bool v) {
+    isRunning_.store(v, std::memory_order_relaxed);
+  }
+
+  void
   start() {
-    isRunning_.store(true, std::memory_order_relaxed);
+    setIsRunning(true);
     while (isRunning_.load(std::memory_order_relaxed)) {
       processMailboxes();
       std::this_thread::yield();
@@ -53,11 +58,11 @@ class MockIoProvider final : public IoProvider {
 
   void
   stop() {
-    isRunning_.store(false, std::memory_order_relaxed);
+    setIsRunning(false);
   }
 
   /**
-   * Busy spin until the zmq thread is running. this is called from external
+   * Busy spin until the thread is running. this is called from external
    * threads to synchronize with this thread's main loop
    */
   void

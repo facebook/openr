@@ -1,9 +1,7 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-
-from __future__ import absolute_import, division, print_function, unicode_literals
 
 
 class SubCmd(object):
@@ -11,7 +9,7 @@ class SubCmd(object):
     HELP = None
 
     def run(self, args):
-        """ perform the command """
+        """perform the command"""
         return 0
 
     def setup_parser(self, parser):
@@ -24,7 +22,7 @@ CmdTable = []
 
 
 def add_subcommands(parser, common_args, cmd_table=CmdTable):
-    """ Register parsers for the defined commands with the provided parser """
+    """Register parsers for the defined commands with the provided parser"""
     for cls in cmd_table:
         command = cls()
         command_parser = parser.add_parser(

@@ -1,39 +1,40 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <openr/kvstore/KvStorePublisher.h>
-
-#include <re2/re2.h>
-
-#include <folly/ExceptionString.h>
-#include <folly/io/async/SSLContext.h>
-#include <folly/io/async/ssl/OpenSSLUtils.h>
-#include <openr/common/Constants.h>
 #include <openr/common/Util.h>
-#include <openr/if/gen-cpp2/PersistentStore_types.h>
-#include <openr/kvstore/KvStore.h>
-#include <thrift/lib/cpp2/server/ThriftServer.h>
+#include <openr/kvstore/KvStorePublisher.h>
 
 namespace openr {
 
 KvStorePublisher::KvStorePublisher(
+    std::set<std::string> const& selectAreas,
     thrift::KeyDumpParams filter,
-    apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher)
-    : filter_(filter), publisher_(std::move(publisher)) {
+    apache::thrift::ServerStreamPublisher<thrift::Publication>&& publisher,
+    std::chrono::steady_clock::time_point subscription_time,
+    int64_t total_messages)
+    : selectAreas_(selectAreas),
+      filter_(filter),
+      publisher_(std::move(publisher)),
+      subscription_time_(subscription_time),
+      total_messages_(total_messages) {
   std::vector<std::string> keyPrefix;
 
   if (filter.keys_ref().has_value()) {
     keyPrefix = std::move(*filter.keys_ref());
-  } else if (filter.prefix_ref().has_value()) {
+  } else if (filter.prefix_ref().is_set()) {
     folly::split(",", *filter.prefix_ref(), keyPrefix, true);
   }
 
+  thrift::FilterOperator op = filter_.oper_ref().has_value()
+      ? *filter_.oper_ref()
+      : thrift::FilterOperator::OR;
+
   keyPrefixFilter_ =
-      KvStoreFilters(keyPrefix, std::move(*filter.originatorIds_ref()));
+      KvStoreFilters(keyPrefix, std::move(*filter.originatorIds_ref()), op);
 }
 
 /**
@@ -52,17 +53,23 @@ KvStorePublisher::KvStorePublisher(
  */
 void
 KvStorePublisher::publish(const thrift::Publication& pub) {
+  if (not(selectAreas_.empty() || selectAreas_.count(pub.get_area()))) {
+    return;
+  }
   if ((not filter_.keys_ref().has_value() or (*filter_.keys_ref()).empty()) and
-      (not filter_.originatorIds_ref().has_value() or
-       (*filter_.originatorIds_ref()).empty())) {
-    // No filtering criteria. Accept all updates.
+      (not filter_.originatorIds_ref().is_set() or
+       (*filter_.originatorIds_ref()).empty()) and
+      not *filter_.ignoreTtl_ref() and not *filter_.doNotPublishValue_ref()) {
+    // No filtering criteria. Accept all updates as TTL updates are not be
+    // to be updated. If we don't optimize here, we will have go through
+    // key values of a publication and copy them.
     auto filteredPub = std::make_unique<thrift::Publication>(pub);
     publisher_.next(std::move(*filteredPub));
     return;
   }
 
   thrift::Publication publication_filtered;
-  if (pub.expiredKeys_ref().has_value()) {
+  if (pub.expiredKeys_ref().is_set()) {
     publication_filtered.expiredKeys_ref() = *pub.expiredKeys_ref();
   }
 
@@ -78,26 +85,30 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
     publication_filtered.floodRootId_ref() = *pub.floodRootId_ref();
   }
 
-  if (pub.area_ref().has_value()) {
+  if (pub.area_ref().is_set()) {
     publication_filtered.area_ref() = *pub.area_ref();
   }
 
   thrift::KeyVals keyvals;
-  thrift::FilterOperator op = filter_.oper_ref().has_value()
-      ? *filter_.oper_ref()
-      : thrift::FilterOperator::OR;
-
-  for (auto& kv : pub.keyVals) {
-    auto& key = kv.first;
-    auto& val = kv.second;
-    if (not val.value_ref().has_value()) {
+  for (auto& [key, val] : *pub.keyVals_ref()) {
+    if (*filter_.ignoreTtl_ref() and not val.value_ref().has_value()) {
+      // ignore TTL updates
       continue;
     }
 
-    if (keyPrefixFilter_.keyMatch(key, val, op)) {
+    if (not keyPrefixFilter_.keyMatch(key, val)) {
+      continue;
+    }
+
+    if ((not *filter_.doNotPublishValue_ref()) or
+        (not val.value_ref().has_value())) {
       keyvals.emplace(key, val);
+    } else {
+      // Exclude Value.value if it's filtered
+      keyvals.emplace(key, createThriftValueWithoutBinaryValue(val));
     }
   }
+
   if (keyvals.size()) {
     // There is at least one key value in the publication for the client
     publication_filtered.keyVals_ref() = keyvals;

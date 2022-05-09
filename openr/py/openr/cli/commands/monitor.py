@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import json
@@ -46,7 +43,12 @@ class MonitorCmd(OpenrCtrlCmd):
 
 class CountersCmd(MonitorCmd):
     def _run(
-        self, client: OpenrCtrl.Client, prefix: str = "", json: bool = False
+        self,
+        client: OpenrCtrl.Client,
+        prefix: str = "",
+        json: bool = False,
+        *args,
+        **kwargs,
     ) -> None:
         resp = client.getCounters()
         self.print_counters(client, resp, prefix, json)
@@ -54,7 +56,7 @@ class CountersCmd(MonitorCmd):
     def print_counters(
         self, client: OpenrCtrl.Client, resp: Dict, prefix: str, json: bool
     ) -> None:
-        """ print the Kv Store counters """
+        """print the Kv Store counters"""
 
         host_id = client.getMyNodeName()
         caption = "{}'s counters".format(host_id)
@@ -78,29 +80,45 @@ class CountersCmd(MonitorCmd):
 
 
 class LogCmd(MonitorCmd):
-    def _run(self, client: OpenrCtrl.Client, json_opt: bool = False) -> None:
-        resp = client.getEventLogs()
-        self.print_log_data(resp, json_opt)
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        json_opt: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
+        try:
+            resp = client.getEventLogs()
+            self.print_log_data(resp, json_opt)
+        except TypeError:
+            host_id = client.getMyNodeName()
+            print(
+                "Incompatible return type. Please upgrade Open/R binary on {}".format(
+                    host_id
+                )
+            )
 
     def print_log_data(self, resp, json_opt):
-        """ print the log data"""
+        """print the log data"""
 
         if json_opt:
-            data = {}
-            data["eventLogs"] = [utils.thrift_to_dict(e) for e in resp]
-            print(utils.json_dumps(data))
+            event_logs = []
+            for event_log in resp:
+                event_logs.append(json.loads(event_log))
+            print(utils.json_dumps(event_logs))
 
         else:
-            log_samples = []
             for event_log in resp:
-                log_samples.extend([json.loads(lg) for lg in event_log.samples])
-
-            for log_sample in log_samples:
-                self.print_log_sample(log_sample)
+                self.print_log_sample(json.loads(event_log))
 
 
 class StatisticsCmd(MonitorCmd):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
         stats_templates = [
             {
                 "title": "KvStore Stats",
@@ -116,15 +134,15 @@ class StatisticsCmd(MonitorCmd):
                 ],
             },
             {
-                "title": "LinkMonitor Stats",
+                "title": "LinkMonitor/Spark Stats",
                 "counters": [
                     ("Adjacent Neighbors", "spark.num_adjacent_neighbors"),
                     ("Tracked Neighbors", "spark.num_tracked_neighbors"),
                 ],
                 "stats": [
                     ("Updates AdjDb", "link_monitor.advertise_adjacencies.sum"),
-                    ("Rcvd Hello Pkts", "spark.hello_packet_recv.sum"),
-                    ("Sent Hello Pkts", "spark.hello_packet_sent.sum"),
+                    ("Rcvd Hello Pkts", "spark.hello.packet_recv.sum"),
+                    ("Sent Hello Pkts", "spark.hello.packet_sent.sum"),
                 ],
             },
             {
@@ -134,7 +152,7 @@ class StatisticsCmd(MonitorCmd):
                     ("Updates AdjDbs", "decision.adj_db_update.count"),
                     ("Updates PrefixDbs", "decision.prefix_db_update.count"),
                     ("SPF Runs", "decision.spf_runs.count"),
-                    ("SPF Avg Duration (ms)", "decision.spf_duration.avg"),
+                    ("SPF Avg Duration (ms)", "decision.spf_ms.avg"),
                     ("Convergence Duration (ms)", "fib.convergence_time_ms.avg"),
                     ("Updates RouteDb", "fib.process_route_db.count"),
                     ("Full Route Sync", "fib.sync_fib_calls.count"),
@@ -144,41 +162,3 @@ class StatisticsCmd(MonitorCmd):
 
         counters = client.getCounters()
         self.print_stats(stats_templates, counters)
-
-    def print_stats(self, stats_templates, counters):
-        """
-        Print in pretty format
-        """
-
-        suffixes = ["60", "600", "3600", "0"]
-
-        for template in stats_templates:
-            counters_rows = []
-            for title, key in template["counters"]:
-                val = counters.get(key, None)
-                counters_rows.append([title, "N/A" if not val else val])
-
-            stats_cols = ["Stat", "1 min", "10 mins", "1 hour", "All Time"]
-            stats_rows = []
-            for title, key_prefix in template["stats"]:
-                row = [title]
-                for key in ["{}.{}".format(key_prefix, s) for s in suffixes]:
-                    val = counters.get(key, None)
-                    row.append("N/A" if not val else val)
-                stats_rows.append(row)
-
-            print("> {} ".format(template["title"]))
-            if counters_rows:
-                print()
-                print(
-                    printing.render_horizontal_table(
-                        counters_rows, tablefmt="plain"
-                    ).strip("\n")
-                )
-            if stats_rows:
-                print()
-                print(
-                    printing.render_horizontal_table(
-                        stats_rows, column_labels=stats_cols, tablefmt="simple"
-                    ).strip("\n")
-                )

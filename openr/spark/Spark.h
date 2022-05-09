@@ -20,18 +20,23 @@
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
+#include <openr/common/LsdbTypes.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/common/StepDetector.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
-#include <openr/if/gen-cpp2/LinkMonitor_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
-#include <openr/if/gen-cpp2/Spark_types.h>
+#include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/spark/IoProvider.h>
 
+
 namespace openr {
+
+namespace {
+const std::string kDefaultArea {openr::Constants::kDefaultArea};
+}
 
 enum class PacketValidationResult {
   SUCCESS = 1,
@@ -92,10 +97,10 @@ class Spark final : public OpenrEventBase {
       std::chrono::milliseconds myHeartbeatHoldTime,
       std::optional<int> ipTos,
       bool enableV4,
-      messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-      messaging::ReplicateQueue<thrift::SparkNeighborEvent>& nbrUpdatesQueue,
-      KvStoreCmdPort kvStoreCmdPort,
-      OpenrCtrlThriftPort openrCtrlThriftPort,
+      messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+      messaging::ReplicateQueue<NeighborEvents>& nbrUpdatesQueue,
+      uint16_t kvStoreCmdPort,
+      uint16_t openrCtrlThriftPort,
       std::pair<uint32_t, uint32_t> version,
       std::shared_ptr<IoProvider> ioProvider,
       bool enableFloodOptimization = false,
@@ -187,7 +192,7 @@ class Spark final : public OpenrEventBase {
 
   // Function processes interface updates from LinkMonitor and appropriately
   // enable/disable neighbor discovery
-  void processInterfaceUpdates(thrift::InterfaceDatabase&& interfaceUpdates);
+  void processInterfaceUpdates(InterfaceDatabase&& interfaceUpdates);
 
   // util function to delete interface in spark
   void deleteInterfaceFromDb(const std::set<std::string>& toDel);
@@ -283,14 +288,14 @@ class Spark final : public OpenrEventBase {
     thrift::SparkNeighbor
     toThrift() const {
       thrift::SparkNeighbor res;
-      res.domainName = domainName;
-      res.nodeName = nodeName;
-      res.holdTime = gracefulRestartHoldTime.count();
-      res.transportAddressV4 = transportAddressV4;
-      res.transportAddressV6 = transportAddressV6;
-      res.kvStoreCmdPort = kvStoreCmdPort;
-      res.openrCtrlThriftPort = openrCtrlThriftPort;
-      res.ifName = remoteIfName;
+      res.domainName_ref() = domainName;
+      res.nodeName_ref() = nodeName;
+      res.holdTime_ref() = gracefulRestartHoldTime.count();
+      res.transportAddressV4_ref() = transportAddressV4;
+      res.transportAddressV6_ref() = transportAddressV6;
+      res.kvStoreCmdPort_ref() = kvStoreCmdPort;
+      res.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
+      res.ifName_ref() = remoteIfName;
       return res;
     }
 
@@ -392,7 +397,7 @@ class Spark final : public OpenrEventBase {
       int32_t label,
       bool supportFloodOptimization,
       const std::string& area =
-          openr::thrift::KvStore_constants::kDefaultArea());
+          kDefaultArea);
 
   // callback function for rtt change
   void processRttChange(
@@ -508,7 +513,7 @@ class Spark final : public OpenrEventBase {
       stateMap_;
 
   // Queue to publish neighbor events
-  messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue_;
+  messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue_;
 
   // this is used to inform peers about my kvstore tcp ports
   const uint16_t kKvStoreCmdPort_{0};
@@ -563,7 +568,7 @@ class Spark final : public OpenrEventBase {
         std::unique_ptr<folly::AsyncTimeout> holdTimer,
         const std::chrono::milliseconds& samplingPeriod,
         std::function<void(const int64_t&)> rttChangeCb,
-        std::string area = openr::thrift::KvStore_constants::kDefaultArea());
+        std::string area = kDefaultArea);
 
     // Neighbor info
     thrift::SparkNeighbor info;
@@ -616,6 +621,20 @@ class Spark final : public OpenrEventBase {
   // instances, hence the shared_ptr
   std::shared_ptr<IoProvider> ioProvider_{nullptr};
 
+  // Boolean flag indicating whether initial interfaces are received during
+  // Open/R initialization procedure.
+  bool initialInterfacesReceived_{false};
+
+  // Interval that Spark holds before publishing discovered neighbors in OpenR
+  // initialization procedure. It is set as '3 * fastInitHelloTime_ +
+  // handshakeTime_' to make sure Spark has enough time to process fast neighbor
+  // discovery among all received interfaces.
+  const std::chrono::milliseconds initializationHoldTime_{0};
+
+  // Timer for collecting neighbors successfully discovered and publishing them
+  // to neighborUpdatesQueue_ in OpenR initialization procedure.
+  std::unique_ptr<folly::AsyncTimeout> initializationHoldTimer_{nullptr};
+
   // vector of BucketedTimeSeries to make sure we don't take too many
   // hello packets from any one iface, address pair
   std::vector<folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>>
@@ -634,4 +653,54 @@ class Spark final : public OpenrEventBase {
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 };
+
+static NeighborEvents sparkNeighborEventToNeighborEvents(const thrift::SparkNeighborEvent& event) {
+  struct NeighborEvent e = NeighborEvent(
+    static_cast<NeighborEventType>(event.eventType_ref().value()),
+    event.neighbor_ref().value().nodeName_ref().value(),
+    event.neighbor_ref().value().transportAddressV4_ref().value(),
+    event.neighbor_ref().value().transportAddressV6_ref().value(),
+    event.ifName_ref().value(),
+    event.neighbor_ref().value().ifName().value(),
+    event.area_ref().value(),
+    event.neighbor_ref().value().kvStoreCmdPort_ref().value(),
+    event.neighbor_ref().value().openrCtrlThriftPort_ref().value(),
+    event.rttUs_ref().value(),
+    event.supportFloodOptimization_ref().value(),
+    false
+  );
+  NeighborEvents eventV = {e};
+  return eventV;
+}
+
+thrift::SparkNeighbor createSparkNeighbor(
+    const std::string& domainName,
+    const std::string& nodeName,
+    int64_t holdTime,
+    const thrift::BinaryAddress& v4Addr,
+    const thrift::BinaryAddress& v6Addr,
+    int64_t kvStoreCmdPort,
+    int64_t openrCtrlThriftPort,
+    const std::string& ifName);
+
+thrift::SparkPayload createSparkPayload(
+    int32_t version,
+    const thrift::SparkNeighbor& originator,
+    uint64_t seqNum,
+    const std::map<std::string, thrift::ReflectedNeighborInfo>& neighborInfos,
+    int64_t timestamp,
+    bool solicitResponse,
+    bool supportFloodOptimization,
+    bool restarting,
+    const std::optional<std::unordered_set<std::string>>& areas);
+
+thrift::SparkNeighborEvent createSparkNeighborEvent(
+    thrift::SparkNeighborEventType event,
+    const std::string& ifName,
+    const thrift::SparkNeighbor& originator,
+    int64_t rttUs,
+    int32_t label,
+    bool supportFloodOptimization,
+    const std::string& area = kDefaultArea);
+
 } // namespace openr

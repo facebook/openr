@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import os
@@ -20,6 +17,7 @@ from openr.cli.commands import (
     kvstore,
     lm,
     monitor,
+    openr,
     perf,
     prefix_mgr,
 )
@@ -29,7 +27,7 @@ from openr.utils.consts import Consts
 
 class TechSupportCmd(object):
     def __init__(self, cli_opts):
-        """ initialize the tech support command """
+        """initialize the tech support command"""
         self.cli_opts = cli_opts
         # Keep short timeout
         self.cli_opts.timeout = 1000
@@ -42,19 +40,18 @@ class TechSupportCmd(object):
             ("openr config file", self.print_config_file),
             ("openr runtime params", self.print_runtime_params),
             ("openr version", self.print_openr_version),
-            ("openr build information", self.print_build_info),
             ("openr config", self.print_config),
-            ("breeze prefixmgr view", self.print_prefixmgr_view),
             ("breeze lm links", self.print_lm_links),
             ("breeze kvstore peers", self.print_kvstore_peers),
             ("breeze kvstore nodes", self.print_kvstore_nodes),
-            ("breeze kvstore adj", self.print_kvstore_adjs),
             ("breeze kvstore prefixes", self.print_kvstore_prefixes),
             ("breeze kvstore keys --ttl", self.print_kvstore_keys),
+            ("breeze decision adj", self.print_decision_adjs),
             ("breeze decision validate", self.print_decision_validate),
             ("breeze decision routes", self.print_decision_routes),
             ("breeze fib validate", self.print_fib_validate),
-            ("breeze fib routes-computed", self.print_fib_routes_computed),
+            ("breeze fib unicast-routes", self.print_fib_unicast_routes),
+            ("breeze fib mpls-routes", self.print_fib_mpls_routes),
             ("breeze fib routes-installed", self.print_fib_routes_installed),
             ("breeze perf fib", self.print_perf_fib),
             ("breeze monitor counters", self.print_monitor_counters),
@@ -92,18 +89,12 @@ class TechSupportCmd(object):
         print(output)
 
     def print_openr_version(self):
-        lm.VersionCmd(self.cli_opts).run(False)
-
-    def print_build_info(self):
-        lm.BuildInfoCmd(self.cli_opts).run(False)
+        openr.VersionCmd(self.cli_opts).run(False)
 
     def print_config(self):
         config.ConfigPrefixAllocatorCmd(self.cli_opts).run()
         config.ConfigLinkMonitorCmd(self.cli_opts).run()
         config.ConfigPrefixManagerCmd(self.cli_opts).run()
-
-    def print_prefixmgr_view(self):
-        prefix_mgr.ViewCmd(self.cli_opts).run()
 
     def print_lm_links(self):
         lm.LMLinksCmd(self.cli_opts).run(False, False)
@@ -114,14 +105,14 @@ class TechSupportCmd(object):
     def print_kvstore_nodes(self):
         kvstore.NodesCmd(self.cli_opts).run()
 
-    def print_kvstore_adjs(self):
-        kvstore.AdjCmd(self.cli_opts).run(["all"], False, False)
-
     def print_kvstore_prefixes(self):
         kvstore.PrefixesCmd(self.cli_opts).run(["all"], False)
 
     def print_kvstore_keys(self):
         kvstore.KeysCmd(self.cli_opts).run(False, "", originator=None, ttl=True)
+
+    def print_decision_adjs(self):
+        decision.DecisionAdjCmd(self.cli_opts).run({"all"}, {"all"}, True, False)
 
     def print_decision_validate(self):
         decision.DecisionValidateCmd(self.cli_opts).run()
@@ -135,10 +126,15 @@ class TechSupportCmd(object):
     def print_fib_validate(self):
         fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
 
-    def print_fib_routes_computed(self):
+    def print_fib_unicast_routes(self):
         if not self.print_routes:
             return
         fib.FibUnicastRoutesCmd(self.cli_opts).run([], False)
+
+    def print_fib_mpls_routes(self):
+        if not self.print_routes:
+            return
+        fib.FibMplsRoutesCmd(self.cli_opts).run([], False)
 
     def print_fib_routes_installed(self):
         if not self.print_routes:

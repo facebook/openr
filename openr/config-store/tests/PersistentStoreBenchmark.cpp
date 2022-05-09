@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -26,7 +26,7 @@ constructRandomVector(uint32_t entryInStore) {
   std::vector<std::string> stringKeys;
   stringKeys.reserve(entryInStore);
   for (uint32_t i = 0; i < entryInStore; ++i) {
-    stringKeys.push_back(folly::sformat("key-{}", i));
+    stringKeys.push_back(fmt::format("key-{}", i));
   }
   return stringKeys;
 }
@@ -42,8 +42,7 @@ writeKeyValueToStore(
   for (size_t index = 0; index < stringKeys.size(); index += skipStep) {
     store
         ->store(
-            stringKeys[index],
-            folly::sformat("val-{}", folly::Random::rand32()))
+            stringKeys[index], fmt::format("val-{}", folly::Random::rand32()))
         .get();
   }
 }

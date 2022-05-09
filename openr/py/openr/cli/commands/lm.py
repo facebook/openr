@@ -1,22 +1,19 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import sys
 from builtins import object
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Sequence, Optional
 
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.LinkMonitor import ttypes as lm_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 
 
@@ -91,8 +88,8 @@ class LMCmdBase(OpenrCtrlCmd):
         print("Successfully {} for the interface.\n".format(action))
 
     def check_link_overriden(
-        self, links: lm_types.DumpLinksReply, interface: str, metric: int
-    ) -> bool:
+        self, links: openr_types.DumpLinksReply, interface: str, metric: int
+    ) -> Optional[bool]:
         """
         This function call will comapre the metricOverride in the following way:
         1) metricOverride NOT set -> return None;
@@ -146,34 +143,73 @@ class LMCmdBase(OpenrCtrlCmd):
 
 
 class SetNodeOverloadCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        yes: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_node_overload_bit(client, True, yes)
 
 
 class UnsetNodeOverloadCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, yes: bool = False) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        yes: bool = False,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_node_overload_bit(client, False, yes)
 
 
 class SetLinkOverloadCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_link_overload_bit(client, True, interface, yes)
 
 
 class UnsetLinkOverloadCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_link_overload_bit(client, False, interface, yes)
 
 
 class SetLinkMetricCmd(LMCmdBase):
     def _run(
-        self, client: OpenrCtrl.Client, interface: str, metric: str, yes: bool
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        metric: str,
+        yes: bool,
+        *args,
+        **kwargs,
     ) -> None:
         self.toggle_link_metric(client, True, interface, int(metric), yes)
 
 
 class UnsetLinkMetricCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, interface: str, yes: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         self.toggle_link_metric(client, False, interface, 0, yes)
 
 
@@ -185,79 +221,60 @@ class SetAdjMetricCmd(LMCmdBase):
         interface: str,
         metric: str,
         yes: bool,
+        *args,
+        **kwargs,
     ) -> None:
         client.setAdjacencyMetric(interface, node, int(metric))
 
 
 class UnsetAdjMetricCmd(LMCmdBase):
     def _run(
-        self, client: OpenrCtrl.Client, node: str, interface: str, yes: bool
+        self,
+        client: OpenrCtrl.Client,
+        node: str,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
     ) -> None:
         client.unsetAdjacencyMetric(interface, node)
 
 
-class VersionCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
-        openr_version = client.getOpenrVersion()
-
-        if json:
-            version = utils.thrift_to_dict(openr_version)
-            print(utils.json_dumps(version))
-        else:
-            rows = []
-            rows.append(["Current Version", ":", openr_version.version])
-            rows.append(
-                ["Lowest Supported Version", ":", openr_version.lowestSupportedVersion]
-            )
-            print(
-                printing.render_horizontal_table(
-                    rows, column_labels=[], tablefmt="plain"
-                )
-            )
-
-
-class BuildInfoCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, json: bool) -> None:
-        info = client.getBuildInfo()
-
-        if json:
-            info = utils.thrift_to_dict(info)
-            print(utils.json_dumps(info))
-        else:
-            print("Build Information")
-            print("  Built by: {}".format(info.buildUser))
-            print("  Built on: {}".format(info.buildTime))
-            print("  Built at: {}".format(info.buildHost))
-            print("  Build path: {}".format(info.buildPath))
-            print("  Package Name: {}".format(info.buildPackageName))
-            print("  Package Version: {}".format(info.buildPackageVersion))
-            print("  Package Release: {}".format(info.buildPackageRelease))
-            print("  Build Revision: {}".format(info.buildRevision))
-            print("  Build Upstream Revision: {}".format(info.buildUpstreamRevision))
-            print("  Build Platform: {}".format(info.buildPlatform))
-            print(
-                "  Build Rule: {} ({}, {}, {})".format(
-                    info.buildRule, info.buildType, info.buildTool, info.buildMode
-                )
-            )
-
-
 class LMAdjCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, nodes: set, json: bool) -> None:
-        adj_db = client.getLinkMonitorAdjacencies()
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        json: bool,
+        areas: Sequence[str] = (),
+        *args,
+        **kwargs,
+    ) -> None:
+        area_filters = OpenrCtrl.AdjacenciesFilter(selectAreas=set(areas))
+        adj_dbs = client.getLinkMonitorAdjacenciesFiltered(area_filters)
 
-        # adj_dbs is built with ONLY one single (node, adjDb). Ignpre bidir option
-        adjs_map = utils.adj_dbs_to_dict(
-            {adj_db.thisNodeName: adj_db}, nodes, False, self.iter_dbs
-        )
-        if json:
-            utils.print_json(adjs_map)
-        else:
-            utils.print_adjs_table(adjs_map, None, None)
+        for adj_db in adj_dbs:
+            if adj_db and adj_db.area and not json:
+                click.secho(f"Area: {adj_db.area}", bold=True)
+            # adj_db is built with ONLY one single (node, adjDb). Ignpre bidir option
+            adjs_map = utils.adj_dbs_to_dict(
+                {adj_db.thisNodeName: adj_db}, nodes, False, self.iter_dbs
+            )
+            if json:
+                utils.print_json(adjs_map)
+            else:
+                utils.print_adjs_table(adjs_map, None, None)
 
 
 class LMLinksCmd(LMCmdBase):
-    def _run(self, client: OpenrCtrl.Client, only_suppressed: bool, json: bool) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        only_suppressed: bool,
+        json: bool,
+        *args,
+        **kwargs,
+    ) -> None:
         links = client.getInterfaces()
         if only_suppressed:
             links.interfaceDetails = {
@@ -334,10 +351,14 @@ class LMLinksCmd(LMCmdBase):
 
     @staticmethod
     def build_table_row(k: str, v: object) -> List[Any]:
+        # pyre-fixme[16]: `object` has no attribute `metricOverride`.
         metric_override = v.metricOverride if v.metricOverride else ""
+        # pyre-fixme[16]: `object` has no attribute `info`.
         if v.info.isUp:
             backoff_sec = int(
-                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0) / 1000
+                # pyre-fixme[16]: `object` has no attribute `linkFlapBackOffMs`.
+                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0)
+                / 1000
             )
             if backoff_sec == 0:
                 state = "Up"
@@ -351,6 +372,7 @@ class LMLinksCmd(LMCmdBase):
                 if utils.is_color_output_supported()
                 else "Down"
             )
+        # pyre-fixme[16]: `object` has no attribute `isOverloaded`.
         if v.isOverloaded:
             metric_override = (
                 click.style("Overloaded", fg="red")

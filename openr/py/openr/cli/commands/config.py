@@ -1,56 +1,52 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 import json
-from typing import Tuple
+from typing import Tuple, Optional, Union
 
 import click
 import jsondiff
-from openr.AllocPrefix import ttypes as ap_types
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.LinkMonitor import ttypes as lm_types
-from openr.Lsdb import ttypes as lsdb_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import OpenrError
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 
 
 class ConfigShowCmd(OpenrCtrlCmd):
-    def _run(self, client: OpenrCtrl.Client):
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         resp = client.getRunningConfig()
         config = json.loads(resp)
         utils.print_json(config)
 
 
 class ConfigDryRunCmd(OpenrCtrlCmd):
-    def _run(self, client: OpenrCtrl.Client, file: str):
+    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs) -> int:
         try:
             file_conf = client.dryrunConfig(file)
         except OpenrError as ex:
             click.echo(click.style("FAILED: {}".format(ex), fg="red"))
-            return
+            return 1
 
         config = json.loads(file_conf)
         utils.print_json(config)
+        return 0
 
 
 class ConfigCompareCmd(OpenrCtrlCmd):
-    def _run(self, client: OpenrCtrl.Client, file: str):
+    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs):
         running_conf = client.getRunningConfig()
 
         try:
             file_conf = client.dryrunConfig(file)
         except OpenrError as ex:
-            print("invalid config {} : {}".format(file, ex))
+            click.echo(click.style("FAILED: {}".format(ex), fg="red"))
             return
 
         res = jsondiff.diff(running_conf, file_conf, load=True, syntax="explicit")
@@ -65,7 +61,7 @@ class ConfigCompareCmd(OpenrCtrlCmd):
 class ConfigStoreCmdBase(OpenrCtrlCmd):
     def getConfigWrapper(
         self, client: OpenrCtrl.Client, config_key: str
-    ) -> Tuple[str, str]:
+    ) -> Tuple[Optional[bytes], Optional[str]]:
         blob = None
         exception_str = None
         try:
@@ -77,7 +73,7 @@ class ConfigStoreCmdBase(OpenrCtrlCmd):
 
 
 class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client):
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         (prefix_alloc_blob, exception_str) = self.getConfigWrapper(
             client, Consts.PREFIX_ALLOC_KEY
         )
@@ -87,11 +83,11 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
             return
 
         prefix_alloc = deserialize_thrift_object(
-            prefix_alloc_blob, ap_types.AllocPrefix
+            prefix_alloc_blob, openr_types.AllocPrefix
         )
         self.print_config(prefix_alloc)
 
-    def print_config(self, prefix_alloc: ap_types.AllocPrefix) -> None:
+    def print_config(self, prefix_alloc: openr_types.AllocPrefix) -> None:
         seed_prefix = prefix_alloc.seedPrefix
         seed_prefix_addr = ipnetwork.sprint_addr(seed_prefix.prefixAddress.addr)
 
@@ -109,7 +105,7 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
 
 
 class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
         # After link-monitor thread starts, it will hold for
         # "adjHoldUntilTimePoint_" time before populate config information.
         # During this short time-period, Exception can be hit if dump cmd
@@ -122,10 +118,12 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        lm_config = deserialize_thrift_object(lm_config_blob, lm_types.LinkMonitorState)
+        lm_config = deserialize_thrift_object(
+            lm_config_blob, openr_types.LinkMonitorState
+        )
         self.print_config(lm_config)
 
-    def print_config(self, lm_config: lm_types.LinkMonitorState):
+    def print_config(self, lm_config: openr_types.LinkMonitorState):
         caption = "Link Monitor parameters stored"
         rows = []
         rows.append(
@@ -154,7 +152,7 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
 
 
 class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client) -> None:
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
         (prefix_mgr_config_blob, exception_str) = self.getConfigWrapper(
             client, Consts.PREFIX_MGR_KEY
         )
@@ -164,23 +162,32 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
             return
 
         prefix_mgr_config = deserialize_thrift_object(
-            prefix_mgr_config_blob, lsdb_types.PrefixDatabase
+            prefix_mgr_config_blob, openr_types.PrefixDatabase
         )
         self.print_config(prefix_mgr_config)
 
-    def print_config(self, prefix_mgr_config: lsdb_types.PrefixDatabase):
+    def print_config(self, prefix_mgr_config: openr_types.PrefixDatabase):
         print()
         print(utils.sprint_prefixes_db_full(prefix_mgr_config))
         print()
 
 
 class ConfigEraseCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, key: str) -> None:
+    def _run(self, client: OpenrCtrl.Client, key: str, *args, **kwargs) -> None:
         client.eraseConfigKey(key)
         print("Key:{} erased".format(key))
 
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, key: str, value: str) -> None:
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        key: str,
+        value: Union[bytes, str],
+        *args,
+        **kwargs
+    ) -> None:
+        if isinstance(value, str):
+            value = value.encode()
         client.setConfigKey(key, value)
         print("Key:{}, value:{} stored".format(key, value))

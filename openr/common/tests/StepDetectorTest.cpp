@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -42,11 +42,11 @@ getTestConfig() {
   // generate a config for testing
   openr::thrift::StepDetectorConfig stepDetectorConfig;
 
-  stepDetectorConfig.fast_window_size = FAST_WINDOW_SIZE;
-  stepDetectorConfig.slow_window_size = SLOW_WINDOW_SIZE;
-  stepDetectorConfig.lower_threshold = LOWER_THRESHOLD;
-  stepDetectorConfig.upper_threshold = UPPER_THRESHOLD;
-  stepDetectorConfig.ads_threshold = ABS_THRESHOLD;
+  stepDetectorConfig.fast_window_size_ref() = FAST_WINDOW_SIZE;
+  stepDetectorConfig.slow_window_size_ref() = SLOW_WINDOW_SIZE;
+  stepDetectorConfig.lower_threshold_ref() = LOWER_THRESHOLD;
+  stepDetectorConfig.upper_threshold_ref() = UPPER_THRESHOLD;
+  stepDetectorConfig.ads_threshold_ref() = ABS_THRESHOLD;
 
   return stepDetectorConfig;
 }
@@ -185,6 +185,7 @@ main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

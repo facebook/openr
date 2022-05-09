@@ -1,10 +1,11 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <signal.h>
 #include <unistd.h>
 
 #include <gflags/gflags.h>
@@ -12,6 +13,17 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/ExponentialBackoff.h>
+
+TEST(ExponentialBackoffTest, AbortAtMaxTest) {
+  openr::ExponentialBackoff<std::chrono::milliseconds> timer(
+      std::chrono::milliseconds(1), std::chrono::milliseconds(2), true);
+  timer.reportError();
+  timer.reportError();
+  EXPECT_EXIT(
+      timer.reportError(),
+      ::testing::KilledBySignal(SIGABRT),
+      "Max back-off reached");
+}
 
 TEST(ExponentialBackoffTest, ApiTest) {
   openr::ExponentialBackoff<std::chrono::milliseconds> timer(
@@ -82,6 +94,7 @@ main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
+  FLAGS_logtostderr = true;
 
   // Run the tests
   return RUN_ALL_TESTS();

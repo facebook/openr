@@ -1,14 +1,16 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "InterfaceEntry.h"
 #include <folly/gen/Base.h>
+#include <folly/logging/xlog.h>
+
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
+#include <openr/link-monitor/InterfaceEntry.h>
 
 namespace openr {
 
@@ -18,19 +20,23 @@ InterfaceEntry::InterfaceEntry(
     std::chrono::milliseconds const& maxBackoff,
     AsyncThrottle& updateCallback,
     folly::AsyncTimeout& updateTimeout)
-    : ifName_(ifName),
-      backoff_(initBackoff, maxBackoff),
+    : backoff_(initBackoff, maxBackoff),
       updateCallback_(updateCallback),
-      updateTimeout_(updateTimeout) {}
+      updateTimeout_(updateTimeout) {
+  CHECK(not ifName.empty());
+  // other attributes will be updated via:
+  //  - updateAttrs()
+  //  - updateAddr()
+  info_.ifName = ifName;
+}
 
 bool
-InterfaceEntry::updateAttrs(int ifIndex, bool isUp, uint64_t weight) {
+InterfaceEntry::updateAttrs(int ifIndex, bool isUp) {
   const bool wasActive = isActive();
-  const bool wasUp = isUp_;
+  const bool wasUp = info_.isUp;
   bool isUpdated = false;
-  isUpdated |= std::exchange(ifIndex_, ifIndex) != ifIndex;
-  isUpdated |= std::exchange(isUp_, isUp) != isUp;
-  isUpdated |= std::exchange(weight_, weight) != weight;
+  isUpdated |= ((std::exchange(info_.ifIndex, ifIndex) != ifIndex) ? 1 : 0);
+  isUpdated |= ((std::exchange(info_.isUp, isUp) != isUp) ? 1 : 0);
 
   // Look for specific case of interface state transition to DOWN
   if (wasUp != isUp and wasUp) {
@@ -47,13 +53,12 @@ InterfaceEntry::updateAttrs(int ifIndex, bool isUp, uint64_t weight) {
   if (isUpdated) {
     updateCallback_();
   }
-
   return isUpdated;
 }
 
 bool
 InterfaceEntry::isActive() {
-  if (not isUp_) {
+  if (not info_.isUp) {
     return false;
   }
 
@@ -74,17 +79,18 @@ bool
 InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
   bool isUpdated = false;
   if (isValid) {
-    isUpdated |= networks_.insert(ipNetwork).second;
+    isUpdated |= ((info_.networks.insert(ipNetwork).second) ? 1 : 0);
   } else {
-    isUpdated |= networks_.erase(ipNetwork) == 1;
+    isUpdated |= (((info_.networks.erase(ipNetwork) == 1)) ? 1 : 0);
   }
 
-  if (isUpdated) {
-    VLOG(1) << (isValid ? "Adding " : "Deleting ")
-            << folly::sformat("{}/{}", ipNetwork.first.str(), ipNetwork.second)
-            << " on interface " << ifName_
-            << ", status: " << (isUp() ? "UP" : "DOWN");
-  }
+  XLOG_IF(DBG1, isUpdated) << fmt::format(
+      "{} {}/{} on interface {}, status: {}",
+      isValid ? "Adding" : "Deleting",
+      ipNetwork.first.str(),
+      ipNetwork.second,
+      info_.ifName,
+      isUp() ? "UP" : "DOWN");
 
   if (isUpdated and isActive()) {
     updateCallback_();
@@ -93,34 +99,11 @@ InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
   return isUpdated;
 }
 
-std::unordered_set<folly::IPAddress>
-InterfaceEntry::getV4Addrs() const {
-  std::unordered_set<folly::IPAddress> v4Addrs;
-  for (auto const& ntwk : networks_) {
-    if (ntwk.first.isV4()) {
-      v4Addrs.insert(ntwk.first);
-    }
-  }
-  return v4Addrs;
-}
-
-std::unordered_set<folly::IPAddress>
-InterfaceEntry::getV6LinkLocalAddrs() const {
-  std::unordered_set<folly::IPAddress> v6Addrs;
-  for (auto const& ntwk : networks_) {
-    if (ntwk.first.isV6() && ntwk.first.isLinkLocal()) {
-      v6Addrs.insert(ntwk.first);
-    }
-  }
-  return v6Addrs;
-}
-
-std::vector<thrift::PrefixEntry>
+std::vector<folly::CIDRNetwork>
 InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
-  std::vector<thrift::PrefixEntry> prefixes;
-  for (auto const& ntwk : networks_) {
-    auto const& ip = ntwk.first;
-    // Ignore irrelevant ip addresses.
+  std::vector<folly::CIDRNetwork> prefixes;
+  for (auto const& [ip, mask] : info_.networks) {
+    // Ignore irrelevant link addresses
     if (ip.isLoopback() || ip.isLinkLocal() || ip.isMulticast()) {
       continue;
     }
@@ -130,26 +113,11 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
       continue;
     }
 
-    auto prefixEntry = openr::thrift::PrefixEntry();
-    prefixEntry.prefix =
-        toIpPrefix(std::make_pair(ip.mask(ntwk.second), ntwk.second));
-    prefixEntry.type = thrift::PrefixType::LOOPBACK;
-    prefixEntry.forwardingType = thrift::PrefixForwardingType::IP;
-    prefixEntry.ephemeral_ref().reset();
-    prefixes.push_back(prefixEntry);
+    // Mask and add subnet for advertisement
+    prefixes.emplace_back(ip.mask(mask), mask);
   }
 
   return prefixes;
-}
-
-thrift::InterfaceInfo
-InterfaceEntry::getInterfaceInfo() const {
-  std::vector<thrift::IpPrefix> networks;
-  for (const auto& network : networks_) {
-    networks.emplace_back(toIpPrefix(network));
-  }
-
-  return createThriftInterfaceInfo(isUp_, ifIndex_, networks);
 }
 
 } // namespace openr

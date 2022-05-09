@@ -31,6 +31,7 @@
 #include <folly/futures/Future.h>
 #include <folly/futures/Promise.h>
 #include <folly/gen/Base.h>
+#include <folly/logging/xlog.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 
 #include <openr/common/Constants.h>
@@ -92,10 +93,10 @@ toggleMcastGroup(
     int ifIndex,
     bool join,
     openr::IoProvider* ioProvider) {
-  VLOG(2) << "Subscribing to link local multicast on ifIndex " << ifIndex;
+  XLOG(DBG2) << "Subscribing to link local multicast on ifIndex " << ifIndex;
 
   if (!mcastGroup.isMulticast()) {
-    LOG(ERROR) << "IP address " << mcastGroup.str() << " is not multicast";
+    XLOG(ERR) << "IP address " << mcastGroup.str() << " is not multicast";
     return false;
   }
 
@@ -109,12 +110,12 @@ toggleMcastGroup(
   if (join) {
     if (ioProvider->setsockopt(
             fd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) != 0) {
-      LOG(ERROR) << "setsockopt ipv6_join_group failed "
+      XLOG(ERR) << "setsockopt ipv6_join_group failed "
                  << folly::errnoStr(errno);
       return false;
     }
 
-    LOG(INFO) << "Joined multicast addr " << mcastGroup.str() << " on ifindex "
+    XLOG(INFO) << "Joined multicast addr " << mcastGroup.str() << " on ifindex "
               << ifIndex;
 
     return true;
@@ -122,12 +123,12 @@ toggleMcastGroup(
 
   if (ioProvider->setsockopt(
           fd, IPPROTO_IPV6, IPV6_LEAVE_GROUP, &mreq, sizeof(mreq)) != 0) {
-    LOG(ERROR) << "setsockopt ipv6_leave_group failed "
+    XLOG(ERR) << "setsockopt ipv6_leave_group failed "
                << folly::errnoStr(errno);
     return false;
   }
 
-  LOG(INFO) << "Left multicast addr " << mcastGroup.str() << " on ifindex "
+  XLOG(INFO) << "Left multicast addr " << mcastGroup.str() << " on ifindex "
             << ifIndex;
 
   return true;
@@ -291,10 +292,10 @@ Spark::Spark(
     std::chrono::milliseconds myHeartbeatHoldTime,
     std::optional<int> maybeIpTos,
     bool enableV4,
-    messaging::RQueue<thrift::InterfaceDatabase> interfaceUpdatesQueue,
-    messaging::ReplicateQueue<thrift::SparkNeighborEvent>& neighborUpdatesQueue,
-    KvStoreCmdPort kvStoreCmdPort,
-    OpenrCtrlThriftPort openrCtrlThriftPort,
+    messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
+    messaging::ReplicateQueue<NeighborEvents>& neighborUpdatesQueue,
+    uint16_t kvStoreCmdPort,
+    uint16_t openrCtrlThriftPort,
     std::pair<uint32_t, uint32_t> version,
     std::shared_ptr<IoProvider> ioProvider,
     bool enableFloodOptimization,
@@ -345,14 +346,45 @@ Spark::Spark(
             numBuckets, sec));
   }
 
+  // Timer for collecting neighbors successfully discovered and publishing them
+  // to neighborUpdatesQueue_ in OpenR initialization procedure.
+  initializationHoldTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+        NeighborEvents upNeighbors;
+        int totalNeighborCnt = 0;
+        logInitializationEvent(
+            "Spark",
+            thrift::InitializationEvent::NEIGHBOR_DISCOVERED,
+            fmt::format(
+                "Published {} UP neighbors out of {}",
+                upNeighbors.size(),
+                totalNeighborCnt));
+
+        // NOTE: In scenarios of standalone node or first node coming up in the
+        // network, there are none announced neighbors.
+        neighborUpdatesQueue_.push(std::move(upNeighbors));
+      });
+
+
   // Fiber to process interface updates from LinkMonitor
   addFiberTask([q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
     while (true) {
       auto interfaceUpdates = q.get(); // perform read
-      VLOG(1) << "Received interface updates";
+      XLOG(DBG1) << "Received interface updates";
       if (interfaceUpdates.hasError()) {
-        LOG(INFO) << "Terminating interface update processing fiber";
+        XLOG(INFO) << "Terminating interface update processing fiber";
         break;
+      }
+
+      if (not initialInterfacesReceived_) {
+        // In OpenR initialization procedure, set up reasonable long enough
+        // timer to handle neighbor discovery.
+        initializationHoldTimer_->scheduleTimeout(initializationHoldTime_);
+        initialInterfacesReceived_ = true;
+
+        XLOG(INFO) << fmt::format(
+            "[Initialization] Initial interface update received. Scheduled timer after {}ms",
+            initializationHoldTime_.count());
       }
 
       processInterfaceUpdates(std::move(interfaceUpdates).value());
@@ -391,7 +423,7 @@ Spark::toStr(SparkNeighState state) {
   case SparkNeighState::RESTART:
     return "RESTART";
   default:
-    LOG(ERROR) << "Unknown type";
+    XLOG(ERR) << "Unknown type";
   }
   return res;
 }
@@ -409,7 +441,7 @@ Spark::stop() {
     }
   }
 
-  LOG(INFO)
+  XLOG(INFO)
       << "I have sent all restarting packets to my neighbors, ready to go down";
   OpenrEventBase::stop();
 }
@@ -418,17 +450,17 @@ void
 Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   int fd = ioProvider_->socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   mcastFd_ = fd;
-  LOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
+  XLOG(INFO) << "Creatd UDP socket for neighbor discovery. fd: " << mcastFd_;
   CHECK_GT(fd, 0);
 
   if (fd < 0) {
-    LOG(FATAL) << "Failed creating Spark UDP socket. Error: "
+    XLOG(FATAL) << "Failed creating Spark UDP socket. Error: "
                << folly::errnoStr(errno);
   }
 
   // make socket non-blocking
   if (ioProvider_->fcntl(fd, F_SETFL, O_NONBLOCK) != 0) {
-    LOG(FATAL) << "Failed making the socket non-blocking. Error: "
+    XLOG(FATAL) << "Failed making the socket non-blocking. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -436,7 +468,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   int v6Only = 1;
   if (ioProvider_->setsockopt(
           fd, IPPROTO_IPV6, IPV6_V6ONLY, &v6Only, sizeof(v6Only)) != 0) {
-    LOG(FATAL) << "Failed making the socket v6 only. Error: "
+    XLOG(FATAL) << "Failed making the socket v6 only. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -444,7 +476,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   int reuseAddr = 1;
   if (ioProvider_->setsockopt(
           fd, SOL_SOCKET, SO_REUSEADDR, &reuseAddr, sizeof(reuseAddr)) != 0) {
-    LOG(FATAL) << "Failed making the socket reuse addr. Error: "
+    XLOG(FATAL) << "Failed making the socket reuse addr. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -456,7 +488,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
           IPV6_RECVPKTINFO,
           &recvPktInfo,
           sizeof(recvPktInfo)) == -1) {
-    LOG(FATAL) << "Failed enabling PKTINFO option. Error: "
+    XLOG(FATAL) << "Failed enabling PKTINFO option. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -465,7 +497,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
     const int ipTos = *maybeIpTos;
     if (ioProvider_->setsockopt(
             fd, IPPROTO_IPV6, IPV6_TCLASS, &ipTos, sizeof(int)) != 0) {
-      LOG(FATAL) << "Failed setting ip-tos value on socket. Error: "
+      XLOG(FATAL) << "Failed setting ip-tos value on socket. Error: "
                  << folly::errnoStr(errno);
     }
   }
@@ -474,7 +506,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   // bind the socket to receive any mcast packet
   //
   {
-    VLOG(2) << "Binding UDP socket to receive on any destination address";
+    XLOG(DBG2) << "Binding UDP socket to receive on any destination address";
 
     auto mcastSockAddr =
         folly::SocketAddress(folly::IPAddress("::"), udpMcastPort_);
@@ -484,7 +516,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
     sockaddr* saddr = reinterpret_cast<sockaddr*>(&addrStorage);
 
     if (ioProvider_->bind(fd, saddr, mcastSockAddr.getActualSize()) != 0) {
-      LOG(FATAL) << "Failed binding the socket. Error: "
+      XLOG(FATAL) << "Failed binding the socket. Error: "
                  << folly::errnoStr(errno);
     }
   }
@@ -493,7 +525,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   int ttl = kSparkHopLimit;
   if (ioProvider_->setsockopt(
           fd, IPPROTO_IPV6, IPV6_MULTICAST_HOPS, &ttl, sizeof(ttl)) != 0) {
-    LOG(FATAL) << "Failed setting TTL on socket. Error: "
+    XLOG(FATAL) << "Failed setting TTL on socket. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -505,7 +537,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
           IPV6_RECVHOPLIMIT,
           &recvHopLimit,
           sizeof(recvHopLimit)) != 0) {
-    LOG(FATAL) << "Failed enabling TTL receive on socket. Error: "
+    XLOG(FATAL) << "Failed enabling TTL receive on socket. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -513,7 +545,7 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   const int loop = 0;
   if (ioProvider_->setsockopt(
           fd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &loop, sizeof(loop)) != 0) {
-    LOG(FATAL) << "Failed disabling looping on socket. Error: "
+    XLOG(FATAL) << "Failed disabling looping on socket. Error: "
                << folly::errnoStr(errno);
   }
 
@@ -521,19 +553,19 @@ Spark::prepareSocket(std::optional<int> maybeIpTos) noexcept {
   const int enabled = 1;
   if (ioProvider_->setsockopt(
           fd, SOL_SOCKET, SO_TIMESTAMPNS, &enabled, sizeof(enabled)) != 0) {
-    LOG(ERROR) << "Failed to enable kernel timestamping. Measured RTTs are "
+    XLOG(ERR) << "Failed to enable kernel timestamping. Measured RTTs are "
                << "likely to have more noise in them. Error: "
                << folly::errnoStr(errno);
   }
 
-  LOG(INFO) << "Spark thread attaching socket/events callbacks...";
+  XLOG(INFO) << "Spark thread attaching socket/events callbacks...";
 
   // Listen for incoming messages on multicast FD
   addSocketFd(mcastFd_, ZMQ_POLLIN, [this](int) noexcept {
     try {
       processPacket();
     } catch (std::exception const& err) {
-      LOG(ERROR) << "Spark: error processing hello packet "
+      XLOG(ERR) << "Spark: error processing hello packet "
                  << folly::exceptionStr(err);
     }
   });
@@ -568,7 +600,7 @@ Spark::addAreaRegex(
 
     for (const auto& regexStr : neighborRegexes) {
       if (-1 == neighborRegexList->Add(regexStr, &regexErr)) {
-        LOG(FATAL) << folly::sformat(
+        XLOG(FATAL) << folly::sformat(
             "Failed to add neighbor regex: {} for area: {}. Error: {}",
             regexStr,
             areaId,
@@ -585,7 +617,7 @@ Spark::addAreaRegex(
 
     for (const auto& regexStr : interfaceRegexes) {
       if (-1 == interfaceRegexList->Add(regexStr, &regexErr)) {
-        LOG(FATAL) << folly::sformat(
+        XLOG(FATAL) << folly::sformat(
             "Failed to add interface regex: {} for area: {}. Error: {}",
             regexStr,
             areaId,
@@ -608,15 +640,15 @@ Spark::loadConfig() {
   if (not config_) {
     // global openrConfig_ NOT supported yet. To make regex backward compatible:
     // defaultArea => anything(".*") for backward compatible
-    addAreaRegex(thrift::KvStore_constants::kDefaultArea(), {".*"}, {".*"});
+    addAreaRegex(kDefaultArea, {".*"}, {".*"});
     return;
   }
 
-  for (const auto& areaConfig : config_->areas) {
+  for (const auto& areaConfig : config_->areas_ref().value()) {
     addAreaRegex(
-        areaConfig.area_id,
-        areaConfig.neighbor_regexes,
-        areaConfig.interface_regexes);
+        areaConfig.area_id_ref().value(),
+        areaConfig.neighbor_regexes_ref().value(),
+        areaConfig.include_interface_regexes_ref().value());
   }
 }
 
@@ -628,7 +660,7 @@ Spark::sanityCheckHelloPkt(
     uint32_t const& remoteVersion) {
   // check if own packet has looped
   if (neighborName == myNodeName_) {
-    VLOG(2) << "Ignore packet from self (" << myNodeName_ << ")";
+    XLOG(DBG2) << "Ignore packet from self (" << myNodeName_ << ")";
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.looped_packet", 1, fb303::SUM);
     return PacketValidationResult::SKIP_LOOPED_SELF;
@@ -637,7 +669,7 @@ Spark::sanityCheckHelloPkt(
   // XXX HACK: Skip domain check
   #if 0
   if (domainName != myDomainName_) {
-    LOG(ERROR) << "Ignoring hello packet from node " << neighborName
+    XLOG(ERR) << "Ignoring hello packet from node " << neighborName
                << " on interface " << remoteIfName
                << " because it's from different domain " << domainName
                << ". My domain is " << myDomainName_;
@@ -650,7 +682,7 @@ Spark::sanityCheckHelloPkt(
   // XXX HACK: Don't check version for Spark/Spark2 compatibility
   #if 0
   if (remoteVersion < static_cast<uint32_t>(kVersion_.lowestSupportedVersion)) {
-    LOG(ERROR) << "Unsupported version: " << neighborName << " "
+    XLOG(ERR) << "Unsupported version: " << neighborName << " "
                << remoteVersion
                << ", must be >= " << kVersion_.lowestSupportedVersion;
     fb303::fbData->addStatValue(
@@ -665,12 +697,12 @@ Spark::sanityCheckHelloPkt(
 PacketValidationResult
 Spark::validateHelloPacket(
     std::string const& ifName, thrift::SparkHelloPacket const& helloPacket) {
-  auto const& originator = helloPacket.payload.originator;
-  auto const& domainName = originator.domainName;
-  auto const& neighborName = originator.nodeName;
-  auto const& remoteIfName = originator.ifName;
+  auto const& originator = helloPacket.payload_ref().value().originator_ref().value();
+  auto const& domainName = originator.domainName_ref().value();
+  auto const& neighborName = originator.nodeName_ref().value();
+  auto const& remoteIfName = originator.ifName_ref().value();
   uint32_t const& remoteVersion =
-      static_cast<uint32_t>(helloPacket.payload.version);
+      static_cast<uint32_t>(helloPacket.payload_ref().value().version_ref().value());
 
   auto sanityCheckResult = sanityCheckHelloPkt(
       domainName, neighborName, remoteIfName, remoteVersion);
@@ -678,14 +710,14 @@ Spark::validateHelloPacket(
     return sanityCheckResult;
   }
   if (PacketValidationResult::FAILURE == sanityCheckResult) {
-    LOG(ERROR) << "Sanity check of Hello pkt failed";
+    XLOG(ERR) << "Sanity check of Hello pkt failed";
     return sanityCheckResult;
   }
 
   // validate v4 address subnet
   if (enableV4_) {
     if (PacketValidationResult::FAILURE ==
-        validateV4AddressSubnet(ifName, originator.transportAddressV4)) {
+        validateV4AddressSubnet(ifName, originator.transportAddressV4_ref().value())) {
       return PacketValidationResult::FAILURE;
     }
   }
@@ -715,7 +747,7 @@ Spark::validateHelloPacket(
         std::forward_as_tuple( // arguments to construct Neighbor object
             originator,
             getNewLabelForIface(ifName),
-            helloPacket.payload.seqNum,
+            helloPacket.payload_ref().value().seqNum_ref().value(),
             std::move(holdTimer),
             myKeepAliveTime_,
             std::move(rttChangeCb)));
@@ -725,7 +757,7 @@ Spark::validateHelloPacket(
 
   // grab existing neighbor; second.first on iterator is the SparkNeighbor
   auto& neighbor = it->second;
-  auto newSeqNum = static_cast<uint64_t>(helloPacket.payload.seqNum);
+  auto newSeqNum = static_cast<uint64_t>(helloPacket.payload_ref().value().seqNum_ref().value());
 
   // Sender's sequence number received in helloPacket is always increasing. If
   // we receive a packet with lower sequence number from adjacent neighbor, then
@@ -733,7 +765,7 @@ Spark::validateHelloPacket(
   // We accept the new sequence number from the neighbor and mark it as a
   // restarting neighbor.
   if (newSeqNum <= neighbor.seqNum) {
-    LOG(INFO) << neighborName << " seems to be restarting as received "
+    XLOG(INFO) << neighborName << " seems to be restarting as received "
               << "unexpected sequence number " << newSeqNum << " instead of "
               << neighbor.seqNum + 1;
     neighbor.info = originator; // Update stored neighbor with new data
@@ -747,10 +779,10 @@ Spark::validateHelloPacket(
   // consider neighbor restart if v4 address has changed on neighbor's
   // interface (due to duplicate IPv4 detection).
   if (enableV4_) {
-    auto const& rcvdV4Addr = originator.transportAddressV4;
-    auto const& existingV4Addr = neighbor.info.transportAddressV4;
+    auto const& rcvdV4Addr = originator.transportAddressV4_ref().value();
+    auto const& existingV4Addr = neighbor.info.transportAddressV4_ref().value();
     if (rcvdV4Addr != existingV4Addr) {
-      LOG(INFO) << neighborName << " seems to be have reassigned IPv4 address";
+      XLOG(INFO) << neighborName << " seems to be have reassigned IPv4 address";
       return PacketValidationResult::NEIGHBOR_RESTART;
     }
   }
@@ -764,15 +796,15 @@ Spark::processNeighborRttChange(
     thrift::SparkNeighbor const& originator,
     int64_t const newRtt) {
   // Neighbor must exist if this callback is fired
-  auto& neighbor = neighbors_.at(ifName).at(originator.nodeName);
+  auto& neighbor = neighbors_.at(ifName).at(originator.nodeName_ref().value());
 
   // only report RTT change if the neighbor is adjacent
   if (!neighbor.isAdjacent) {
-    VLOG(2) << "Neighbor is not adjacent, not reporting";
+    XLOG(DBG2) << "Neighbor is not adjacent, not reporting";
     return;
   }
 
-  VLOG(2) << "RTT for neighbor " << originator.nodeName << " has changed "
+  XLOG(DBG2) << "RTT for neighbor " << originator.nodeName_ref().value() << " has changed "
           << "from " << neighbor.rtt.count() / 1000.0 << "ms to "
           << newRtt / 1000.0 << "ms over interface " << ifName;
 
@@ -785,7 +817,7 @@ Spark::processNeighborRttChange(
       neighbor.label,
       false /* supportFloodOptimization: doesn't matter in RTT event*/,
       neighbor.area);
-  neighborUpdatesQueue_.push(std::move(event));
+  neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
 }
 
 void
@@ -797,7 +829,7 @@ Spark::processNeighborHoldTimeout(
 
   // valid timeout event, remove neighbor from tracked and adjacent
   // lists and report downstream
-  LOG(INFO) << "Neighbor " << neighborName << " expired on interface "
+  XLOG(INFO) << "Neighbor " << neighborName << " expired on interface "
             << ifName;
 
   // remove from tracked neighbor at the end
@@ -808,7 +840,7 @@ Spark::processNeighborHoldTimeout(
 
   // check if the neighbor was adjacent. if so, report it as neighbor-down
   if (neighbor.isAdjacent) {
-    LOG(INFO) << "Neighbor " << neighborName
+    XLOG(INFO) << "Neighbor " << neighborName
               << " was adjacent, reporting as DOWN";
     neighbor.isAdjacent = false;
 
@@ -820,9 +852,9 @@ Spark::processNeighborHoldTimeout(
         neighbor.label,
         false /* supportFloodOptimization: doesn't matter in GR-expired event*/,
         neighbor.area);
-    neighborUpdatesQueue_.push(std::move(event));
+    neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
   } else {
-    VLOG(2) << "Neighbor went down, but was not adjacent, not reporting";
+    XLOG(DBG2) << "Neighbor went down, but was not adjacent, not reporting";
   }
 }
 
@@ -861,14 +893,14 @@ Spark::parsePacket(
       IoProvider::recvMessage(mcastFd_, buf, kMinIpv6Mtu, ioProvider_.get());
 
   if (hopLimit < kSparkHopLimit) {
-    LOG(ERROR) << "Rejecting packet from " << clientAddr.getAddressStr()
+    XLOG(ERR) << "Rejecting packet from " << clientAddr.getAddressStr()
                << " due to hop limit being " << hopLimit;
     return false;
   }
 
   auto res = findInterfaceFromIfindex(ifIndex);
   if (!res.has_value()) {
-    LOG(ERROR) << "Received packet from " << clientAddr.getAddressStr()
+    XLOG(ERR) << "Received packet from " << clientAddr.getAddressStr()
                << " on unknown interface with index " << ifIndex
                << ". Ignoring the packet.";
     return false;
@@ -876,7 +908,7 @@ Spark::parsePacket(
 
   ifName = res.value();
 
-  VLOG(4) << "Received message on " << ifName << " ifindex " << ifIndex
+  XLOG(DBG4) << "Received message on " << ifName << " ifindex " << ifIndex
           << " from " << clientAddr.getAddressStr();
 
   // update counters for packets received, dropped and processed
@@ -887,7 +919,7 @@ Spark::parsePacket(
       "spark.hello_packet_recv_size", bytesRead, fb303::SUM);
 
   if (!shouldProcessHelloPacket(ifName, clientAddr.getIPAddress())) {
-    LOG(ERROR) << "Spark: dropping hello packet due to rate limiting on iface: "
+    XLOG(ERR) << "Spark: dropping hello packet due to rate limiting on iface: "
                << ifName << " from addr: " << clientAddr.getAddressStr();
     fb303::fbData->addStatValue("spark.hello_packet_dropped", 1, fb303::SUM);
     return false;
@@ -896,15 +928,15 @@ Spark::parsePacket(
   fb303::fbData->addStatValue("spark.hello_packet_processed", 1, fb303::SUM);
 
   if (bytesRead >= 0) {
-    VLOG(4) << "Read a total of " << bytesRead << " bytes from fd " << mcastFd_;
+    XLOG(DBG4) << "Read a total of " << bytesRead << " bytes from fd " << mcastFd_;
 
     if (static_cast<size_t>(bytesRead) > kMinIpv6Mtu) {
-      LOG(ERROR) << "Message from " << clientAddr.getAddressStr()
+      XLOG(ERR) << "Message from " << clientAddr.getAddressStr()
                  << " has been truncated";
       return false;
     }
   } else {
-    LOG(ERROR) << "Failed reading from fd " << mcastFd_ << " error "
+    XLOG(ERR) << "Failed reading from fd " << mcastFd_ << " error "
                << folly::errnoStr(errno);
     return false;
   }
@@ -915,7 +947,7 @@ Spark::parsePacket(
     pkt =
         util::readThriftObjStr<thrift::SparkHelloPacket>(readBuf, serializer_);
   } catch (std::exception const& err) {
-    LOG(ERROR) << "Failed parsing hello packet " << folly::exceptionStr(err);
+    XLOG(ERR) << "Failed parsing hello packet " << folly::exceptionStr(err);
     return false;
   }
   return true;
@@ -933,7 +965,7 @@ Spark::validateV4AddressSubnet(
   try {
     toIPAddress(neighV4Addr);
   } catch (const folly::IPAddressFormatException& ex) {
-    LOG(ERROR) << "Neighbor V4 address is not known";
+    XLOG(ERR) << "Neighbor V4 address is not known";
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.missing_v4_addr", 1, fb303::SUM);
     return PacketValidationResult::FAILURE;
@@ -944,7 +976,7 @@ Spark::validateV4AddressSubnet(
       folly::sformat("{}/{}", toString(neighV4Addr), myV4PrefixLen);
 
   if (!myV4Addr.inSubnet(neighCidrNetwork)) {
-    LOG(ERROR) << "Neighbor V4 address " << toString(neighV4Addr)
+    XLOG(ERR) << "Neighbor V4 address " << toString(neighV4Addr)
                << " is not in the same subnet with local V4 address "
                << myV4Addr.str() << "/" << +myV4PrefixLen;
     fb303::fbData->addStatValue(
@@ -964,13 +996,13 @@ Spark::processRttChange(
 
   // only report RTT change if the neighbor is adjacent
   if (spark2Neighbor.state != SparkNeighState::ESTABLISHED) {
-    VLOG(2) << "Neighbor: " << neighborName << " over iface: " << ifName
+    XLOG(DBG2) << "Neighbor: " << neighborName << " over iface: " << ifName
             << " is in state: " << toStr(spark2Neighbor.state)
             << ". Skip RTT change notification.";
     return;
   }
 
-  LOG(INFO) << "RTT for spark2Neighbor " << neighborName << " has changed "
+  XLOG(INFO) << "RTT for spark2Neighbor " << neighborName << " has changed "
             << "from " << spark2Neighbor.rtt.count() << "usecs to " << newRtt
             << "usecs over interface " << ifName;
 
@@ -993,30 +1025,30 @@ Spark::updateNeighborRtt(
     std::string const& neighborName,
     std::string const& remoteIfName,
     std::string const& ifName) {
-  VLOG(4) << "RTT timestamps in order: " << mySentTime.count() << ", "
+  XLOG(DBG4) << "RTT timestamps in order: " << mySentTime.count() << ", "
           << nbrRecvTime.count() << ", " << nbrSentTime.count() << ", "
           << myRecvTime.count();
 
   if (!mySentTime.count() || !nbrRecvTime.count()) {
-    LOG(ERROR) << "Missing timestamp to deduce RTT";
+    XLOG(ERR) << "Missing timestamp to deduce RTT";
     return;
   }
 
   if (nbrSentTime < nbrRecvTime) {
-    LOG(ERROR) << "Time anomaly. nbrSentTime: [" << nbrSentTime.count()
+    XLOG(ERR) << "Time anomaly. nbrSentTime: [" << nbrSentTime.count()
                << "] < nbrRecvTime: [" << nbrRecvTime.count() << "]";
     return;
   }
 
   if (myRecvTime < mySentTime) {
-    LOG(ERROR) << "Time anomaly. myRecvTime: [" << myRecvTime.count()
+    XLOG(ERR) << "Time anomaly. myRecvTime: [" << myRecvTime.count()
                << "] < mySentTime: [" << mySentTime.count() << "]";
     return;
   }
 
   // Measure only if neighbor is reflecting our previous hello packet.
   auto rtt = (myRecvTime - mySentTime) - (nbrSentTime - nbrRecvTime);
-  VLOG(3) << "Measured new RTT for neighbor " << neighborName
+  XLOG(DBG3) << "Measured new RTT for neighbor " << neighborName
           << " from remote iface " << remoteIfName << " over interface "
           << ifName << " as " << rtt.count() / 1000.0 << "ms.";
   // Mask off to millisecond accuracy!
@@ -1035,7 +1067,7 @@ Spark::updateNeighborRtt(
   // clock adjustment.
   // Next measurements will correct this wrong measurement.
   if (rtt.count() < 0) {
-    LOG(ERROR) << "Time anomaly. Measured negative RTT. "
+    XLOG(ERR) << "Time anomaly. Measured negative RTT. "
                << rtt.count() / 1000.0 << "ms.";
     return;
   }
@@ -1054,7 +1086,7 @@ Spark::updateNeighborRtt(
           rtt.count());
       // Set initial value if empty
       if (!neighbor.rtt.count()) {
-        VLOG(2) << "Setting initial value for RTT for neighbor "
+        XLOG(DBG2) << "Setting initial value for RTT for neighbor "
                 << neighborName;
         neighbor.rtt = rtt;
       }
@@ -1076,7 +1108,7 @@ Spark::updateNeighborRtt(
           rtt.count());
       // Set initial value if empty
       if (!spark2Neighbor.rtt.count()) {
-        VLOG(2) << "Setting initial value for RTT for spark2Neighbor "
+        XLOG(DBG2) << "Setting initial value for RTT for spark2Neighbor "
                 << neighborName;
         spark2Neighbor.rtt = rtt;
       }
@@ -1093,7 +1125,7 @@ Spark::sendHandshakeMsg(
     std::string const& neighborAreaId,
     bool isAdjEstablished) {
   SCOPE_FAIL {
-    LOG(ERROR) << "Failed sending Handshake packet on " << ifName;
+    XLOG(ERR) << "Failed sending Handshake packet on " << ifName;
   };
 
   // in some cases, getting link-local address may fail and throw
@@ -1106,15 +1138,15 @@ Spark::sendHandshakeMsg(
 
   // build handshake msg
   thrift::SparkHandshakeMsg handshakeMsg;
-  handshakeMsg.nodeName = myNodeName_;
-  handshakeMsg.isAdjEstablished = isAdjEstablished;
-  handshakeMsg.holdTime = myHeartbeatHoldTime_.count();
-  handshakeMsg.gracefulRestartTime = myHoldTime_.count();
-  handshakeMsg.transportAddressV6 = toBinaryAddress(v6Addr);
-  handshakeMsg.transportAddressV4 = toBinaryAddress(v4Addr);
-  handshakeMsg.openrCtrlThriftPort = kOpenrCtrlThriftPort_;
-  handshakeMsg.kvStoreCmdPort = kKvStoreCmdPort_;
-  handshakeMsg.area = neighborAreaId; // send neighborAreaId deduced locally
+  handshakeMsg.nodeName_ref() = myNodeName_;
+  handshakeMsg.isAdjEstablished_ref() = isAdjEstablished;
+  handshakeMsg.holdTime_ref() = myHeartbeatHoldTime_.count();
+  handshakeMsg.gracefulRestartTime_ref() = myHoldTime_.count();
+  handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
+  handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
+  handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
+  handshakeMsg.kvStoreCmdPort_ref() = kKvStoreCmdPort_;
+  handshakeMsg.area_ref() = neighborAreaId; // send neighborAreaId deduced locally
   handshakeMsg.neighborNodeName_ref() = neighborName;
 
   thrift::SparkHelloPacket pkt;
@@ -1127,7 +1159,7 @@ Spark::sendHandshakeMsg(
       folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
-    LOG(ERROR) << "Handshake packet is too big, can't send it out.";
+    XLOG(ERR) << "Handshake packet is too big, can't send it out.";
     return;
   }
 
@@ -1135,7 +1167,7 @@ Spark::sendHandshakeMsg(
       mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
 
   if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
-    VLOG(1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
+    XLOG(DBG1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
             << ifName << " failed due to error " << folly::errnoStr(errno);
     return;
   }
@@ -1154,11 +1186,11 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   };
 
   SCOPE_FAIL {
-    LOG(ERROR) << "Failed sending Heartbeat packet on " << ifName;
+    XLOG(ERR) << "Failed sending Heartbeat packet on " << ifName;
   };
 
   if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
-    VLOG(3) << "Interface: " << ifName
+    XLOG(DBG3) << "Interface: " << ifName
             << " hasn't have any active neighbor yet."
             << " Skip sending out heartbeatMsg.";
     return;
@@ -1173,8 +1205,8 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
 
   // build heartbeat msg
   thrift::SparkHeartbeatMsg heartbeatMsg;
-  heartbeatMsg.nodeName = myNodeName_;
-  heartbeatMsg.seqNum = mySeqNum_;
+  heartbeatMsg.nodeName_ref() = myNodeName_;
+  heartbeatMsg.seqNum_ref() = mySeqNum_;
 
   thrift::SparkHelloPacket pkt;
   pkt.heartbeatMsg_ref() = std::move(heartbeatMsg);
@@ -1186,7 +1218,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
       folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
-    LOG(ERROR) << "Handshake packet is too big, can't send it out.";
+    XLOG(ERR) << "Handshake packet is too big, can't send it out.";
     return;
   }
 
@@ -1194,7 +1226,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
       mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
 
   if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
-    VLOG(1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
+    XLOG(DBG1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
             << ifName << " failed due to error " << folly::errnoStr(errno);
     return;
   }
@@ -1235,14 +1267,14 @@ Spark::getSparkNeighState(
   runInEventBaseThread(
       [this, promise = std::move(promise), &ifName, &neighborName]() mutable {
         if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
-          LOG(ERROR) << "No interface: " << ifName
+          XLOG(ERR) << "No interface: " << ifName
                      << " in spark2Neighbor collection";
           promise.setValue(std::nullopt);
         } else {
           auto& ifNeighbors = spark2Neighbors_.at(ifName);
           auto neighborIt = ifNeighbors.find(neighborName);
           if (neighborIt == ifNeighbors.end()) {
-            LOG(ERROR) << "No neighborName: " << neighborName
+            XLOG(ERR) << "No neighborName: " << neighborName
                        << " in spark2Neighbor colelction";
             promise.setValue(std::nullopt);
           } else {
@@ -1328,7 +1360,7 @@ Spark::neighborDownWrapper(
 
   // remove neighborship on this interface
   if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
-    LOG(WARNING) << "Ignore " << ifName << " as there is NO active neighbors.";
+    XLOG(WARNING) << "Ignore " << ifName << " as there is NO active neighbors.";
     return;
   }
 
@@ -1348,14 +1380,14 @@ Spark::notifySparkNeighborEvent(
     bool supportFloodOptimization,
     const std::string& area) {
   thrift::SparkNeighborEvent event;
-  event.eventType = eventType;
-  event.ifName = ifName;
-  event.neighbor = originator;
-  event.rttUs = rttUs;
-  event.label = label;
-  event.supportFloodOptimization = supportFloodOptimization;
-  event.area = area;
-  neighborUpdatesQueue_.push(std::move(event));
+  event.eventType_ref() = eventType;
+  event.ifName_ref() = ifName;
+  event.neighbor_ref() = originator;
+  event.rttUs_ref() = rttUs;
+  event.label_ref() = label;
+  event.supportFloodOptimization_ref() = supportFloodOptimization;
+  event.area_ref() = area;
+  neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
 }
 
 void
@@ -1371,7 +1403,7 @@ Spark::processHeartbeatTimeout(
     ifNeighbors.erase(neighborName);
   };
 
-  LOG(INFO) << "Heartbeat timer expired for: " << neighborName
+  XLOG(INFO) << "Heartbeat timer expired for: " << neighborName
             << " on interface " << ifName;
 
   // neighbor must in 'ESTABLISHED' state
@@ -1393,7 +1425,7 @@ Spark::processNegotiateTimeout(
   // spark2 neighbor must exist if the negotiate hold-time expired
   auto& neighbor = spark2Neighbors_.at(ifName).at(neighborName);
 
-  LOG(INFO) << "Negotiate timer expired for: " << neighborName
+  XLOG(INFO) << "Negotiate timer expired for: " << neighborName
             << " on interface " << ifName;
 
   // neighbor must in 'NEGOTIATE' state
@@ -1423,7 +1455,7 @@ Spark::processGRTimeout(
     ifNeighbors.erase(neighborName);
   };
 
-  LOG(INFO) << "Graceful restart timer expired for: " << neighborName
+  XLOG(INFO) << "Graceful restart timer expired for: " << neighborName
             << " on interface " << ifName;
 
   // neighbor must in "RESTART" state
@@ -1476,17 +1508,17 @@ Spark::processHelloMsg(
     thrift::SparkHelloMsg const& helloMsg,
     std::string const& ifName,
     std::chrono::microseconds const& myRecvTimeInUs) {
-  auto const& neighborName = helloMsg.nodeName;
-  auto const& domainName = helloMsg.domainName;
-  auto const& remoteIfName = helloMsg.ifName;
-  auto const& neighborInfos = helloMsg.neighborInfos;
-  auto const& remoteVersion = static_cast<uint32_t>(helloMsg.version);
-  auto const& remoteSeqNum = static_cast<uint64_t>(helloMsg.seqNum);
-  auto const& nbrSentTimeInUs = std::chrono::microseconds(helloMsg.sentTsInUs);
+  auto const& neighborName = helloMsg.nodeName_ref().value();
+  auto const& domainName = helloMsg.domainName_ref().value();
+  auto const& remoteIfName = helloMsg.ifName_ref().value();
+  auto const& neighborInfos = helloMsg.neighborInfos_ref().value();
+  auto const& remoteVersion = static_cast<uint32_t>(helloMsg.version_ref().value());
+  auto const& remoteSeqNum = static_cast<uint64_t>(helloMsg.seqNum_ref().value());
+  auto const& nbrSentTimeInUs = std::chrono::microseconds(helloMsg.sentTsInUs_ref().value());
 
   // interface name check
   if (spark2Neighbors_.find(ifName) == spark2Neighbors_.end()) {
-    LOG(ERROR) << "Ignoring packet received from: " << neighborName
+    XLOG(ERR) << "Ignoring packet received from: " << neighborName
                << " on unknown interface: " << ifName;
     return;
   }
@@ -1494,7 +1526,7 @@ Spark::processHelloMsg(
   auto sanityCheckResult = sanityCheckHelloPkt(
       domainName, neighborName, remoteIfName, remoteVersion);
   if (PacketValidationResult::SKIP_LOOPED_SELF == sanityCheckResult) {
-    VLOG(4) << "Received self-looped hello pkt";
+    XLOG(DBG4) << "Received self-looped hello pkt";
     return;
   }
 
@@ -1574,9 +1606,9 @@ Spark::processHelloMsg(
         // recvTime of neighbor helloPkt
         myRecvTimeInUs,
         // sentTime of my helloPkt recorded by neighbor
-        std::chrono::microseconds(ts.lastNbrMsgSentTsInUs),
+        std::chrono::microseconds(ts.lastNbrMsgSentTsInUs_ref().value()),
         // recvTime of my helloPkt recorded by neighbor
-        std::chrono::microseconds(ts.lastMyMsgRcvdTsInUs),
+        std::chrono::microseconds(ts.lastMyMsgRcvdTsInUs_ref().value()),
         // sentTime of neighbor helloPkt
         nbrSentTimeInUs,
         neighborName,
@@ -1584,15 +1616,15 @@ Spark::processHelloMsg(
         ifName);
   }
 
-  VLOG(3) << "Current state for neighbor: (" << neighborName << ") is: ["
+  XLOG(DBG3) << "Current state for neighbor: (" << neighborName << ") is: ["
           << toStr(neighbor.state) << "]";
 
   // for neighbor in fast initial state and does not see us yet,
   // reply for quick convergence
-  if (helloMsg.solicitResponse) {
+  if (helloMsg.solicitResponse_ref().value()) {
     sendHelloPacket(ifName);
 
-    VLOG(3) << "Reply to neighbor's helloMsg since it is under fastInit";
+    XLOG(DBG3) << "Reply to neighbor's helloMsg since it is under fastInit";
   }
 
   if (neighbor.state == SparkNeighState::IDLE) {
@@ -1617,9 +1649,9 @@ Spark::processHelloMsg(
     // Ignore this helloMsg from my previous incarnation.
     // Wait for neighbor to catch up with the latest Seq#.
     const uint64_t myRemoteSeqNum =
-        static_cast<uint64_t>(neighborInfos.at(myNodeName_).seqNum);
+        static_cast<uint64_t>(neighborInfos.at(myNodeName_).seqNum_ref().value());
     if (myRemoteSeqNum >= mySeqNum_) {
-      VLOG(2) << "Seeing my previous incarnation from neighbor: ("
+      XLOG(DBG2) << "Seeing my previous incarnation from neighbor: ("
               << neighborName << "). Seen Seq# from neighbor: ("
               << myRemoteSeqNum << "), my Seq#: (" << mySeqNum_ << ").";
       return;
@@ -1659,8 +1691,8 @@ Spark::processHelloMsg(
     neighbor.seqNum = remoteSeqNum;
 
     // Check if neighbor is undergoing 'Graceful-Restart'
-    if (helloMsg.restarting) {
-      LOG(INFO) << "Adjacent neighbor (" << neighborName << "), "
+    if (helloMsg.restarting_ref().value()) {
+      XLOG(INFO) << "Adjacent neighbor (" << neighborName << "), "
                 << "from remote interface: (" << remoteIfName << "), "
                 << "on interface: (" << ifName << ") is restarting.";
       processGRMsg(neighborName, ifName, neighbor);
@@ -1695,14 +1727,14 @@ Spark::processHelloMsg(
     if (neighbor.seqNum < remoteSeqNum) {
       // By going here, it means this node missed ALL of the helloMsg sent-out
       // after neighbor 'restarting' itself. Will let GR timer to handle it.
-      LOG(WARNING) << "Unexpected Seq#:" << remoteSeqNum
+      XLOG(WARNING) << "Unexpected Seq#:" << remoteSeqNum
                    << " received from neighbor: (" << neighborName
                    << "), local Seq#: (" << neighbor.seqNum << ").";
       return;
     }
 
     // Neighbor is back from 'restarting' state. Go back to 'ESTABLISHED'
-    LOG(INFO) << "Node: (" << neighborName << ") is back from restart. "
+    XLOG(INFO) << "Node: (" << neighborName << ") is back from restart. "
               << "Received Seq#: (" << remoteSeqNum << "), local Seq#: ("
               << neighbor.seqNum << ").";
 
@@ -1741,13 +1773,13 @@ Spark::processHandshakeMsg(
   // is point-to-point
   if (auto neighborNodeName = handshakeMsg.neighborNodeName_ref()) {
     if (*neighborNodeName != myNodeName_) {
-      VLOG(4) << "Ignoring handshakeMsg targeted for node: "
+      XLOG(DBG4) << "Ignoring handshakeMsg targeted for node: "
               << *neighborNodeName << ", my node name: " << myNodeName_;
       return;
     }
   }
 
-  auto const& neighborName = handshakeMsg.nodeName;
+  auto const& neighborName = handshakeMsg.nodeName_ref().value();
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
 
@@ -1756,7 +1788,7 @@ Spark::processHandshakeMsg(
   //  1). neighbor is tracked on ifName;
   //  2). neighbor is under NEGOTIATE stage;
   if (neighborIt == ifNeighbors.end()) {
-    VLOG(3) << "Neighbor: (" << neighborName
+    XLOG(DBG3) << "Neighbor: (" << neighborName
             << "). is NOT found. Ignore handshakeMsg.";
     return;
   }
@@ -1770,13 +1802,13 @@ Spark::processHandshakeMsg(
   //       state will fall back from NEGOTIATE => WARM.
   //       Node should NOT ask for handshakeMsg reply to
   //       avoid infinite loop of pkt between nodes.
-  if (not handshakeMsg.isAdjEstablished) {
+  if (not handshakeMsg.isAdjEstablished_ref().value()) {
     sendHandshakeMsg(
         ifName,
         neighborName,
         neighbor.area,
         neighbor.state != SparkNeighState::NEGOTIATE);
-    LOG(INFO) << "Neighbor: (" << neighborName
+    XLOG(INFO) << "Neighbor: (" << neighborName
               << ") has NOT forming adj with us yet. "
               << "Reply to handshakeMsg immediately.";
   }
@@ -1790,7 +1822,7 @@ Spark::processHandshakeMsg(
   // handshake is happening by extending heartbeat hold timer.
   if (neighbor.heartbeatHoldTimer) {
     // Reset the hold-timer for neighbor as we have received a keep-alive msg
-    LOG(INFO) << "Extend heartbeat timer for neighbor: " << neighborName;
+    XLOG(INFO) << "Extend heartbeat timer for neighbor: " << neighborName;
     neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
   }
 
@@ -1798,28 +1830,28 @@ Spark::processHandshakeMsg(
   //  1). negotiate hold timer already expired;
   //  2). v4 validation failed and fall back to WARM;
   if (neighbor.state != SparkNeighState::NEGOTIATE) {
-    VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
+    XLOG(DBG3) << "For neighborNode (" << neighborName << "): current state: ["
             << toStr(neighbor.state) << "]"
             << ", expected state: [NEGOTIIATE]";
     return;
   }
 
   // update Spark2 neighborState
-  neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort;
-  neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort;
-  neighbor.transportAddressV4 = handshakeMsg.transportAddressV4;
-  neighbor.transportAddressV6 = handshakeMsg.transportAddressV6;
+  neighbor.kvStoreCmdPort = handshakeMsg.kvStoreCmdPort_ref().value();
+  neighbor.openrCtrlThriftPort = handshakeMsg.openrCtrlThriftPort_ref().value();
+  neighbor.transportAddressV4 = handshakeMsg.transportAddressV4_ref().value();
+  neighbor.transportAddressV6 = handshakeMsg.transportAddressV6_ref().value();
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime = std::max(
-      std::chrono::milliseconds(handshakeMsg.holdTime), myHeartbeatHoldTime_);
+      std::chrono::milliseconds(handshakeMsg.holdTime_ref().value()), myHeartbeatHoldTime_);
   neighbor.gracefulRestartHoldTime = std::max(
-      std::chrono::milliseconds(handshakeMsg.gracefulRestartTime), myHoldTime_);
+      std::chrono::milliseconds(handshakeMsg.gracefulRestartTime_ref().value()), myHoldTime_);
 
   // v4 subnet validation if enabled
   if (enableV4_) {
     if (PacketValidationResult::FAILURE ==
-        validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4)) {
+        validateV4AddressSubnet(ifName, handshakeMsg.transportAddressV4_ref().value())) {
       // state transition
       SparkNeighState oldState = neighbor.state;
       neighbor.state =
@@ -1841,16 +1873,16 @@ Spark::processHandshakeMsg(
   //  2) neighbor.area: areaId that I think neighbor node should be in;
   //
   //  ONLY promote to NEGOTIATE state if areaId matches
-  if (neighbor.area != thrift::KvStore_constants::kDefaultArea() &&
-      handshakeMsg.area != thrift::KvStore_constants::kDefaultArea()) {
+  if (neighbor.area != kDefaultArea &&
+      handshakeMsg.area_ref().value() != kDefaultArea) {
     // For backward compatible consideration, If:
     //  1) neighbor.area == defaulArea: this node doesn't support areaConfig;
     //  2) handshakeMsg.area == defaultArea: peer doesn't support areaConfig;
-    if (neighbor.area != handshakeMsg.area) {
-      LOG(ERROR)
+    if (neighbor.area != handshakeMsg.area_ref().value()) {
+      XLOG(ERR)
           << "Inconsistent areaId deduced between local and remote review. "
           << "Neighbor's areaId: [" << neighbor.area << "], "
-          << "My areaId from remote: [" << handshakeMsg.area << "].";
+          << "My areaId from remote: [" << handshakeMsg.area_ref().value() << "].";
 
       // state transition
       SparkNeighState oldState = neighbor.state;
@@ -1868,7 +1900,7 @@ Spark::processHandshakeMsg(
     // Backward compatibility:
     // In case it doesn't support AREA negotiation.
     // Override neighbor area deduced previously from helloMsg to defaultArea.
-    neighbor.area = thrift::KvStore_constants::kDefaultArea();
+    neighbor.area = kDefaultArea;
   }
 
   // state transition
@@ -1883,7 +1915,7 @@ Spark::processHandshakeMsg(
 void
 Spark::processHeartbeatMsg(
     thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName) {
-  auto const& neighborName = heartbeatMsg.nodeName;
+  auto const& neighborName = heartbeatMsg.nodeName_ref().value();
   auto& ifNeighbors = spark2Neighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
 
@@ -1891,7 +1923,7 @@ Spark::processHeartbeatMsg(
   // establish neighborship. During this time, heartbeatMsg from peer
   // will NOT be processed.
   if (neighborIt == ifNeighbors.end()) {
-    VLOG(3) << "I am NOT aware of neighbor: (" << neighborName
+    XLOG(DBG3) << "I am NOT aware of neighbor: (" << neighborName
             << "). Ignore it.";
     return;
   }
@@ -1901,7 +1933,7 @@ Spark::processHeartbeatMsg(
   // In case receiving heartbeat msg when it is NOT in established state,
   // Just ignore it.
   if (neighbor.state != SparkNeighState::ESTABLISHED) {
-    VLOG(3) << "For neighborNode (" << neighborName << "): current state: ["
+    XLOG(DBG3) << "For neighborNode (" << neighborName << "): current state: ["
             << toStr(neighbor.state) << "]"
             << ", expected state: [ESTABLISHED]";
     return;
@@ -1934,7 +1966,7 @@ Spark::processPacket() {
       processHandshakeMsg(helloPacket.handshakeMsg_ref().value(), ifName);
       return;
     } else {
-      VLOG(3) << "No valid Spark2 msg. Fallback to old Spark processing";
+      XLOG(DBG3) << "No valid Spark2 msg. Fallback to old Spark processing";
     }
   }
 
@@ -1945,24 +1977,24 @@ Spark::processPacket() {
   }
   if (validationResult == PacketValidationResult::FAILURE ||
       validationResult == PacketValidationResult::INVALID_AREA_CONFIGURATION) {
-    LOG(ERROR) << "Ignoring invalid packet received from "
-               << helloPacket.payload.originator.nodeName << " on " << ifName;
+    XLOG(ERR) << "Ignoring invalid packet received from "
+               << helloPacket.payload_ref().value().originator.nodeName_ref().value() << " on " << ifName;
     return;
   }
 
   // the map of adjacent neighbors should have been already created
-  auto const& originator = helloPacket.payload.originator;
-  auto& neighbor = neighbors_.at(ifName).at(originator.nodeName);
+  auto const& originator = helloPacket.payload_ref().value().originator_ref().value();
+  auto& neighbor = neighbors_.at(ifName).at(originator.nodeName_ref().value());
   bool isAdjacent = neighbor.isAdjacent;
 
   // Update timestamps for received hello packet for neighbor
-  auto nbrSentTime = std::chrono::microseconds(helloPacket.payload.timestamp);
+  auto nbrSentTime = std::chrono::microseconds(helloPacket.payload_ref().value().timestamp_ref().value());
   neighbor.neighborTimestamp = nbrSentTime;
   neighbor.localTimestamp = myRecvTime;
 
   // check if it's a restarting packet
-  if (helloPacket.payload.restarting_ref().has_value() and
-      *helloPacket.payload.restarting_ref()) {
+  if (helloPacket.payload_ref().value().restarting_ref().has_value() and
+      *helloPacket.payload_ref().value().restarting_ref()) {
     // this neighbor informed us that it's restarting
     neighbor.numRecvRestarting += 1;
     if (neighbor.numRecvRestarting > 1) {
@@ -1970,8 +2002,8 @@ Spark::processPacket() {
       // restarting
       return;
     }
-    LOG(INFO) << "neighbor " << originator.nodeName << " from iface "
-              << originator.ifName << " on iface" << ifName << " is restarting";
+    XLOG(INFO) << "neighbor " << originator.nodeName_ref().value() << " from iface "
+              << originator.ifName_ref().value() << " on iface" << ifName << " is restarting";
 
     auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_RESTARTING,
@@ -1981,16 +2013,16 @@ Spark::processPacket() {
         neighbor.label,
         false /* supportDual: doesn't matter in DOWN event*/,
         neighbor.area);
-    neighborUpdatesQueue_.push(std::move(event));
+    neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
     return;
   }
 
   // Try to deduce RTT for this neighbor and update timestamps for recvd hello
-  auto it = helloPacket.payload.neighborInfos.find(myNodeName_);
-  if (it != helloPacket.payload.neighborInfos.end()) {
+  auto it = helloPacket.payload_ref().value().neighborInfos.find(myNodeName_);
+  if (it != helloPacket.payload_ref().value().neighborInfos.end()) {
     auto& tstamps = it->second;
-    auto mySentTime = std::chrono::microseconds(tstamps.lastNbrMsgSentTsInUs);
-    auto nbrRecvTime = std::chrono::microseconds(tstamps.lastMyMsgRcvdTsInUs);
+    auto mySentTime = std::chrono::microseconds(tstamps.lastNbrMsgSentTsInUs_ref().value());
+    auto nbrRecvTime = std::chrono::microseconds(tstamps.lastMyMsgRcvdTsInUs_ref().value());
     updateNeighborRtt(
         // recvTime of neighbor helloPkt
         myRecvTime,
@@ -2000,8 +2032,8 @@ Spark::processPacket() {
         nbrRecvTime,
         // sentTime of neighbor helloPkt
         nbrSentTime,
-        originator.nodeName,
-        originator.ifName,
+        originator.nodeName_ref().value(),
+        originator.ifName_ref().value(),
         ifName);
   }
 
@@ -2012,28 +2044,28 @@ Spark::processPacket() {
   //
 
   bool foundSelf{false};
-  auto myIt = helloPacket.payload.neighborInfos.find(myNodeName_);
-  if (myIt != helloPacket.payload.neighborInfos.end()) {
+  auto myIt = helloPacket.payload_ref().value().neighborInfos.find(myNodeName_);
+  if (myIt != helloPacket.payload_ref().value().neighborInfos.end()) {
     // the seq# neighbor has seen from us could not be higher than ours if it
     // is, this normally means we have restarted, and seeing our previous
     // incarnation and we act like we haven't heard from the neighbor (wait
     // for it to catch with our hello packets).
-    uint64_t seqNumSeen = static_cast<uint64_t>(myIt->second.seqNum);
+    uint64_t seqNumSeen = static_cast<uint64_t>(myIt->second.seqNum_ref().value());
     foundSelf = (seqNumSeen < mySeqNum_);
 
     if (not foundSelf) {
-      VLOG(2) << "Seeing my previous incarnation in neighbor "
-              << originator.nodeName
+      XLOG(DBG2) << "Seeing my previous incarnation in neighbor "
+              << originator.nodeName_ref().value()
               << " hello packets. Seen Seq#: " << seqNumSeen
               << ", My Seq#: " << mySeqNum_;
     }
   } else {
-    VLOG(2) << "Not seeing myself in neighbor hello packets.";
+    XLOG(DBG2) << "Not seeing myself in neighbor hello packets.";
   }
 
   // if a neighbor is in fast initial state and does not see us yet,
   // then reply to this neighbor in fast frequency
-  if (!foundSelf && helloPacket.payload.solicitResponse) {
+  if (!foundSelf && helloPacket.payload_ref().value().solicitResponse_ref().value()) {
     scheduleTimeout(std::chrono::milliseconds(0), [this, ifName]() noexcept {
       sendHelloPacket(ifName);
     });
@@ -2041,12 +2073,12 @@ Spark::processPacket() {
 
   // check if neighbor support flood optimization or not
   const auto& supportFloodOptimization =
-      helloPacket.payload.supportFloodOptimization;
+      helloPacket.payload_ref().value().supportFloodOptimization_ref().value();
 
   if (isAdjacent &&
       validationResult == PacketValidationResult::NEIGHBOR_RESTART) {
-    LOG(INFO) << "Adjacent neighbor " << originator.nodeName << " from iface "
-              << originator.ifName << " on iface " << ifName
+    XLOG(INFO) << "Adjacent neighbor " << originator.nodeName_ref().value() << " from iface "
+              << originator.ifName_ref().value() << " on iface " << ifName
               << " is restarting, waiting for it to ack myself.";
 
     auto event = createSparkNeighborEvent(
@@ -2058,22 +2090,22 @@ Spark::processPacket() {
         supportFloodOptimization,
         neighbor.area);
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
-    neighborUpdatesQueue_.push(std::move(event));
+    neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
     return;
   }
 
   // NOTE: means we only use the data for neighbor from initial packet.
   // all the other messages serves as confirmation of hold time refresh.
   if (foundSelf && isAdjacent) {
-    VLOG(3) << "Already adjacent neighbor " << originator.nodeName
-            << " from iface " << originator.ifName << " on iface " << ifName
+    XLOG(DBG3) << "Already adjacent neighbor " << originator.nodeName_ref().value()
+            << " from iface " << originator.ifName_ref().value() << " on iface " << ifName
             << " confirms adjacency";
 
     // Reset the hold-timer for neighbor as we have received a keep-alive
     // message. Note that we are using hold-time sent by neighbor so neighbor
     // can reset it on the fly.
     neighbor.holdTimer->scheduleTimeout(
-        std::chrono::milliseconds(originator.holdTime));
+        std::chrono::milliseconds(originator.holdTime_ref().value()));
 
     return;
   }
@@ -2081,16 +2113,16 @@ Spark::processPacket() {
   // Neighbor has not heard from us yet, and we don't see ourselves
   // in its hello packets
   if (!foundSelf && !isAdjacent) {
-    LOG(INFO) << "Neighbor " << originator.nodeName << " on iface " << ifName
-              << " from iface " << originator.ifName
+    XLOG(INFO) << "Neighbor " << originator.nodeName_ref().value() << " on iface " << ifName
+              << " from iface " << originator.ifName_ref().value()
               << " has not heard from us yet";
     return;
   }
 
   // add new adjacency in LinkMonitor once we have measured initial RTT
   if (foundSelf && !isAdjacent) {
-    LOG(INFO) << "Added new adjacent neighbor " << originator.nodeName
-              << " from iface " << originator.ifName << " on iface " << ifName;
+    XLOG(INFO) << "Added new adjacent neighbor " << originator.nodeName_ref().value()
+              << " from iface " << originator.ifName_ref().value() << " on iface " << ifName;
 
     auto event = createSparkNeighborEvent(
         thrift::SparkNeighborEventType::NEIGHBOR_UP,
@@ -2100,13 +2132,13 @@ Spark::processPacket() {
         neighbor.label,
         supportFloodOptimization,
         neighbor.area);
-    neighborUpdatesQueue_.push(std::move(event));
+    neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
     neighbor.numRecvRestarting = 0; // reset counter when neighbor comes up
     neighbor.isAdjacent = true;
 
     // Start hold-timer
     neighbor.holdTimer->scheduleTimeout(
-        std::chrono::milliseconds(originator.holdTime));
+        std::chrono::milliseconds(originator.holdTime_ref().value()));
 
     return;
   }
@@ -2115,8 +2147,8 @@ Spark::processPacket() {
   // if neighbor. This case can arise when adjacent node no longer want to peer
   // with us.
   if (!foundSelf && isAdjacent) {
-    LOG(INFO) << "Removed adjacent neighbor " << originator.nodeName
-              << " from iface " << originator.ifName << " on iface " << ifName
+    XLOG(INFO) << "Removed adjacent neighbor " << originator.nodeName_ref().value()
+              << " from iface " << originator.ifName_ref().value() << " on iface " << ifName
               << " since it no longer hears us.";
 
     auto event = createSparkNeighborEvent(
@@ -2127,7 +2159,7 @@ Spark::processPacket() {
         neighbor.label,
         false /* supportFloodOptimization: doesn't matter in DOWN event*/,
         neighbor.area);
-    neighborUpdatesQueue_.push(std::move(event));
+    neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
     neighbor.isAdjacent = false;
     neighbor.holdTimer->cancelTimeout(); // Stop hold-timer
     return;
@@ -2137,10 +2169,10 @@ Spark::processPacket() {
 void
 Spark::sendHelloPacket(
     std::string const& ifName, bool inFastInitState, bool restarting) {
-  VLOG(3) << "Send hello packet called for " << ifName;
+  XLOG(DBG3) << "Send hello packet called for " << ifName;
 
   if (interfaceDb_.count(ifName) == 0) {
-    LOG(ERROR) << "Interface " << ifName << " is no longer being tracked";
+    XLOG(ERR) << "Interface " << ifName << " is no longer being tracked";
     return;
   }
 
@@ -2150,7 +2182,7 @@ Spark::sendHelloPacket(
   };
 
   SCOPE_FAIL {
-    LOG(ERROR) << "Failed sending Hello packet on " << ifName;
+    XLOG(ERR) << "Failed sending Hello packet on " << ifName;
   };
 
   // in some cases, getting link-local address may fail and throw
@@ -2161,33 +2193,33 @@ Spark::sendHelloPacket(
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v4Addr = interfaceEntry.v4Network.first;
   const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
-  thrift::OpenrVersion openrVer(kVersion_.version);
+  thrift::OpenrVersion openrVer(kVersion_.version_ref().value());
 
   // build the hello packet from payload and empty signature
   thrift::SparkHelloPacket helloPacket;
 
   if (enableSpark2_) {
     thrift::SparkHelloMsg helloMsg;
-    helloMsg.domainName = myDomainName_;
-    helloMsg.nodeName = myNodeName_;
-    helloMsg.ifName = ifName;
-    helloMsg.seqNum = mySeqNum_;
-    helloMsg.neighborInfos =
+    helloMsg.domainName_ref() = myDomainName_;
+    helloMsg.nodeName_ref() = myNodeName_;
+    helloMsg.ifName_ref() = ifName;
+    helloMsg.seqNum_ref() = mySeqNum_;
+    helloMsg.neighborInfos_ref() =
         std::map<std::string, thrift::ReflectedNeighborInfo>{};
-    helloMsg.version = openrVer;
-    helloMsg.solicitResponse = inFastInitState;
-    helloMsg.restarting = restarting;
-    helloMsg.sentTsInUs = getCurrentTimeInUs().count();
+    helloMsg.version_ref() = openrVer;
+    helloMsg.solicitResponse_ref() = inFastInitState;
+    helloMsg.restarting_ref() = restarting;
+    helloMsg.sentTsInUs_ref() = getCurrentTimeInUs().count();
 
     // bake neighborInfo into helloMsg
     for (const auto& kv : spark2Neighbors_.at(ifName)) {
       auto const& neighborName = kv.first;
       auto const& neighbor = kv.second;
 
-      auto& neighborInfo = helloMsg.neighborInfos[neighborName];
-      neighborInfo.seqNum = neighbor.seqNum;
-      neighborInfo.lastNbrMsgSentTsInUs = neighbor.neighborTimestamp.count();
-      neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
+      auto& neighborInfo = helloMsg.neighborInfos_ref().value()[neighborName];
+      neighborInfo.seqNum_ref() = neighbor.seqNum;
+      neighborInfo.lastNbrMsgSentTsInUs_ref() = neighbor.neighborTimestamp.count();
+      neighborInfo.lastMyMsgRcvdTsInUs_ref() = neighbor.localTimestamp.count();
     }
 
     // fill in helloMsg field
@@ -2226,13 +2258,13 @@ Spark::sendHelloPacket(
     // haven't heard before from the neighbor.
     // Refer to thrift for definition of timestampts.
     auto& neighborInfo = payload.neighborInfos[neighborName];
-    neighborInfo.seqNum = neighbor.seqNum;
-    neighborInfo.lastNbrMsgSentTsInUs = neighbor.neighborTimestamp.count();
-    neighborInfo.lastMyMsgRcvdTsInUs = neighbor.localTimestamp.count();
+    neighborInfo.seqNum_ref() = neighbor.seqNum;
+    neighborInfo.lastNbrMsgSentTsInUs_ref() = neighbor.neighborTimestamp.count();
+    neighborInfo.lastMyMsgRcvdTsInUs_ref() = neighbor.localTimestamp.count();
   }
 
-  helloPacket.payload = std::move(payload);
-  helloPacket.signature = "";
+  helloPacket.payload_ref() = std::move(payload);
+  helloPacket.signature_ref() = "";
   
 
   auto packet = util::writeThriftObjStr(helloPacket, serializer_);
@@ -2242,7 +2274,7 @@ Spark::sendHelloPacket(
       folly::IPAddress(Constants::kSparkMcastAddr.toString()), udpMcastPort_);
 
   if (kMinIpv6Mtu < packet.size()) {
-    LOG(ERROR) << "Hello packet is too big, cannot sent!";
+    XLOG(ERR) << "Hello packet is too big, cannot sent!";
     return;
   }
 
@@ -2250,7 +2282,7 @@ Spark::sendHelloPacket(
       mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
 
   if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
-    VLOG(1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
+    XLOG(DBG1) << "Sending multicast to " << dstAddr.getAddressStr() << " on "
             << ifName << " failed due to error " << folly::errnoStr(errno);
     return;
   }
@@ -2260,16 +2292,12 @@ Spark::sendHelloPacket(
       "spark.hello.bytes_sent", packet.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.hello.packets_sent", 1, fb303::SUM);
 
-  VLOG(4) << "Sent " << bytesSent << " bytes in hello packet";
+  XLOG(DBG4) << "Sent " << bytesSent << " bytes in hello packet";
 }
 
 void
-Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
+Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
   decltype(interfaceDb_) newInterfaceDb{};
-
-  CHECK_EQ(ifDb.thisNodeName, myNodeName_)
-      << "Node name in ifDb " << ifDb.thisNodeName
-      << " does not match my node name " << myNodeName_;
 
   //
   // To be conisdered a valid interface for Spark to track, it must:
@@ -2277,11 +2305,12 @@ Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
   // - have a v6LinkLocal IP
   // - have an IPv4 addr when v4 is enabled
   //
-  for (const auto& kv : ifDb.interfaces) {
-    const auto& ifName = kv.first;
-    const auto isUp = kv.second.isUp;
-    const auto& ifIndex = kv.second.ifIndex;
-    const auto& networks = kv.second.networks;
+  for (const auto& ifInfo : ifDb) {
+    auto ifInfoThrift = ifInfo.toThrift();
+    const auto& ifName = ifInfo.ifName;
+    const auto isUp = ifInfo.isUp;
+    const auto& ifIndex = ifInfo.ifIndex;
+    const auto& networks = ifInfoThrift.networks_ref().value();
 
     // Sort networks and use the lowest one (other node will do similar)
     std::set<folly::CIDRNetwork> v4Networks;
@@ -2299,11 +2328,11 @@ Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
       continue;
     }
     if (v6LinkLocalNetworks.empty()) {
-      VLOG(2) << "IPv6 link local address not found";
+      XLOG(INFO) << "IPv6 link local address not found";
       continue;
     }
     if (enableV4_ && v4Networks.empty()) {
-      VLOG(2) << "IPv4 enabled but no IPv4 addresses are configured";
+      XLOG(INFO) << "IPv4 enabled but no IPv4 addresses are configured";
       continue;
     }
 
@@ -2365,7 +2394,7 @@ Spark::processInterfaceUpdates(thrift::InterfaceDatabase&& ifDb) {
 void
 Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
   for (const auto& ifName : toDel) {
-    LOG(INFO) << "Removing " << ifName << " from Spark. "
+    XLOG(INFO) << "Removing " << ifName << " from Spark. "
               << "It is down, declaring all neighbors down";
 
     // one neighbor either supports spark2 or NOT.
@@ -2375,7 +2404,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
         auto& neighborName = kv.first;
         auto& neighbor = kv.second;
         allocatedLabels_.erase(neighbor.label);
-        LOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
+        XLOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                   << ifName << " down";
 
         CHECK(not neighbor.nodeName.empty());
@@ -2384,8 +2413,8 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
         // Spark will NOT notify neighbor DOWN event in following cases:
         //    1). v6Addr is empty for this neighbor;
         //    2). v4 enabled and v4Addr is empty for this neighbor;
-        if (neighbor.transportAddressV6.addr.empty() ||
-            (enableV4_ && neighbor.transportAddressV4.addr.empty())) {
+        if (neighbor.transportAddressV6.addr_ref().value().empty() ||
+            (enableV4_ && neighbor.transportAddressV4.addr_ref().value().empty())) {
           continue;
         }
         neighborDownWrapper(neighbor, ifName, neighborName);
@@ -2402,7 +2431,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
       if (!neighbor.isAdjacent) {
         continue;
       }
-      LOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
+      XLOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                 << ifName << " down";
 
       auto event = createSparkNeighborEvent(
@@ -2413,7 +2442,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
           neighbor.label,
           false /* supportFloodOptimization: doesn't matter in DOWN event*/,
           neighbor.area);
-      neighborUpdatesQueue_.push(std::move(event));
+      neighborUpdatesQueue_.push(sparkNeighborEventToNeighborEvents(event));
     }
 
     // unsubscribe the socket from mcast group on this interface
@@ -2424,7 +2453,7 @@ Spark::deleteInterfaceFromDb(const std::set<std::string>& toDel) {
             interfaceDb_.at(ifName).ifIndex,
             false /* leave */,
             ioProvider_.get())) {
-      LOG(ERROR) << folly::sformat(
+      XLOG(ERR) << folly::sformat(
           "Failed leaving multicast group: {}", folly::errnoStr(errno));
     }
     // cleanup for this interface
@@ -2442,7 +2471,7 @@ Spark::addInterfaceToDb(
     auto newInterface = newInterfaceDb.at(ifName);
     auto ifIndex = newInterface.ifIndex;
     CHECK_NE(ifIndex, 0) << "Cound not get ifIndex for Iface " << ifName;
-    LOG(INFO) << "Adding iface " << ifName << " for tracking with ifindex "
+    XLOG(INFO) << "Adding iface " << ifName << " for tracking with ifindex "
               << ifIndex;
 
     // subscribe the socket to mcast address on this interface
@@ -2513,7 +2542,7 @@ Spark::addInterfaceToDb(
     auto helloTimer = folly::AsyncTimeout::make(
         *getEvb(),
         [this, ifName, timePoint, roll, rollFast]() mutable noexcept {
-          VLOG(3) << "Sending hello multicast packet on interface " << ifName;
+          XLOG(DBG3) << "Sending hello multicast packet on interface " << ifName;
           bool inFastInitState = false;
           if (enableSpark2_ && increaseHelloInterval_) {
             // Under Spark2 context, hello pkt will be sent in relatively low
@@ -2557,7 +2586,7 @@ Spark::updateInterfaceInDb(
     auto& newInterface = newInterfaceDb.at(ifName);
 
     if (interface == newInterface) {
-      VLOG(3) << "No update to iface " << ifName << " in spark tracking";
+      XLOG(DBG3) << "No update to iface " << ifName << " in spark tracking";
       continue;
     }
 
@@ -2572,7 +2601,7 @@ Spark::updateInterfaceInDb(
               interface.ifIndex,
               false /* leave */,
               ioProvider_.get())) {
-        LOG(WARNING) << folly::sformat(
+        XLOG(WARNING) << folly::sformat(
             "Failed leaving multicast group: {}", folly::errnoStr(errno));
       }
 
@@ -2588,7 +2617,7 @@ Spark::updateInterfaceInDb(
             "Failed joining multicast group: {}", folly::errnoStr(errno)));
       }
     }
-    LOG(INFO) << "Updating iface " << ifName << " in spark tracking from "
+    XLOG(INFO) << "Updating iface " << ifName << " in spark tracking from "
               << "(ifindex " << interface.ifIndex << ", addrs "
               << interface.v6LinkLocalNetwork.first << " , "
               << interface.v4Network.first << ") to "
@@ -2643,13 +2672,14 @@ Spark::updateGlobalCounters() {
       auto const& neighbor = kv.second;
       adjacentNeighborCount += neighbor.isAdjacent;
       fb303::fbData->setCounter(
-          "spark.rtt_us." + neighbor.info.nodeName + "." + ifaceNeighbors.first,
+          "spark.rtt_us." + neighbor.info.nodeName_ref().value() + "." + ifaceNeighbors.first,
           neighbor.rtt.count());
       fb303::fbData->setCounter(
-          "spark.rtt_latest_us." + neighbor.info.nodeName,
+          "spark.rtt_latest_us." + neighbor.info.nodeName_ref().value(),
           neighbor.rttLatest.count());
       fb303::fbData->setCounter(
-          "spark.seq_num." + neighbor.info.nodeName, neighbor.seqNum);
+          "spark.seq_num." + neighbor.info.nodeName_ref().value(),
+          neighbor.seqNum);
     }
   }
   for (auto const& ifaceNeighbors : spark2Neighbors_) {
@@ -2700,7 +2730,7 @@ Spark::getNeighborArea(
     if (neighborRegex and interfaceRegex) {
       if (matchRegexSet(peerNodeName, neighborRegex) and
           matchRegexSet(localIfName, interfaceRegex)) {
-        VLOG(4) << folly::sformat(
+        XLOG(DBG4) << folly::sformat(
             "Area: {} found for neighbor: {}, interface: {}",
             areaId,
             peerNodeName,
@@ -2708,27 +2738,95 @@ Spark::getNeighborArea(
         candidateAreas.emplace_back(areaId);
       }
     } else if (neighborRegex and matchRegexSet(peerNodeName, neighborRegex)) {
-      VLOG(4) << folly::sformat(
+      XLOG(DBG4) << folly::sformat(
           "Area: {} found for neighbor: {}", areaId, peerNodeName);
       candidateAreas.emplace_back(areaId);
     } else if (interfaceRegex and matchRegexSet(localIfName, interfaceRegex)) {
-      VLOG(4) << folly::sformat(
+      XLOG(DBG4) << folly::sformat(
           "Area: {} found for interface: {}", areaId, localIfName);
       candidateAreas.emplace_back(areaId);
     }
   }
 
   if (candidateAreas.empty()) {
-    LOG(ERROR) << "No matching area found for neighbor: " << peerNodeName;
+    XLOG(ERR) << "No matching area found for neighbor: " << peerNodeName;
     fb303::fbData->addStatValue("spark.neighbor_no_area", 1, fb303::COUNT);
     return std::nullopt;
   } else if (candidateAreas.size() > 1) {
-    LOG(ERROR) << "Multiple area found for neighbor: " << peerNodeName;
+    XLOG(ERR) << "Multiple area found for neighbor: " << peerNodeName;
     fb303::fbData->addStatValue(
         "spark.neighbor_multiple_area", 1, fb303::COUNT);
     return std::nullopt;
   }
   return candidateAreas.back();
+}
+
+thrift::SparkNeighborEvent
+createSparkNeighborEvent(
+    thrift::SparkNeighborEventType eventType,
+    const std::string& ifName,
+    const thrift::SparkNeighbor& originator,
+    int64_t rttUs,
+    int32_t label,
+    bool supportFloodOptimization,
+    const std::string& area) {
+  thrift::SparkNeighborEvent event;
+  event.eventType_ref() = eventType;
+  event.ifName_ref() = ifName;
+  event.neighbor_ref() = originator;
+  event.rttUs_ref() = rttUs;
+  event.label_ref() = label;
+  event.supportFloodOptimization_ref() = supportFloodOptimization;
+  event.area_ref() = area;
+  return event;
+}
+
+thrift::SparkNeighbor
+createSparkNeighbor(
+    const std::string& domainName,
+    const std::string& nodeName,
+    int64_t holdTime,
+    const thrift::BinaryAddress& v4Addr,
+    const thrift::BinaryAddress& v6Addr,
+    int64_t kvStoreCmdPort,
+    int64_t openrCtrlThriftPort,
+    const std::string& ifName) {
+  thrift::SparkNeighbor neighbor;
+  neighbor.domainName_ref() = domainName;
+  neighbor.nodeName_ref() = nodeName;
+  neighbor.holdTime_ref() = holdTime;
+  neighbor.transportAddressV4_ref() = v4Addr;
+  neighbor.transportAddressV6_ref() = v6Addr;
+  neighbor.kvStoreCmdPort_ref() = kvStoreCmdPort;
+  neighbor.openrCtrlThriftPort_ref() = openrCtrlThriftPort;
+  neighbor.ifName_ref() = ifName;
+  return neighbor;
+}
+
+thrift::SparkPayload
+createSparkPayload(
+    int32_t version,
+    const thrift::SparkNeighbor& originator,
+    uint64_t seqNum,
+    const std::map<std::string, thrift::ReflectedNeighborInfo>& neighborInfos,
+    int64_t timestamp,
+    bool solicitResponse,
+    bool supportFloodOptimization,
+    bool restarting,
+    const std::optional<std::unordered_set<std::string>>& areas) {
+  thrift::SparkPayload payload;
+  payload.version_ref() = version;
+  payload.originator_ref() = originator;
+  payload.seqNum_ref() = seqNum;
+  payload.neighborInfos_ref() = neighborInfos;
+  payload.timestamp_ref() = timestamp;
+  payload.solicitResponse_ref() = solicitResponse;
+  payload.supportFloodOptimization_ref() = supportFloodOptimization;
+  payload.restarting_ref() = restarting;
+  if (areas.has_value()) {
+    payload.areas_ref() = areas.value();
+  }
+  return payload;
 }
 
 } // namespace openr

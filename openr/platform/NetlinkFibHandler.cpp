@@ -1,23 +1,15 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "NetlinkFibHandler.h"
-
-#include <algorithm>
-#include <functional>
-#include <iterator>
-#include <thread>
-#include <utility>
-
-#include <folly/Format.h>
 #include <folly/gen/Base.h>
+#include <folly/logging/xlog.h>
 
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
@@ -49,22 +41,6 @@ NetlinkFibHandler::NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock)
                      std::chrono::system_clock::now().time_since_epoch())
                      .count()) {
   CHECK_NOTNULL(nlSock);
-  // NOTE: This will mask off neighbor events publisher. It is okay because as
-  // of now no one is using Neighbor Events.
-  nlSock_->setNeighborEventCB([this](fbnl::Neighbor neighbor, bool) {
-    std::lock_guard<std::mutex> g(listenersMutex_);
-    for (auto& listener : listeners_.accessAllThreads()) {
-      LOG(INFO) << "Sending notification to bgpD";
-      listener.eventBase->runInEventBaseThread(
-          [this, neighbor, listenerPtr = &listener] {
-            LOG(INFO) << "firing off notification";
-            invokeNeighborListeners(
-                listenerPtr,
-                {neighbor.getDestination().str()},
-                neighbor.isReachable());
-          });
-    }
-  });
 }
 
 NetlinkFibHandler::~NetlinkFibHandler() {}
@@ -102,23 +78,6 @@ NetlinkFibHandler::protocolToPriority(const uint8_t protocol) {
 }
 
 folly::SemiFuture<folly::Unit>
-NetlinkFibHandler::collectAllResult(
-    std::vector<folly::SemiFuture<int>>&& result,
-    std::set<int> errorsToIgnore) {
-  return folly::collectAll(std::move(result))
-      .deferValue([errorsToIgnore](std::vector<folly::Try<int>>&& retvals) {
-        for (auto& retvalTry : retvals) {
-          auto retval = std::abs(retvalTry.value()); // Throws exception if any
-          if (retval == 0 or errorsToIgnore.count(retval)) {
-            continue;
-          }
-          throw fbnl::NlException("One or more netlink request failed", retval);
-        }
-        return folly::Unit();
-      });
-}
-
-folly::SemiFuture<folly::Unit>
 NetlinkFibHandler::semifuture_addUnicastRoute(
     int16_t clientId, std::unique_ptr<thrift::UnicastRoute> route) {
   auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
@@ -143,15 +102,16 @@ NetlinkFibHandler::semifuture_addUnicastRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Adding/Updating unicast routes of client "
-            << getClientName(clientId) << ", numRoutes=" << routes->size();
+  XLOG(INFO) << "Adding/Updating unicast routes of client "
+             << getClientName(clientId) << ", numRoutes=" << routes->size();
 
   // Add routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
   for (auto& route : *routes) {
     result.emplace_back(nlSock_->addRoute(buildRoute(route, protocol.value())));
   }
-  return collectAllResult(std::move(result), {EEXIST});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -162,8 +122,8 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Deleting unicast routes of client " << getClientName(clientId)
-            << ", numRoutes=" << prefixes->size();
+  XLOG(INFO) << "Deleting unicast routes of client " << getClientName(clientId)
+             << ", numRoutes=" << prefixes->size();
 
   // Delete routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -173,7 +133,8 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     rtBuilder.setProtocolId(protocol.value());
     result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
-  return collectAllResult(std::move(result), {ESRCH});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {ESRCH});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -184,8 +145,8 @@ NetlinkFibHandler::semifuture_addMplsRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Adding/Updating mpls routes of client "
-            << getClientName(clientId) << ", numRoutes=" << routes->size();
+  XLOG(INFO) << "Adding/Updating mpls routes of client "
+             << getClientName(clientId) << ", numRoutes=" << routes->size();
 
   // Add routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -193,7 +154,8 @@ NetlinkFibHandler::semifuture_addMplsRoutes(
     result.emplace_back(
         nlSock_->addRoute(buildMplsRoute(route, protocol.value())));
   }
-  return collectAllResult(std::move(result), {EEXIST});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -204,8 +166,8 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Deleting mpls routes of client " << getClientName(clientId)
-            << ", numRoutes=" << topLabels->size();
+  XLOG(INFO) << "Deleting mpls routes of client " << getClientName(clientId)
+             << ", numRoutes=" << topLabels->size();
 
   // Delete routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -215,7 +177,8 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
     rtBuilder.setProtocolId(protocol.value());
     result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
-  return collectAllResult(std::move(result), {ESRCH});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {ESRCH});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -227,8 +190,8 @@ NetlinkFibHandler::semifuture_syncFib(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Syncing unicast FIB for client " << getClientName(clientId)
-            << ", numRoutes=" << unicastRoutes->size();
+  XLOG(INFO) << "Syncing unicast FIB for client " << getClientName(clientId)
+             << ", numRoutes=" << unicastRoutes->size();
 
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
@@ -247,26 +210,36 @@ NetlinkFibHandler::semifuture_syncFib(
     if (v6Routes.hasError()) {
       throw fbnl::NlException("Failed fetching IPv6 routes", v6Routes.error());
     }
-    for (auto& route : std::move(v4Routes).value()) {
-      const auto prefix = route.getDestination();
-      existingRoutes.emplace(prefix, std::move(route));
-    }
-    for (auto& route : std::move(v6Routes).value()) {
-      const auto prefix = route.getDestination();
-      existingRoutes.emplace(prefix, std::move(route));
+    for (auto& routesPtr : {&v4Routes, &v6Routes}) {
+      for (auto& route : routesPtr->value()) {
+        const auto prefix = route.getDestination();
+        // Linux will report a null next-hop for RTN_BLACKHOLE type while
+        // RIB does not
+        if (route.getType() == RTN_BLACKHOLE) {
+          route.setNextHops({});
+        }
+        existingRoutes.emplace(prefix, std::move(route));
+      }
     }
   }
 
   // Go over the new routes. Add or update
   std::unordered_set<folly::CIDRNetwork> newPrefixes;
   for (auto& route : *unicastRoutes) {
-    const auto network = toIPNetwork(route.dest);
+    const auto network = toIPNetwork(*route.dest_ref());
     newPrefixes.insert(network);
     auto nlRoute = buildRoute(route, protocol.value());
     auto it = existingRoutes.find(network);
     if (it != existingRoutes.end() and it->second == nlRoute) {
       // Existing route is same as the one we're trying to add. SKIP
       continue;
+    }
+    if (it != existingRoutes.end()) {
+      XLOG(INFO) << "Updating unicast-route "
+                 << "\n[OLD] " << it->second.str() << "\n[NEW] "
+                 << nlRoute.str();
+    } else {
+      XLOG(INFO) << "Adding unicast-route \n[NEW]" << nlRoute.str();
     }
     // Add new route or replace existing one
     result.emplace_back(nlSock_->addRoute(nlRoute));
@@ -279,13 +252,16 @@ NetlinkFibHandler::semifuture_syncFib(
       continue;
     }
     // Delete stale route
+    XLOG(INFO) << "Deleting unicast-route "
+               << folly::IPAddress::networkToString(prefix);
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
   // Return collected result
   // NOTE: We're ignoring EEXIST error code. ESRCH error code must not be
   // raised because we're deleting route that already exist
-  return collectAllResult(std::move(result), {EEXIST});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST});
 }
 
 folly::SemiFuture<folly::Unit>
@@ -297,8 +273,8 @@ NetlinkFibHandler::semifuture_syncMplsFib(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Syncing mpls FIB for client " << getClientName(clientId)
-            << ", numRoutes=" << mplsRoutes->size();
+  XLOG(INFO) << "Syncing mpls FIB for client " << getClientName(clientId)
+             << ", numRoutes=" << mplsRoutes->size();
 
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
@@ -318,12 +294,20 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   // Go over the new routes. Add or update
   std::unordered_set<uint32_t> newLabels;
   for (auto& route : *mplsRoutes) {
-    newLabels.insert(route.topLabel);
+    const auto label = *route.topLabel_ref();
+    newLabels.insert(label);
     auto nlRoute = buildMplsRoute(route, protocol.value());
-    auto it = existingRoutes.find(route.topLabel);
+    auto it = existingRoutes.find(label);
     if (it != existingRoutes.end() and it->second == nlRoute) {
       // Existing route is same as the one we're trying to add. SKIP
       continue;
+    }
+    if (it != existingRoutes.end()) {
+      XLOG(INFO) << "Updating mpls-route "
+                 << "\n[OLD] " << it->second.str() << "\n[NEW] "
+                 << nlRoute.str();
+    } else {
+      XLOG(INFO) << "Adding mpls-route \n[NEW]" << nlRoute.str();
     }
     // Add new route or replace existing one
     result.emplace_back(nlSock_->addRoute(nlRoute));
@@ -336,11 +320,13 @@ NetlinkFibHandler::semifuture_syncMplsFib(
       continue;
     }
     // Delete stale route
+    XLOG(INFO) << "Deleting mpls-route " << *nlRoute.getMplsLabel();
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
   // Return collected result
-  return collectAllResult(std::move(result), {EEXIST, ESRCH});
+  return fbnl::NetlinkProtocolSocket::collectReturnStatus(
+      std::move(result), {EEXIST, ESRCH});
 }
 
 int64_t
@@ -366,7 +352,7 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
         std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Get unicast routes for client " << getClientName(clientId);
+  XLOG(INFO) << "Get unicast routes for client " << getClientName(clientId);
 
   auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
   auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
@@ -384,8 +370,8 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
               }
               for (auto& nlRoute : nlRoutes.value().value()) {
                 thrift::UnicastRoute route;
-                route.dest = toIpPrefix(nlRoute.getDestination());
-                route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+                route.dest_ref() = toIpPrefix(nlRoute.getDestination());
+                route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
                 routes->emplace_back(std::move(route));
               }
             }
@@ -401,7 +387,7 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
         std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>();
   }
   CHECK(protocol.has_value());
-  LOG(INFO) << "Get mpls routes for client " << getClientName(clientId);
+  XLOG(INFO) << "Get mpls routes for client " << getClientName(clientId);
 
   return nlSock_->getMplsRoutes(protocol.value())
       .deferValue(
@@ -414,8 +400,8 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
             routes->reserve(nlRoutes->size());
             for (auto& nlRoute : nlRoutes.value()) {
               thrift::MplsRoute route;
-              route.topLabel = nlRoute.getMplsLabel().value();
-              route.nextHops = toThriftNextHops(nlRoute.getNextHops());
+              route.topLabel_ref() = nlRoute.getMplsLabel().value();
+              route.nextHops_ref() = toThriftNextHops(nlRoute.getNextHops());
               routes->emplace_back(std::move(route));
             }
             return routes;
@@ -432,10 +418,10 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
 
     // Add nexthop address
     if (nh.getGateway().has_value()) {
-      nextHop.address = toBinaryAddress(nh.getGateway().value());
+      *nextHop.address_ref() = toBinaryAddress(nh.getGateway().value());
       // Add nexthop interface if any
       if (nh.getIfIndex().has_value()) {
-        nextHop.address.ifName_ref() =
+        nextHop.address_ref()->ifName_ref() =
             getIfName(nh.getIfIndex().value()).value();
       }
     } else {
@@ -443,11 +429,11 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
       // valid but zeroed ipv6 address.
       CHECK(labelAction.has_value());
       CHECK(thrift::MplsActionCode::POP_AND_LOOKUP == labelAction.value());
-      nextHop.address = toBinaryAddress(folly::IPAddressV6("::"));
+      *nextHop.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
     }
 
     // Set nexthop weight
-    nextHop.weight = nh.getWeight();
+    nextHop.weight_ref() = nh.getWeight();
 
     // Add mpls action
     if (labelAction.has_value()) {
@@ -475,18 +461,19 @@ NetlinkFibHandler::buildMplsAction(
     return;
   }
   auto mplsAction = nhop.mplsAction_ref().value();
-  nhBuilder.setLabelAction(mplsAction.action);
-  if (mplsAction.action == thrift::MplsActionCode::SWAP) {
+  nhBuilder.setLabelAction(*mplsAction.action_ref());
+  if (*mplsAction.action_ref() == thrift::MplsActionCode::SWAP) {
     if (!mplsAction.swapLabel_ref().has_value()) {
       throw fbnl::NlException("Swap label not provided");
     }
     nhBuilder.setSwapLabel(mplsAction.swapLabel_ref().value());
-  } else if (mplsAction.action == thrift::MplsActionCode::PUSH) {
+  } else if (*mplsAction.action_ref() == thrift::MplsActionCode::PUSH) {
     if (!mplsAction.pushLabels_ref().has_value()) {
       throw fbnl::NlException("Push label(s) not provided");
     }
     nhBuilder.setPushLabels(mplsAction.pushLabels_ref().value());
-  } else if (mplsAction.action == thrift::MplsActionCode::POP_AND_LOOKUP) {
+  } else if (
+      *mplsAction.action_ref() == thrift::MplsActionCode::POP_AND_LOOKUP) {
     auto lpbkIfIndex = getLoopbackIfIndex();
     if (lpbkIfIndex.has_value()) {
       nhBuilder.setIfIndex(lpbkIfIndex.value());
@@ -505,12 +492,12 @@ NetlinkFibHandler::buildNextHop(
   // add nexthops
   fbnl::NextHopBuilder nhBuilder;
   for (const auto& nh : nhop) {
-    if (nh.address.ifName_ref()) {
-      nhBuilder.setIfIndex(getIfIndex(*nh.address.ifName_ref()).value());
+    if (nh.address_ref()->ifName_ref()) {
+      nhBuilder.setIfIndex(getIfIndex(*nh.address_ref()->ifName_ref()).value());
     }
-    nhBuilder.setGateway(toIPAddress(nh.address));
+    nhBuilder.setGateway(toIPAddress(*nh.address_ref()));
     buildMplsAction(nhBuilder, nh);
-    nhBuilder.setWeight(nh.weight);
+    nhBuilder.setWeight(*nh.weight_ref());
     rtBuilder.addNextHop(nhBuilder.build());
     nhBuilder.reset();
   }
@@ -520,18 +507,18 @@ fbnl::Route
 NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
   // Create route object
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(route.dest))
+  rtBuilder.setDestination(toIPNetwork(*route.dest_ref()))
       .setProtocolId(protocol)
       .setPriority(protocolToPriority(protocol))
       .setFlags(0)
       .setValid(true);
 
-  if (route.nextHops.empty()) {
+  if (route.nextHops_ref()->empty()) {
     // Empty nexthops is same as DROP (aka RTN_BLACKHOLE)
     rtBuilder.setType(RTN_BLACKHOLE);
   } else {
     // Add nexthops
-    buildNextHop(rtBuilder, route.nextHops);
+    buildNextHop(rtBuilder, *route.nextHops_ref());
   }
 
   return rtBuilder.build();
@@ -540,20 +527,20 @@ NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
 fbnl::Route
 NetlinkFibHandler::buildMplsRoute(
     const thrift::MplsRoute& mplsRoute, int protocol) {
-  // Craete route object
+  // Create route object
+  // NOTE: Priority for MPLS routes is not supported in Linux
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setMplsLabel(static_cast<uint32_t>(mplsRoute.topLabel))
+  rtBuilder.setMplsLabel(static_cast<uint32_t>(*mplsRoute.topLabel_ref()))
       .setProtocolId(protocol)
-      .setPriority(protocolToPriority(protocol))
       .setFlags(0)
       .setValid(true);
 
-  if (mplsRoute.nextHops.empty()) {
+  if (mplsRoute.nextHops_ref()->empty()) {
     // Empty nexthops is same as DROP (aka RTN_BLACKHOLE)
     rtBuilder.setType(RTN_BLACKHOLE);
   } else {
     // Add nexthops
-    buildNextHop(rtBuilder, mplsRoute.nextHops);
+    buildNextHop(rtBuilder, *mplsRoute.nextHops_ref());
   }
 
   return rtBuilder.setValid(true).build();
@@ -645,10 +632,10 @@ NetlinkFibHandler::sendNeighborDownInfo(
     std::unique_ptr<std::vector<std::string>> neighborIps) {
   std::lock_guard<std::mutex> g(listenersMutex_);
   for (auto& listener : listeners_.accessAllThreads()) {
-    LOG(INFO) << "Sending notification to bgpD";
+    XLOG(INFO) << "Sending notification to bgpD";
     listener.eventBase->runInEventBaseThread(
         [this, neighborIps = std::move(*neighborIps), listenerPtr = &listener] {
-          LOG(INFO) << "firing off notification";
+          XLOG(INFO) << "firing off notification";
           invokeNeighborListeners(listenerPtr, neighborIps, false);
         });
   }
@@ -661,7 +648,7 @@ NetlinkFibHandler::async_eb_registerForNeighborChanged(
   auto client = ctx->getDuplexClient<
       thrift::NeighborListenerClientForFibagentAsyncClient>();
 
-  LOG(INFO) << "registered for bgp";
+  XLOG(INFO) << "registered for bgp";
   std::lock_guard<std::mutex> g(listenersMutex_);
   auto info = listeners_.get();
   CHECK(cb->getEventBase()->isInEventBaseThread());
@@ -678,7 +665,7 @@ NetlinkFibHandler::async_eb_registerForNeighborChanged(
   }
   info->clients.clear();
   info->clients.emplace(ctx, client);
-  LOG(INFO) << "registered for bgp success";
+  XLOG(INFO) << "registered for bgp success";
   cb->done();
 }
 
@@ -699,7 +686,7 @@ NetlinkFibHandler::invokeNeighborListeners(
         thrift::NeighborListenerClientForFibagentAsyncClient::
             recv_neighborsChanged(state);
       } catch (const std::exception& ex) {
-        LOG(ERROR) << "Exception in neighbor listener: " << ex.what();
+        XLOG(ERR) << "Exception in neighbor listener: " << ex.what();
         brokenClients_.push_back(client.first);
       }
     };

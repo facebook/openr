@@ -1,11 +1,8 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import ssl
@@ -24,7 +21,7 @@ from thrift.transport import THeaderTransport, TSocket, TSSLSocket
 
 class OpenrCtrlClient(OpenrCtrl.Client):
     """
-    Base class for for secure and plain-text clients. Do not use this
+    Base class for secure and plain-text clients. Do not use this
     client directly. Instead use one of `OpenrCtrlPlainTextClient` or
     `OpenrCtrlSecureClient`
     """
@@ -135,7 +132,6 @@ def get_openr_ctrl_cpp_client(
 
     options = options if options else getDefaultOptions(host)
     ssl_context = None
-
     # Create ssl context if specified
     if options.ssl:
         # Translate ssl verification option

@@ -1,9 +1,10 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
+
 #include <map>
 #include <memory>
 #include <string>
@@ -25,9 +26,7 @@
 #include <openr/tests/mocks/MockNetlinkProtocolSocket.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 
-using namespace openr;
 using namespace openr::fbnl;
-using namespace folly::literals::shell_literals;
 
 namespace {
 // Virtual interfaces

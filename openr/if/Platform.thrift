@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,20 +7,14 @@
 
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
+namespace go openr.Platform
 namespace py openr.Platform
 namespace py3 openr.thrift
 namespace lua openr.Platform
+namespace wiki Open_Routing.Thrift_APIs.Platform
 
 include "fb303/thrift/fb303_core.thrift"
-include "Network.thrift"
-
-struct Link {
-  1: i64 ifIndex;
-  2: bool isUp;
-  3: list<Network.IpPrefix> networks;
-  4: string ifName;
-  5: i64 weight = 1; // used for weighted ecmp
-}
+include "openr/if/Network.thrift"
 
 /**
  * Enum to keep track of Client name to Client-ID mapping. Indicates which
@@ -47,13 +41,19 @@ enum SwitchRunState {
   UNINITIALIZED = 0,
   INITIALIZED = 1,
   CONFIGURED = 2,
-  FIB_SYNCED = 3,
-  EXITING = 4
+  EXITING = 4,
 }
 
 exception PlatformError {
-  1: string message
-} ( message = "message" )
+  1: string message;
+} (message = "message")
+
+exception PlatformFibUpdateError {
+  1: map<i32, list<Network.IpPrefix>> vrf2failedAddUpdatePrefixes;
+  2: map<i32, list<Network.IpPrefix>> vrf2failedDeletePrefixes;
+  3: list<i32> failedAddUpdateMplsLabels;
+  4: list<i32> failedDeleteMplsLabels;
+}
 
 // static mapping of clientId => protocolId, priority same of admin distance
 // For Open/R.
@@ -61,105 +61,125 @@ exception PlatformError {
 // For BGP
 //    ClientId: 0 => ProtocolId: 253, Priority: 20
 // NOTE: protocolID must be less than 254
-const map<i16, i16> clientIdtoProtocolId = {
-    786: 99,  // Open/R
-    0: 253,   // BGP
-}
-const map<i16, i16> protocolIdtoPriority = {
-    99: 10,   // Open/R
-    253: 20,  // BGP
-}
-const i16 kUnknowProtAdminDistance = 255
+const map<i16, i16> clientIdtoProtocolId = {786: 99, 0: 253}; // Open/R
+const map<i16, i16> protocolIdtoPriority = {99: 10, 253: 20}; // Open/R
+const i16 kUnknowProtAdminDistance = 255;
 
 /**
  * Interface to on-box Fib.
  */
 service FibService extends fb303_core.BaseService {
-
   /*
   * get run state
   */
-  SwitchRunState getSwitchRunState()
+  SwitchRunState getSwitchRunState();
 
   //
   // Unicast Routes API
+  // NOTE: FibAgent may throw `PlatformFibUpdateError` for Add and Sync
+  // APIs only. Delete should never fail, since it does not consume HW resources
+  // but rather frees them. Agent already protect against spurious deletes e.g.
+  // trying to delete non-existing route (aka double deletes).
   //
-  void addUnicastRoute(
-    1: i16 clientId,
-    2: Network.UnicastRoute route,
-  ) throws (1: PlatformError error)
 
-  void deleteUnicastRoute(
-    1: i16 clientId,
-    2: Network.IpPrefix prefix,
-  ) throws (1: PlatformError error)
+  void addUnicastRoute(1: i16 clientId, 2: Network.UnicastRoute route) throws (
+    1: PlatformError error,
+    2: PlatformFibUpdateError fibError,
+  );
+
+  void deleteUnicastRoute(1: i16 clientId, 2: Network.IpPrefix prefix) throws (
+    1: PlatformError error,
+  );
 
   void addUnicastRoutes(
     1: i16 clientId,
     2: list<Network.UnicastRoute> routes,
-  ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error, 2: PlatformFibUpdateError fibError);
 
   void deleteUnicastRoutes(
     1: i16 clientId,
     2: list<Network.IpPrefix> prefixes,
-  ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error);
 
-  void syncFib(
-    1: i16 clientId,
-    2: list<Network.UnicastRoute> routes,
-  ) throws (1: PlatformError error)
+  void syncFib(1: i16 clientId, 2: list<Network.UnicastRoute> routes) throws (
+    1: PlatformError error,
+    2: PlatformFibUpdateError fibError,
+  );
 
   // Retrieve list of unicast routes per client
-  list<Network.UnicastRoute> getRouteTableByClient(
-    1: i16 clientId
-  ) throws (1: PlatformError error)
+  list<Network.UnicastRoute> getRouteTableByClient(1: i16 clientId) throws (
+    1: PlatformError error,
+  );
+
+  list<Network.RouteDetails> getRouteTableDetails() throws (
+    1: PlatformError error,
+  );
 
   //
   // MPLS routes API
+  // NOTE: FibAgent may throw `PlatformFibUpdateError` for Add and Sync
+  // APIs only. Delete should never fail, since it does not consume HW resources
+  // but rather frees them. Agent already protect against spurious deletes e.g.
+  // trying to delete non-existing route (aka double deletes).
   //
+
   void addMplsRoutes(
     1: i16 clientId,
     2: list<Network.MplsRoute> routes,
-  ) throws (1: PlatformError error)
+  ) throws (1: PlatformError error, 2: PlatformFibUpdateError fibError);
 
-  void deleteMplsRoutes(
-    1: i16 clientId,
-    2: list<i32> topLabels,
-  ) throws (1: PlatformError error)
+  void deleteMplsRoutes(1: i16 clientId, 2: list<i32> topLabels) throws (
+    1: PlatformError error,
+  );
 
   // Flush previous routes and install new routes without disturbing
   // traffic. Similar to syncFib API
-  void syncMplsFib(
-    1: i16 clientId,
-    2: list<Network.MplsRoute> routes,
-  ) throws (1: PlatformError error)
+  void syncMplsFib(1: i16 clientId, 2: list<Network.MplsRoute> routes) throws (
+    1: PlatformError error,
+    2: PlatformFibUpdateError fibError,
+  );
 
   // Retrieve list of MPLS routes per client
-  list<Network.MplsRoute> getMplsRouteTableByClient(
-    1: i16 clientId
-  ) throws (1: PlatformError error)
+  list<Network.MplsRoute> getMplsRouteTableByClient(1: i16 clientId) throws (
+    1: PlatformError error,
+  );
 
-  void registerForNeighborChanged()
-    throws (1: PlatformError error) (thread='eb')
+  //
+  // BGP API (for emulation only)
+  //
+  void registerForNeighborChanged() throws (1: PlatformError error) (
+    thread = 'eb',
+  );
 
-  void sendNeighborDownInfo(
-    1: list<string> neighborIp
-    )
-    throws (1: PlatformError error)
+  void sendNeighborDownInfo(1: list<string> neighborIp) throws (
+    1: PlatformError error,
+  );
 
   //
   // FBOSS Agent API (for emulation only)
   //
-  list<Network.LinkNeighborThrift> getLldpNeighbors()
-    throws (1: PlatformError error)
 
-  Network.PortInfoThrift getPortInfo(
-    1: i32 portId
-    )
-    throws (1: PlatformError error)
+  list<Network.LinkNeighborThrift> getLldpNeighbors() throws (
+    1: PlatformError error,
+  );
 
-  map<i32, Network.PortInfoThrift> getAllPortInfo()
-  throws (1: PlatformError error)
+  Network.PortInfoThrift getPortInfo(1: i32 portId) throws (
+    1: PlatformError error,
+  );
+
+  map<i32, Network.PortInfoThrift> getAllPortInfo() throws (
+    1: PlatformError error,
+  );
+
+  // Dummy API - Returns empty result
+  map<i32, Network.PortStatus> getPortStatus(1: list<i32> ports) throws (
+    1: PlatformError error,
+  );
+
+  // Dummy API - Returns empty result
+  list<Network.AggregatePortThrift> getAggregatePortTable() throws (
+    1: PlatformError error,
+  );
 }
 
 service NeighborListenerClientForFibagent {
@@ -170,6 +190,7 @@ service NeighborListenerClientForFibagent {
    * since the last notification. Changes are not queued between
    * subscriptions.
    */
-  void neighborsChanged(1: list<string> added, 2: list<string> removed)
-    throws (1: PlatformError error)
+  void neighborsChanged(1: list<string> added, 2: list<string> removed) throws (
+    1: PlatformError error,
+  );
 }

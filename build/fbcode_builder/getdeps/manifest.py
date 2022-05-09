@@ -1,18 +1,18 @@
-# Copyright (c) Facebook, Inc. and its affiliates.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from __future__ import absolute_import, division, print_function, unicode_literals
-
+import configparser
 import io
 import os
+from typing import List
 
 from .builder import (
     AutoconfBuilder,
     Boost,
-    CargoBuilder,
     CMakeBuilder,
+    BistroBuilder,
     Iproute2Builder,
     MakeBuilder,
     NinjaBootstrap,
@@ -20,7 +20,9 @@ from .builder import (
     OpenNSABuilder,
     OpenSSLBuilder,
     SqliteBuilder,
+    CMakeBootStrapBuilder,
 )
+from .cargo import CargoBuilder
 from .expr import parse_expr
 from .fetcher import (
     ArchiveFetcher,
@@ -32,11 +34,6 @@ from .fetcher import (
 )
 from .py_wheel_builder import PythonWheelBuilder
 
-
-try:
-    import configparser
-except ImportError:
-    import ConfigParser as configparser
 
 REQUIRED = "REQUIRED"
 OPTIONAL = "OPTIONAL"
@@ -67,23 +64,30 @@ SCHEMA = {
             "builder": REQUIRED,
             "subdir": OPTIONAL,
             "build_in_src_dir": OPTIONAL,
-            "disable_env_override_pkgconfig": OPTIONAL,
-            "disable_env_override_path": OPTIONAL,
+            "job_weight_mib": OPTIONAL,
         },
     },
     "msbuild": {"optional_section": True, "fields": {"project": REQUIRED}},
     "cargo": {
         "optional_section": True,
-        "fields": {"build_doc": OPTIONAL, "workspace_dir": OPTIONAL},
+        "fields": {
+            "build_doc": OPTIONAL,
+            "workspace_dir": OPTIONAL,
+            "manifests_to_build": OPTIONAL,
+        },
     },
     "cmake.defines": {"optional_section": True},
     "autoconf.args": {"optional_section": True},
+    "autoconf.envcmd.LDFLAGS": {"optional_section": True},
     "rpms": {"optional_section": True},
     "debs": {"optional_section": True},
+    "homebrew": {"optional_section": True},
     "preinstalled.env": {"optional_section": True},
+    "bootstrap.args": {"optional_section": True},
     "b2.args": {"optional_section": True},
     "make.build_args": {"optional_section": True},
     "make.install_args": {"optional_section": True},
+    "make.test_args": {"optional_section": True},
     "header-only": {"optional_section": True, "fields": {"includedir": REQUIRED}},
     "shipit.pathmap": {"optional_section": True},
     "shipit.strip": {"optional_section": True},
@@ -94,15 +98,22 @@ SCHEMA = {
 # using the expression syntax to enable/disable sections
 ALLOWED_EXPR_SECTIONS = [
     "autoconf.args",
+    "autoconf.envcmd.LDFLAGS",
     "build",
     "cmake.defines",
     "dependencies",
     "make.build_args",
     "make.install_args",
+    "bootstrap.args",
     "b2.args",
     "download",
     "git",
     "install.files",
+    "rpms",
+    "debs",
+    "shipit.pathmap",
+    "shipit.strip",
+    "homebrew",
 ]
 
 
@@ -237,8 +248,26 @@ class ManifestParser(object):
 
         return defval
 
-    def get_section_as_args(self, section, ctx=None):
-        """ Intended for use with the make.[build_args/install_args] and
+    def get_dependencies(self, ctx):
+        dep_list = list(self.get_section_as_dict("dependencies", ctx).keys())
+        dep_list.sort()
+        builder = self.get("build", "builder", ctx=ctx)
+        if builder in ("cmake", "python-wheel"):
+            dep_list.insert(0, "cmake")
+        elif builder == "autoconf" and self.name not in (
+            "autoconf",
+            "libtool",
+            "automake",
+        ):
+            # they need libtool and its deps (automake, autoconf) so add
+            # those as deps (but obviously not if we're building those
+            # projects themselves)
+            dep_list.insert(0, "libtool")
+
+        return dep_list
+
+    def get_section_as_args(self, section, ctx=None) -> List[str]:
+        """Intended for use with the make.[build_args/install_args] and
         autoconf.args sections, this method collects the entries and returns an
         array of strings.
         If the manifest contains conditional sections, ctx is used to
@@ -263,8 +292,8 @@ class ManifestParser(object):
         return args
 
     def get_section_as_ordered_pairs(self, section, ctx=None):
-        """ Used for eg: shipit.pathmap which has strong
-        ordering requirements """
+        """Used for eg: shipit.pathmap which has strong
+        ordering requirements"""
         res = []
         ctx = ctx or {}
 
@@ -281,9 +310,8 @@ class ManifestParser(object):
                 res.append((key, value))
         return res
 
-    def get_section_as_dict(self, section, ctx=None):
+    def get_section_as_dict(self, section, ctx):
         d = {}
-        ctx = ctx or {}
 
         for s in self._config.sections():
             if s != section:
@@ -298,13 +326,13 @@ class ManifestParser(object):
         return d
 
     def update_hash(self, hasher, ctx):
-        """ Compute a hash over the configuration for the given
+        """Compute a hash over the configuration for the given
         context.  The goal is for the hash to change if the config
         for that context changes, but not if a change is made to
         the config only for a different platform than that expressed
         by ctx.  The hash is intended to be used to help invalidate
         a future cache for the third party build products.
-        The hasher argument is a hash object returned from hashlib. """
+        The hasher argument is a hash object returned from hashlib."""
         for section in sorted(SCHEMA.keys()):
             hasher.update(section.encode("utf-8"))
 
@@ -324,14 +352,15 @@ class ManifestParser(object):
                     hasher.update(value.encode("utf-8"))
 
     def is_first_party_project(self):
-        """ returns true if this is an FB first-party project """
+        """returns true if this is an FB first-party project"""
         return self.shipit_project is not None
 
     def get_required_system_packages(self, ctx):
-        """ Returns dictionary of packager system -> list of packages """
+        """Returns dictionary of packager system -> list of packages"""
         return {
             "rpm": self.get_section_as_args("rpms", ctx),
             "deb": self.get_section_as_args("debs", ctx),
+            "homebrew": self.get_section_as_args("homebrew", ctx),
         }
 
     def _is_satisfied_by_preinstalled_environment(self, ctx):
@@ -358,7 +387,7 @@ class ManifestParser(object):
             and build_options.fbsource_dir
             and self.shipit_project
         ):
-            return SimpleShipitTransformerFetcher(build_options, self)
+            return SimpleShipitTransformerFetcher(build_options, self, ctx)
 
         if (
             self.fbsource_path
@@ -390,7 +419,7 @@ class ManifestParser(object):
             # We need to defer this import until now to avoid triggering
             # a cycle when the facebook/__init__.py is loaded.
             try:
-                from getdeps.facebook.lfs import LFSCachingArchiveFetcher
+                from .facebook.lfs import LFSCachingArchiveFetcher
 
                 return LFSCachingArchiveFetcher(
                     build_options, self, url, self.get("download", "sha256", ctx=ctx)
@@ -415,38 +444,81 @@ class ManifestParser(object):
         ctx,
         loader,
         final_install_prefix=None,
+        extra_cmake_defines=None,
     ):
         builder = self.get("build", "builder", ctx=ctx)
         if not builder:
             raise Exception("project %s has no builder for %r" % (self.name, ctx))
         build_in_src_dir = self.get("build", "build_in_src_dir", "false", ctx=ctx)
         if build_in_src_dir == "true":
+            # Some scripts don't work when they are configured and build in
+            # a different directory than source (or when the build directory
+            # is not a subdir of source).
             build_dir = src_dir
+            subdir = self.get("build", "subdir", None, ctx=ctx)
+            if subdir is not None:
+                build_dir = os.path.join(build_dir, subdir)
             print("build_dir is %s" % build_dir)  # just to quiet lint
 
-        if builder == "make":
+        if builder == "make" or builder == "cmakebootstrap":
             build_args = self.get_section_as_args("make.build_args", ctx)
             install_args = self.get_section_as_args("make.install_args", ctx)
-            return MakeBuilder(
+            test_args = self.get_section_as_args("make.test_args", ctx)
+            if builder == "cmakebootstrap":
+                return CMakeBootStrapBuilder(
+                    build_options,
+                    ctx,
+                    self,
+                    src_dir,
+                    None,
+                    inst_dir,
+                    build_args,
+                    install_args,
+                    test_args,
+                )
+            else:
+                return MakeBuilder(
+                    build_options,
+                    ctx,
+                    self,
+                    src_dir,
+                    None,
+                    inst_dir,
+                    build_args,
+                    install_args,
+                    test_args,
+                )
+
+        if builder == "autoconf":
+            args = self.get_section_as_args("autoconf.args", ctx)
+            conf_env_args = {}
+            ldflags_cmd = self.get_section_as_args("autoconf.envcmd.LDFLAGS", ctx)
+            if ldflags_cmd:
+                conf_env_args["LDFLAGS"] = ldflags_cmd
+            return AutoconfBuilder(
                 build_options,
                 ctx,
                 self,
                 src_dir,
-                None,
+                build_dir,
                 inst_dir,
-                build_args,
-                install_args,
-            )
-
-        if builder == "autoconf":
-            args = self.get_section_as_args("autoconf.args", ctx)
-            return AutoconfBuilder(
-                build_options, ctx, self, src_dir, build_dir, inst_dir, args
+                args,
+                conf_env_args,
             )
 
         if builder == "boost":
             args = self.get_section_as_args("b2.args", ctx)
             return Boost(build_options, ctx, self, src_dir, build_dir, inst_dir, args)
+
+        if builder == "bistro":
+            return BistroBuilder(
+                build_options,
+                ctx,
+                self,
+                src_dir,
+                build_dir,
+                inst_dir,
+            )
 
         if builder == "cmake":
             defines = self.get_section_as_dict("cmake.defines", ctx)
@@ -458,7 +530,9 @@ class ManifestParser(object):
                 build_dir,
                 inst_dir,
                 defines,
+                loader,
                 final_install_prefix,
+                extra_cmake_defines,
             )
 
         if builder == "python-wheel":
@@ -489,7 +563,8 @@ class ManifestParser(object):
 
         if builder == "cargo":
             build_doc = self.get("cargo", "build_doc", False, ctx)
-            workspace_dir = self.get("cargo", "workspace_dir", "", ctx)
+            workspace_dir = self.get("cargo", "workspace_dir", None, ctx)
+            manifests_to_build = self.get("cargo", "manifests_to_build", None, ctx)
             return CargoBuilder(
                 build_options,
                 ctx,
@@ -499,6 +574,7 @@ class ManifestParser(object):
                 inst_dir,
                 build_doc,
                 workspace_dir,
+                manifests_to_build,
                 loader,
             )
 
@@ -509,13 +585,21 @@ class ManifestParser(object):
 
 
 class ManifestContext(object):
-    """ ProjectContext contains a dictionary of values to use when evaluating boolean
+    """ProjectContext contains a dictionary of values to use when evaluating boolean
     expressions in a project manifest.
 
     This object should be passed as the `ctx` parameter in ManifestParser.get() calls.
     """
 
-    ALLOWED_VARIABLES = {"os", "distro", "distro_vers", "fb", "test"}
+    ALLOWED_VARIABLES = {
+        "os",
+        "distro",
+        "distro_vers",
+        "fb",
+        "fbsource",
+        "test",
+        "shared_libs",
+    }
 
     def __init__(self, ctx_dict):
         assert set(ctx_dict.keys()) == self.ALLOWED_VARIABLES
@@ -539,10 +623,10 @@ class ManifestContext(object):
 
 
 class ContextGenerator(object):
-    """ ContextGenerator allows creating ManifestContext objects on a per-project basis.
+    """ContextGenerator allows creating ManifestContext objects on a per-project basis.
     This allows us to evaluate different projects with slightly different contexts.
 
-    For instance, this can be used to only enable tests for some projects. """
+    For instance, this can be used to only enable tests for some projects."""
 
     def __init__(self, default_ctx):
         self.default_ctx = ManifestContext(default_ctx)

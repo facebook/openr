@@ -1,17 +1,14 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
-#include "KvStoreAgent.h"
-
-#include <cstdlib>
-
 #include <glog/logging.h>
 
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/public_tld/examples/KvStoreAgent.h>
 
 namespace openr {
 
@@ -22,29 +19,33 @@ KvStoreAgent::KvStoreAgent(std::string nodeId, KvStore* kvStore)
   kvStoreClient_ =
       std::make_unique<KvStoreClientInternal>(this, nodeId, kvStore_);
 
-  // set a call back so we can keep track of other keys with the prefix we
-  // care about
-  kvStoreClient_->setKvCallback(
+  // subscribe to prefixes of this specific node that we care about
+  const auto keyPrefix =
+      fmt::format("{}{}:", Constants::kPrefixDbMarker.toString(), nodeId);
+  kvStoreClient_->subscribeKeyFilter(
+      KvStoreFilters({keyPrefix}, {} /* originatorIds */),
       [this, nodeId](
           const std::string& key, const std::optional<thrift::Value>& value) {
         if (0 == key.find(agentKeyPrefix) &&
-            value.value().originatorId != nodeId && value.value().value_ref()) {
+            *value.value().originatorId_ref() != nodeId &&
+            value.value().value_ref()) {
           // Lets check out what some other node's value is
-          LOG(INFO) << "Got data from: " << value.value().originatorId
+          LOG(INFO) << "Got data from: " << *value.value().originatorId_ref()
                     << " Data: " << value.value().value_ref().value();
         }
       });
 
   // every once in a while, we need to change our value
   periodicValueChanger_ =
-      fbzmq::ZmqTimeout::make(getEvb(), [this, nodeId]() noexcept {
-        std::srand(std::time(0));
-        this->kvStoreClient_->persistKey(
-            agentKeyPrefix + nodeId, std::to_string(std::rand()));
+      folly::AsyncTimeout::make(*getEvb(), [this, nodeId]() noexcept {
+        static int val = 0;
+        this->kvStoreClient_->setKey(
+            AreaId{"my_area_name"},
+            agentKeyPrefix + nodeId,
+            std::to_string(++val));
       });
 
-  periodicValueChanger_->scheduleTimeout(
-      std::chrono::seconds(60), true /* isPeriodic */);
+  periodicValueChanger_->scheduleTimeout(std::chrono::seconds(60));
 }
 
 } // namespace openr

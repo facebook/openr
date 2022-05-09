@@ -1,13 +1,15 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/gen/Base.h>
 #include <openr/common/OpenrClient.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/kvstore/KvStore.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
 
@@ -21,7 +23,7 @@ parseThriftValue(thrift::Value const& value) {
 
   auto buf = folly::IOBuf::wrapBufferAsValue(
       value.value_ref()->data(), value.value_ref()->size());
-  return fbzmq::util::readThriftObj<ThriftType>(buf, serializer);
+  return readThriftObj<ThriftType>(buf, serializer);
 }
 
 // static
@@ -30,12 +32,9 @@ std::unordered_map<std::string, ThriftType>
 parseThriftValues(
     std::unordered_map<std::string, thrift::Value> const& keyVals) {
   std::unordered_map<std::string, ThriftType> result;
-
-  for (auto const& kv : keyVals) {
-    // Here: kv.first is the key string, kv.second is thrift::Value
-    result.emplace(kv.first, parseThriftValue<ThriftType>(kv.second));
-  } // for
-
+  for (auto const& [key, val] : keyVals) {
+    result.emplace(key, parseThriftValue<ThriftType>(val));
+  }
   return result;
 }
 
@@ -43,111 +42,171 @@ parseThriftValues(
 template <typename ThriftType>
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
+    std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
+    const std::shared_ptr<folly::SSLContext> sslContext,
     std::optional<int> maybeIpTos /* std::nullopt */,
-    const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
-    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
-  auto val = dumpAllWithThriftClientFromMultiple(
+    const folly::SocketAddress&
+        bindAddr /* folly::AsyncSocket::anyAddress()*/) {
+  const auto [res, unreachableAddrs] = dumpAllWithThriftClientFromMultiple(
+      area,
       sockAddrs,
       keyPrefix,
       connectTimeout,
       processTimeout,
+      sslContext,
       maybeIpTos,
-      bindAddr,
-      area);
-  if (not val.first) {
-    return std::make_pair(std::nullopt, val.second);
+      bindAddr);
+  if (not res) {
+    return std::make_pair(std::nullopt, unreachableAddrs);
   }
-  return std::make_pair(parseThriftValues<ThriftType>(*val.first), val.second);
+  return std::make_pair(parseThriftValues<ThriftType>(*res), unreachableAddrs);
+}
+
+void
+printKeyValInArea(
+    int logLevel,
+    const std::string& logStr,
+    const std::string& areaTag,
+    const std::string& key,
+    const thrift::Value& val) {
+  VLOG(logLevel) << fmt::format(
+      "{}{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, ttl: {}]",
+      areaTag,
+      logStr,
+      key,
+      *val.version_ref(),
+      *val.originatorId_ref(),
+      *val.ttlVersion_ref(),
+      *val.ttl_ref());
 }
 
 // static method to dump KvStore key-val over multiple instances
 std::pair<
     std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
-    std::vector<fbzmq::SocketUrl> /* unreached url */>
+    std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
+    std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
     const std::string& keyPrefix,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
+    const std::shared_ptr<folly::SSLContext> sslContext,
     std::optional<int> maybeIpTos /* std::nullopt */,
-    const folly::SocketAddress& bindAddr /* folly::AsyncSocket::anyAddress()*/,
-    const std::string& area /* thrift::KvStore_constants::kDefaultArea() */) {
+    const folly::SocketAddress&
+        bindAddr /* folly::AsyncSocket::anyAddress()*/) {
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   std::unordered_map<std::string, thrift::Value> merged;
-  std::vector<fbzmq::SocketUrl> unreachedUrls;
+  std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
-  params.prefix = keyPrefix;
+  *params.prefix_ref() = keyPrefix;
   if (not keyPrefix.empty()) {
     params.keys_ref() = {keyPrefix};
   }
 
-  LOG(INFO) << "Prepare requests to all Open/R instances";
+  auto addrStrs =
+      folly::gen::from(sockAddrs) |
+      folly::gen::mapped([](const folly::SocketAddress& sockAddr) {
+        return fmt::format(
+            "[{}, {}]", sockAddr.getAddressStr(), sockAddr.getPort());
+      }) |
+      folly::gen::as<std::vector<std::string>>();
+
+  VLOG(1) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs)
+          << ". Required SSL secure connection: " << std::boolalpha
+          << (sslContext != nullptr);
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
+#ifndef OPENR_TG_OPTIMIZED_BUILD
     std::unique_ptr<thrift::OpenrCtrlCppAsyncClient> client{nullptr};
-    try {
-      client = getOpenrCtrlPlainTextClient(
-          evb,
-          folly::IPAddress(sockAddr.getAddressStr()),
-          sockAddr.getPort(),
-          connectTimeout,
-          processTimeout,
-          bindAddr,
-          maybeIpTos);
-    } catch (const std::exception& ex) {
-      LOG(ERROR) << "Failed to connect to Open/R instance at address of: "
-                 << sockAddr.getAddressStr()
-                 << ". Exception: " << folly::exceptionStr(ex);
+#else
+    std::unique_ptr<thrift::OpenrCtrlAsyncClient> client{nullptr};
+#endif
+    if (sslContext) {
+      VLOG(3) << "Try to connect Open/R SSL secure client.";
+      try {
+        client = getOpenrCtrlSecureClient(
+            evb,
+            sslContext,
+            folly::IPAddress(sockAddr.getAddressStr()),
+            sockAddr.getPort(),
+            connectTimeout,
+            processTimeout,
+            bindAddr,
+            maybeIpTos);
+      } catch (const std::exception& ex) {
+        LOG(ERROR)
+            << "Failed to connect to Open/R instance at: "
+            << sockAddr.getAddressStr()
+            << " via secure client. Exception: " << folly::exceptionStr(ex);
+      }
     }
+
+    // Cannot connect to Open/R via secure client. Try plain-text client
     if (!client) {
-      unreachedUrls.push_back(fbzmq::SocketUrl{sockAddr.getAddressStr()});
+      VLOG(3) << "Try to connect Open/R plain-text client.";
+      try {
+        client = getOpenrCtrlPlainTextClient(
+            evb,
+            folly::IPAddress(sockAddr.getAddressStr()),
+            sockAddr.getPort(),
+            connectTimeout,
+            processTimeout,
+            bindAddr,
+            maybeIpTos);
+      } catch (const std::exception& ex) {
+        LOG(ERROR)
+            << "Failed to connect to Open/R instance at: "
+            << sockAddr.getAddressStr()
+            << "via plain-text client. Exception: " << folly::exceptionStr(ex);
+      }
+    }
+
+    // Cannot connect to Open/R via either plain-text client or secured client
+    if (!client) {
+      unreachableAddrs.emplace_back(sockAddr);
       continue;
     }
 
     VLOG(3) << "Successfully connected to Open/R with addr: "
             << sockAddr.getAddressStr();
 
-    // Keep getKvStoreKeyValsFiltered() for backward compatibility purpose
-    if (area == thrift::KvStore_constants::kDefaultArea()) {
-      calls.emplace_back(client->semifuture_getKvStoreKeyValsFiltered(params));
-    } else {
-      calls.emplace_back(
-          client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
-    }
+    calls.emplace_back(
+        area ? client->semifuture_getKvStoreKeyValsFilteredArea(params, *area)
+             : client->semifuture_getKvStoreKeyValsFiltered(params));
   }
 
   // can't connect to ANY single Open/R instance
   if (calls.empty()) {
-    return std::make_pair(std::nullopt, unreachedUrls);
+    return std::make_pair(std::nullopt, unreachableAddrs);
   }
 
   folly::collectAll(calls).via(&evb).thenValue(
       [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
-        LOG(INFO) << "Merge values received from Open/R instances"
-                  << ", results size: " << results.size();
+        VLOG(1) << "Merge key-vals from " << results.size()
+                << " different Open/R instances.";
 
         // loop semifuture collection to merge all values
         for (auto& result : results) {
-          VLOG(3) << "hasException: " << result.hasException()
-                  << ", hasValue: " << result.hasValue();
-
           // folly::Try will contain either value or exception
-          // Do NOT CHECK(result.hasValue()) since exception can happen.
           if (result.hasException()) {
-            LOG(WARNING) << "Exception happened: "
-                         << folly::exceptionStr(result.exception());
+            LOG(ERROR) << "Exception: "
+                       << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
-            VLOG(3) << "KvStore publication received";
-            KvStore::mergeKeyValues(merged, result.value().keyVals);
+            auto keyVals = *result.value().keyVals_ref();
+            const auto deltaPub = mergeKeyValues(merged, keyVals);
+
+            VLOG(3) << "Received kvstore publication with: " << keyVals.size()
+                    << " key-vals. Incurred " << deltaPub.size()
+                    << " key-val updates.";
           }
         }
         evb.terminateLoopSoon();
@@ -162,9 +221,9 @@ dumpAllWithThriftClientFromMultiple(
           std::chrono::steady_clock::now() - startTime)
           .count();
 
-  LOG(INFO) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+  VLOG(1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
-  return std::make_pair(merged, unreachedUrls);
+  return std::make_pair(merged, unreachableAddrs);
 }
 
 } // namespace openr

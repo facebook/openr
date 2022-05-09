@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -13,15 +13,14 @@
 
 #include <folly/gen/Base.h>
 #include <folly/gen/String.h>
+#include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <sodium.h>
 
 #include <openr/allocators/RangeAllocator.h>
 #include <openr/config/Config.h>
-#include <openr/config/tests/Utils.h>
 #include <openr/kvstore/KvStoreWrapper.h>
-
-using folly::make_optional;
+#include <openr/tests/utils/Utils.h>
 
 using namespace folly::gen;
 
@@ -58,17 +57,25 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   SetUp() override {
     for (uint32_t i = 0; i < kNumStores; i++) {
       auto config = std::make_shared<Config>(
-          getBasicOpenrConfig(folly::sformat("store{}", i + 1)));
-      auto store = std::make_unique<KvStoreWrapper>(zmqContext, config);
+          getBasicOpenrConfig(fmt::format("store{}", i + 1)));
+      auto store = std::make_unique<KvStoreWrapper>(
+          zmqContext, config->getAreaIds(), config->toThriftKvStoreConfig());
       stores.emplace_back(std::move(store));
       configs.emplace_back(std::move(config));
       stores.back()->run();
     }
 
     for (uint32_t i = 1; i < kNumStores; i++) {
-      stores[i - 1]->addPeer(stores[i]->getNodeId(), stores[i]->getPeerSpec());
+      stores[i - 1]->addPeer(
+          kTestingAreaName, stores[i]->getNodeId(), stores[i]->getPeerSpec());
       stores[i]->addPeer(
-          stores[i - 1]->getNodeId(), stores[i - 1]->getPeerSpec());
+          kTestingAreaName,
+          stores[i - 1]->getNodeId(),
+          stores[i - 1]->getPeerSpec());
+    }
+
+    for (const auto& store : stores) {
+      store->recvKvStoreSyncedSignal();
     }
 
     for (uint32_t i = 0; i < kNumClients; i++) {
@@ -98,7 +105,7 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
   static std::string
   createClientName(int id) {
     CHECK_LT(kNumClients, 100) << "Clients must be in 2 digits.";
-    return folly::sformat("client-{}{}", id / 10, id % 10);
+    return fmt::format("client-{}{}", id / 10, id % 10);
   }
 
   template <typename T>
@@ -118,11 +125,16 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
     std::vector<std::unique_ptr<RangeAllocator<T>>> allocators;
     for (size_t i = 0; i < clients.size(); i++) {
       auto allocator = std::make_unique<RangeAllocator<T>>(
+          kTestingAreaName,
           createClientName(i),
           "value:",
+          stores[i % kNumStores]->getKvStore(),
           clients[i].get(),
-          [callback,
-           i](std::optional<T> newVal) noexcept { callback(i, newVal); },
+          [callback, i](std::optional<T> newVal) noexcept {
+            callback(i, newVal);
+          },
+          kvRequestQueue,
+          false, /* enableKvRequestQueue_ */
           10ms /* min backoff */,
           100ms /* max backoff */,
           overrideOwner /* override allowed */,
@@ -141,6 +153,9 @@ class RangeAllocatorFixture : public ::testing::TestWithParam<bool> {
 
   // ZMQ Context for IO processing
   fbzmq::Context zmqContext;
+
+  // key-value request queue
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
   // Linear topology of stores. i <--> i+1 <--> i+2 ......
   std::vector<std::unique_ptr<KvStoreWrapper>> stores;
@@ -415,8 +430,7 @@ int
 main(int argc, char** argv) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
+  folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
   FLAGS_logtostderr = true;
 

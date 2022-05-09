@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -37,6 +37,13 @@ TEST(AsyncDebounce, BasicOperation) {
     std::unique_lock<std::mutex> lk(m);
     evb.runInEventBaseThread([&m, debouncedCalls, &debouncedFn]() {
       std::unique_lock<std::mutex> l(m);
+      // Debounce several times.
+      for (int i = 0; i < debouncedCalls; ++i) {
+        debouncedFn();
+      }
+      // Cancel scheduled timeout.
+      debouncedFn.cancelScheduledTimeout();
+      // Debounce again.
       for (int i = 0; i < debouncedCalls; ++i) {
         debouncedFn();
       }
@@ -66,6 +73,7 @@ main(int argc, char* argv[]) {
   gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
+  FLAGS_logtostderr = true;
 
   return RUN_ALL_TESTS();
 }

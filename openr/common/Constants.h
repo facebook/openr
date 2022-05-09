@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -39,6 +39,9 @@ class Constants {
   // to be "fast" since we talk to directly adjacent nodes
   static constexpr std::chrono::milliseconds kReadTimeout{1000};
 
+  static constexpr auto kInitEventCounterFormat =
+      "initialization.{}.duration_ms";
+
   // Default keepAlive values
   static constexpr int kKeepAliveEnable{1};
   // Idle Time before sending keep alives
@@ -50,17 +53,6 @@ class Constants {
 
   // The maximum messages we can queue on sending socket
   static constexpr int kHighWaterMark{65536};
-
-  // Maximum label size
-  static constexpr int32_t kMaxSrLabel{(1 << 20) - 1};
-
-  // Segment Routing namespace constants. Local and Global ranges are exclusive
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrGlobalRange{101, 49999};
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrLocalRange{50000, 59999};
-  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
-      kSrStaticMplsRouteRange{60000, 69999};
 
   // IP TOS to be used for all control IP packets in network flowing across
   // the nodes
@@ -74,8 +66,12 @@ class Constants {
   static constexpr folly::StringPiece kEventLogCategory{"perfpipe_aquaman"};
 
   // ExponentialBackoff durations
+  // Link-monitor, KvStore
   static constexpr std::chrono::milliseconds kInitialBackoff{64};
   static constexpr std::chrono::milliseconds kMaxBackoff{8192};
+  // FIB, perhaps this could be removed and above used in time
+  static constexpr std::chrono::milliseconds kFibInitialBackoff{8};
+  static constexpr std::chrono::milliseconds kFibMaxBackoff{4096};
 
   // Persistent store specific
   static constexpr std::chrono::milliseconds kPersistentStoreInitialBackoff{
@@ -84,9 +80,13 @@ class Constants {
 
   //
   // KvStore specific
+  //
 
   // default interval for kvstore to sync with peers
   static constexpr std::chrono::seconds kStoreSyncInterval{60};
+
+  // default interval for flooding topology dump
+  static constexpr std::chrono::seconds kFloodTopoDumpInterval{60};
 
   // default thrift client keep alive interval to avoid idle timeout
   static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
@@ -97,6 +97,7 @@ class Constants {
 
   //
   // PrefixAllocator specific
+  //
 
   // default interval for prefix allocator to sync with kvstore
   static constexpr std::chrono::milliseconds kPrefixAllocatorSyncInterval{1000};
@@ -117,9 +118,14 @@ class Constants {
   // LinkMonitor specific
   //
 
-  // the time we hold on announcing a link when it comes up
-  static constexpr std::chrono::milliseconds kLinkThrottleTimeout{1000};
+  // Hold time to wait before advertising link events. We use different
+  // timers for UP (Throttle=100ms) and DOWN events are immediately
+  static constexpr std::chrono::milliseconds kLinkThrottleTimeout{100};
   static constexpr std::chrono::milliseconds kLinkImmediateTimeout{1};
+
+  // Hold time to wait before advertising adjacency UP event to KvStore.
+  // Adjacency DOWN event is immediately advertised.
+  static constexpr std::chrono::milliseconds kAdjacencyThrottleTimeout{1000};
 
   // overloaded note metric value
   static constexpr uint64_t kOverloadNodeMetric{1ull << 32};
@@ -139,6 +145,14 @@ class Constants {
   // fixed size list of BucketedTimeSeries
   static constexpr uint32_t kMaxAllowedPps{50};
 
+  // Segment Routing namespace constants. Local and Global ranges are exclusive
+  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
+      kSrGlobalRange{101, 49999};
+  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
+      kSrLocalRange{50000, 59999};
+  static constexpr std::pair<int32_t /* low */, int32_t /* high */>
+      kSrStaticMplsRouteRange{60000, 69999};
+
   // Number of BucketedTimeSeries to spread potential neighbors across
   // for the purpose of limiting the number of packets per second processed
   static constexpr size_t kNumTimeSeries{1024};
@@ -153,7 +167,8 @@ class Constants {
   static constexpr std::chrono::milliseconds kPlatformRoutesProcTimeout{20000};
   static constexpr std::chrono::milliseconds kPlatformIntfProcTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
-  static constexpr std::chrono::milliseconds kServiceProcTimeout{20000};
+  static constexpr std::chrono::milliseconds kServiceConnSSLTimeout{1000};
+  static constexpr std::chrono::milliseconds kServiceProcTimeout{2500};
 
   // time interval to sync between Open/R and Platform
   static constexpr std::chrono::seconds kPlatformSyncInterval{60};
@@ -181,6 +196,12 @@ class Constants {
   // KvStore specific
   //
 
+  // the time we hold on to clear keys from KvStore
+  static constexpr std::chrono::milliseconds kKvStoreClearThrottleTimeout{10};
+
+  // the time we hold on to announce to KvStore
+  static constexpr std::chrono::milliseconds kKvStoreSyncThrottleTimeout{100};
+
   // Kvstore timer for flooding pending publication
   static constexpr std::chrono::milliseconds kFloodPendingPublication{100};
 
@@ -193,11 +214,18 @@ class Constants {
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};
 
+  // KvStore default areaId
+  //
+  // NOTE: this is a special areaId that is treated as the wildcard area.
+  // Interfaces configured into this area will form adjacencies with any other
+  // node not validating what area they claim to be in.
+  static constexpr folly::StringPiece kDefaultArea{"0"};
+
   // KvStore key markers
   static constexpr folly::StringPiece kAdjDbMarker{"adj:"};
-  static constexpr folly::StringPiece kPrefixDbMarker{"prefix:"};
+  static constexpr folly::StringPiece kPrefixDbMarker{"prefixV2:"};
+  static constexpr folly::StringPiece kPrefixDbMarkerDeprecated{"prefix:"};
   static constexpr folly::StringPiece kPrefixAllocMarker{"allocprefix:"};
-  static constexpr folly::StringPiece kFibTimeMarker{"fibtime:"};
   static constexpr folly::StringPiece kNodeLabelRangePrefix{"nodeLabel:"};
 
   static constexpr folly::StringPiece kGlobalCmdLocalIdTemplate{
@@ -239,31 +267,23 @@ class Constants {
   // Prefix manager specific
   //
 
-  // the time we hold on to announce to KvStore
-  static constexpr std::chrono::milliseconds kPrefixMgrKvThrottleTimeout{250};
-
   // Default metrics (path and source preference) for Open/R originated routes
   // (loopback address & interface subnets).
   static constexpr int32_t kDefaultPathPreference{1000}; // LIVE routes
   static constexpr int32_t kDefaultSourcePreference{200}; // Source pref
+
+  // Nexthops used to program drop route
+  static constexpr folly::StringPiece kLocalRouteNexthopV4{"0.0.0.0"};
+  static constexpr folly::StringPiece kLocalRouteNexthopV6{"::"};
 
   // OpenR ports
 
   // Openr Ctrl thrift server port
   static constexpr int32_t kOpenrCtrlPort{2018};
 
+  // [TO BE DEPRECATED]
   // The port KvStore replier listens on
   static constexpr int32_t kKvStoreRepPort{60002};
-
-  // The port monitor publishes on
-  static constexpr int32_t kMonitorPubPort{60007};
-
-  // The port monitor replies on
-  static constexpr int32_t kMonitorRepPort{60008};
-
-  // Switch agent thrift service port for Platform programming
-  // [TO BE DEPRECATED]
-  static constexpr int32_t kSystemAgentPort{60099};
 
   // Switch agent thrift service port for FIB programming
   static constexpr int32_t kFibAgentPort{60100};
@@ -271,31 +291,22 @@ class Constants {
   // Spark UDP multicast port for sending spark-hello messages
   static constexpr int32_t kSparkMcastPort{6666};
 
+  //
+  // See https://github.com/facebook/openr/blob/master/openr/docs/Versions.md
+  // for details of version history
+  //
+  // ATTN: Please update `Versions.md` when current Open/R version
+  //       is bumped up.
+  //
+
   // Current OpenR version
-  // 20200701 - Area feature becomes mandatory
-  // 20200421 - Spark2 Area feature
-  // 20191010 - Spark2 feature
-  // 20190805 - per prefix key feature
-  static constexpr int32_t kOpenrVersion{20200701};
+  static constexpr int32_t kOpenrVersion{20200825};
 
   // Lowest Supported OpenR version
-  static constexpr int32_t kOpenrSupportedVersion{20200421};
+  static constexpr int32_t kOpenrSupportedVersion{20200604};
 
   // Threshold time in secs to crash after reaching critical memory
   static constexpr std::chrono::seconds kMemoryThresholdTime{600};
-
-  static const std::list<std::string>&
-  getNextProtocolsForThriftServers() {
-    static const std::list<std::string> result{
-        "thrift",
-        "h2",
-        // "http" is not a legit specifier but need to include it for
-        // legacy.  Thrift's HTTP2RoutingHandler uses this, and clients
-        // may be sending it.
-        "http",
-        "rs"};
-    return result;
-  }
 };
 
 } // namespace openr

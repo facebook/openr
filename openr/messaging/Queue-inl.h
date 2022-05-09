@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <string>
+#include "openr/messaging/Queue.h"
 namespace openr {
 namespace messaging {
 
@@ -38,7 +40,16 @@ RQueue<ValueType>::size() {
 }
 
 template <typename ValueType>
+std::string
+RQueue<ValueType>::getReaderId() {
+  return queue_->queueId();
+}
+
+template <typename ValueType>
 RWQueue<ValueType>::RWQueue() {}
+
+template <typename ValueType>
+RWQueue<ValueType>::RWQueue(const std::string& queueId) : queueId_(queueId) {}
 
 template <typename ValueType>
 RWQueue<ValueType>::~RWQueue() {
@@ -59,13 +70,14 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
   if (pendingReads_.size()) {
     // Unblock a pending read
     auto& pendingRead = pendingReads_.front().get();
-    pendingRead.data = std::forward<ValueTypeT>(val);
+    pendingRead.data.emplace(std::forward<ValueTypeT>(val));
     pendingRead.baton.post();
     pendingReads_.pop_front();
   } else {
     // Add data into the queue
     queue_.emplace_back(std::forward<ValueTypeT>(val));
   }
+  ++writes_;
 
   return true;
 }
@@ -76,20 +88,23 @@ RWQueue<ValueType>::get() {
   PendingRead pendingRead;
 
   // Queue is closed
-  if (not getAnyImpl(pendingRead)) {
-    return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
+  auto maybeImmediateRead = getAnyImpl(pendingRead);
+  if (maybeImmediateRead.hasError()) {
+    return folly::makeUnexpected(maybeImmediateRead.error());
   }
 
   // Post our own baton if read is immediate (for)
   // XXX: This will evenly distribute elements between readers when queue
   // and also ensures fiber-fairness
-  if (pendingRead.data) {
+  if (maybeImmediateRead.value()) {
+    CHECK(pendingRead.data);
     pendingRead.baton.post();
   }
 
   // Wait for baton and read the data
   pendingRead.baton.wait();
   if (pendingRead.data) {
+    ++reads_;
     return std::move(pendingRead.data).value();
   }
   return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
@@ -102,18 +117,21 @@ RWQueue<ValueType>::getCoro() {
   PendingRead pendingRead;
 
   // Queue is closed
-  if (not getAnyImpl(pendingRead)) {
-    co_return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
+  auto maybeImmediateRead = getAnyImpl(pendingRead);
+  if (maybeImmediateRead.hasError()) {
+    co_return folly::makeUnexpected(maybeImmediateRead.error());
   }
 
   // Wait if there is no data
-  if (pendingRead.data) {
+  if (maybeImmediateRead.value()) {
+    CHECK(pendingRead.data);
     pendingRead.baton.post();
   }
 
   // Wait for baton and read the data
   co_await pendingRead.baton;
   if (pendingRead.data) {
+    ++reads_;
     co_return std::move(pendingRead.data).value();
   }
   co_return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
@@ -121,25 +139,25 @@ RWQueue<ValueType>::getCoro() {
 #endif
 
 template <typename ValueType>
-bool
+folly::Expected<bool, QueueError>
 RWQueue<ValueType>::getAnyImpl(PendingRead& pendingRead) {
   std::lock_guard<std::mutex> l(lock_);
 
   // If queue is closed, return immediately
   if (closed_) {
-    return false;
+    return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
   }
 
   // Perform immediate read if data is available
   if (queue_.size()) {
-    pendingRead.data = std::move(queue_.front());
+    pendingRead.data.emplace(std::move(queue_.front()));
     queue_.pop_front();
     return true;
   }
 
   // Else enqueue read request
   pendingReads_.emplace_back(pendingRead);
-  return true;
+  return false;
 }
 
 template <typename ValueType>
@@ -169,6 +187,12 @@ RWQueue<ValueType>::isClosed() {
 }
 
 template <typename ValueType>
+std::string
+RWQueue<ValueType>::getQueueId() {
+  return queueId_;
+}
+
+template <typename ValueType>
 size_t
 RWQueue<ValueType>::size() {
   std::lock_guard<std::mutex> l(lock_);
@@ -180,6 +204,27 @@ size_t
 RWQueue<ValueType>::numPendingReads() {
   std::lock_guard<std::mutex> l(lock_);
   return pendingReads_.size();
+}
+
+template <typename ValueType>
+size_t
+RWQueue<ValueType>::numWrites() {
+  std::lock_guard<std::mutex> l(lock_);
+  return writes_;
+}
+
+template <typename ValueType>
+size_t
+RWQueue<ValueType>::numReads() {
+  std::lock_guard<std::mutex> l(lock_);
+  return reads_;
+}
+
+template <typename ValueType>
+RWQueueStats
+RWQueue<ValueType>::getStats() {
+  std::lock_guard<std::mutex> l(lock_);
+  return RWQueueStats{"", reads_, writes_, queue_.size()};
 }
 
 } // namespace messaging

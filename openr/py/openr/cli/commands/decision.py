@@ -1,48 +1,26 @@
 #!/usr/bin/env python3
-
-#
-# Copyright (c) 2014-present, Facebook, Inc.
+# Copyright (c) Meta Platforms, Inc. and affiliates.
 #
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
-#
 
 
 import ipaddress
+import json
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Optional, Set, Sequence, Tuple
 
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.KvStore import ttypes as kv_store_types
-from openr.Lsdb import ttypes as lsdb_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
+from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object
-
-
-class DecisionPrefixesCmd(OpenrCtrlCmd):
-    def _run(
-        self,
-        client: OpenrCtrl.Client,
-        nodes: set,
-        json: bool,
-        prefix: str,
-        client_type: str,
-    ) -> None:
-        prefix_dbs = client.getDecisionPrefixDbs()
-        if json:
-            utils.print_prefixes_json(
-                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
-            )
-        else:
-            utils.print_prefixes_table(
-                prefix_dbs, nodes, prefix, client_type, self.iter_dbs
-            )
+from openr.utils.serializer import deserialize_thrift_object, serialize_json
 
 
 class DecisionRoutesComputedCmd(OpenrCtrlCmd):
@@ -53,6 +31,8 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
         prefixes: Any,
         labels: Any,
         json: bool,
+        *args,
+        **kwargs,
     ) -> None:
         if "all" in nodes:
             nodes = self._get_all_nodes(client)
@@ -68,58 +48,63 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
                 utils.print_route_db(route_db, prefixes, labels)
 
     def _get_all_nodes(self, client: OpenrCtrl.Client) -> set:
-        """ return all the nodes' name in the network """
+        """return all the nodes' name in the network"""
 
         def _parse(nodes, adj_db):
             nodes.add(adj_db.thisNodeName)
 
         nodes = set()
         adj_dbs = client.getDecisionPrefixDbs()
-        self.iter_dbs(nodes, adj_dbs, ["all"], _parse)
+        self.iter_dbs(nodes, adj_dbs, {"all"}, _parse)
         return nodes
-
-
-class DecisionRoutesUnInstallableCmd(OpenrCtrlCmd):
-    def _run(
-        self, client: OpenrCtrl.Client, prefixes: Any, labels: Any, json: bool
-    ) -> None:
-        route_db = client.getRouteDbComputed("")
-        # Filter out all MPLS routes
-        route_db.mplsRoutes = []
-        # Filter unicast routes on `doNotInstall` attribute
-        route_db.unicastRoutes = [r for r in route_db.unicastRoutes if r.doNotInstall]
-        if json:
-            route_db_dict = {route_db.thisNodeName: utils.route_db_to_dict(route_db)}
-            utils.print_routes_json(route_db_dict, prefixes, labels)
-        else:
-            utils.print_route_db(route_db, prefixes, labels)
 
 
 class DecisionAdjCmd(OpenrCtrlCmd):
     def _run(
-        self, client: OpenrCtrl.Client, nodes: set, bidir: bool, json: bool
+        self,
+        client: OpenrCtrl.Client,
+        nodes: set,
+        areas: set,
+        bidir: bool,
+        json: bool,
+        *args,
+        **kwargs,
     ) -> None:
-        adj_dbs = client.getDecisionAdjacencyDbs()
-        adjs_map = utils.adj_dbs_to_dict(adj_dbs, nodes, bidir, self.iter_dbs)
-        for _, val in adjs_map.items():
-            for adj_entry in val["adjacencies"]:
-                adj_entry["area"] = val.get("area", "N/A")
+
+        adj_dbs = client.getDecisionAdjacenciesFiltered(
+            ctrl_types.AdjacenciesFilter(selectAreas=areas)
+        )
+
+        # convert list<adjDb> from server to a two level map: {area: {node: adjDb}}
+        adjs_map_all_areas = utils.adj_dbs_to_area_dict(adj_dbs, nodes, bidir)
+
         if json:
-            utils.print_json(adjs_map)
+            utils.print_json(adjs_map_all_areas)
         else:
-            utils.print_adjs_table(adjs_map, None, None)
+            # print per-node adjDb tables on a per-area basis
+            for area, adjs_map in sorted(adjs_map_all_areas.items()):
+                print("\n== Area:", area, "==\n")
+                utils.print_adjs_table(adjs_map, None, None)
 
 
 class PathCmd(OpenrCtrlCmd):
     def _run(
-        self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int, area: str
+        self,
+        client: OpenrCtrl.Client,
+        src: str,
+        dst: str,
+        max_hop: int,
+        area: str,
+        *args,
+        **kwargs,
     ) -> None:
         if not src or not dst:
             host_id = client.getMyNodeName()
             src = src or host_id
             dst = dst or host_id
 
-        self.prefix_dbs: Dict[str, lsdb_types.PrefixDatabase] = {}
+        # pyre-fixme[16]: `PathCmd` has no attribute `prefix_dbs`.
+        self.prefix_dbs: Dict[str, openr_types.PrefixDatabase] = {}
         area = utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
 
@@ -136,7 +121,7 @@ class PathCmd(OpenrCtrlCmd):
         self.print_paths(paths)
 
     def get_loopback_addr(self, node):
-        """ get node's loopback addr"""
+        """get node's loopback addr"""
 
         def _parse(loopback_set, prefix_db):
             for prefix_entry in prefix_db.prefixEntries:
@@ -180,7 +165,7 @@ class PathCmd(OpenrCtrlCmd):
         return prefix_set
 
     def get_if2node_map(self, adj_dbs):
-        """ create a map from interface to node """
+        """create a map from interface to node"""
 
         def _parse(if2node, adj_db):
             nexthop_dict = if2node[adj_db.thisNodeName]
@@ -195,7 +180,7 @@ class PathCmd(OpenrCtrlCmd):
         return if2node
 
     def get_lpm_route(self, route_db, dst_addr):
-        """ find the routes to the longest prefix matches of dst. """
+        """find the routes to the longest prefix matches of dst."""
 
         max_prefix_len = -1
         lpm_route = None
@@ -234,9 +219,9 @@ class PathCmd(OpenrCtrlCmd):
     def get_nexthop_nodes(
         self, route_db, dst_addr, cur_lpm_len, if2node, fib_routes, in_fib
     ):
-        """ get the next hop nodes.
+        """get the next hop nodes.
         if the longest prefix is coming from the current node,
-        return an empty list to terminate the path searching. """
+        return an empty list to terminate the path searching."""
 
         next_hop_nodes = []
         is_initialized = fib_routes[route_db.thisNodeName]
@@ -313,10 +298,23 @@ class PathCmd(OpenrCtrlCmd):
         paths = []
 
         def _backtracking(cur, path, hop, visited, in_fib):
+            """
+            Depth-first search (DFS) for traversing graph and getting paths
+            from src to dst with lowest metric in total.
+
+            Attributes:
+                cur: current starting node
+                path: a list of the nodes who form the path from src to the current node
+                hop: how many hops from src node to the current node
+                visited: a set of visited nodes
+                in_fib: if current node is in fib path
+            """
             if hop > max_hop:
                 return
 
+            # get the longest prefix match for dst_addr from current node's advertising prefixes
             cur_lpm_len = self.get_lpm_len_from_node(cur, dst_addr)
+            # get the next hop nodes
             next_hop_nodes = self.get_nexthop_nodes(
                 client.getRouteDbComputed(cur),
                 dst_addr,
@@ -349,6 +347,7 @@ class PathCmd(OpenrCtrlCmd):
                     ):
                         is_nexthop_in_fib_path = True
 
+                # recursion - extend the path from next hop node
                 _backtracking(
                     next_hop_node_name,
                     path,
@@ -359,13 +358,58 @@ class PathCmd(OpenrCtrlCmd):
                 visited.remove(next_hop_node_name)
                 path.pop()
 
-        _backtracking(src, [], 1, set(src), True)
+        # initial call to begin the DFS to search paths
+        visited_set = set()
+        visited_set.add(src)
+        _backtracking(src, [], 1, visited_set, True)
+        return paths
+
+    def calculate_hop_metric(self, paths):
+        """
+        In the `paths` got from DFS, each hop only has the total metric toward the dst.
+
+        For example, assuming there is a path from node0 to node3:
+            node0 -(metric=50)-> node1 -(metric=20)-> node2 -(metric=80)-> node3
+
+        In the `paths` argument, each hop only has the total metric toward the node3:
+          Hop  NextHop Node    Interface      Metric (total metric toward the dst)
+            1  node0           po1            150 (50+20+80)
+            2  node1           po2            100 (20+80)
+            3  node2           po3            80
+
+        This function is trying to re-calculate the metric for each hop and make it like:
+          Hop  NextHop Node    Interface      Metric (hop metric)
+            1  node0           po1            50
+            2  node1           po2            20
+            3  node2           po3            80
+        """
+        if not paths:
+            return
+
+        for path in paths:
+            path_hops = path[1]
+            # only the path with more than one hop needed to re-caculculate
+            if len(path_hops) <= 1:
+                continue
+
+            pre_total_metric = 0
+            # iterate the hop metric in reverse way to do deduction, example:
+            # Hop  NextHop Node    cur_total_metric   pre_total_metric  Hop Metric
+            # 3    node2                 80                0            80-0    = 80
+            # 2    node1                 100               80           100-80  = 20
+            # 1    node0                 150               100          150-100 = 50
+            for hop_attr in reversed(path_hops):
+                cur_total_metric = hop_attr[3]
+                hop_attr[3] = cur_total_metric - pre_total_metric
+                pre_total_metric = cur_total_metric
         return paths
 
     def print_paths(self, paths):
         if not paths:
             print("No paths are found!")
             return
+
+        paths = self.calculate_hop_metric(paths)
 
         column_labels = ["Hop", "NextHop Node", "Interface", "Metric", "NextHop-v6"]
 
@@ -388,88 +432,114 @@ class PathCmd(OpenrCtrlCmd):
 
 
 class DecisionValidateCmd(OpenrCtrlCmd):
-    def _run(self, client: OpenrCtrl.Client, json=False, area: str = None) -> None:
-        """Returns a status code. 0 = success, 1 = failure"""
-        (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
-            client, area
-        )
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        json: bool = False,
+        areas: Sequence[str] = (),
+        *args: Any,
+        **kwargs: Any,
+    ) -> int:
+        """Returns a status code. 0 = success, >= 1 failure"""
+        if not areas:
+            areas_summary = client.getKvStoreAreaSummary(set())
+            areas = tuple(a.area for a in areas_summary)
 
-        kvstore_adj_node_names = set()
-        kvstore_prefix_node_names = set()
+        errors = 0
+        for area in sorted(areas):
+            click.secho(f"> Area: {area}", bold=True)
+            (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
+                client, area
+            )
 
-        for key, value in sorted(kvstore_keyvals.items()):
-            if key.startswith(Consts.ADJ_DB_MARKER):
-                return_code = self.print_db_delta_adj(
-                    key, value, kvstore_adj_node_names, decision_adj_dbs, json
-                )
-                if return_code != 0:
-                    return return_code
+            kvstore_adj_node_names = set()
+            kvstore_prefix_node_names = set()
 
-        return_code = self.print_db_delta_prefix(
-            kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
-        )
-        if return_code != 0:
-            return return_code
+            for key, value in sorted(kvstore_keyvals.items()):
+                if key.startswith(Consts.ADJ_DB_MARKER):
+                    return_code = self.print_db_delta_adj(
+                        key, value, kvstore_adj_node_names, decision_adj_dbs, json
+                    )
+                    if return_code:
+                        errors += return_code
+                        continue
 
-        decision_adj_node_names = {
-            node
-            for node in decision_adj_dbs.keys()
-            if decision_adj_dbs[node].adjacencies
-        }
-        decision_prefix_node_names = set(decision_prefix_dbs.keys())
+            return_code, decision_prefix_node_names = self.print_db_delta_prefix(
+                kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+            )
+            if return_code:
+                errors += return_code
+                continue
 
-        adjValidateRet = self.print_db_diff(
-            decision_adj_node_names,
-            kvstore_adj_node_names,
-            ["Decision", "KvStore"],
-            "adj",
-            json,
-        )
+            decision_adj_node_names = {db.thisNodeName for db in decision_adj_dbs}
 
-        prefixValidateRet = self.print_db_diff(
-            decision_prefix_node_names,
-            kvstore_prefix_node_names,
-            ["Decision", "KvStore"],
-            "prefix",
-            json,
-        )
+            errors += self.print_db_diff(
+                decision_adj_node_names,
+                kvstore_adj_node_names,
+                ["Decision", "KvStore"],
+                "adj",
+                json,
+            )
 
-        return adjValidateRet or prefixValidateRet
+            errors += self.print_db_diff(
+                decision_prefix_node_names,
+                kvstore_prefix_node_names,
+                ["Decision", "KvStore"],
+                "prefix",
+                json,
+            )
 
-    def get_dbs(self, client: OpenrCtrl.Client, area: str) -> Tuple[Dict, Dict, Dict]:
+        return errors
+
+    def get_dbs(
+        self, client: OpenrCtrl.Client, area: str
+    ) -> Tuple[
+        List[openr_types.AdjacencyDatabase], List[ctrl_types.ReceivedRouteDetail], Dict
+    ]:
         # get LSDB from Decision
-        decision_adj_dbs = client.getDecisionAdjacencyDbs()
-        decision_prefix_dbs = client.getDecisionPrefixDbs()
+        adj_filter = ctrl_types.AdjacenciesFilter({area})
+        decision_adj_dbs = client.getDecisionAdjacenciesFiltered(adj_filter)
+        route_filter = ctrl_types.ReceivedRouteFilter(areaName=area)
+        decision_prefix_dbs = client.getReceivedRoutesFiltered(route_filter)
 
-        area = utils.get_area_id(client, area)
+        area_id = utils.get_area_id(client, area)
         # get LSDB from KvStore
         params = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
         params.keys = [Consts.ALL_DB_MARKER]
-        if area is None:
-            kvstore_keyvals = client.getKvStoreKeyValsFiltered(params).keyVals
+        if area_id is None:
+            kvstore_publication = client.getKvStoreKeyValsFiltered(params)
         else:
-            kvstore_keyvals = client.getKvStoreKeyValsFilteredArea(params, area).keyVals
+            kvstore_publication = client.getKvStoreKeyValsFilteredArea(params, area_id)
 
-        return (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals)
+        return (decision_adj_dbs, decision_prefix_dbs, kvstore_publication.keyVals)
 
     def print_db_delta_adj(
-        self, key, value, kvstore_adj_node_names, decision_adj_dbs, json
-    ):
-        """ Returns status code. 0 = success, 1 = failure"""
+        self,
+        key: str,
+        value: Any,
+        kvstore_adj_node_names: Set,
+        decision_adj_dbs: Sequence[openr_types.AdjacencyDatabase],
+        json: bool,
+    ) -> int:
+        """Returns status code. 0 = success, 1 = failure"""
 
         kvstore_adj_db = deserialize_thrift_object(
-            value.value, lsdb_types.AdjacencyDatabase
+            value.value, openr_types.AdjacencyDatabase
         )
         node_name = kvstore_adj_db.thisNodeName
         kvstore_adj_node_names.add(node_name)
-        if node_name not in decision_adj_dbs:
+        if node_name not in {db.thisNodeName for db in decision_adj_dbs}:
             print(
                 printing.render_vertical_table(
-                    [["node {}'s adj db is missing in Decision".format(node_name)]]
+                    [[f"node {node_name}'s adj db is missing in Decision"]]
                 )
             )
             return 1
-        decision_adj_db = decision_adj_dbs[node_name]
+
+        decision_adj_db = openr_types.AdjacencyDatabase()
+        for db in decision_adj_dbs:
+            if db.thisNodeName == node_name:
+                decision_adj_db = db
 
         return_code = 0
         if json:
@@ -489,8 +559,8 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                     printing.render_vertical_table(
                         [
                             [
-                                "node {}'s adj db in Decision out of sync with "
-                                "KvStore's".format(node_name)
+                                f"node {node_name}'s adj db in Decision out of "
+                                "sync with KvStore's"
                             ]
                         ]
                     )
@@ -501,31 +571,32 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         return return_code
 
     def print_db_delta_prefix(
-        self, kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
-    ):
-        """ Returns status code. 0 = success, 1 = failure"""
+        self,
+        kvstore_keyvals: Dict,
+        kvstore_prefix_node_names: Set,
+        decision_prefix_dbs: Sequence[ctrl_types.ReceivedRouteDetail],
+        json: bool,
+    ) -> Tuple[int, Set[str]]:
+        """Returns status code. 0 = success, 1 = failure"""
 
         prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
+        decision_prefix_nodes = set()
+        for received_route_detail in decision_prefix_dbs:
+            for node_and_area in received_route_detail.bestKeys:
+                decision_prefix_nodes.add(node_and_area.node)
 
         for node_name, prefix_db in prefix_maps.items():
             kvstore_prefix_node_names.add(node_name)
-            if node_name not in decision_prefix_dbs:
+            if node_name not in decision_prefix_nodes:
                 print(
                     printing.render_vertical_table(
-                        [
-                            [
-                                "node {}'s prefix db is missing in Decision".format(
-                                    node_name
-                                )
-                            ]
-                        ]
+                        [[f"node {node_name}'s prefix db is missing in Decision"]]
                     )
                 )
-                return 1
-            decision_prefix_db = decision_prefix_dbs[node_name]
-            decision_prefix_set = {}
+                return 1, decision_prefix_nodes
 
-            utils.update_global_prefix_db(decision_prefix_set, decision_prefix_db)
+            decision_prefix_set = {}
+            utils.update_global_prefix_db(decision_prefix_set, prefix_db)
             lines = utils.sprint_prefixes_db_delta(decision_prefix_set, prefix_db)
             if lines:
                 print(
@@ -539,18 +610,18 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                     )
                 )
                 print("\n".join(lines))
-                return 1
-        return 0
+                return 1, decision_prefix_nodes
+        return 0, decision_prefix_nodes
 
     def print_db_diff(
         self,
-        nodes_set_a: set,
-        nodes_set_b: set,
+        nodes_set_a: Set,
+        nodes_set_b: Set,
         db_sources: List[str],
         db_type: str,
         json: bool,
     ) -> int:
-        """ Returns a status code, 0 = success, 1 = failure"""
+        """Returns a status code, 0 = success, 1 = failure"""
         a_minus_b = sorted(nodes_set_a - nodes_set_b)
         b_minus_a = sorted(nodes_set_b - nodes_set_a)
         return_code = 0
@@ -613,33 +684,103 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
 
 class DecisionRibPolicyCmd(OpenrCtrlCmd):
-
     # @override
-    def _run(self, client: OpenrCtrl.Client):
+    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         policy = None
         try:
             policy = client.getRibPolicy()
         except ctrl_types.OpenrError as e:
-            print(f"Error: {e.message}", file=sys.stderr)
+            print("Error: ", str(e), "\nSystem standard error: ", sys.stderr)
             return
 
         # Convert the prefixes to readable format
         assert policy is not None
-        for stmt in policy.statements:
-            if stmt.matcher.prefixes:
-                stmt.matcher.prefixes = [
-                    ipnetwork.sprint_prefix(p) for p in stmt.matcher.prefixes
-                ]
 
         # NOTE: We don't do explicit effor to print policy in
         print("> RibPolicy")
         print(f"  Validity: {policy.ttl_secs}s")
         for stmt in policy.statements:
-            prefixes = stmt.matcher.prefixes or []
+            prefixes: List[str] = []
+            if stmt.matcher.prefixes:
+                prefixes = [ipnetwork.sprint_prefix(p) for p in stmt.matcher.prefixes]
+            tags = stmt.matcher.tags or []
             action = stmt.action.set_weight or ctrl_types.RibRouteActionWeight()
             print(f"  Statement: {stmt.name}")
-            print(f"    Prefix Match List: {', '.join(prefixes)}")
-            print(
-                f"    Action Set Weight: default={action.default_weight}, "
-                f"area-weights={action.area_to_weight}"
-            )
+            if prefixes:
+                print(f"    Prefix Match List: {', '.join(prefixes)}")
+            if tags:
+                print(f"    Tags Match List: {', '.join(tags)}")
+            print("    Action Set Weight:")
+            print(f"      Default: {action.default_weight}")
+            print("      Area:")
+            for area, weight in action.area_to_weight.items():
+                print(f"        {area}: {weight}")
+            print("      Neighbor:")
+            for neighbor, weight in action.neighbor_to_weight.items():
+                print(f"        {neighbor}: {weight}")
+
+
+class ReceivedRoutesCmd(OpenrCtrlCmd):
+    # @override
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        prefixes: List[str],
+        node: Optional[str],
+        area: Optional[str],
+        json: bool,
+        detailed: bool,
+        tag2name: bool,
+        *args,
+        **kwargs,
+    ) -> None:
+        routes = self.fetch(client, prefixes, node, area)
+
+        if json:
+            print(serialize_json(routes))
+        else:
+            self.render(routes, detailed, tag2name)
+
+    def fetch(
+        self,
+        client: OpenrCtrl.Client,
+        prefixes: List[str],
+        node: Optional[str],
+        area: Optional[str],
+    ) -> List[ctrl_types.ReceivedRouteDetail]:
+        """
+        Fetch the requested data
+        """
+
+        # Create filter
+        route_filter = ctrl_types.ReceivedRouteFilter()
+        if prefixes:
+            route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+        if node:
+            route_filter.nodeName = node
+        if area:
+            route_filter.areaName = area
+
+        # Get routes
+        return client.getReceivedRoutesFiltered(route_filter)
+
+    def render(
+        self,
+        routes: List[ctrl_types.ReceivedRouteDetail],
+        detailed: bool,
+        tag2name: bool,
+    ) -> None:
+        """
+        Render received routes
+        """
+
+        def key_fn(key: utils.PrintAdvertisedTypes) -> Tuple[str, str]:
+            if not isinstance(key, ctrl_types.NodeAndArea):
+                return ("", "")
+            return (key.node, key.area)
+
+        tag_to_name = (
+            utils.get_tag_to_name_map(self._get_config()) if tag2name else None
+        )
+
+        utils.print_route_details(routes, key_fn, detailed, tag_to_name)

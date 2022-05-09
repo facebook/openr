@@ -9,6 +9,8 @@ repo_url = https://github.com/facebook/fboss.git
 
 [build.os=linux]
 builder = cmake
+# fboss files take a lot of RAM to compile.
+job_weight_mib = 3072
 
 [build.not(os=linux)]
 builder = nop
@@ -32,6 +34,9 @@ libsai
 OpenNSA
 re2
 python
+yaml-cpp
+libyaml
+CLI11
 
 [shipit.pathmap]
 fbcode/fboss/github = .

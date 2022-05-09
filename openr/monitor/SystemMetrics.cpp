@@ -1,5 +1,5 @@
-/**
- * Copyright (c) 2014-present, Facebook, Inc.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -7,17 +7,23 @@
 
 #include "openr/monitor/SystemMetrics.h"
 
+#include <folly/logging/xlog.h>
+
 namespace openr {
 
-/* Return RSS memory the process currently used from /proc/[pid]/status.
+namespace {
+
+/* Return memory the process currently used from /proc/[pid]/status.
  / The /proc is a pseudo-filesystem providing an API to kernel data
  / structures.
 */
 std::optional<size_t>
-SystemMetrics::getRSSMemBytes() {
+getMemBytes(const std::string& memoryType) {
   std::optional<size_t> rss;
   // match the line like: "VmRSS:      9028 kB"
-  std::string regexString("VmRSS:\\s+(\\d+)\\s+(\\w+)");
+  // match the line like: "VmSize:      10036 kB"
+  // std::string regexString("VmRSS:\\s+(\\d+)\\s+(\\w+)");
+  auto regexString = fmt::format("{}:\\s+(\\d+)\\s+(\\w+)", memoryType);
   re2::RE2 regex{regexString};
   std::string rssMatched;
   std::string line;
@@ -34,11 +40,24 @@ SystemMetrics::getRSSMemBytes() {
       }
     }
   } catch (const std::exception& ex) {
-    LOG(ERROR)
+    XLOG(ERR)
         << "Fail to read the \"/proc/self/status\" of current process to get the memory usage: "
         << ex.what();
   }
   return rss;
+}
+} // namespace
+
+// Return RSS memory the process currently used
+std::optional<size_t>
+SystemMetrics::getRSSMemBytes() {
+  return getMemBytes("VmRSS");
+}
+
+// Return virtual memory the process currently used
+std::optional<size_t>
+SystemMetrics::getVirtualMemBytes() {
+  return getMemBytes("VmSize");
 }
 
 /* Return CPU% the process used

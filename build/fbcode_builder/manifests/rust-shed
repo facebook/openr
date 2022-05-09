@@ -12,6 +12,7 @@ builder = cargo
 
 [cargo]
 build_doc = true
+workspace_dir =
 
 [shipit.pathmap]
 fbcode/common/rust/shed = shed
@@ -24,10 +25,10 @@ tools/rust/ossconfigs = .
 
 [dependencies]
 fbthrift
-# macOS doesn't expose the openssl api so we need to build our own.
-# Windows doesn't have openssl and Linux might contain an old version,
-# so we get to provide it
+
+# We use the system openssl on linux
+[dependencies.not(os=linux)]
 openssl
 
-[dependencies.fb=on]
+[dependencies.fbsource=on]
 rust

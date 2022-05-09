@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014-present, Facebook, Inc.
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
  *
  * This source code is licensed under the MIT license found in the
  * LICENSE file in the root directory of this source tree.
@@ -15,46 +15,43 @@ OpenrThriftServerWrapper::OpenrThriftServerWrapper(
     Fib* fib,
     KvStore* kvStore,
     LinkMonitor* linkMonitor,
+    Monitor* monitor,
     PersistentStore* configStore,
     PrefixManager* prefixManager,
-    std::shared_ptr<const Config> config,
-    MonitorSubmitUrl const& monitorSubmitUrl,
-    fbzmq::Context& context)
+    Spark* spark,
+    std::shared_ptr<const Config> config)
     : nodeName_(nodeName),
-      monitorSubmitUrl_(monitorSubmitUrl),
-      context_(context),
       decision_(decision),
       fib_(fib),
       kvStore_(kvStore),
       linkMonitor_(linkMonitor),
+      monitor_(monitor),
       configStore_(configStore),
       prefixManager_(prefixManager),
+      spark_(spark),
       config_(config) {
   CHECK(!nodeName_.empty());
 }
 
 void
 OpenrThriftServerWrapper::run() {
+  // create openrCtrlHandler
+  ctrlHandler_ = std::make_shared<OpenrCtrlHandler>(
+      nodeName_,
+      std::unordered_set<std::string>{},
+      &evb_,
+      decision_,
+      fib_,
+      kvStore_,
+      linkMonitor_,
+      monitor_,
+      configStore_,
+      prefixManager_,
+      spark_,
+      config_);
   // Create main-event-loop
   evbThread_ = std::thread([&]() { evb_.run(); });
   evb_.waitUntilRunning();
-
-  // create openrCtrlHandler
-  evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    openrCtrlHandler_ = std::make_shared<OpenrCtrlHandler>(
-        nodeName_,
-        std::unordered_set<std::string>{},
-        &evb_,
-        decision_,
-        fib_,
-        kvStore_,
-        linkMonitor_,
-        configStore_,
-        prefixManager_,
-        config_,
-        monitorSubmitUrl_,
-        context_);
-  });
 
   // setup openrCtrlThrift server for client to connect to
   std::shared_ptr<apache::thrift::ThriftServer> server =
@@ -62,8 +59,8 @@ OpenrThriftServerWrapper::run() {
   server->setNumIOWorkerThreads(1);
   server->setNumAcceptThreads(1);
   server->setPort(0);
-  server->setInterface(openrCtrlHandler_);
-  openrCtrlThriftServerThread_.start(std::move(server));
+  server->setInterface(ctrlHandler_);
+  thriftServerThread_.start(std::move(server));
 
   LOG(INFO) << "Successfully started openr-ctrl thrift server";
 }
@@ -72,10 +69,17 @@ void
 OpenrThriftServerWrapper::stop() {
   // ATTN: it is user's responsibility to close the queue passed
   //       to OpenrThrifyServerWrapper before calling stop()
-  openrCtrlHandler_.reset();
+  thriftServerThread_.stop();
+  thriftServerThread_.join();
+
+  LOG(INFO) << "Stopping openr-ctrl handler";
+  CHECK(ctrlHandler_.unique()) << "Unexpected ownership of ctrlHandler";
+  ctrlHandler_.reset();
+
+  LOG(INFO) << "Stopping ctrl eventbase";
   evb_.stop();
+  evb_.waitUntilStopped();
   evbThread_.join();
-  openrCtrlThriftServerThread_.stop();
 
   LOG(INFO) << "Successfully stopped openr-ctrl thrift server";
 }
