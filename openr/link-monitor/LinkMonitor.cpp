@@ -49,9 +49,9 @@ printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   XLOG(DBG1) << fmt::format(
       "[Soft-Drain] Node Metric Increment: {}",
       *state.nodeMetricIncrementVal_ref());
-  if (not state.linkMetiricIncrementMap_ref()->empty()) {
+  if (not state.linkMetricIncrementMap_ref()->empty()) {
     XLOG(DBG1) << fmt::format("[Soft-Drain] Link Metric Increment:");
-    for (auto const& [key, val] : *state.linkMetiricIncrementMap_ref()) {
+    for (auto const& [key, val] : *state.linkMetricIncrementMap_ref()) {
       XLOG(DBG1) << fmt::format("\t{}: {}", key, val);
     }
   }
@@ -210,7 +210,6 @@ LinkMonitor::LinkMonitor(
           thrift::SegmentRoutingNodeLabelType::STATIC)
           << "Unknown segment routing node label allocation type";
       // Use statically configured node segment label as node label
-      // state_.nodeLabel_ref() = getStaticNodeSegmentLabel(kv.second);
       auto nodeLbl = getStaticNodeSegmentLabel(areaCfg);
       state_.nodeLabelMap_ref()->insert_or_assign(areaId, nodeLbl);
       XLOG(INFO) << fmt::format(
@@ -1007,8 +1006,8 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       metric += *state_.nodeMetricIncrementVal_ref();
 
       // increment the link-level metric if any
-      if (state_.linkMetiricIncrementMap_ref()->count(*adj.ifName_ref())) {
-        metric += state_.linkMetiricIncrementMap_ref()[*adj.ifName_ref()];
+      if (state_.linkMetricIncrementMap_ref()->count(*adj.ifName_ref())) {
+        metric += state_.linkMetricIncrementMap_ref()[*adj.ifName_ref()];
       }
 
       // ATTN: adj-metric override will be honored if being configured.
@@ -1592,8 +1591,8 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
       return;
     }
 
-    if (state_.linkMetiricIncrementMap_ref()->count(interfaceName) &&
-        state_.linkMetiricIncrementMap_ref()[interfaceName] ==
+    if (state_.linkMetricIncrementMap_ref()->count(interfaceName) &&
+        state_.linkMetricIncrementMap_ref()[interfaceName] ==
             metricIncrementVal) {
       XLOG(INFO) << "Skip cmd: setInterfaceMetricIncrement."
                  << "\n  Increment metric: " << metricIncrementVal
@@ -1604,12 +1603,12 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
 
     // set the link-level metric increment
     auto oldMetric = folly::get_default(
-        *state_.linkMetiricIncrementMap_ref(), interfaceName, 0);
+        *state_.linkMetricIncrementMap_ref(), interfaceName, 0);
     SYSLOG(INFO) << "Increment metric for interface " << interfaceName
                  << "\n  Old increment value: " << oldMetric
                  << "\n  Setting new increment value: " << metricIncrementVal;
 
-    state_.linkMetiricIncrementMap_ref()[interfaceName] = metricIncrementVal;
+    state_.linkMetricIncrementMap_ref()[interfaceName] = metricIncrementVal;
 
     advertiseAdjacenciesThrottled_->operator()();
     p.setValue();
@@ -1630,7 +1629,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
       return;
     }
 
-    if (not state_.linkMetiricIncrementMap_ref()->count(interfaceName)) {
+    if (not state_.linkMetricIncrementMap_ref()->count(interfaceName)) {
       XLOG(INFO) << "Skip cmd: [unsetInterfaceMetricIncrement]."
                  << "due the interface " << interfaceName
                  << "didn't set the link-level metric increment before.";
@@ -1640,7 +1639,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
 
     SYSLOG(INFO) << "Removing link-level metric increment for interface: "
                  << interfaceName;
-    state_.linkMetiricIncrementMap_ref()->erase(interfaceName);
+    state_.linkMetricIncrementMap_ref()->erase(interfaceName);
 
     advertiseAdjacenciesThrottled_->operator()();
     p.setValue();
@@ -1685,9 +1684,9 @@ LinkMonitor::semifuture_getInterfaces() {
       }
 
       // Populate link-level metric override if any
-      if (state_.linkMetiricIncrementMap_ref()->count(ifName) > 0) {
+      if (state_.linkMetricIncrementMap_ref()->count(ifName) > 0) {
         ifDetails.linkMetricIncrementVal_ref() =
-            state_.linkMetiricIncrementMap_ref()->at(ifName);
+            state_.linkMetricIncrementMap_ref()->at(ifName);
       }
 
       // Add link-backoff

@@ -1205,43 +1205,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   }
 }
 
-// Test linkMonitor restarts to honor `enableSegmentRouting` flag
-TEST_F(LinkMonitorTestFixture, NodeLabelRemoval) {
-  {
-    // Intertionally save nodeLabel to be non-zero value
-    thrift::LinkMonitorState state;
-    state.nodeLabel_ref() = 1 + rand(); // non-zero random number
-    auto resp = configStore->storeThriftObj(kConfigKey, state).get();
-    EXPECT_EQ(folly::Unit(), resp);
-  }
-
-  {
-    // stop linkMonitor
-    LOG(INFO) << "Mock restarting link monitor!";
-    stopLinkMonitor();
-
-    // Create new neighbor update queue. Previous one is closed
-    neighborUpdatesQueue.open();
-    kvStoreEventsQueue.open();
-    initializationEventQueue.open();
-    nlSock->openQueue();
-    kvStoreWrapper->openQueue();
-
-    // ATTN: intentionally set `enableSegmentRouting = false` to test the
-    //       config_ load scenario.
-    auto tConfigCopy = createConfig();
-    tConfigCopy.enable_segment_routing_ref() = false;
-    auto configSegmentRoutingDisabled = std::make_shared<Config>(tConfigCopy);
-    createLinkMonitor(configSegmentRoutingDisabled);
-
-    // nodeLabel is non-zero value read from config_, override to 0 to
-    // honor flag.
-    auto thriftAdjDbs = linkMonitor->semifuture_getAdjacencies().get();
-    EXPECT_EQ(1, thriftAdjDbs->size());
-    EXPECT_EQ(0, *thriftAdjDbs->at(0).nodeLabel_ref());
-  }
-}
-
 // Test throttling
 TEST_F(LinkMonitorTestFixture, Throttle) {
   {

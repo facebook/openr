@@ -129,7 +129,6 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
         rows.append(
             ["isOverloaded: {}".format("Yes" if lm_config.isOverloaded else "No")]
         )
-        rows.append(["nodeLabel: {}".format(lm_config.nodeLabel)])
         rows.append(
             ["overloadedLinks: {}".format(", ".join(lm_config.overloadedLinks))]
         )

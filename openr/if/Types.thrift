@@ -728,12 +728,6 @@ struct LinkMonitorState {
   3: map<string, i32> linkMetricOverrides;
 
   /**
-   * [TO_BE_DEPRECATED]
-   * Label allocated to node (via RangeAllocator). `0` indicates null value
-   */
-  4: i32 nodeLabel = 0 (deprecated);
-
-  /**
    * [ADJACENCY METRIC OVERRIDE]
    *
    * Custom metric override for an adjacency
@@ -758,7 +752,7 @@ struct LinkMonitorState {
    *
    * Custom metric increment for a specifc set of links.
    */
-  8: map<string, i32> linkMetiricIncrementMap;
+  8: map<string, i32> linkMetricIncrementMap;
 } (cpp.minimize_padding)
 
 /**
