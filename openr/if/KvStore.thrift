@@ -165,12 +165,6 @@ struct KeySetParams {
   5: optional list<string> nodeIds;
 
   /**
-   * @deprecated - Optional flood root-id, indicating which SPT this publication
-   * should be flooded on; if none, flood to all peers
-   */
-  6: optional string floodRootId;
-
-  /**
    * Optional attribute to indicate timestamp when request is sent. This is
    * system timestamp in milliseconds since epoch
    */
@@ -272,12 +266,6 @@ struct PeerSpec {
   2: string cmdUrl (deprecated);
 
   /**
-   * [TO BE DEPRECATED]
-   * support flood optimization or not
-   */
-  3: bool supportFloodOptimization = 0;
-
-  /**
    * thrift port
    */
   4: i32 ctrlPort = 0;
@@ -326,12 +314,6 @@ struct Publication {
    * send back keyVals that need to be updated
    */
   5: optional list<string> tobeUpdatedKeys;
-
-  /**
-   * optional flood root-id, indicating which SPT this publication should be
-   * flooded on; if none, flood to all peers
-   */
-  6: optional string floodRootId (deprecated);
 
   /**
    * KvStore Area to which this publication belongs
@@ -416,29 +398,6 @@ struct KvStoreConfig {
    */
   6: optional list<string> key_prefix_filters;
   7: optional list<string> key_originator_id_filters;
-
-  /**
-   * [TO BE DEPRECATED]
-   * Set this true to enable flooding-optimization, Open/R will start forming
-   * spanning tree and flood updates on formed SPT instead of physical topology.
-   * This will greatly reduce kvstore updates traffic, however, based on which
-   * node is picked as flood-root, control-plane propagation might increase.
-   * Before, propagation is determined by shortest path between two nodes. Now,
-   * it will be the path between two nodes in the formed SPT, which is not
-   * necessary to be the shortest path. (worst case: 2 x SPT-depth between two
-   * leaf nodes). data-plane traffic stays the same.
-   */
-  8: optional bool enable_flood_optimization;
-
-  /**
-   * [TO BE DEPRECATED]
-   * Set this true to let this node declare itself as a flood-root. You can set
-   * multiple nodes as flood-roots in a network, in steady state, Open/R will
-   * pick optimal (smallest node-name) one as the SPT for flooding. If optimal
-   * root went away, Open/R will pick 2nd optimal one as SPT-root and so on so
-   * forth. If all root nodes went away, Open/R will fall back to naive flooding.
-   */
-  9: optional bool is_flood_root;
 
   /**
    * Mark control plane traffic with specified IP-TOS value.

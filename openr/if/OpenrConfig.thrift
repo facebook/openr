@@ -85,26 +85,6 @@ struct KvstoreConfig {
    */
   6: optional list<string> key_prefix_filters;
   7: optional list<string> key_originator_id_filters;
-
-  /**
-   * Set this true to enable flooding-optimization, Open/R will start forming
-   * spanning tree and flood updates on formed SPT instead of physical topology.
-   * This will greatly reduce kvstore updates traffic, however, based on which
-   * node is picked as flood-root, control-plane propagation might increase.
-   * Before, propagation is determined by shortest path between two nodes. Now,
-   * it will be the path between two nodes in the formed SPT, which is not
-   * necessary to be the shortest path. (worst case: 2 x SPT-depth between two
-   * leaf nodes). data-plane traffic stays the same.
-   */
-  8: optional bool enable_flood_optimization;
-  /**
-   * Set this true to let this node declare itself as a flood-root. You can set
-   * multiple nodes as flood-roots in a network, in steady state, Open/R will
-   * pick optimal (smallest node-name) one as the SPT for flooding. If optimal
-   * root went away, Open/R will pick 2nd optimal one as SPT-root and so on so
-   * forth. If all root nodes went away, Open/R will fall back to naive flooding.
-   */
-  9: optional bool is_flood_root;
 } (cpp.minimize_padding)
 
 /*

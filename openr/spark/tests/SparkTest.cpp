@@ -870,7 +870,7 @@ TEST_F(SparkFixture, ReadConfigTest) {
       ifIndex2 /* ifIndex */,
       {ip2V4, ip2V6} /* networks */)});
 
-  // Validate the config content of `supportFloodOptimization` from peer
+  // Validate the config content from peer
   {
     auto events = node1->waitForEvents(NB_UP);
     ASSERT_TRUE(events.has_value() and events.value().size() == 1);

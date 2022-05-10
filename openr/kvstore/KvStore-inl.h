@@ -1903,20 +1903,16 @@ KvStoreDb<ClientType>::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
-    auto const& supportFloodOptimization =
-        *newPeerSpec.supportFloodOptimization_ref();
     auto const& peerAddr = *newPeerSpec.peerAddr_ref();
 
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
     if (peerIter != thriftPeers_.end()) {
-      XLOG(INFO)
-          << AreaTag()
-          << fmt::format(
-                 "[Peer Update] {} is updated with peerAddr: {}, supportFloodOptimization: {}",
-                 peerName,
-                 peerAddr,
-                 supportFloodOptimization);
+      XLOG(INFO) << AreaTag()
+                 << fmt::format(
+                        "[Peer Update] {} is updated with peerAddr: {}",
+                        peerName,
+                        peerAddr);
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
       if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr_ref()) {
@@ -1947,13 +1943,11 @@ KvStoreDb<ClientType>::addThriftPeers(
       peerIter->second.client.reset(); // destruct thriftClient
     } else {
       // case 3: found a new peer coming up
-      XLOG(INFO)
-          << AreaTag()
-          << fmt::format(
-                 "[Peer Add] {} is added with peerAddr: {}, supportFloodOptimization: {}",
-                 peerName,
-                 peerAddr,
-                 supportFloodOptimization);
+      XLOG(INFO) << AreaTag()
+                 << fmt::format(
+                        "[Peer Add] {} is added with peerAddr: {}",
+                        peerName,
+                        peerAddr);
 
       KvStorePeer peer(
           peerName,
@@ -2034,13 +2028,11 @@ KvStoreDb<ClientType>::delThriftPeers(std::vector<std::string> const& peers) {
     }
     const auto& peerSpec = peerIter->second.peerSpec;
 
-    XLOG(INFO)
-        << AreaTag()
-        << fmt::format(
-               "[Peer Delete] {} is detached from peerAddr: {}, supportFloodOptimization: {}",
-               peerName,
-               *peerSpec.peerAddr_ref(),
-               *peerSpec.supportFloodOptimization_ref());
+    XLOG(INFO) << AreaTag()
+               << fmt::format(
+                      "[Peer Delete] {} is detached from peerAddr: {}",
+                      peerName,
+                      *peerSpec.peerAddr_ref());
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
