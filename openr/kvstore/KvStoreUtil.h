@@ -202,6 +202,8 @@ struct KvStoreNoMergeReasonStats {
   std::vector<int64_t> listOldVersions{};
   // the kv does not need to be merged
   uint32_t numberOfNoNeedToUpdates{0};
+  // detected that sender is stale and need to full sync
+  bool inconsistencyDetetectedWithOriginator{false};
 };
 
 /*
@@ -225,7 +227,8 @@ std::pair<
 mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
-    std::optional<KvStoreFilters> const& filters = std::nullopt);
+    std::optional<KvStoreFilters> const& filters = std::nullopt,
+    std::optional<std::string> const& senderName = std::nullopt);
 
 /*
  * Compare two thrift::Values to figure out which value is better to

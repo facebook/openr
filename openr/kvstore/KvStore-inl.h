@@ -685,6 +685,8 @@ KvStore<ClientType>::initGlobalCounters() {
       "kvstore.received_publications", fb303::COUNT);
   fb303::fbData->addStatExportType("kvstore.received_key_vals", fb303::SUM);
   fb303::fbData->addStatExportType("kvstore.updated_key_vals", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.num_conflict_version_key", fb303::SUM);
 }
 
 // static util function to fetch peers by state
@@ -750,24 +752,29 @@ KvStoreDb<ClientType>::getNextState(
                   {thrift::KvStorePeerState::SYNCING,
                    std::nullopt,
                    std::nullopt,
-                   thrift::KvStorePeerState::IDLE},
+                   thrift::KvStorePeerState::IDLE,
+                   std::nullopt},
                   /*
                    * index 1 - SYNCING
                    * SYNC_RESP_RCVD => INITIALIZED
                    * THRIFT_API_ERROR => IDLE
+                   * INCONSISTENCY_DETECTED => IDLE
                    */
                   {std::nullopt,
                    std::nullopt,
                    thrift::KvStorePeerState::INITIALIZED,
+                   thrift::KvStorePeerState::IDLE,
                    thrift::KvStorePeerState::IDLE},
                   /*
                    * index 2 - INITIALIZED
                    * SYNC_RESP_RCVD => INITIALIZED
                    * THRIFT_API_ERROR => IDLE
+                   * INCONSISTENCY_DETECTED => IDLE
                    */
                   {std::nullopt,
                    std::nullopt,
                    thrift::KvStorePeerState::INITIALIZED,
+                   thrift::KvStorePeerState::IDLE,
                    thrift::KvStorePeerState::IDLE}};
 
   CHECK(currState.has_value()) << "Current state is 'UNDEFINED'";
@@ -1846,7 +1853,8 @@ KvStoreDb<ClientType>::processThriftFailure(
     folly::fbstring const& exceptionStr,
     std::chrono::milliseconds timeDelta) {
   // check if it is valid peer(i.e. peer removed in process of syncing)
-  if (not thriftPeers_.count(peerName)) {
+  auto it = thriftPeers_.find(peerName);
+  if (it == thriftPeers_.end()) {
     return;
   }
 
@@ -1856,19 +1864,25 @@ KvStoreDb<ClientType>::processThriftFailure(
                     exceptionStr,
                     timeDelta.count());
 
+  auto& peer = it->second;
+  ++peer.numThriftApiErrors;
+  disconnectPeer(peer, KvStorePeerEvent::THRIFT_API_ERROR);
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::disconnectPeer(
+    KvStorePeer& peer, KvStorePeerEvent const& event) {
   // reset client to reconnect later in next batch of thriftSyncTimer_
   // scanning
-  auto& peer = thriftPeers_.at(peerName);
   peer.keepAliveTimer->cancelTimeout();
   peer.expBackoff.reportError(); // apply exponential backoff
   peer.client.reset();
 
   // state transition
   auto oldState = *peer.peerSpec.state_ref();
-  peer.peerSpec.state_ref() =
-      getNextState(oldState, KvStorePeerEvent::THRIFT_API_ERROR);
-  ++peer.numThriftApiErrors;
-  logStateTransition(peerName, oldState, *peer.peerSpec.state_ref());
+  peer.peerSpec.state_ref() = getNextState(oldState, event);
+  logStateTransition(peer.nodeName, oldState, *peer.peerSpec.state_ref());
 
   // Thrift error is treated as a completion signal of syncing with peer. Check
   // whether initial sync is completed.
@@ -2535,12 +2549,28 @@ KvStoreDb<ClientType>::mergePublication(
     return 0;
   }
 
+  auto sender = senderId.has_value()
+      ? senderId
+      : (nodeIds.has_value() ? std::optional(nodeIds->back()) : std::nullopt);
   // Generate delta with local KvStore
+  auto [mergedKeyVals, stats] = mergeKeyValues(
+      kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters, sender);
+  if (stats.inconsistencyDetetectedWithOriginator) {
+    // inconsistency detected: Received a TTL update from originator
+    // but key version are mismatched
+    // Transition to IDLE to resync
+    auto it = thriftPeers_.find(sender.value());
+    if (it != thriftPeers_.end()) {
+      disconnectPeer(it->second, KvStorePeerEvent::INCONSISTENCY_DETECTED);
+      fb303::fbData->addStatValue(
+          "kvstore.num_conflict_version_key", 1, fb303::COUNT);
+      return 0;
+    }
+  }
+
   thrift::Publication deltaPublication;
-  deltaPublication.keyVals_ref() =
-      mergeKeyValues(
-          kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters)
-          .first;
+
+  deltaPublication.keyVals_ref() = std::move(mergedKeyVals);
   deltaPublication.area_ref() = area_;
 
   const size_t kvUpdateCnt = deltaPublication.keyVals_ref()->size();
@@ -2604,5 +2634,4 @@ KvStoreDb<ClientType>::logKvEvent(
 
   kvParams_.logSampleQueue.push(std::move(sample));
 }
-
 } // namespace openr

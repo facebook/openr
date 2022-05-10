@@ -33,6 +33,7 @@ enum class KvStorePeerEvent {
   PEER_DEL = 1,
   SYNC_RESP_RCVD = 2,
   THRIFT_API_ERROR = 3,
+  INCONSISTENCY_DETECTED = 4,
 };
 
 /*
@@ -311,6 +312,14 @@ class KvStoreDb {
       std::string const& peerName,
       folly::fbstring const& exceptionStr,
       std::chrono::milliseconds timeDelta);
+
+  /*
+   * [Version Inconsistency Mitigation]
+   */
+
+  // forward declare
+  struct KvStorePeer;
+  void disconnectPeer(KvStorePeer& peer, KvStorePeerEvent const& event);
 
   /*
    * [Incremental flooding]

@@ -68,10 +68,12 @@ class KvStoreTestFixture : public ::testing::Test {
       thrift::KvStoreConfig kvStoreConf,
       const std::unordered_set<std::string>& areaIds = {kTestingAreaName},
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
+          std::nullopt,
+      std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue =
           std::nullopt) {
     stores_.emplace_back(
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            areaIds, kvStoreConf, peerUpdatesQueue));
+            areaIds, kvStoreConf, peerUpdatesQueue, kvRequestQueue));
     return stores_.back().get();
   }
 
@@ -305,6 +307,125 @@ TEST_F(KvStoreTestFixture, PublishKvStoreSyncedIfNoPeersInSomeAreas) {
   PeerEvent peerEventB{{"area1", AreaPeerEvent(peersB, {} /*peersToDel*/)}};
   storeBPeerUpdatesQueue.push(peerEventB);
   storeB->recvKvStoreSyncedSignal();
+}
+
+/**
+ * Verify if an inconsistent update (a ttl update with incorrect key version) is
+ * received. Two kvstore will resync and reach consistency.
+ *
+ * Topology: A-B-C
+ *
+ * A(inconsistent store) originate key 'key' and is in sync with B. (key, 1)
+ * Change A to have (key, 20). Prevent B to receive update from A :B still have
+ * (key, 1). A sends a TTL update at some point to A. => Will trigger resync and
+ * they will be consistent agian.
+ *
+ * C will not resync with B. And will be eventually consistent.
+ */
+TEST_F(KvStoreTestFixture, ResyncUponInconsistentUpdate) {
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
+  auto config = getTestKvConf("storeA");
+  config.key_ttl_ms_ref() = 1000; // set ttl to trigger ttl update later
+  auto* inconsistentStore = createKvStore(
+      std::move(config),
+      {kTestingAreaName},
+      std::nullopt,
+      kvRequestQueue_.getReader());
+  auto* storeB = createKvStore(getTestKvConf("storeB"));
+  auto* storeC = createKvStore(getTestKvConf("storeC"));
+  inconsistentStore->run();
+  storeB->run();
+  storeC->run();
+
+  auto storeCpubs = storeC->getReader();
+
+  // A - B
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName,
+      inconsistentStore->getNodeId(),
+      inconsistentStore->getPeerSpec()));
+
+  EXPECT_TRUE(inconsistentStore->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+
+  // B - C
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName, storeC->getNodeId(), storeC->getPeerSpec()));
+
+  EXPECT_TRUE(storeC->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+
+  waitForAllPeersInitialized();
+
+  const std::string key = "key";
+  const std::string value = "val";
+  const uint version = 20;
+
+  // Inconsistent store originates the key
+  kvRequestQueue_.push(PersistKeyValueRequest(kTestingAreaName, key, value));
+
+  // Force B to have higher version. Store A and C is not updated (By setting
+  // the node id to include A and C)
+  const thrift::Value thriftVal = createThriftValue(
+      version /* version */,
+      inconsistentStore->getNodeId() /* originatorId */,
+      value /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */);
+
+  storeB->setKey(
+      kTestingAreaName,
+      key,
+      thriftVal,
+      std::optional<std::vector<std::string>>({"storeA", "storeC"}) // nodeIds
+  );
+
+  OpenrEventBase evb;
+  int scheduleAt{0};
+  // Check both store to be in sync after a TTL update from A. With higher
+  // version
+
+  // wait until a TTL update is send and full resync is done between A and B
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 500), [&]() noexcept {
+        // All kvstores are in sync
+        {
+          auto allKeyVals = storeB->dumpAll(kTestingAreaName);
+          EXPECT_EQ(1, allKeyVals.size());
+          auto val = allKeyVals[key];
+          // compare everything except ttl version
+          EXPECT_EQ(version + 1, val.get_version());
+          EXPECT_EQ(thriftVal.get_originatorId(), val.get_originatorId());
+          EXPECT_EQ(*thriftVal.get_value(), *val.get_value());
+        }
+        {
+          auto allKeyVals = inconsistentStore->dumpAll(kTestingAreaName);
+          EXPECT_EQ(1, allKeyVals.size());
+          auto val = allKeyVals[key];
+          // compare everything except ttl version
+          EXPECT_EQ(version + 1, val.get_version());
+          EXPECT_EQ(thriftVal.get_originatorId(), val.get_originatorId());
+          EXPECT_EQ(*thriftVal.get_value(), *val.get_value());
+        }
+        {
+          auto allKeyVals = storeC->dumpAll(kTestingAreaName);
+          EXPECT_EQ(1, allKeyVals.size());
+          auto val = allKeyVals[key];
+          // compare everything except ttl version
+          EXPECT_EQ(version + 1, val.get_version());
+          EXPECT_EQ(thriftVal.get_originatorId(), val.get_originatorId());
+          EXPECT_EQ(*thriftVal.get_value(), *val.get_value());
+        }
+        // There is no resync between B-C: only 2 updates (initial one) and
+        // update
+        EXPECT_EQ(2, storeCpubs.size());
+
+        evb.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
 }
 
 /**

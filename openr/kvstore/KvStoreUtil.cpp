@@ -42,7 +42,8 @@ std::pair<
 mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
-    std::optional<KvStoreFilters> const& filters) {
+    std::optional<KvStoreFilters> const& filters,
+    std::optional<std::string> const& sender) {
   // the publication to build if we update our KV store
   std::unordered_map<std::string, thrift::Value> kvUpdates;
   KvStoreNoMergeReasonStats stats;
@@ -79,6 +80,30 @@ mergeKeyValues(
       myVersion = *kvStoreIt->second.version_ref();
     } else {
       XLOG(DBG4) << "(mergeKeyValues) key: '" << key << "' not found, adding";
+    }
+
+    // TTL update but version is not the same
+    // One version update is missed and there is inconsistency. Resync
+    if (newVersion != myVersion and not value.value_ref().has_value()) {
+      auto originator = *value.originatorId_ref();
+      auto senderName = sender.value_or("");
+      XLOG(ERR) << fmt::format(
+          "(mergeKeyValues) Received ttl update from {}. key: {}, received version: {}, Local version: {}, originator: {}",
+          senderName,
+          key,
+          myVersion,
+          newVersion,
+          originator);
+      // if sender is the key originator, then stop and report (and trigger
+      // resync) Triggering resync with originator will help originator to bump
+      // its key version if needed. However, if the sender is not the originator
+      // of the inconsistent key, resync will not help. E.g A-B-C. if A is the
+      // originator of the key, and C receives an inconsistent update from B C
+      // will not ask to resync with B.
+      if (senderName == originator) {
+        stats.inconsistencyDetetectedWithOriginator = true;
+        return std::make_pair(std::move(kvUpdates), std::move(stats));
+      }
     }
 
     // If we get an old value just skip it
