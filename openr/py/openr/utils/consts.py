@@ -18,7 +18,7 @@ class Consts:
     DEFAULT_FIB_AGENT_PORT = 5909
 
     TIMEOUT_MS = 10000  # 10 seconds
-    CONST_TTL_INF = -(2 ** 31)
+    CONST_TTL_INF = -(2**31)
     IP_TOS = 192
     ADJ_DB_MARKER = "adj:"
     PREFIX_DB_MARKER = "prefix:"
