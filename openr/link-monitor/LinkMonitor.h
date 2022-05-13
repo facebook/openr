@@ -40,8 +40,6 @@ struct AdjacencyValue {
   // metric that is calculated from Spark without any addiditonal increment
   int32_t baseMetric;
   // It is restarting or not.
-  // TODO: remove `isRestarting` flag once enable_ordered_adj_publication is
-  // fully rolled out to PROD.
   bool isRestarting{false};
   // If set to true, node->neighbor adj could only be used by neighbor but not
   // other nodes in the area. Otherwise, all nodes in the area could use the
@@ -225,11 +223,6 @@ class LinkMonitor final : public OpenrEventBase {
   void neighborRttChangeEvent(const NeighborEvent& event);
 
   /*
-   * [KvStore] initial sync event
-   */
-  void processKvStoreSyncEvent(KvStoreSyncEvent&& event);
-
-  /*
    * [Netlink Platform]
    *
    * LinkMonitor maintains multiple fiber tasks to:
@@ -319,10 +312,6 @@ class LinkMonitor final : public OpenrEventBase {
   // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
   // return 0 if no more unstable interface
   std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
-
-  // util function to check if adj announcement should be skipped
-  bool shouldSkipAdjAnnouncement(
-      const AdjacencyKey& adjKey, const AdjacencyValue& adjVal);
 
   // build AdjacencyDatabase
   thrift::AdjacencyDatabase buildAdjacencyDatabase(const std::string& area);

@@ -303,6 +303,9 @@ class LinkMonitorTestFixture : public testing::Test {
     tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 8;
     tConfig.link_monitor_config_ref()->use_rtt_metric_ref() = false;
 
+    // override feature toggling
+    tConfig.enable_ordered_adj_publication_ref() = true;
+
     return tConfig;
   }
 

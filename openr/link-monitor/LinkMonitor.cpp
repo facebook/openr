@@ -260,20 +260,6 @@ LinkMonitor::LinkMonitor(
     }
   });
 
-  // Add fiber to process KvStore Sync events
-  // TODO: remove this queue to reduce KvStore dependency
-  addFiberTask([q = std::move(kvStoreEventsQueue), this]() mutable noexcept {
-    while (true) {
-      auto maybeEvent = q.get();
-      if (maybeEvent.hasError()) {
-        XLOG(INFO) << "Terminating kvstore events processing fiber";
-        break;
-      }
-      // process different types of event
-      processKvStoreSyncEvent(std::move(maybeEvent).value());
-    }
-  });
-
   // Add fiber to process interfaceDb syning from netlink platform
   addFiberTask([this]() mutable noexcept { syncInterfaceTask(); });
 
@@ -361,7 +347,7 @@ LinkMonitor::neighborUpEvent(
       createPeerSpec(peerAddr, ctrlThriftPort, thrift::KvStorePeerState::IDLE),
       std::move(newAdj),
       useRttMetric_ ? getRttMetric(rttUs) : 1, // baseMetric
-      false, /* isResarting flag */
+      false, /* isRestarting flag */
       isGracefulRestart ? false : onlyUsedByOtherNode);
 
   // update kvstore peer
@@ -507,54 +493,6 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
 }
 
 void
-LinkMonitor::processKvStoreSyncEvent(KvStoreSyncEvent&& event) {
-  const auto& nodeName = event.nodeName;
-  const auto& area = event.area;
-
-  const auto& areaPeers = peers_.find(area);
-  // ignore invalid initial sync events
-  if (areaPeers == peers_.end()) {
-    return;
-  }
-
-  const auto& peerVal = areaPeers->second.find(nodeName);
-  // spark neighbor down events erased this peer, nothing to do
-  if (peerVal == areaPeers->second.end()) {
-    return;
-  }
-
-  // parallel link caused KvStore Peer session re-establishment
-  // no need to refresh initialSynced state.
-  if (peerVal->second.initialSynced) {
-    return;
-  }
-
-  // set initialSynced = true, promote neighbor's adj up events
-  peerVal->second.initialSynced = true;
-
-  SYSLOG(INFO) << "Neighbor " << nodeName << " finished Initial Sync "
-               << ", area: " << area << ". Promoting Adjacency UP events.";
-
-  // update adjacency status
-  for (const auto& adjId : peerVal->second.establishedSparkNeighbors) {
-    auto areaAdjIt = adjacencies_.find(area);
-    if (areaAdjIt != adjacencies_.end()) {
-      auto it = areaAdjIt->second.find(adjId);
-      if (it != areaAdjIt->second.end()) {
-        // kvstore sync is done, exit GR mode
-        if (it->second.isRestarting) {
-          XLOG(INFO) << "Neighbor " << adjId.first << " on interface "
-                     << adjId.second << " exiting GR successfully";
-          it->second.isRestarting = false;
-        }
-      }
-    }
-  }
-
-  advertiseAdjacenciesThrottled_->operator()();
-}
-
-void
 LinkMonitor::updateKvStorePeerNeighborUp(
     const std::string& area,
     const AdjacencyKey& adjId,
@@ -629,7 +567,12 @@ LinkMonitor::updateKvStorePeerNeighborDown(
   // remove neighbor from establishedSparkNeighbors list
   peer.establishedSparkNeighbors.erase(adjId);
 
-  // send peer delete request if all spark session is down for this neighbor
+  // send PEER_DEL request to bring DOWN TCP session if all Spark neighbor
+  // sessions are down.
+  //
+  // ATTN:
+  //  - TCP session MUST be brought DOWN if this is the last neighbor session;
+  //  - A new TCP session(PEER_UP) will be established once UP/RESTARTED;
   if (peer.establishedSparkNeighbors.empty()) {
     logPeerEvent("DEL_PEER", remoteNodeName, peer.tPeerSpec);
 
@@ -710,6 +653,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
     }
   }
 }
+
 void
 LinkMonitor::advertiseAdjacencies() {
   // advertise to all areas. Once area configuration per link is implemented
@@ -895,35 +839,6 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
   return minRemainMs;
 }
 
-bool
-LinkMonitor::shouldSkipAdjAnnouncement(
-    const AdjacencyKey& adjKey, const AdjacencyValue& adjVal) {
-  // TODO: once `enable_ordered_adj_publication` is enabled everywhere, the
-  // logic to skip adjacency announcement can be removed.
-  if (enableOrderedAdjPublication_) {
-    return false;
-  }
-
-  // ignore adjs that are waiting first KvStore full sync
-  bool waitingInitialSync{true};
-
-  const auto& areaPeers = peers_.find(adjVal.area);
-  if (areaPeers != peers_.end()) {
-    const auto& peerVal = areaPeers->second.find(adjKey.first);
-    // set waitingInitialSync false if peer has reached initial sync state
-    if (peerVal != areaPeers->second.end() && peerVal->second.initialSynced) {
-      waitingInitialSync = false;
-    }
-  }
-
-  // If adj is not in GR and it's waiting for kvstore sync,
-  // skip announcement
-  if (not adjVal.isRestarting && waitingInitialSync) {
-    return true;
-  }
-  return false;
-}
-
 thrift::AdjacencyDatabase
 LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   // prepare adjacency database
@@ -948,15 +863,6 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   auto areaAdjIt = adjacencies_.find(area);
   if (areaAdjIt != adjacencies_.end()) {
     for (auto& [adjKey, adjValue] : areaAdjIt->second) {
-      // TODO: deprecate this condition check
-      if (shouldSkipAdjAnnouncement(adjKey, adjValue)) {
-        LOG(INFO) << fmt::format(
-            "Skip announcement of adjKey: [{}, {}] without initial sync.",
-            adjKey.first,
-            adjKey.second);
-        continue;
-      }
-
       // NOTE: copy on purpose
       auto adj = folly::copy(adjValue.adjacency);
 
