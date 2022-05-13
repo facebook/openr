@@ -115,7 +115,6 @@ LinkMonitor::LinkMonitor(
           *config->getLinkMonitorConfig().enable_perf_measurement_ref()),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
-      enableNewGRBehavior_(config->isNewGRBehaviorEnabled()),
       prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
       prefixForwardingAlgorithm_(
           *config->getConfig().prefix_forwarding_algorithm_ref()),
@@ -351,39 +350,22 @@ LinkMonitor::neighborUpEvent(
   }
   CHECK(not peerAddr.empty()) << "Got empty peerAddr";
 
-  const auto adjId = std::make_pair(remoteNodeName, localIfName);
-  // If enableNewGRBehavior_, GR = neighbor restart -> kvstore initial sync.
-  // We record GR status of old adj, KvStore Sync event will reset this field.
-  // Else: GR = neighbor restart -> spark neighbor establishment.
-  // We restart isRestarting flag to False here.
-  //
-  // TODO: remove `isRestarting` flag once enable_ordered_adj_publication is
-  // fully rolled out to PROD.
-  bool isRestarting{false};
-  if (enableNewGRBehavior_) {
-    const auto& areaAdjacencies = adjacencies_.find(area);
-    if (areaAdjacencies != adjacencies_.end()) {
-      const auto& oldAdj = areaAdjacencies->second.find(adjId);
-      if (oldAdj != areaAdjacencies->second.end() and
-          oldAdj->second.isRestarting) {
-        isRestarting = true;
-      }
-    }
-  }
+  // create AdjacencyKey to uniquely map to AdjacencyEntry
+  const auto adjKey = std::make_pair(remoteNodeName, localIfName);
 
   // NOTE: for Graceful Restart(GR) case, we don't expect any adjacency
   // information change. Ignore the `onlyUsedByOtherNode` flag for adjacency
   // advertisement.
-  adjacencies_[area][adjId] = AdjacencyValue(
+  adjacencies_[area][adjKey] = AdjacencyValue(
       area,
       createPeerSpec(peerAddr, ctrlThriftPort, thrift::KvStorePeerState::IDLE),
       std::move(newAdj),
       useRttMetric_ ? getRttMetric(rttUs) : 1, // baseMetric
-      isRestarting,
+      false, /* isResarting flag */
       isGracefulRestart ? false : onlyUsedByOtherNode);
 
   // update kvstore peer
-  updateKvStorePeerNeighborUp(area, adjId, adjacencies_.at(area).at(adjId));
+  updateKvStorePeerNeighborUp(area, adjKey, adjacencies_.at(area).at(adjKey));
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -596,14 +578,9 @@ LinkMonitor::updateKvStorePeerNeighborUp(
     return;
   }
 
-  // if not enableNewGRBehavior_, set initialSynced = true to promote adj up
-  // event immediately
-  bool initialSynced = enableNewGRBehavior_ ? false : true;
-
   // create new KvStore Peer struct if it's first adj up
   areaPeers->second.emplace(
-      remoteNodeName,
-      KvStorePeerValue(adjVal.peerSpec, initialSynced, {adjId}));
+      remoteNodeName, KvStorePeerValue(adjVal.peerSpec, true, {adjId}));
 
   // Do not publish incremental peer event before initial peers are received and
   // published.
@@ -1870,20 +1847,6 @@ LinkMonitor::anyAreaShouldRedistributeIface(std::string const& iface) const {
     anyMatch |= areaConf.shouldRedistributeIface(iface);
   }
   return anyMatch;
-}
-
-const std::pair<int32_t, int32_t>
-LinkMonitor::getNodeSegmentLabelRange(
-    AreaConfiguration const& areaConfig) const {
-  CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
-  std::pair<int32_t, int32_t> labelRange{
-      *areaConfig.getNodeSegmentLabelConfig()
-           ->node_segment_label_range_ref()
-           ->start_label_ref(),
-      *areaConfig.getNodeSegmentLabelConfig()
-           ->node_segment_label_range_ref()
-           ->end_label_ref()};
-  return labelRange;
 }
 
 int32_t
