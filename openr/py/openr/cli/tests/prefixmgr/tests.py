@@ -15,10 +15,10 @@ from openr.cli.clis import prefix_mgr
 from openr.cli.tests import helpers
 
 from .fixtures import (
-    MOCKED_ADVERTISED_ROUTES,
     ADVERTISED_ROUTES_OUTPUT,
     ADVERTISED_ROUTES_OUTPUT_DETAILED,
     ADVERTISED_ROUTES_OUTPUT_JSON,
+    MOCKED_ADVERTISED_ROUTES,
 )
 
 

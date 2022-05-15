@@ -18,7 +18,7 @@ from openr.cli.clis import (
     spark,
     tech_support,
 )
-from openr.cli.utils.options import OPTIONS, breeze_option, str2cert
+from openr.cli.utils.options import breeze_option, OPTIONS, str2cert
 
 
 # Plugin module is optional

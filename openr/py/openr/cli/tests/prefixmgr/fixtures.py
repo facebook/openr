@@ -6,18 +6,9 @@
 
 # pyre-ignore-all-errors
 
-from openr.Network.ttypes import (
-    BinaryAddress,
-    IpPrefix,
-)
-from openr.OpenrCtrl.ttypes import (
-    AdvertisedRoute,
-    AdvertisedRouteDetail,
-)
-from openr.Types.ttypes import (
-    PrefixEntry,
-    PrefixMetrics,
-)
+from openr.Network.ttypes import BinaryAddress, IpPrefix
+from openr.OpenrCtrl.ttypes import AdvertisedRoute, AdvertisedRouteDetail
+from openr.Types.ttypes import PrefixEntry, PrefixMetrics
 
 
 MOCKED_ADVERTISED_ROUTES = [

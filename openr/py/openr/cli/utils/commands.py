@@ -6,7 +6,7 @@
 
 
 import json
-from typing import Any, Callable, Dict, Set, Optional
+from typing import Any, Callable, Dict, Optional, Set
 
 import bunch
 from openr.clients.openr_client import get_openr_ctrl_client

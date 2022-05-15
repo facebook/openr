@@ -5,8 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Any, List
-from typing import Optional, Set, AbstractSet
+from typing import AbstractSet, Any, List, Optional, Set
 
 import click
 from bunch import Bunch

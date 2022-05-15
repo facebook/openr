@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import json
-from typing import Tuple, Optional, Union
+from typing import Optional, Tuple, Union
 
 import click
 import jsondiff

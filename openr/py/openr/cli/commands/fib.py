@@ -9,7 +9,7 @@ import datetime
 import ipaddress
 import time
 from builtins import object
-from typing import List, Optional, Union, Sequence
+from typing import List, Optional, Sequence, Union
 
 import prettytable
 import pytz

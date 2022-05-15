@@ -9,7 +9,7 @@ import ipaddress
 import json
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Set, Sequence, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import click
 from openr.cli.utils import utils

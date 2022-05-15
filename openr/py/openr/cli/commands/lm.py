@@ -7,7 +7,7 @@
 
 import sys
 from builtins import object
-from typing import Any, Dict, List, Sequence, Optional
+from typing import Any, Dict, List, Optional, Sequence
 
 import click
 from openr.cli.utils import utils

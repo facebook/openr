@@ -9,12 +9,12 @@ from typing import Dict, List, Optional, Tuple
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.cli.utils.utils import (
     get_tag_to_name_map,
-    PrintAdvertisedTypes,
-    print_route_details,
     print_advertised_routes,
+    print_route_details,
+    PrintAdvertisedTypes,
 )
 from openr.Network import ttypes as network_types
-from openr.OpenrConfig.ttypes import PrefixForwardingType, PrefixForwardingAlgorithm
+from openr.OpenrConfig.ttypes import PrefixForwardingAlgorithm, PrefixForwardingType
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, serializer

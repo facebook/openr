@@ -19,15 +19,15 @@ from io import TextIOBase
 from itertools import product
 from typing import (
     Any,
+    Callable,
     Dict,
     Iterable,
     List,
     Optional,
+    Sequence,
     Set,
     Tuple,
     Union,
-    Callable,
-    Sequence,
 )
 
 import bunch
@@ -44,7 +44,7 @@ from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object, object_to_dict
 from thrift.protocol import THeaderProtocol
-from thrift.transport import TSocket, THeaderTransport
+from thrift.transport import THeaderTransport, TSocket
 
 
 PrintAdvertisedTypes = Union[

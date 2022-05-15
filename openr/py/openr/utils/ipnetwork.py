@@ -7,7 +7,7 @@
 
 import ipaddress
 import socket
-from typing import Union, List, Optional
+from typing import List, Optional, Union
 
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types

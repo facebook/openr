@@ -17,7 +17,7 @@ import time
 from builtins import str
 from collections.abc import Iterable
 from itertools import combinations
-from typing import Any, Callable, Dict, List, Optional, Set, AbstractSet
+from typing import AbstractSet, Any, Callable, Dict, List, Optional, Set
 
 import bunch
 import hexdump
