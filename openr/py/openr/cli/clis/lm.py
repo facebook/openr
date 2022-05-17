@@ -16,27 +16,52 @@ from openr.cli.utils.utils import parse_nodes
 class LMCli(object):
     def __init__(self):
 
+        # [Show Cmd]
         self.lm.add_command(LMLinksCli().links, name="links")
         self.lm.add_command(LMAdjCli().adj, name="adj")
+
+        # [Hard-Drain] set node overload
         self.lm.add_command(
             SetNodeOverloadCli().set_node_overload, name="set-node-overload"
         )
         self.lm.add_command(
             UnsetNodeOverloadCli().unset_node_overload, name="unset-node-overload"
         )
+        # [Hard-Drain] set link overload
         self.lm.add_command(
             SetLinkOverloadCli().set_link_overload, name="set-link-overload"
         )
         self.lm.add_command(
             UnsetLinkOverloadCli().unset_link_overload, name="unset-link-overload"
         )
+        # [Soft-Drain] set node metric increment
+        self.lm.add_command(
+            IncreaseNodeMetricCli().increase_node_metric, name="increase-node-metric"
+        )
+        self.lm.add_command(
+            ClearNodeMetricCli().clear_node_metric,
+            name="clear-node-metric-increase",
+        )
+        # [Soft-Drain] set link metric increment
+        self.lm.add_command(
+            IncreaseLinkMetricCli().increase_link_metric, name="increase-link-metric"
+        )
+        self.lm.add_command(
+            ClearLinkMetricCli().clear_link_metric,
+            name="clear-link-metric-increase",
+        )
+        # [TO BE DEPRECATED]
         self.lm.add_command(SetLinkMetricCli().set_link_metric, name="set-link-metric")
         self.lm.add_command(
             UnsetLinkMetricCli().unset_link_metric, name="unset-link-metric"
         )
-        self.lm.add_command(SetAdjMetricCli().set_adj_metric, name="set-adj-metric")
+        # [Metric Override]
         self.lm.add_command(
-            UnsetAdjMetricCli().unset_adj_metric, name="unset-adj-metric"
+            OverrideAdjMetricCli().override_adj_metric, name="override-adj-metric"
+        )
+        self.lm.add_command(
+            ClearAdjMetricOverrideCli().clear_adj_metric_override,
+            name="clear-adj-metric-override",
         )
 
     @click.group()
@@ -72,6 +97,13 @@ class LMAdjCli(object):
 
         nodes = parse_nodes(cli_opts, "")
         lm.LMAdjCmd(cli_opts).run(nodes, json, areas)
+
+
+"""
+[Hard-Drain]
+    - Node Level Overload;
+    - Link Level Overload;
+"""
 
 
 class SetNodeOverloadCli(object):
@@ -116,6 +148,86 @@ class UnsetLinkOverloadCli(object):
         lm.UnsetLinkOverloadCmd(cli_opts).run(interface, yes)
 
 
+"""
+[Soft-Drain]
+    - Node Level Metric Increment
+    - Link Level Metric Increment
+"""
+
+
+class IncreaseNodeMetricCli(object):
+    @click.command()
+    @click.argument("metric")
+    @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.pass_obj
+    def increase_node_metric(cli_opts, metric, yes):  # noqa: B902
+        """
+        Increase node-level metric for soft-drain behavior.
+        """
+
+        # increase node metric
+        lm.IncreaseNodeMetricCmd(cli_opts).run(metric, yes)
+
+        # show adj metric result
+        nodes = parse_nodes(cli_opts, "")
+        lm.LMAdjCmd(cli_opts).run(nodes, False)
+
+
+class ClearNodeMetricCli(object):
+    @click.command()
+    @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.pass_obj
+    def clear_node_metric(cli_opts, yes):  # noqa: B902
+        """
+        Clear node-level metric increment for soft-drain behavior.
+        """
+
+        # clear node metric increment
+        lm.ClearNodeMetricCmd(cli_opts).run(yes)
+
+        # show adj metric result
+        nodes = parse_nodes(cli_opts, "")
+        lm.LMAdjCmd(cli_opts).run(nodes, False)
+
+
+class IncreaseLinkMetricCli(object):
+    @click.command()
+    @click.argument("interface")
+    @click.argument("metric")
+    @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.pass_obj
+    def increase_link_metric(cli_opts, interface, metric, yes):  # noqa: B902
+        """
+        Increase link-level metric for soft-drain behavior.
+        """
+
+        # increase link metric
+        lm.IncreaseLinkMetricCmd(cli_opts).run(interface, metric, yes)
+
+        # show adj metric result
+        nodes = parse_nodes(cli_opts, "")
+        lm.LMAdjCmd(cli_opts).run(nodes, False)
+
+
+class ClearLinkMetricCli(object):
+    @click.command()
+    @click.argument("interface")
+    @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.pass_obj
+    def clear_link_metric(cli_opts, interface, yes):  # noqa: B902
+        """
+        Clear link-level metric increment for soft-drain behavior.
+        """
+
+        # clear link metric increment
+        lm.ClearLinkMetricCmd(cli_opts).run(interface, yes)
+
+        # show adj metric result
+        nodes = parse_nodes(cli_opts, "")
+        lm.LMAdjCmd(cli_opts).run(nodes, False)
+
+
+# [TO BE DEPRECATED]
 class SetLinkMetricCli(object):
     @click.command()
     @click.argument("interface")
@@ -144,16 +256,16 @@ class UnsetLinkMetricCli(object):
         lm.UnsetLinkMetricCmd(cli_opts).run(interface, yes)
 
 
-class SetAdjMetricCli(object):
+class OverrideAdjMetricCli(object):
     @click.command()
     @click.argument("node")
     @click.argument("interface")
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
-    def set_adj_metric(cli_opts, node, interface, metric, yes):  # noqa: B902
+    def override_adj_metric(cli_opts, node, interface, metric, yes):  # noqa: B902
         """
-        Set custom metric value for the adjacency
+        Override the adjacency metric value.
         """
         question_str = "Are you sure to override metric for adjacency {} {} ?".format(
             node, interface
@@ -161,20 +273,20 @@ class SetAdjMetricCli(object):
         if not utils.yesno(question_str, yes):
             return
 
-        lm.SetAdjMetricCmd(cli_opts).run(node, interface, metric, yes)
+        lm.OverrideAdjMetricCmd(cli_opts).run(node, interface, metric, yes)
         nodes = parse_nodes(cli_opts, "")
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 
-class UnsetAdjMetricCli(object):
+class ClearAdjMetricOverrideCli(object):
     @click.command()
     @click.argument("node")
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
-    def unset_adj_metric(cli_opts, node, interface, yes):  # noqa: B902
+    def clear_adj_metric_override(cli_opts, node, interface, yes):  # noqa: B902
         """
-        Unset previously set custom metric value on the node.
+        Clear previously overridden adjacency metric value.
         """
         question_str = "Are you sure to unset metric " "for adjacency {} {} ?".format(
             node, interface
@@ -182,6 +294,6 @@ class UnsetAdjMetricCli(object):
         if not utils.yesno(question_str, yes):
             return
 
-        lm.UnsetAdjMetricCmd(cli_opts).run(node, interface, yes)
+        lm.ClearAdjMetricOverrideCmd(cli_opts).run(node, interface, yes)
         nodes = parse_nodes(cli_opts, "")
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)

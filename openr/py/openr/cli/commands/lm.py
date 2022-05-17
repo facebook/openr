@@ -26,6 +26,8 @@ class LMCmdBase(OpenrCtrlCmd):
     def toggle_node_overload_bit(
         self, client: OpenrCtrl.Client, overload: bool, yes: bool = False
     ) -> None:
+        """[Hard-Drain] Node level overload"""
+
         links = client.getInterfaces()
         host = links.thisNodeName
         print()
@@ -59,6 +61,8 @@ class LMCmdBase(OpenrCtrlCmd):
         interface: str,
         yes: bool = False,
     ) -> None:
+        """[Hard-Drain] Link level overload"""
+
         links = client.getInterfaces()
         print()
 
@@ -86,6 +90,90 @@ class LMCmdBase(OpenrCtrlCmd):
             client.unsetInterfaceOverload(interface)
 
         print("Successfully {} for the interface.\n".format(action))
+
+    def toggle_node_metric_inc(
+        self, client: OpenrCtrl.Client, metric_inc: int, yes: bool = False
+    ) -> None:
+        """[Soft-Drain] Node level metric increment"""
+
+        links = client.getInterfaces()
+        host = links.thisNodeName
+
+        # ATTN:
+        #   - sys.exit(0) will NOT print out existing AdjacencyDatabase
+        #   - return will print out existing AdjacencyDatabase
+        if metric_inc < 0:
+            print(f"Can't set negative node metric increment on: {host}")
+            sys.exit(0)
+
+        if metric_inc and links.nodeMetricIncrementVal == metric_inc:
+            print(f"Node metric increment already set with: {metric_inc}. No-op.\n")
+            return
+
+        if not metric_inc and links.nodeMetricIncrementVal == 0:
+            print(f"No node metric increment has been set on: {host}. No-op.\n")
+            return
+
+        action = "set node metric inc" if metric_inc else "unset node metric inc"
+        question_str = "Are you sure to {} for node {} ?"
+        if not utils.yesno(question_str.format(action, host), yes):
+            sys.exit(0)
+
+        if metric_inc:
+            client.setNodeInterfaceMetricIncrement(metric_inc)
+        else:
+            client.unsetNodeInterfaceMetricIncrement()
+
+        print(f"Successfully {action} for node {host}.\n")
+
+    def toggle_link_metric_inc(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        metric_inc: int,
+        yes: bool,
+    ) -> None:
+        """[Soft-Drain] Link level metric increment"""
+
+        links = client.getInterfaces()
+        host = links.thisNodeName
+
+        # ATTN:
+        #   - sys.exit(0) will NOT print out existing AdjacencyDatabase
+        #   - return will print out existing AdjacencyDatabase
+        if metric_inc < 0:
+            print(f"Can't set negative link metric increment on: {host}")
+            sys.exit(0)
+
+        if interface not in links.interfaceDetails:
+            print(f"No such interface: {interface} on node: {host}")
+            sys.exit(0)
+
+        if (
+            metric_inc
+            and links.interfaceDetails[interface].linkMetricIncrementVal == metric_inc
+        ):
+            print(f"Link metric increment already set with: {metric_inc}. No-op.\n")
+            return
+
+        if (
+            not metric_inc
+            and links.interfaceDetails[interface].linkMetricIncrementVal == 0
+        ):
+            print(f"No link metric increment has been set on: {interface}. No-op.\n")
+            return
+
+        action = "set link metric inc" if metric_inc else "unset link metric inc"
+        question_str = "Are you sure to {} for link {} on node {} ?"
+        if not utils.yesno(question_str.format(action, interface, host), yes):
+            sys.exit(0)
+
+        if metric_inc:
+            client.setInterfaceMetricIncrement(interface, metric_inc)
+        else:
+            client.unsetInterfaceMetricIncrement(interface)
+
+        print(f"Successfully {action} for interface {interface} on node {host}.\n")
 
     def check_link_overriden(
         self, links: openr_types.DumpLinksReply, interface: str, metric: int
@@ -188,6 +276,55 @@ class UnsetLinkOverloadCmd(LMCmdBase):
         self.toggle_link_overload_bit(client, False, interface, yes)
 
 
+class IncreaseNodeMetricCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        metric: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
+        self.toggle_node_metric_inc(client, int(metric), yes)
+
+
+class ClearNodeMetricCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
+        self.toggle_node_metric_inc(client, 0, yes)
+
+
+class IncreaseLinkMetricCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        metric: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
+        self.toggle_link_metric_inc(client, interface, int(metric), yes)
+
+
+class ClearLinkMetricCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        interface: str,
+        yes: bool,
+        *args,
+        **kwargs,
+    ) -> None:
+        self.toggle_link_metric_inc(client, interface, 0, yes)
+
+
+# [TO BE DEPRECATED]
 class SetLinkMetricCmd(LMCmdBase):
     def _run(
         self,
@@ -213,7 +350,7 @@ class UnsetLinkMetricCmd(LMCmdBase):
         self.toggle_link_metric(client, False, interface, 0, yes)
 
 
-class SetAdjMetricCmd(LMCmdBase):
+class OverrideAdjMetricCmd(LMCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -227,7 +364,7 @@ class SetAdjMetricCmd(LMCmdBase):
         client.setAdjacencyMetric(interface, node, int(metric))
 
 
-class UnsetAdjMetricCmd(LMCmdBase):
+class ClearAdjMetricOverrideCmd(LMCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
