@@ -233,27 +233,36 @@ class SetLinkMetricCli(object):
     @click.argument("interface")
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
-    @click.pass_obj
-    def set_link_metric(cli_opts, interface, metric, yes):  # noqa: B902
+    @click.pass_context
+    def set_link_metric(ctx, interface, metric, yes):  # noqa: B902
         """
-        Set custom metric value for a link. You can use high link metric value
-        to emulate soft-drain behaviour.
+        Deprecated - Set custom metric value for a link.
         """
 
-        lm.SetLinkMetricCmd(cli_opts).run(interface, metric, yes)
+        click.secho(
+            "Command deprecated - Please use `breeze lm increase-link-metric`",
+            bold=True,
+            err=True,
+        )
+        ctx.exit(1)
 
 
 class UnsetLinkMetricCli(object):
     @click.command()
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
-    @click.pass_obj
-    def unset_link_metric(cli_opts, interface, yes):  # noqa: B902
+    @click.pass_context
+    def unset_link_metric(ctx, interface, yes):  # noqa: B902
         """
-        Unset previously set custom metric value on the interface.
+        Deprecated - Unset previously set custom metric value on the interface.
         """
 
-        lm.UnsetLinkMetricCmd(cli_opts).run(interface, yes)
+        click.secho(
+            "Command deprecated - Please use `breeze lm clear-link-metric-increase`",
+            bold=True,
+            err=True,
+        )
+        ctx.exit(1)
 
 
 class OverrideAdjMetricCli(object):
