@@ -20,7 +20,6 @@ template <class ClientType>
 KvStore<ClientType>::KvStore(
     // initializers for immutable state
     messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-    messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
@@ -29,7 +28,6 @@ KvStore<ClientType>::KvStore(
     : kvParams_(
           *kvStoreConfig.node_name_ref(),
           kvStoreUpdatesQueue,
-          kvStoreEventsQueue,
           logSampleQueue,
           getKvStoreFilters(kvStoreConfig),
           kvStoreConfig.flood_rate_ref().to_optional(),
@@ -1778,9 +1776,6 @@ KvStoreDb<ClientType>::processThriftSuccess(
   peer.peerSpec.state_ref() =
       getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
   logStateTransition(peerName, oldState, *peer.peerSpec.state_ref());
-
-  // Notify subscribers of KVSTORE_SYNC event
-  kvParams_.kvStoreEventsQueue.push(KvStoreSyncEvent(peerName, area_));
 
   // Log full-sync event via replicate queue
   logSyncEvent(peerName, timeDelta);

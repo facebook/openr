@@ -68,27 +68,21 @@ struct KvStorePeerValue {
   // established Spark Neighbor
   thrift::PeerSpec tPeerSpec;
 
-  // one time flag set by KvStore Peer Initialized event
-  // Only when a peer reaches initialSynced state, its adjancency UP events
-  // can be announced to the network
-  bool initialSynced{false};
-
   // Established spark neighbors related to remoteNodeName. KvStore Peer State
   // Machine is a continuation of Spark Neighbor State Machine, tracking spark
   // neighbors here help us decide when to send ADD/DEL KvStorePeer request.
   //
-  // * Notice this is different from Adjacencies.
-  // An Adjancency remains up when remote spark neighbor performs a graceful
-  // restart, but spark neighbor state is IDLE during neighbor restart. Here
+  // ATTN: this is different from adjacencies_ collection!
+  //
+  // An adjancency remains UP when remote spark neighbor performs a graceful
+  // restart(GR). However, neighbor is not in ESTABLISHED state during GR. Here
   // we only track spark neighbors in ESTABLISHED state.
   std::unordered_set<AdjacencyKey> establishedSparkNeighbors;
 
   KvStorePeerValue(
       thrift::PeerSpec tPeerSpec,
-      bool initialSynced,
       std::unordered_set<AdjacencyKey> establishedSparkNeighbors)
       : tPeerSpec(std::move(tPeerSpec)),
-        initialSynced(initialSynced),
         establishedSparkNeighbors(std::move(establishedSparkNeighbors)) {}
 };
 
@@ -118,7 +112,6 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
       messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
-      messaging::RQueue<KvStoreSyncEvent> kvStoreEventsQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
       // if set, we will override drain state from persistent store with
       // assumeDrained value

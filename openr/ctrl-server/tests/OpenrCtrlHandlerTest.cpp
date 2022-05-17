@@ -112,7 +112,6 @@ class OpenrCtrlFixture : public ::testing::Test {
         logSampleQueue_,
         kvRequestQueue_,
         neighborUpdatesQueue_.getReader(),
-        kvStoreWrapper_->getInitialSyncEventsReader(),
         nlSock_->getReader(),
         false /* overrideDrainState */);
     linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });

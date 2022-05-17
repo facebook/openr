@@ -98,7 +98,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create and start kvstore thread
   kvStore_ = std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
       kvStoreUpdatesQueue_,
-      kvStoreEventsQueue_,
       peerUpdatesQueue_.getReader(),
       kvRequestQueue_.getReader(),
       logSampleQueue_,
@@ -167,7 +166,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       logSampleQueue_,
       kvRequestQueue_,
       neighborUpdatesQueue_.getReader(),
-      kvStoreEventsQueue_.getReader(),
       nlSock_->getReader(),
       false /* overrideDrainState */);
 
@@ -331,7 +329,6 @@ OpenrWrapper<Serializer>::stop() {
   kvRequestQueue_.close();
   interfaceUpdatesQueue_.close();
   neighborUpdatesQueue_.close();
-  kvStoreEventsQueue_.close();
   nlSock_->closeQueue();
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();

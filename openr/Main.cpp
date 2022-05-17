@@ -217,7 +217,6 @@ main(int argc, char** argv) {
 
   // Queue for inter-module communication
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  ReplicateQueue<KvStoreSyncEvent> kvStoreEventsQueue;
   ReplicateQueue<thrift::InitializationEvent>
       prefixMgrInitializationEventsQueue;
   ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
@@ -245,8 +244,6 @@ main(int argc, char** argv) {
       routeUpdatesQueue.getReader("fibDecision");
   auto linkMonitorNeighborUpdatesQueueReader =
       neighborUpdatesQueue.getReader("linkMonitor");
-  auto linkMonitorKvStoreSyncEventsQueueReader =
-      kvStoreEventsQueue.getReader("linkMonitor");
   auto linkMonitorNetlinkEventsQueueReader =
       netlinkEventsQueue.getReader("linkMonitor");
   auto sparkInitializationEventsQueueReader =
@@ -359,13 +356,11 @@ main(int argc, char** argv) {
       "kvstore",
       std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
           kvStoreUpdatesQueue,
-          kvStoreEventsQueue,
           peerUpdatesQueue.getReader("kvStore"),
           kvRequestQueue.getReader("kvStore"),
           logSampleQueue,
           config->getAreaIds(),
           config->toThriftKvStoreConfig()));
-  watchdog->addQueue(kvStoreEventsQueue, "kvStoreEventsQueue");
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
   watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
@@ -437,7 +432,6 @@ main(int argc, char** argv) {
           logSampleQueue,
           kvRequestQueue,
           std::move(linkMonitorNeighborUpdatesQueueReader),
-          std::move(linkMonitorKvStoreSyncEventsQueueReader),
           std::move(linkMonitorNetlinkEventsQueueReader),
           FLAGS_override_drain_state));
   watchdog->addQueue(interfaceUpdatesQueue, "interfaceUpdatesQueue");
@@ -552,7 +546,6 @@ main(int argc, char** argv) {
   peerUpdatesQueue.close();
   kvRequestQueue.close();
   neighborUpdatesQueue.close();
-  kvStoreEventsQueue.close();
   prefixUpdatesQueue.close();
   prefixMgrInitializationEventsQueue.close();
   kvStoreUpdatesQueue.close();

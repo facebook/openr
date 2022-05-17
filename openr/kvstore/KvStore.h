@@ -73,9 +73,6 @@ struct KvStoreParams {
   // Queue for publishing KvStore updates to other modules within a process
   messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue;
 
-  // Queue for publishing kvstore peer initial sync events
-  messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue;
-
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue;
 
@@ -93,7 +90,6 @@ struct KvStoreParams {
   KvStoreParams(
       std::string nodeId,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       std::optional<KvStoreFilters> filter,
       // Kvstore flooding rate
@@ -104,7 +100,6 @@ struct KvStoreParams {
       std::chrono::milliseconds keyTtl)
       : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
-        kvStoreEventsQueue(kvStoreEventsQueue),
         logSampleQueue(logSampleQueue),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
@@ -590,8 +585,6 @@ class KvStore final : public OpenrEventBase {
   KvStore(
       // Queue for publishing kvstore updates
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      // Queue for publishing kvstore initial sync events
-      messaging::ReplicateQueue<KvStoreSyncEvent>& kvStoreEventsQueue,
       // Queue for receiving peer updates
       messaging::RQueue<PeerEvent> peerUpdatesQueue,
       // Queue for receiving key-value update requests

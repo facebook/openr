@@ -24,7 +24,6 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
   // create kvStore instance
   kvStore_ = std::make_unique<KvStore<ClientType>>(
       kvStoreUpdatesQueue_,
-      kvStoreSyncEventsQueue_,
       peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
                                    : dummyPeerUpdatesQueue_.getReader(),
       kvRequestQueue.has_value() ? kvRequestQueue.value()
@@ -71,7 +70,6 @@ KvStoreWrapper<ClientType>::stop() {
 
   // Close queue
   kvStoreUpdatesQueue_.close();
-  kvStoreSyncEventsQueue_.close();
   dummyPeerUpdatesQueue_.close();
   dummyKvRequestQueue_.close();
   logSampleQueue_.close();

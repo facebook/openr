@@ -107,7 +107,6 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
-    messaging::RQueue<KvStoreSyncEvent> kvStoreEventsQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
     bool overrideDrainState)
     : nodeId_(config->getNodeName()),
@@ -518,7 +517,7 @@ LinkMonitor::updateKvStorePeerNeighborUp(
 
   // create new KvStore Peer struct if it's first adj up
   areaPeers->second.emplace(
-      remoteNodeName, KvStorePeerValue(adjVal.peerSpec, true, {adjId}));
+      remoteNodeName, KvStorePeerValue(adjVal.peerSpec, {adjId}));
 
   // Do not publish incremental peer event before initial peers are received and
   // published.

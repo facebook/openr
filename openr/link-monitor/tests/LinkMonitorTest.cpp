@@ -240,7 +240,6 @@ class LinkMonitorTestFixture : public testing::Test {
     peerUpdatesQueue.close();
     kvRequestQueue.close();
     neighborUpdatesQueue.close();
-    kvStoreEventsQueue.close();
     initializationEventQueue.close();
     prefixUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
@@ -403,7 +402,6 @@ class LinkMonitorTestFixture : public testing::Test {
         logSampleQueue,
         kvRequestQueue,
         neighborUpdatesQueue.getReader(),
-        kvStoreEventsQueue.getReader(),
         nlSock->getReader(),
         overrideDrainState);
 
@@ -617,7 +615,6 @@ class LinkMonitorTestFixture : public testing::Test {
   stopLinkMonitor() {
     // close queue first
     neighborUpdatesQueue.close();
-    kvStoreEventsQueue.close();
     initializationEventQueue.close();
     nlSock->closeQueue();
     kvStoreWrapper->closeQueue();
@@ -634,7 +631,6 @@ class LinkMonitorTestFixture : public testing::Test {
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
   messaging::ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue;
-  messaging::ReplicateQueue<KvStoreSyncEvent> kvStoreEventsQueue;
   messaging::ReplicateQueue<thrift::InitializationEvent>
       initializationEventQueue;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
@@ -721,7 +717,6 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
-  kvStoreEventsQueue.open();
   initializationEventQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
@@ -740,7 +735,6 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   // Create new neighbor update queue. Previous one is closed
   neighborUpdatesQueue.open();
-  kvStoreEventsQueue.open();
   initializationEventQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
@@ -963,13 +957,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     ASSERT_TRUE(peerEvent.hasValue());
     EXPECT_EQ(peerEvent.value().size(), 1);
 
-    // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
-  }
-
-  // kvstore peer initial sync
-  {
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
     checkNextAdjPub("adj:node-1");
   }
 
@@ -1173,7 +1161,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   // Create new
   // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
   neighborUpdatesQueue = messaging::ReplicateQueue<NeighborInitEvent>();
-  kvStoreEventsQueue = messaging::ReplicateQueue<KvStoreSyncEvent>();
   initializationEventQueue =
       messaging::ReplicateQueue<thrift::InitializationEvent>(),
   peerUpdatesQueue = messaging::ReplicateQueue<PeerEvent>();
@@ -1190,7 +1177,6 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   {
     auto neighborEvent = nb2_up_event;
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
     LOG(INFO) << "14. Testing adj up event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -1230,11 +1216,6 @@ TEST_F(LinkMonitorTestFixture, Throttle) {
     neighborUpdatesQueue.push(
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
   }
-
-  // initial sync event on nb2, kick advertiseAdjacenciesThrottled_
-  kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
-  // another initial sync event from nb3
-  kvStoreEventsQueue.push(KvStoreSyncEvent("node-3", kTestingAreaName));
 
   // before throttled function kicks in
 
@@ -1308,7 +1289,6 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
 
     // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer events: peerSpec_2_2
@@ -1369,7 +1349,6 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
 
     // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer events: peerSpec_2_2
@@ -1393,7 +1372,6 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
 
     // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-3", kTestingAreaName));
     checkNextAdjPub("adj:node-1");
   }
 }
@@ -1433,9 +1411,6 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
-
-    // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
 
     // check for adj update: initial adjacency db includes adj_2_1
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
@@ -1523,9 +1498,6 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
 
-    // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-3", kTestingAreaName));
-
     // adj_2_1 still in adj publication
     auto adjDb = createAdjDb("node-1", {adj_3_1, adj_2_1, adj_2_2}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
@@ -1550,9 +1522,6 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 
   // neighbor 2 kvstore initial sync adj_2_1, adj_2_2 exit GR mode
   {
-    // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
-
     // wait for this peer change to propogate
     std::this_thread::sleep_for(std::chrono::seconds(1));
 
@@ -1591,9 +1560,6 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
-
-    // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
 
     // check for adj update: initial adjacency db includes adj_2_1
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
@@ -1657,9 +1623,6 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
-
-    // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-3", kTestingAreaName));
 
     // adj_2_1 still in adj publication
     auto adjDb = createAdjDb("node-1", {adj_3_1, adj_2_1, adj_2_2}, kNodeLabel);
@@ -2241,7 +2204,6 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
         logSampleQueue,
         kvRequestQueue,
         neighborUpdatesQueue.getReader(),
-        kvStoreEventsQueue.getReader(),
         nlSock->getReader(),
         false /* overrideDrainState */);
     linkMonitors.emplace_back(std::move(lm));
@@ -2286,7 +2248,6 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
   // cleanup
   nlSock->closeQueue();
   neighborUpdatesQueue.close();
-  kvStoreEventsQueue.close();
   initializationEventQueue.close();
   kvStoreWrapper->closeQueue();
   for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
@@ -2526,9 +2487,6 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     neighborUpdatesQueue.push(
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
-    // kvstore peer initial sync
-    kvStoreEventsQueue.push(KvStoreSyncEvent("node-2", kTestingAreaName));
-
     // NOTE: adjacency db will contain adj_2_1 with
     // `adjOnlyUsedByOtherNode=true`
     auto adj_2_1Copy = folly::copy(adj_2_1);
@@ -2597,8 +2555,6 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     {
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
       neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
-      kvStoreEventsQueue.push(
-          KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
       LOG(INFO) << "Testing neighbor UP event in default area!";
 
       checkNextAdjPub("adj:node-1", kTestingAreaName);
@@ -2615,8 +2571,6 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
       cp.area_ref() = planeArea_;
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
       neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
-      kvStoreEventsQueue.push(
-          KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
 
       checkNextAdjPub("adj:node-1", planeArea_);
@@ -2628,8 +2582,6 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     expectedAdjDbs.push(std::move(adjDb));
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
     neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
-    kvStoreEventsQueue.push(
-        KvStoreSyncEvent(*nb2.nodeName_ref(), kTestingAreaName));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", kTestingAreaName);
     checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
@@ -2644,8 +2596,6 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     cp.area_ref() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
-    kvStoreEventsQueue.push(
-        KvStoreSyncEvent(*cp.nodeName_ref(), *cp.area_ref()));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", planeArea_);
     checkPeerDump(

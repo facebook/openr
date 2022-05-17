@@ -331,8 +331,6 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
       store2.get(), key1, thriftVal1, kTestingAreaName, waitTime_));
 
   // verify no initial sync event
-  EXPECT_EQ(0, store1->getInitialSyncEventsReader().size());
-  EXPECT_EQ(0, store2->getInitialSyncEventsReader().size());
   EXPECT_EQ(1, store1->dumpAll(kTestingAreaName).size());
   EXPECT_EQ(1, store2->dumpAll(kTestingAreaName).size());
 }
