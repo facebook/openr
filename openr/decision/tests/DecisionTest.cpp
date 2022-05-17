@@ -608,6 +608,114 @@ TEST(ShortestPathTest, UnknownNode) {
   EXPECT_FALSE(routeDb.has_value());
 }
 
+/*
+ * 1-2-3, where both 1 and 3 advertise same prefix but 1 is overloaded.
+ * 1 and 2 will choose only 3 (despite 1 advertising the prefix itself)
+ * 3 will choose itself
+ */
+TEST(SpfSolver, NodeOverloadRouteChoice) {
+  auto adjacencyDb1 = createAdjDb("1", {adj12}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj23}, 2);
+  auto adjacencyDb3 = createAdjDb("3", {adj32}, 3);
+
+  std::string nodeName("1");
+  SpfSolver spfSolver(
+      nodeName,
+      false /* disable v4 */,
+      true /* enable segment label */,
+      true /* enable adj labels */,
+      false /* disable LFA */);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  PrefixState prefixState;
+  //
+  // Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
+  //
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+    EXPECT_FALSE(res.topologyChanged);
+    EXPECT_TRUE(res.nodeLabelChanged); // label changed for node1
+  }
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+    EXPECT_TRUE(res.nodeLabelChanged);
+  }
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+    EXPECT_TRUE(res.nodeLabelChanged);
+  }
+
+  // Originate same prefix differently
+  const auto prefix1 = createPrefixEntry(addr1, thrift::PrefixType::CONFIG);
+  const auto prefix3 = createPrefixEntry(addr1, thrift::PrefixType::VIP);
+  const auto prefixDb1 = createPrefixDb("1", {prefix1});
+  const auto prefixDb2 = createPrefixDb("2", {});
+  const auto prefixDb3 = createPrefixDb("3", {prefix3});
+
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_TRUE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+
+  //
+  // dump routes for all nodes. expect one unicast route, no overload
+  //
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check two nexthop
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(2, ribEntry.nexthops.size());
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(0, routeDb->unicastRoutes.size()); // self originated
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("3", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(0, routeDb->unicastRoutes.size()); // self originated
+  }
+
+  // Overload node 1
+  adjacencyDb1.isOverloaded_ref() = true;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+    EXPECT_FALSE(res.nodeLabelChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check two nexthop
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    // Not choosing itself even it originates this prefix
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(prefix3, ribEntry.bestPrefixEntry);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("3", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(0, routeDb->unicastRoutes.size()); // self originated
+  }
+}
+
 /**
  * Test to verify adjacencyDatabase update
  */

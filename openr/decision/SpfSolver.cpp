@@ -111,6 +111,8 @@ SpfSolver::SpfSolver(
   fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
   fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "decision.incorrect_redistribution_route", fb303::COUNT);
 }
 
 SpfSolver::~SpfSolver() = default;
@@ -672,7 +674,16 @@ SpfSolver::selectBestRoutes(
     ret.success = true;
   }
 
-  return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
+  auto res = maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
+  // TODO: michaeluw: make it a check when it is safe
+  if (res.allNodeAreas.find(res.bestNodeArea) == res.allNodeAreas.end()) {
+    XLOG(ERR)
+        << "Best prefix not part of best prefixes when selecting route to "
+        << folly::IPAddress::networkToString;
+    fb303::fbData->addStatValue(
+        "decision.incorrect_redistribution_route", 1, fb303::COUNT);
+  }
+  return res;
 }
 
 void
@@ -711,10 +722,14 @@ SpfSolver::maybeFilterDrainedNodes(
     RouteSelectionResult&& result,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
   RouteSelectionResult filtered = folly::copy(result);
+  bool shouldUpdateBestNodeArea{false};
   for (auto iter = filtered.allNodeAreas.cbegin();
        iter != filtered.allNodeAreas.cend();) {
     const auto& [node, area] = *iter;
     if (areaLinkStates.at(area).isNodeOverloaded(node)) {
+      if (result.bestNodeArea == *iter) {
+        shouldUpdateBestNodeArea = true;
+      }
       iter = filtered.allNodeAreas.erase(iter);
     } else {
       ++iter;
@@ -722,8 +737,7 @@ SpfSolver::maybeFilterDrainedNodes(
   }
 
   // Update the bestNodeArea to a valid key
-  if (not filtered.allNodeAreas.empty() and
-      filtered.bestNodeArea != result.bestNodeArea) {
+  if (not filtered.allNodeAreas.empty() and shouldUpdateBestNodeArea) {
     filtered.bestNodeArea = *filtered.allNodeAreas.begin();
   }
 
