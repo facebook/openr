@@ -16,6 +16,7 @@
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/link-monitor/AdjacencyEntry.h>
 #include <openr/link-monitor/LinkMonitor.h>
 
 namespace fb303 = facebook::fb303;
@@ -337,20 +338,24 @@ LinkMonitor::neighborUpEvent(
 
   // create AdjacencyKey to uniquely map to AdjacencyEntry
   const auto adjKey = std::make_pair(remoteNodeName, localIfName);
+  const auto tPeerSpec =
+      createPeerSpec(peerAddr, ctrlThriftPort, thrift::KvStorePeerState::IDLE);
 
   // NOTE: for Graceful Restart(GR) case, we don't expect any adjacency
   // information change. Ignore the `onlyUsedByOtherNode` flag for adjacency
   // advertisement.
-  adjacencies_[area][adjKey] = AdjacencyValue(
-      area,
-      createPeerSpec(peerAddr, ctrlThriftPort, thrift::KvStorePeerState::IDLE),
-      std::move(newAdj),
-      useRttMetric_ ? getRttMetric(rttUs) : 1, // baseMetric
-      false, /* isRestarting flag */
-      isGracefulRestart ? false : onlyUsedByOtherNode);
+  adjacencies_[area].insert_or_assign(
+      adjKey,
+      AdjacencyEntry(
+          adjKey,
+          tPeerSpec,
+          newAdj,
+          useRttMetric_ ? getRttMetric(rttUs) : 1, /* baseMetric */
+          false, /* isRestarting flag */
+          isGracefulRestart ? false : onlyUsedByOtherNode));
 
   // update kvstore peer
-  updateKvStorePeerNeighborUp(area, adjKey, adjacencies_.at(area).at(adjKey));
+  updateKvStorePeerNeighborUp(area, adjKey, tPeerSpec);
 
   // Advertise new adjancies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -391,7 +396,7 @@ LinkMonitor::neighborAdjSyncedEvent(const NeighborEvent& event) {
       localIfName);
 
   // reset flag to indicate adjacency can be used by everyone
-  adjIt->second.onlyUsedByOtherNode = false;
+  adjIt->second.onlyUsedByOtherNode_ = false;
 
   // advertise new adjacencies in a throttled fashion
   advertiseAdjacenciesThrottled_->operator()();
@@ -421,7 +426,7 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
   }
 
   // update KvStore Peer
-  updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second);
+  updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second.peerSpec_);
 
   // Remove such adjacencies.
   adjacencies_[area].erase(adjValueIt);
@@ -462,10 +467,10 @@ LinkMonitor::neighborRestartingEvent(const NeighborEvent& event) {
   }
 
   // update adjacencies_ restarting-bit and advertise peers
-  adjValueIt->second.isRestarting = true;
+  adjValueIt->second.isRestarting_ = true;
 
   // update KvStore Peer
-  updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second);
+  updateKvStorePeerNeighborDown(area, adjId, adjValueIt->second.peerSpec_);
 }
 
 void
@@ -483,7 +488,7 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
   if (areaAdjIt != adjacencies_.end()) {
     auto it = areaAdjIt->second.find({remoteNodeName, localIfName});
     if (it != areaAdjIt->second.end()) {
-      auto& adj = it->second.adjacency;
+      auto& adj = it->second.adj_;
       adj.metric_ref() = newRttMetric;
       adj.rtt_ref() = rttUs;
       advertiseAdjacenciesThrottled_->operator()();
@@ -495,7 +500,7 @@ void
 LinkMonitor::updateKvStorePeerNeighborUp(
     const std::string& area,
     const AdjacencyKey& adjId,
-    const AdjacencyValue& adjVal) {
+    const thrift::PeerSpec& spec) {
   const auto& remoteNodeName = adjId.first;
 
   // update kvstore peers
@@ -516,8 +521,7 @@ LinkMonitor::updateKvStorePeerNeighborUp(
   }
 
   // create new KvStore Peer struct if it's first adj up
-  areaPeers->second.emplace(
-      remoteNodeName, KvStorePeerValue(adjVal.peerSpec, {adjId}));
+  areaPeers->second.emplace(remoteNodeName, KvStorePeerValue(spec, {adjId}));
 
   // Do not publish incremental peer event before initial peers are received and
   // published.
@@ -527,8 +531,8 @@ LinkMonitor::updateKvStorePeerNeighborUp(
 
   // Advertise KvStore peers immediately
   thrift::PeersMap peersToAdd;
-  peersToAdd.emplace(remoteNodeName, adjVal.peerSpec);
-  logPeerEvent("ADD_PEER", remoteNodeName, adjVal.peerSpec);
+  peersToAdd.emplace(remoteNodeName, spec);
+  logPeerEvent("ADD_PEER", remoteNodeName, spec);
 
   PeerEvent event;
   event.emplace(area, AreaPeerEvent(peersToAdd, {} /*peersToDel*/));
@@ -539,7 +543,7 @@ void
 LinkMonitor::updateKvStorePeerNeighborDown(
     const std::string& area,
     const AdjacencyKey& adjId,
-    const AdjacencyValue& adjVal) {
+    const thrift::PeerSpec& spec) {
   const auto& remoteNodeName = adjId.first;
 
   // find kvstore peer for adj
@@ -589,7 +593,7 @@ LinkMonitor::updateKvStorePeerNeighborDown(
 
   // If current KvStore tPeerSpec != this sparkNeighbor's peerSpec, no need to
   // update peer spec, we are done.
-  if (adjVal.peerSpec != peer.tPeerSpec) {
+  if (spec != peer.tPeerSpec) {
     return;
   }
 
@@ -599,7 +603,7 @@ LinkMonitor::updateKvStorePeerNeighborDown(
   //      adj_1 down -> Now adj_2 will be the peer-spec being used to establish
   peer.tPeerSpec = adjacencies_.at(area)
                        .at(*peer.establishedSparkNeighbors.begin())
-                       .peerSpec;
+                       .peerSpec_;
 
   // peer spec change, send peer add event
   logPeerEvent("ADD_PEER", remoteNodeName, peer.tPeerSpec);
@@ -646,7 +650,7 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   fb303::fbData->setCounter("link_monitor.adjacencies", getTotalAdjacencies());
   for (const auto& [_, areaAdjacencies] : adjacencies_) {
     for (const auto& [_, adjValue] : areaAdjacencies) {
-      auto& adj = adjValue.adjacency;
+      auto& adj = adjValue.adj_;
       fb303::fbData->setCounter(
           "link_monitor.metric." + *adj.otherNodeName_ref(), *adj.metric_ref());
     }
@@ -863,7 +867,7 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   if (areaAdjIt != adjacencies_.end()) {
     for (auto& [adjKey, adjValue] : areaAdjIt->second) {
       // NOTE: copy on purpose
-      auto adj = folly::copy(adjValue.adjacency);
+      auto adj = folly::copy(adjValue.adj_);
 
       // [Hard-Drain] set link overload bit
       adj.isOverloaded_ref() =
@@ -875,14 +879,14 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       // 1. base metric derived from round-trip-time(RTT) or default hop-count;
       // 2. [Soft-Drain] node-level incremental metric;
       // 3. [Soft-Drain] link-level incremental metric.
-      int32_t metric = adjValue.baseMetric;
+      int32_t metric = adjValue.baseMetric_;
 
       // [TO BE DEPRECATED]
       // override metric with link metric if it exists
       metric = folly::get_default(
           *state_.linkMetricOverrides_ref(),
           *adj.ifName_ref(),
-          adjValue.baseMetric);
+          adjValue.baseMetric_);
 
       // increment the node-level metric if any
       metric += *state_.nodeMetricIncrementVal_ref();
@@ -903,7 +907,7 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       adj.metric_ref() = metric;
 
       // set flag to indicate if adjacency will ONLY be used by other node
-      adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode;
+      adj.adjOnlyUsedByOtherNode_ref() = adjValue.onlyUsedByOtherNode_;
 
       adjDb.adjacencies_ref()->emplace_back(std::move(adj));
     }

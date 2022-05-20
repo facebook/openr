@@ -239,6 +239,7 @@ add_library(openrlib
   openr/kvstore/KvStorePublisher.cpp
   openr/kvstore/KvStoreUtil.cpp
   openr/kvstore/KvStoreWrapper.cpp
+  openr/link-monitor/AdjacencyEntry.cpp
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
   openr/nl/NetlinkAddrMessage.cpp

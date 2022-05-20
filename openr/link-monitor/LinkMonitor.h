@@ -20,47 +20,13 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/link-monitor/AdjacencyEntry.h>
 #include <openr/link-monitor/InterfaceEntry.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 
 namespace openr {
-
-using AdjacencyKey = std::
-    pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;
-
-struct AdjacencyValue {
-  // areaId of the adjacency
-  std::string area;
-  // peer's publication and command socket URLs information
-  thrift::PeerSpec peerSpec;
-  // detailed adjacency information
-  thrift::Adjacency adjacency;
-  // metric that is calculated from Spark without any addiditonal increment
-  int32_t baseMetric;
-  // It is restarting or not.
-  bool isRestarting{false};
-  // If set to true, node->neighbor adj could only be used by neighbor but not
-  // other nodes in the area. Otherwise, all nodes in the area could use the
-  // adj for route computation.
-  bool onlyUsedByOtherNode{false};
-
-  AdjacencyValue() {}
-  AdjacencyValue(
-      std::string areaId,
-      thrift::PeerSpec spec,
-      thrift::Adjacency adj,
-      int32_t baseMetric,
-      bool restarting = false,
-      bool onlyUsedByOtherNode = false)
-      : area(areaId),
-        peerSpec(spec),
-        adjacency(adj),
-        baseMetric(baseMetric),
-        isRestarting(restarting),
-        onlyUsedByOtherNode(onlyUsedByOtherNode) {}
-};
 
 // KvStore Peer Value
 struct KvStorePeerValue {
@@ -255,13 +221,13 @@ class LinkMonitor final : public OpenrEventBase {
    */
   void updateKvStorePeerNeighborUp(
       const std::string& area,
-      const AdjacencyKey& adjId,
-      const AdjacencyValue& adjVal);
+      const AdjacencyKey& adjKey,
+      const thrift::PeerSpec& spec);
 
   void updateKvStorePeerNeighborDown(
       const std::string& area,
-      const AdjacencyKey& adjId,
-      const AdjacencyValue& adjVal);
+      const AdjacencyKey& adjKey,
+      const thrift::PeerSpec& spec);
 
   /*
    * [Kvstore] Advertise my adjacencies_
@@ -403,8 +369,8 @@ class LinkMonitor final : public OpenrEventBase {
   // There can be multiple interfaces to a remote node, but at most 1 interface
   // (we use the "min" interface) for tcp connection.
   std::unordered_map<
-      std::string /* area */, // Compiler doesn't allow names here.
-      std::unordered_map<AdjacencyKey, AdjacencyValue>>
+      std::string /* area */,
+      std::unordered_map<AdjacencyKey, AdjacencyEntry>>
       adjacencies_;
 
   // Previously announced KvStore peers
@@ -415,7 +381,8 @@ class LinkMonitor final : public OpenrEventBase {
 
   // all interfaces states, including DOWN one
   // Keyed by interface Name
-  std::unordered_map<std::string, InterfaceEntry> interfaces_;
+  std::unordered_map<std::string /* interface name */, InterfaceEntry>
+      interfaces_;
 
   // Container storing map of advertised prefixes - Map<prefix, list<area>>
   std::map<folly::CIDRNetwork, std::vector<std::string>> advertisedPrefixes_;

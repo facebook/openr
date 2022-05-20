@@ -23,6 +23,9 @@ namespace openr {
 //
 // Aliases for data-structures
 //
+
+using AdjacencyKey = std::
+    pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;
 using NodeAndArea = std::pair<std::string, std::string>;
 using PrefixEntries =
     std::unordered_map<NodeAndArea, std::shared_ptr<thrift::PrefixEntry>>;
