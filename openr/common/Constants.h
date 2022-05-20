@@ -23,16 +23,6 @@ class Constants {
   // Common
   //
 
-  // the string we expect as an error response to a query
-  static constexpr folly::StringPiece kErrorResponse{"ERR"};
-
-  // the string we expect in reply to a successful request
-  static constexpr folly::StringPiece kSuccessResponse{"OK"};
-
-  // this is used to periodically break from the poll waiting
-  // and perform other functions
-  static constexpr std::chrono::milliseconds kPollTimeout{50};
-
   // this is the maximum time we wait for read data on a socket
   // this is an important constant, as we do not implement any
   // recovery from read errors. We expect in our network reads
@@ -41,23 +31,6 @@ class Constants {
 
   static constexpr auto kInitEventCounterFormat =
       "initialization.{}.duration_ms";
-
-  // Default keepAlive values
-  static constexpr int kKeepAliveEnable{1};
-  // Idle Time before sending keep alives
-  static constexpr std::chrono::seconds kKeepAliveTime{30};
-  // max keep alives before resetting connection
-  static constexpr int kKeepAliveCnt{6};
-  // interval between keep alives
-  static constexpr std::chrono::seconds kKeepAliveIntvl{5};
-
-  // The maximum messages we can queue on sending socket
-  static constexpr int kHighWaterMark{65536};
-
-  // IP TOS to be used for all control IP packets in network flowing across
-  // the nodes
-  // DSCP = 48 (first 6 bits), ECN = 0 (last 2 bits). Total 192
-  static constexpr int kIpTos{0x30 << 2};
 
   // default interval to publish to monitor
   static constexpr std::chrono::seconds kCounterSubmitInterval{5};
@@ -81,9 +54,6 @@ class Constants {
   //
   // KvStore specific
   //
-
-  // default interval for kvstore to sync with peers
-  static constexpr std::chrono::seconds kStoreSyncInterval{60};
 
   // default interval for flooding topology dump
   static constexpr std::chrono::seconds kFloodTopoDumpInterval{60};
@@ -127,18 +97,12 @@ class Constants {
   // Adjacency DOWN event is immediately advertised.
   static constexpr std::chrono::milliseconds kAdjacencyThrottleTimeout{1000};
 
-  // overloaded note metric value
-  static constexpr uint64_t kOverloadNodeMetric{1ull << 32};
-
   //
   // Spark specific
   //
 
   // the multicast address used by Spark
   static constexpr folly::StringPiece kSparkMcastAddr{"ff02::1"};
-
-  // Required percentage change in measured RTT for announcing new RTT
-  static constexpr double kRttChangeThreashold{10.0};
 
   // The maximum number of spark packets per second we will process from
   // a iface, ip addr pairs that hash to the same bucket in our
@@ -157,7 +121,6 @@ class Constants {
   static constexpr folly::StringPiece kPlatformHost{"::1"};
   static constexpr std::chrono::milliseconds kPlatformConnTimeout{100};
   static constexpr std::chrono::milliseconds kPlatformRoutesProcTimeout{20000};
-  static constexpr std::chrono::milliseconds kPlatformIntfProcTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
   static constexpr std::chrono::milliseconds kServiceConnSSLTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceProcTimeout{2500};
@@ -175,14 +138,8 @@ class Constants {
   static constexpr std::chrono::seconds kPlatformThriftIdleTimeout{
       Constants::kPlatformSyncInterval * 3};
 
-  // Duration for throttling full sync of network state from kernel via netlink
-  static constexpr std::chrono::seconds kNetlinkSyncThrottleInterval{3};
-
   // PrefixAllocator address programming retry interval 100 ms
   static constexpr std::chrono::milliseconds kPrefixAllocatorRetryInterval{100};
-
-  // Protocol ID for OpenR routes
-  static constexpr uint8_t kAqRouteProtoId{99};
 
   //
   // KvStore specific
@@ -220,7 +177,6 @@ class Constants {
   static constexpr folly::StringPiece kNodeLabelRangePrefix{"nodeLabel:"};
 
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
-  static constexpr folly::StringPiece kPluginSessionContext{"OpenrPlugin"};
 
   // max interval to update TTL for each key in kvstore w/ finite TTL
   static constexpr std::chrono::milliseconds kMaxTtlUpdateInterval{2h};
@@ -261,16 +217,6 @@ class Constants {
 
   // Openr Ctrl thrift server port
   static constexpr int32_t kOpenrCtrlPort{2018};
-
-  // [TO BE DEPRECATED]
-  // The port KvStore replier listens on
-  static constexpr int32_t kKvStoreRepPort{60002};
-
-  // Switch agent thrift service port for FIB programming
-  static constexpr int32_t kFibAgentPort{60100};
-
-  // Spark UDP multicast port for sending spark-hello messages
-  static constexpr int32_t kSparkMcastPort{6666};
 
   //
   // See https://github.com/facebook/openr/blob/master/openr/docs/Versions.md

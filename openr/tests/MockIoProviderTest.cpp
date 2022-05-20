@@ -22,7 +22,6 @@ namespace {
 
 const int kMinIpv6PktSize{1280};
 const int kMockedUdpPort{6666};
-const int kPollTimeout{10};
 const int kRecvBufferSize{1024};
 const std::string kDiscardMulticastAddr("ff01::1");
 
