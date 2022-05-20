@@ -282,3 +282,11 @@ struct std::hash<openr::AreaId> {
     return hash<string>()(areaId);
   }
 };
+
+// Result for pair-wise comparison
+enum class ComparisonResult {
+  UNKNOWN = 0, // can happen if value is missing
+  FIRST = 1, // First one is better
+  SECOND = 2, // Second one is better
+  TIED = 3,
+};

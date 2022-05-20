@@ -458,7 +458,8 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   // check key was added correctly
   auto recVal = kvStore->getKey(kTestingAreaName, key);
   ASSERT_TRUE(recVal.has_value());
-  EXPECT_EQ(0, openr::compareValues(thriftVal, recVal.value()));
+  EXPECT_EQ(
+      ComparisonResult::TIED, openr::compareValues(thriftVal, recVal.value()));
 
   // check only this key exists in kvstore
   std::unordered_map<std::string, thrift::Value> expectedKeyVals;
@@ -481,7 +482,9 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   // check merge occurred correctly -- value overwritten
   auto recVal2 = kvStore->getKey(kTestingAreaName, key);
   ASSERT_TRUE(recVal2.has_value());
-  EXPECT_EQ(0, openr::compareValues(thriftVal2, recVal2.value()));
+  EXPECT_EQ(
+      ComparisonResult::TIED,
+      openr::compareValues(thriftVal2, recVal2.value()));
 
   // check merge occurred correctly -- no duplicate key
   expectedKeyVals[key] = thriftVal2;

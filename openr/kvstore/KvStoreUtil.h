@@ -239,13 +239,15 @@ mergeKeyValues(
  * @param v2 - second thrift::Value to compare
  *
  * @return
- *  - int that represents which value is better
- *      1  if v1 is better
- *     -1  if v2 is better
- *      0  if equal
- *     -2  if unknown (can happen if value is missing -- only hash is provided)
+ *  - ComparisonResult that represents which value is better
+ *     FIRST  if v1 is better
+ *     SECOND  if v2 is better
+ *     TIED  if tied
+ *     UNKNOWN  if unknown (can happen if value is missing -- only hash is
+ *             provided)
  */
-int compareValues(const thrift::Value& v1, const thrift::Value& v2);
+ComparisonResult compareValues(
+    const thrift::Value& v1, const thrift::Value& v2);
 
 // Dump the keys on which hashes differ from given keyVals
 thrift::Publication dumpDifference(

@@ -226,8 +226,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   v2 = refValue;
   (*v1.version_ref())++;
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, 1); // v1 is better
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
   }
 
   // diff originatorId
@@ -235,8 +235,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   v2 = refValue;
   *v2.originatorId_ref() = "node6";
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, -1); // v2 is better
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::SECOND); // v2 is better
   }
 
   // diff ttlVersion
@@ -244,16 +244,16 @@ TEST(KvStoreUtil, compareValuesTest) {
   v2 = refValue;
   (*v1.ttlVersion_ref())++;
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, 1); // v1 is better
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
   }
 
   // same values
   v1 = refValue;
   v2 = refValue;
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, 0); // same
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::TIED); // same
   }
 
   // hash and value are different
@@ -262,8 +262,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   v1.value_ref() = "dummyValue1";
   v1.hash_ref() = 445566;
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, 1); // v1 is better
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
   }
 
   // v2.hash is missing, values are different
@@ -272,8 +272,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   v1.value_ref() = "dummyValue1";
   v2.hash_ref().reset();
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, 1); // v1 is better
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
   }
 
   // v1.hash and v1.value are missing
@@ -282,8 +282,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   v1.value_ref().reset();
   v1.hash_ref().reset();
   {
-    int rc = compareValues(v1, v2);
-    EXPECT_EQ(rc, -2); // unknown
+    ComparisonResult rc = compareValues(v1, v2);
+    EXPECT_EQ(rc, ComparisonResult::UNKNOWN); // unknown
   }
 }
 

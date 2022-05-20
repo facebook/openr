@@ -236,16 +236,19 @@ mergeKeyValues(
 /**
  * Compare two values to find out which value is better
  */
-int
+ComparisonResult
 compareValues(const thrift::Value& v1, const thrift::Value& v2) {
   // compare version
   if (*v1.version_ref() != *v2.version_ref()) {
-    return *v1.version_ref() > *v2.version_ref() ? 1 : -1;
+    return *v1.version_ref() > *v2.version_ref() ? ComparisonResult::FIRST
+                                                 : ComparisonResult::SECOND;
   }
 
   // compare orginatorId
   if (*v1.originatorId_ref() != *v2.originatorId_ref()) {
-    return *v1.originatorId_ref() > *v2.originatorId_ref() ? 1 : -1;
+    return *v1.originatorId_ref() > *v2.originatorId_ref()
+        ? ComparisonResult::FIRST
+        : ComparisonResult::SECOND;
   }
 
   // compare value
@@ -256,19 +259,28 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
     // hashes are same => (version, orginatorId, value are same)
     // compare ttl-version
     if (*v1.ttlVersion_ref() != *v2.ttlVersion_ref()) {
-      return *v1.ttlVersion_ref() > *v2.ttlVersion_ref() ? 1 : -1;
+      return *v1.ttlVersion_ref() > *v2.ttlVersion_ref()
+          ? ComparisonResult::FIRST
+          : ComparisonResult::SECOND;
     } else {
-      return 0;
+      return ComparisonResult::TIED;
     }
   }
 
   // can't use hash, either it's missing or they are different
   // compare values
   if (v1.value_ref().has_value() and v2.value_ref().has_value()) {
-    return (*v1.value_ref()).compare(*v2.value_ref());
+    auto compareRes = (*v1.value_ref()).compare(*v2.value_ref());
+    if (compareRes > 0) {
+      return ComparisonResult::FIRST;
+    } else if (compareRes < 0) {
+      return ComparisonResult::SECOND;
+    } else {
+      return ComparisonResult::TIED;
+    }
   } else {
     // some value is missing
-    return -2; // unknown
+    return ComparisonResult::UNKNOWN;
   }
 }
 
@@ -389,14 +401,12 @@ dumpDifference(
     }
 
     const auto& reqVal = reqKv->second;
-    int rc = compareValues(myVal, reqVal);
+    ComparisonResult rc = compareValues(myVal, reqVal);
 
-    if (rc == 1 or rc == -2) {
-      // myVal is better or unknown
+    if (rc == ComparisonResult::FIRST or rc == ComparisonResult::UNKNOWN) {
       thriftPub.keyVals_ref()->emplace(myKey, myVal);
     }
-    if (rc == -1 or rc == -2) {
-      // reqVal is better or unknown
+    if (rc == ComparisonResult::SECOND or rc == ComparisonResult::UNKNOWN) {
       thriftPub.tobeUpdatedKeys_ref()->emplace_back(myKey);
     }
   }
