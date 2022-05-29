@@ -393,20 +393,62 @@ PrefixManager::buildOriginatedPrefixes(
   staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
 }
 
+std::pair<thrift::PrefixType, const PrefixEntry>
+PrefixManager::getBestPrefixEntry(
+    const std::unordered_map<thrift::PrefixType, PrefixEntry>&
+        prefixTypeToEntry) {
+  // select the best entry/entries by comparing metric_ref() field
+  const auto bestTypes = selectBestPrefixMetrics(prefixTypeToEntry);
+  auto bestType = *bestTypes.begin();
+  // if best route is BGP, and an equivalent CONFIG route exists,
+  // then prefer config route if knob prefer_openr_originated_config_=true
+  if (bestType == thrift::PrefixType::BGP and preferOpenrOriginatedRoutes_ and
+      bestTypes.count(thrift::PrefixType::CONFIG)) {
+    bestType = thrift::PrefixType::CONFIG;
+  }
+  return std::make_pair(bestType, prefixTypeToEntry.at(bestType));
+}
+
 void
 PrefixManager::sendStaticUnicastRoutes(thrift::PrefixType prefixType) {
   DecisionRouteUpdate routeUpdatesForDecision;
   DecisionRouteUpdate routeUpdatesForBgp;
   routeUpdatesForDecision.prefixType = prefixType;
 
+  // During initialization, when PrefixManager receives prefixes of a particular
+  // type, this function is used to send prefixEntries corresponding that type
+  // to Decision.
+
   for (const auto& [prefix, prefixEntries] : prefixMap_) {
-    for (const auto& [type, prefixEntry] : prefixEntries) {
-      if (type != prefixType) {
+    // When preferOpenrOriginatedRoutes_ is set, CONFIG routes should be
+    // preferred over BGP routes
+
+    // TODO: Ideally the following logic should be covered by the
+    // getBestPrefixEntry below. However, getBestPrefixEntry could work only
+    // when prefixMap_ has the entry of the type hrift::PrefixType::CONFIG.
+    // If we add an entry when buildOriginatedPrefixes (e.g., by performing
+    // processOriginatedPrefixes after building), several exiting tests would
+    // break. Currently, PrefixManager sends the originated routes to
+    // Decision and Decision would then configure the routes by triggerring
+    // redistributePrefixesAcrossAreas on PrefixManager. To simplify the logic
+    // below, we need to revisit that process.
+    if (preferOpenrOriginatedRoutes_ and
+        (prefixType == thrift::PrefixType::BGP)) {
+      // check if thrift::PrefixType::CONFIG exists already
+      if (originatedPrefixDb_.count(prefix)) {
+        // if so, prioritize CONFIG route over BGP routes, and hence we
+        // shouldn't update
         continue;
       }
-      populateRouteUpdates(
-          prefix, prefixEntry, routeUpdatesForDecision, routeUpdatesForBgp);
     }
+
+    // Only populate the best entry
+    auto [bestType, bestEntry] = getBestPrefixEntry(prefixEntries);
+    if (bestType != prefixType) {
+      continue;
+    }
+    populateRouteUpdates(
+        prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
   }
   staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
 }
@@ -463,9 +505,9 @@ PrefixManager::updatePrefixKeysInKvStore(
 
   auto keysIt = advertiseStatus_.find(prefix);
   if (keysIt != advertiseStatus_.end()) {
-    // ATTN: advertiseStatus_ collection holds "advertised" prefixes in previous
-    // round of syncing. By removing prefixes in current run, whatever left in
-    // `advertiseStatus_` will be the delta to be removed.
+    // ATTN: advertiseStatus_ collection holds "advertised" prefixes in
+    // previous round of syncing. By removing prefixes in current run,
+    // whatever left in `advertiseStatus_` will be the delta to be removed.
     for (const auto& area : updatedArea) {
       keysIt->second.areas.erase(area);
     }
@@ -649,27 +691,6 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
   return true;
 }
 
-namespace {
-
-std::pair<thrift::PrefixType, const PrefixEntry>
-getBestPrefixEntry(
-    const std::unordered_map<thrift::PrefixType, PrefixEntry>&
-        prefixTypeToEntry,
-    bool preferOpenrOriginatedRoutes) {
-  // select the best entry/entries by comparing metric_ref() field
-  const auto bestTypes = selectBestPrefixMetrics(prefixTypeToEntry);
-  auto bestType = *bestTypes.begin();
-  // if best route is BGP, and an equivalent CONFIG route exists,
-  // then prefer config route if knob prefer_openr_originated_config_=true
-  if (bestType == thrift::PrefixType::BGP and preferOpenrOriginatedRoutes and
-      bestTypes.count(thrift::PrefixType::CONFIG)) {
-    bestType = thrift::PrefixType::CONFIG;
-  }
-  return std::make_pair(bestType, prefixTypeToEntry.at(bestType));
-}
-
-} // namespace
-
 void
 PrefixManager::syncKvStore() {
   XLOG(DBG1) << "[KvStore Sync] Syncing " << pendingUpdates_.size()
@@ -695,8 +716,7 @@ PrefixManager::syncKvStore() {
     receivedPrefixCnt += prefixEntries.size();
 
     // Check if prefix is updated and ready to be advertised.
-    auto [_, bestEntry] =
-        getBestPrefixEntry(prefixEntries, preferOpenrOriginatedRoutes_);
+    auto [_, bestEntry] = getBestPrefixEntry(prefixEntries);
     const auto& labelRef = bestEntry.tPrefixEntry->prependLabel_ref();
     bool hasPrefixUpdate = pendingUpdates_.hasPrefix(prefix);
     bool haslabelUpdate =
@@ -1159,8 +1179,7 @@ PrefixManager::filterAndAddAreaRoute(
     return;
   }
 
-  auto bestTypeEntry =
-      getBestPrefixEntry(prefixEntries, preferOpenrOriginatedRoutes_);
+  auto bestTypeEntry = getBestPrefixEntry(prefixEntries);
   thrift::PrefixType bestPrefixType = bestTypeEntry.first;
   const auto& bestPrefixEntry = bestTypeEntry.second;
 
@@ -1225,7 +1244,8 @@ std::vector<PrefixEntry>
 PrefixManager::applyOriginationPolicy(
     const std::vector<PrefixEntry>& prefixEntries,
     const std::string& policyName) {
-  // Store them before applying origination policy for future debugging purpose
+  // Store them before applying origination policy for future debugging
+  // purpose
   storeOriginatedPrefixes(prefixEntries, policyName);
   std::vector<PrefixEntry> postOriginationPrefixes = {};
   for (auto prefix : prefixEntries) {
@@ -1538,13 +1558,13 @@ PrefixManager::processOriginatedPrefixes() {
       XLOG(DBG1) << "[Route Origination] Withdrawing originated route "
                  << folly::IPAddress::networkToString(network);
     } else {
-      // In OpenR initialization process, PrefixManager publishes unicast routes
-      // for config originated prefixes with `install_to_fib=true` (This is
-      // required in warmboot). If it turns out there are no enough supporting
-      // routes, previously published unicast routes in OpenR initialization
-      // process should be deleted.
-      // TODO: Consider moving static route generation and best entry selection
-      // logic to Decision.
+      // In OpenR initialization process, PrefixManager publishes unicast
+      // routes for config originated prefixes with `install_to_fib=true`
+      // (This is required in warmboot). If it turns out there are no enough
+      // supporting routes, previously published unicast routes in OpenR
+      // initialization process should be deleted.
+      // TODO: Consider moving static route generation and best entry
+      // selection logic to Decision.
       if ((not route.supportingRoutesFulfilled()) and
           advertiseStatus_.count(network) > 0 and
           advertiseStatus_[network].publishedRoute.has_value()) {
@@ -1565,8 +1585,8 @@ PrefixManager::processOriginatedPrefixes() {
 void
 PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   // Forward fib update to bgprib for route announcement.
-  // NOTE: fib update does not include routes that do not need fib programming,
-  // which are send to bgprib in syncKvStore().
+  // NOTE: fib update does not include routes that do not need fib
+  // programming, which are send to bgprib in syncKvStore().
   //
   // If initialization process is enabled, full sync signal will be sent
   // explicitly in triggerInitialPrefixDbSync(). We send fib update as
@@ -1680,8 +1700,7 @@ PrefixManager::redistributePrefixesAcrossAreas(
     if (*prefixEntry.type_ref() == thrift::PrefixType::CONFIG) {
       // Skip local-originated prefix as it won't be considered as
       // part of its own supporting routes.
-      auto originatedPrefixIt = originatedPrefixDb_.find(prefix);
-      if (originatedPrefixIt != originatedPrefixDb_.end()) {
+      if (originatedPrefixDb_.count(prefix)) {
         continue;
       }
     }

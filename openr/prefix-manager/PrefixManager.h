@@ -289,6 +289,13 @@ class PrefixManager final : public OpenrEventBase {
       const std::unordered_set<std::string>& deletedArea);
 
   /*
+   * Perform best entry selection among the given prefixTypeToEntry
+   */
+  std::pair<thrift::PrefixType, const PrefixEntry> getBestPrefixEntry(
+      const std::unordered_map<thrift::PrefixType, PrefixEntry>&
+          prefixTypeToEntry);
+
+  /*
    * Send static unicast routes for prefix entries of certain type in OpenR
    * initialization process.
    */

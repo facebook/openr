@@ -3681,6 +3681,57 @@ TEST_F(
   evb.run();
 }
 
+class SingleProtocolRoutingTestFixture
+    : public PrefixManagerInitialKvStoreSyncTestFixture {
+ protected:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
+    // Single protocol routing settings
+    tConfig.prefer_openr_originated_routes() = true;
+    tConfig.enable_best_route_selection() = true;
+    tConfig.enable_bgp_peering() = true;
+    tConfig.bgp_config() = thrift::BgpConfig();
+
+    // Set originated prefixes.
+    thrift::OriginatedPrefix originatedPrefixV4;
+    originatedPrefixV4.prefix() = toString(addr4);
+    originatedPrefixV4.install_to_fib() = true;
+    thrift::OriginatedPrefix originatedPrefixV6;
+    originatedPrefixV6.prefix() = toString(addr6);
+    originatedPrefixV6.minimum_supporting_routes() = 0;
+    originatedPrefixV6.install_to_fib() = true;
+
+    tConfig.originated_prefixes() = {originatedPrefixV4, originatedPrefixV6};
+
+    tConfig.enable_ordered_adj_publication() = true;
+
+    return tConfig;
+  }
+};
+
+TEST_F(SingleProtocolRoutingTestFixture, LocalRouteWinsOverBgpRoutesTest) {
+  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
+
+  // install the orignated routes
+  auto update = waitForRouteUpdate(staticRoutesReader);
+  EXPECT_THAT(*update->unicastRoutesToUpdate(), testing::SizeIs(2));
+  EXPECT_THAT(*update->unicastRoutesToDelete(), testing::SizeIs(0));
+
+  // Send the bgp prefix addr6
+  PrefixEvent event(
+      PrefixEventType::ADD_PREFIXES,
+      thrift::PrefixType::BGP,
+      {createPrefixEntry(addr6, thrift::PrefixType::BGP)});
+  prefixUpdatesQueue.push(std::move(event));
+
+  // BGP route should not win over originated routes
+  // And hence, no updated should be found
+  update = waitForRouteUpdate(staticRoutesReader);
+  EXPECT_THAT(*update->unicastRoutesToUpdate(), testing::SizeIs(0));
+  EXPECT_THAT(*update->unicastRoutesToDelete(), testing::SizeIs(0));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
