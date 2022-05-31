@@ -1094,10 +1094,9 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   OpenrEventBase evb;
   folly::Baton waitBaton;
   int scheduleAt{0};
-  // wait to sync kvstore. Set as 100ms sine p99 of KvStore convergece completed
-  // within 99ms as of today.
+  // wait 250ms for kvstore to sync.
   evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 100), [&]() noexcept {
+      std::chrono::milliseconds(scheduleAt += 250), [&]() noexcept {
         // std::this_thread::sleep_for(std::chrono::milliseconds(100));
         // key 'test1' should be added with remaining TTL
         maybeThriftVal = store1->getKey(kTestingAreaName, "test1");
