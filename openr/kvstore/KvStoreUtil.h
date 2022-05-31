@@ -270,11 +270,13 @@ thrift::Publication dumpHashWithFilters(
     const KvStoreFilters& kvFilters);
 
 // Update Time to expire filed in Publication
-// If timeleft is below Constants::kTtlThreshold, erase keyVals
+// If timeleft is below Constants::kTtlThreshold and removeAboutToExpire is
+// true, erase keyVals
 void updatePublicationTtl(
     const TtlCountdownQueue& ttlCountdownQueue,
     const std::chrono::milliseconds ttlDecr,
-    thrift::Publication& thriftPub);
+    thrift::Publication& thriftPub,
+    const bool removeAboutToExpire = true);
 
 } // namespace openr
 

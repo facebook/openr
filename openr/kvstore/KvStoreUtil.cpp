@@ -477,7 +477,8 @@ void
 updatePublicationTtl(
     const TtlCountdownQueue& ttlCountdownQueue,
     const std::chrono::milliseconds ttlDecr,
-    thrift::Publication& thriftPub) {
+    thrift::Publication& thriftPub,
+    const bool removeAboutToExpire) {
   auto timeNow = std::chrono::steady_clock::now();
   for (const auto& qE : ttlCountdownQueue) {
     // Find key and ensure we are taking time from right entry from queue
@@ -498,7 +499,7 @@ updatePublicationTtl(
     }
 
     // filter key from publication if time left is below ttl threshold
-    if (timeLeft < Constants::kTtlThreshold) {
+    if (removeAboutToExpire and (timeLeft < Constants::kTtlThreshold)) {
       thriftPub.keyVals_ref()->erase(kv);
       continue;
     }

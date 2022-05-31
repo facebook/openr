@@ -244,7 +244,10 @@ KvStore<ClientType>::semifuture_getKvStoreKeyVals(
 
       auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys_ref());
       updatePublicationTtl(
-          kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
+          kvStoreDb.getTtlCountdownQueue(),
+          kvParams_.ttlDecr,
+          thriftPub,
+          false);
 
       p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
     } catch (thrift::KvStoreError const& e) {
