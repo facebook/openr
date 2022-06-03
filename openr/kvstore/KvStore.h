@@ -68,7 +68,7 @@ using SelfOriginatedKeyVals =
  */
 struct KvStoreParams {
   // the name of this node (unique in domain)
-  std::string nodeId;
+  std::string nodeId{};
 
   // Queue for publishing KvStore updates to other modules within a process
   messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue;
@@ -77,11 +77,11 @@ struct KvStoreParams {
   messaging::ReplicateQueue<LogSample>& logSampleQueue;
 
   // IP ToS
-  std::optional<int> maybeIpTos;
+  std::optional<int> maybeIpTos{std::nullopt};
   // KvStore key filters
-  std::optional<KvStoreFilters> filters;
+  std::optional<KvStoreFilters> filters{std::nullopt};
   // Kvstore flooding rate
-  std::optional<thrift::KvStoreFloodRate> floodRate;
+  std::optional<thrift::KvStoreFloodRate> floodRate{std::nullopt};
   // TTL decrement factor
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
   // TTL for self-originated keys
@@ -442,10 +442,10 @@ class KvStoreDb {
   KvStoreParams& kvParams_;
 
   // area identified of this KvStoreDb instance
-  const std::string area_;
+  const std::string area_{};
 
   // area id tag for logging purpose
-  const std::string areaTag_;
+  const std::string areaTag_{};
 
   // KvStore peer struct to convey peer information
   struct KvStorePeer {
@@ -460,10 +460,10 @@ class KvStoreDb {
         OpenrEventBase* evb, std::optional<int> maybeIpTos);
 
     // node name
-    const std::string nodeName;
+    const std::string nodeName{};
 
     // area tag
-    const std::string areaTag;
+    const std::string areaTag{};
 
     // peer spec(peerSpec can be modified as peerAddr can change)
     thrift::PeerSpec peerSpec;
@@ -486,7 +486,7 @@ class KvStoreDb {
     // Stores set of keys that may have changed during initialization of this
     // peer. Will flood to them in finalizeFullSync(), the last step of
     // initial sync.
-    std::unordered_set<std::string> pendingKeysDuringInitialization;
+    std::unordered_set<std::string> pendingKeysDuringInitialization{};
 
     // Number of occured Thrift API errors in the process of syncing with
     // peer.
@@ -501,13 +501,13 @@ class KvStoreDb {
   bool initialSyncCompleted_{false};
 
   // store keys mapped to (version, originatoId, value)
-  std::unordered_map<std::string, thrift::Value> kvStore_;
+  std::unordered_map<std::string, thrift::Value> kvStore_{};
 
   // TTL count down queue
   TtlCountdownQueue ttlCountdownQueue_;
 
   // TTL count down timer
-  std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_;
+  std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_{nullptr};
 
   // Kvstore rate limiter
   std::unique_ptr<folly::BasicTokenBucket<>> floodLimiter_{nullptr};
@@ -519,34 +519,34 @@ class KvStoreDb {
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
 
   // timer to advertise ttl updates for self-originated key-vals
-  std::unique_ptr<folly::AsyncTimeout> selfOriginatedKeyTtlTimer_;
+  std::unique_ptr<folly::AsyncTimeout> selfOriginatedKeyTtlTimer_{nullptr};
 
   // timer to advertise key-vals for self-originated keys
-  std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_;
+  std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_{nullptr};
 
   // all self originated key-vals and their backoffs
   // persistKey and setKey will add, clearKey will remove
   std::unordered_map<std::string /* key */, SelfOriginatedValue>
-      selfOriginatedKeyVals_;
+      selfOriginatedKeyVals_{};
 
   // Map of keys to unset to new values to set. Used for batch processing of
   // unset ClearKeyValueRequests.
-  std::unordered_map<std::string /* key */, thrift::Value> keysToUnset_;
+  std::unordered_map<std::string /* key */, thrift::Value> keysToUnset_{};
 
   // Set of local keys to be re-advertised.
-  std::unordered_set<std::string /* key */> keysToAdvertise_;
+  std::unordered_set<std::string /* key */> keysToAdvertise_{};
 
   // Throttle advertisement of self-originated persisted keys.
   // Calls `advertiseSelfOriginatedKeys()`.
-  std::unique_ptr<AsyncThrottle> advertiseSelfOriginatedKeysThrottled_;
+  std::unique_ptr<AsyncThrottle> advertiseSelfOriginatedKeysThrottled_{nullptr};
 
   // Throttle advertisement of TTL updates for self-originated keys.
   // Calls `advertiseTtlUpdates()`.
-  std::unique_ptr<AsyncThrottle> selfOriginatedTtlUpdatesThrottled_;
+  std::unique_ptr<AsyncThrottle> selfOriginatedTtlUpdatesThrottled_{nullptr};
 
   // Throttle unsetting of self-originated keys.
   // Calls `unsetPendingSelfOriginatedKeys()`.
-  std::unique_ptr<AsyncThrottle> unsetSelfOriginatedKeysThrottled_;
+  std::unique_ptr<AsyncThrottle> unsetSelfOriginatedKeysThrottled_{nullptr};
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>
