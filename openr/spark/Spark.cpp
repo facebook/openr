@@ -212,30 +212,30 @@ Spark::SparkNeighbor::toThrift() const {
   thrift::SparkNeighbor info;
 
   // populate basic info
-  info.nodeName_ref() = this->nodeName;
-  info.state_ref() = apache::thrift::util::enumNameSafe(this->state);
-  info.event_ref() = apache::thrift::util::enumNameSafe(this->event);
-  info.area_ref() = this->area;
+  info.nodeName() = this->nodeName;
+  info.state() = apache::thrift::util::enumNameSafe(this->state);
+  info.event() = apache::thrift::util::enumNameSafe(this->event);
+  info.area() = this->area;
 
   // populate address/port info for TCP connection
-  info.transportAddressV4_ref() = this->transportAddressV4;
-  info.transportAddressV6_ref() = this->transportAddressV6;
-  info.openrCtrlThriftPort_ref() = this->openrCtrlThriftPort;
+  info.transportAddressV4() = this->transportAddressV4;
+  info.transportAddressV6() = this->transportAddressV6;
+  info.openrCtrlThriftPort() = this->openrCtrlThriftPort;
 
   // populate interface info
-  info.localIfName_ref() = this->localIfName;
-  info.remoteIfName_ref() = this->remoteIfName;
+  info.localIfName() = this->localIfName;
+  info.remoteIfName() = this->remoteIfName;
 
   // populate misc info
-  info.rttUs_ref() = this->rtt.count();
+  info.rttUs() = this->rtt.count();
 
   // populate telemetry info
   auto currentTime = getCurrentTime<std::chrono::milliseconds>();
-  info.lastHelloMsgSentTimeDelta_ref() =
+  info.lastHelloMsgSentTimeDelta() =
       currentTime.count() - lastHelloMsgSentAt.count();
-  info.lastHandshakeMsgSentTimeDelta_ref() =
+  info.lastHandshakeMsgSentTimeDelta() =
       currentTime.count() - lastHandshakeMsgSentAt.count();
-  info.lastHeartbeatMsgSentTimeDelta_ref() =
+  info.lastHeartbeatMsgSentTimeDelta() =
       currentTime.count() - lastHeartbeatMsgSentAt.count();
 
   return info;
@@ -282,7 +282,7 @@ Spark::SparkNeighbor::shouldResetAdjacency(
   }
 
   // Honor the `holdAdjacency` flag from `SparkHeartbeatMsg`
-  return not *heartbeatMsg.holdAdjacency_ref();
+  return not *heartbeatMsg.holdAdjacency();
 }
 
 Spark::Spark(
@@ -295,31 +295,29 @@ Spark::Spark(
     std::optional<uint32_t> maybeMaxAllowedPps)
     : myNodeName_(config->getNodeName()),
       neighborDiscoveryPort_(static_cast<uint16_t>(
-          *config->getSparkConfig().neighbor_discovery_port_ref())),
+          *config->getSparkConfig().neighbor_discovery_port())),
       helloTime_(
-          std::chrono::seconds(*config->getSparkConfig().hello_time_s_ref())),
+          std::chrono::seconds(*config->getSparkConfig().hello_time_s())),
       fastInitHelloTime_(std::chrono::milliseconds(
-          *config->getSparkConfig().fastinit_hello_time_ms_ref())),
+          *config->getSparkConfig().fastinit_hello_time_ms())),
       handshakeTime_(std::chrono::milliseconds(
-          *config->getSparkConfig().fastinit_hello_time_ms_ref())),
+          *config->getSparkConfig().fastinit_hello_time_ms())),
       initializationHoldTime_(3 * fastInitHelloTime_ + handshakeTime_),
-      keepAliveTime_(std::chrono::seconds(
-          *config->getSparkConfig().keepalive_time_s_ref())),
-      handshakeHoldTime_(std::chrono::seconds(
-          *config->getSparkConfig().keepalive_time_s_ref())),
-      holdTime_(
-          std::chrono::seconds(*config->getSparkConfig().hold_time_s_ref())),
+      keepAliveTime_(
+          std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
+      handshakeHoldTime_(
+          std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
+      holdTime_(std::chrono::seconds(*config->getSparkConfig().hold_time_s())),
       gracefulRestartTime_(std::chrono::seconds(
-          *config->getSparkConfig().graceful_restart_time_s_ref())),
+          *config->getSparkConfig().graceful_restart_time_s())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
-      kOpenrCtrlThriftPort_(
-          *config->getThriftServerConfig().openr_ctrl_port_ref()),
+      kOpenrCtrlThriftPort_(*config->getThriftServerConfig().openr_ctrl_port()),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
       enableOrderedAdjPublication_(
-          *config->getConfig().enable_ordered_adj_publication_ref()),
+          *config->getConfig().enable_ordered_adj_publication()),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
       << "Keep-alive-time must be less than hold-time.";
@@ -492,8 +490,8 @@ Spark::prepareSocket() noexcept {
   }
 
   // Set ip-tos
-  if (config_->getConfig().ip_tos_ref().has_value()) {
-    int ipTos = config_->getConfig().ip_tos_ref().value();
+  if (config_->getConfig().ip_tos().has_value()) {
+    int ipTos = config_->getConfig().ip_tos().value();
     if (ioProvider_->setsockopt(
             fd, IPPROTO_IPV6, IPV6_TCLASS, &ipTos, sizeof(int)) != 0) {
       XLOG(FATAL) << "Failed setting ip-tos value on socket. Error: "
@@ -782,7 +780,7 @@ Spark::processRttChange(
   sparkNeighbor.rtt = roundedNewRtt;
 
   // notify the rtt changes if use the rtt metric
-  if (*config_->getLinkMonitorConfig().use_rtt_metric_ref()) {
+  if (*config_->getLinkMonitorConfig().use_rtt_metric()) {
     XLOG(DBG1) << fmt::format(
         "[SparkHelloMsg] RTT for neighbor:{} has changed from {}us to {}us over iface: {}",
         neighborName,
@@ -901,19 +899,19 @@ Spark::sendHandshakeMsg(
 
   // build handshake msg
   thrift::SparkHandshakeMsg handshakeMsg;
-  handshakeMsg.nodeName_ref() = myNodeName_;
-  handshakeMsg.isAdjEstablished_ref() = isAdjEstablished;
-  handshakeMsg.holdTime_ref() = holdTime_.count();
-  handshakeMsg.gracefulRestartTime_ref() = gracefulRestartTime_.count();
-  handshakeMsg.transportAddressV6_ref() = toBinaryAddress(v6Addr);
-  handshakeMsg.transportAddressV4_ref() = toBinaryAddress(v4Addr);
-  handshakeMsg.openrCtrlThriftPort_ref() = kOpenrCtrlThriftPort_;
+  handshakeMsg.nodeName() = myNodeName_;
+  handshakeMsg.isAdjEstablished() = isAdjEstablished;
+  handshakeMsg.holdTime() = holdTime_.count();
+  handshakeMsg.gracefulRestartTime() = gracefulRestartTime_.count();
+  handshakeMsg.transportAddressV6() = toBinaryAddress(v6Addr);
+  handshakeMsg.transportAddressV4() = toBinaryAddress(v4Addr);
+  handshakeMsg.openrCtrlThriftPort() = kOpenrCtrlThriftPort_;
   // ATTN: send neighborAreaId deduced locally
-  handshakeMsg.area_ref() = neighborAreaId;
-  handshakeMsg.neighborNodeName_ref() = neighborName;
+  handshakeMsg.area() = neighborAreaId;
+  handshakeMsg.neighborNodeName() = neighborName;
 
   thrift::SparkHelloPacket pkt;
-  pkt.handshakeMsg_ref() = std::move(handshakeMsg);
+  pkt.handshakeMsg() = std::move(handshakeMsg);
 
   auto packet = writeThriftObjStr(pkt, serializer_);
 
@@ -987,17 +985,17 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
 
   // build heartbeat msg
   thrift::SparkHeartbeatMsg heartbeatMsg;
-  heartbeatMsg.nodeName_ref() = myNodeName_;
-  heartbeatMsg.seqNum_ref() = mySeqNum_;
-  heartbeatMsg.holdAdjacency_ref() = false;
+  heartbeatMsg.nodeName() = myNodeName_;
+  heartbeatMsg.seqNum() = mySeqNum_;
+  heartbeatMsg.holdAdjacency() = false;
   if (enableOrderedAdjPublication_) {
     // ATTN: notify peer to set special adjacency flag when node is still within
     // initialization procedure
-    heartbeatMsg.holdAdjacency_ref() = (not initialized_);
+    heartbeatMsg.holdAdjacency() = (not initialized_);
   }
 
   thrift::SparkHelloPacket pkt;
-  pkt.heartbeatMsg_ref() = std::move(heartbeatMsg);
+  pkt.heartbeatMsg() = std::move(heartbeatMsg);
 
   auto packet = writeThriftObjStr(pkt, serializer_);
 
@@ -1364,15 +1362,15 @@ Spark::processHelloMsg(
     thrift::SparkHelloMsg const& helloMsg,
     std::string const& ifName,
     std::chrono::microseconds const& myRecvTimeInUs) {
-  auto const& neighborName = *helloMsg.nodeName_ref();
-  auto const& remoteIfName = *helloMsg.ifName_ref();
-  auto const& neighborInfos = *helloMsg.neighborInfos_ref();
-  auto const& remoteVersion = static_cast<uint32_t>(*helloMsg.version_ref());
-  auto const& remoteSeqNum = static_cast<uint64_t>(*helloMsg.seqNum_ref());
+  auto const& neighborName = *helloMsg.nodeName();
+  auto const& remoteIfName = *helloMsg.ifName();
+  auto const& neighborInfos = *helloMsg.neighborInfos();
+  auto const& remoteVersion = static_cast<uint32_t>(*helloMsg.version());
+  auto const& remoteSeqNum = static_cast<uint64_t>(*helloMsg.seqNum());
   auto const& nbrSentTimeInUs =
-      std::chrono::microseconds(*helloMsg.sentTsInUs_ref());
-  auto const& solicitResponse = *helloMsg.solicitResponse_ref();
-  auto const& restarting = *helloMsg.restarting_ref();
+      std::chrono::microseconds(*helloMsg.sentTsInUs());
+  auto const& solicitResponse = *helloMsg.solicitResponse();
+  auto const& restarting = *helloMsg.restarting();
 
   XLOG(DBG2) << "[SparkHelloMsg] Received pkt over intf: " << ifName
              << ", solicitResponse: " << std::boolalpha << solicitResponse
@@ -1392,10 +1390,10 @@ Spark::processHelloMsg(
 
   // version check
   if (remoteVersion <
-      static_cast<uint32_t>(*kVersion_.lowestSupportedVersion_ref())) {
+      static_cast<uint32_t>(*kVersion_.lowestSupportedVersion())) {
     XLOG(ERR) << "[SparkHelloMsg] Unsupported version: " << remoteVersion
               << " from: " << neighborName
-              << ", must be >= " << *kVersion_.lowestSupportedVersion_ref();
+              << ", must be >= " << *kVersion_.lowestSupportedVersion();
     fb303::fbData->addStatValue("spark.hello.invalid_version", 1, fb303::SUM);
     return;
   }
@@ -1426,7 +1424,7 @@ Spark::processHelloMsg(
         std::piecewise_construct,
         std::forward_as_tuple(neighborName),
         std::forward_as_tuple(
-            *config_->getSparkConfig().step_detector_conf_ref(),
+            *config_->getSparkConfig().step_detector_conf(),
             neighborName, // neighborNode name
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
@@ -1454,9 +1452,9 @@ Spark::processHelloMsg(
         // recvTime of neighbor helloPkt
         myRecvTimeInUs,
         // sentTime of my helloPkt recorded by neighbor
-        std::chrono::microseconds(*ts.lastNbrMsgSentTsInUs_ref()),
+        std::chrono::microseconds(*ts.lastNbrMsgSentTsInUs()),
         // recvTime of my helloPkt recorded by neighbor
-        std::chrono::microseconds(*ts.lastMyMsgRcvdTsInUs_ref()),
+        std::chrono::microseconds(*ts.lastMyMsgRcvdTsInUs()),
         // sentTime of neighbor helloPkt
         nbrSentTimeInUs,
         neighborName,
@@ -1471,7 +1469,7 @@ Spark::processHelloMsg(
 
   // for neighbor in fast initial state and does not see us yet,
   // reply for quick convergence
-  if (*helloMsg.solicitResponse_ref()) {
+  if (*helloMsg.solicitResponse()) {
     XLOG(DBG2) << fmt::format(
         "[SparkHelloMsg] Neighbor: {} is soliciting response. Reply immediately.",
         neighborName);
@@ -1501,7 +1499,7 @@ Spark::processHelloMsg(
     // Ignore this helloMsg from my previous incarnation.
     // Wait for neighbor to catch up with the latest Seq#.
     const uint64_t myRemoteSeqNum =
-        static_cast<uint64_t>(*neighborInfos.at(myNodeName_).seqNum_ref());
+        static_cast<uint64_t>(*neighborInfos.at(myNodeName_).seqNum());
     if (myRemoteSeqNum >= mySeqNum_) {
       XLOG(DBG2)
           << "[SparkHelloMsg] Seeing my previous incarnation from neighbor: "
@@ -1524,7 +1522,7 @@ Spark::processHelloMsg(
     neighbor.seqNum = remoteSeqNum;
 
     // Check if neighbor is undergoing 'Graceful-Restart'
-    if (*helloMsg.restarting_ref()) {
+    if (*helloMsg.restarting()) {
       XLOG(INFO) << "[SparkHelloMsg] Adjacent neighbor: " << neighborName
                  << ", from remote interface: " << remoteIfName
                  << ", on interface: " << ifName << " is restarting.";
@@ -1590,7 +1588,7 @@ void
 Spark::processHandshakeMsg(
     thrift::SparkHandshakeMsg const& handshakeMsg, std::string const& ifName) {
   // sanity check for SparkHandshakeMsg
-  auto const& neighborName = *handshakeMsg.nodeName_ref();
+  auto const& neighborName = *handshakeMsg.nodeName();
   auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
   if (PacketValidationResult::SUCCESS != sanityCheckResult) {
     return;
@@ -1598,7 +1596,7 @@ Spark::processHandshakeMsg(
 
   // Ignore handshakeMsg if I am NOT the receiver as AREA negotiation
   // is point-to-point
-  if (auto neighborNodeName = handshakeMsg.neighborNodeName_ref()) {
+  if (auto neighborNodeName = handshakeMsg.neighborNodeName()) {
     if (*neighborNodeName != myNodeName_) {
       XLOG(DBG4) << fmt::format(
           "[SparkHandshakeMsg] Ignoring msg targeted for node: {}, my node name: {}",
@@ -1629,7 +1627,7 @@ Spark::processHandshakeMsg(
   //       state will fall back from NEGOTIATE => WARM.
   //       Node should NOT ask for handshakeMsg reply to
   //       avoid infinite loop of pkt between nodes.
-  if (not(*handshakeMsg.isAdjEstablished_ref())) {
+  if (not(*handshakeMsg.isAdjEstablished())) {
     sendHandshakeMsg(
         ifName,
         neighborName,
@@ -1652,23 +1650,22 @@ Spark::processHandshakeMsg(
   }
 
   // update Spark neighborState
-  neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort_ref();
-  neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4_ref();
-  neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6_ref();
+  neighbor.openrCtrlThriftPort = *handshakeMsg.openrCtrlThriftPort();
+  neighbor.transportAddressV4 = *handshakeMsg.transportAddressV4();
+  neighbor.transportAddressV6 = *handshakeMsg.transportAddressV6();
 
   // update neighbor holdTime as "NEGOTIATING" process
-  neighbor.heartbeatHoldTime = std::max(
-      std::chrono::milliseconds(*handshakeMsg.holdTime_ref()), holdTime_);
+  neighbor.heartbeatHoldTime =
+      std::max(std::chrono::milliseconds(*handshakeMsg.holdTime()), holdTime_);
   neighbor.gracefulRestartHoldTime = std::max(
-      std::chrono::milliseconds(*handshakeMsg.gracefulRestartTime_ref()),
+      std::chrono::milliseconds(*handshakeMsg.gracefulRestartTime()),
       gracefulRestartTime_);
 
   // v4 subnet validation if v4 is enabled. If we're using v4-over-v6 we no
   // longer need to validate the address reported by neighbor node
   if (enableV4_ and not v4OverV6Nexthop_) {
     if (PacketValidationResult::FAILURE ==
-        validateV4AddressSubnet(
-            ifName, *handshakeMsg.transportAddressV4_ref())) {
+        validateV4AddressSubnet(ifName, *handshakeMsg.transportAddressV4())) {
       // state transition
       thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
@@ -1691,8 +1688,8 @@ Spark::processHandshakeMsg(
   //  2) neighbor.area: areaId that I think neighbor node should be in;
   //
   //  ONLY promote to NEGOTIATE state if areaId matches
-  if (neighbor.area != *handshakeMsg.area_ref()) {
-    if (*handshakeMsg.area_ref() == Constants::kDefaultArea.toString() ||
+  if (neighbor.area != *handshakeMsg.area()) {
+    if (*handshakeMsg.area() == Constants::kDefaultArea.toString() ||
         neighbor.area == Constants::kDefaultArea.toString()) {
       // for backward compatibility: if the peer is still advertising
       // default area (0), it would be considered a match
@@ -1702,7 +1699,7 @@ Spark::processHandshakeMsg(
       XLOG(ERR) << fmt::format(
           "[SparkHandshakeMsg] Inconsistent areaId deduced. "
           "Neighbor's areaId is {} and my areaId from remote is {}.",
-          *handshakeMsg.area_ref(),
+          *handshakeMsg.area(),
           neighbor.area);
 
       // state transition
@@ -1740,13 +1737,13 @@ Spark::processHandshakeMsg(
 void
 Spark::processHeartbeatMsg(
     thrift::SparkHeartbeatMsg const& heartbeatMsg, std::string const& ifName) {
-  auto const& remoteSeqNum = *heartbeatMsg.seqNum_ref();
+  auto const& remoteSeqNum = *heartbeatMsg.seqNum();
 
   XLOG(DBG3) << "[SparkHeartbeatMsg] Received SparkHeartbeatMsg over intf: "
              << ifName << ", remote sequenceId: " << remoteSeqNum;
 
   // sanity check for SparkHandshakeMsg
-  auto const& neighborName = *heartbeatMsg.nodeName_ref();
+  auto const& neighborName = *heartbeatMsg.nodeName();
   auto sanityCheckResult = sanityCheckMsg(neighborName, ifName);
   if (PacketValidationResult::SUCCESS != sanityCheckResult) {
     return;
@@ -1801,12 +1798,12 @@ Spark::processPacket() {
   }
 
   // Spark specific msg processing
-  if (helloPacket.helloMsg_ref().has_value()) {
-    processHelloMsg(helloPacket.helloMsg_ref().value(), ifName, myRecvTime);
-  } else if (helloPacket.heartbeatMsg_ref().has_value()) {
-    processHeartbeatMsg(helloPacket.heartbeatMsg_ref().value(), ifName);
-  } else if (helloPacket.handshakeMsg_ref().has_value()) {
-    processHandshakeMsg(helloPacket.handshakeMsg_ref().value(), ifName);
+  if (helloPacket.helloMsg().has_value()) {
+    processHelloMsg(helloPacket.helloMsg().value(), ifName, myRecvTime);
+  } else if (helloPacket.heartbeatMsg().has_value()) {
+    processHeartbeatMsg(helloPacket.heartbeatMsg().value(), ifName);
+  } else if (helloPacket.handshakeMsg().has_value()) {
+    processHandshakeMsg(helloPacket.handshakeMsg().value(), ifName);
   }
 }
 
@@ -1836,28 +1833,26 @@ Spark::sendHelloMsg(
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v4Addr = interfaceEntry.v4Network.first;
   const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
-  thrift::OpenrVersion openrVer(*kVersion_.version_ref());
+  thrift::OpenrVersion openrVer(*kVersion_.version());
 
   // build the helloMsg from scratch
   thrift::SparkHelloMsg helloMsg;
-  helloMsg.nodeName_ref() = myNodeName_;
-  helloMsg.ifName_ref() = ifName;
-  helloMsg.seqNum_ref() = mySeqNum_;
-  helloMsg.neighborInfos_ref() =
+  helloMsg.nodeName() = myNodeName_;
+  helloMsg.ifName() = ifName;
+  helloMsg.seqNum() = mySeqNum_;
+  helloMsg.neighborInfos() =
       std::map<std::string, thrift::ReflectedNeighborInfo>{};
-  helloMsg.version_ref() = openrVer;
-  helloMsg.solicitResponse_ref() = inFastInitState;
-  helloMsg.restarting_ref() = restarting;
-  helloMsg.sentTsInUs_ref() =
-      getCurrentTime<std::chrono::microseconds>().count();
+  helloMsg.version() = openrVer;
+  helloMsg.solicitResponse() = inFastInitState;
+  helloMsg.restarting() = restarting;
+  helloMsg.sentTsInUs() = getCurrentTime<std::chrono::microseconds>().count();
 
   // bake neighborInfo into helloMsg
   for (auto& [neighborName, neighbor] : sparkNeighbors_.at(ifName)) {
-    auto& neighborInfo = helloMsg.neighborInfos_ref()[neighborName];
-    neighborInfo.seqNum_ref() = neighbor.seqNum;
-    neighborInfo.lastNbrMsgSentTsInUs_ref() =
-        neighbor.neighborTimestamp.count();
-    neighborInfo.lastMyMsgRcvdTsInUs_ref() = neighbor.localTimestamp.count();
+    auto& neighborInfo = helloMsg.neighborInfos()[neighborName];
+    neighborInfo.seqNum() = neighbor.seqNum;
+    neighborInfo.lastNbrMsgSentTsInUs() = neighbor.neighborTimestamp.count();
+    neighborInfo.lastMyMsgRcvdTsInUs() = neighbor.localTimestamp.count();
 
     // update telemetry for SparkHelloMsg
     neighbor.lastHelloMsgSentAt = getCurrentTime<std::chrono::milliseconds>();
@@ -1865,7 +1860,7 @@ Spark::sendHelloMsg(
 
   // fill in helloMsg field
   thrift::SparkHelloPacket helloPacket;
-  helloPacket.helloMsg_ref() = std::move(helloMsg);
+  helloPacket.helloMsg() = std::move(helloMsg);
 
   // send the payload
   auto packet = writeThriftObjStr(helloPacket, serializer_);
@@ -2023,9 +2018,9 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
       // Spark will NOT notify neighbor DOWN event in following cases:
       //    1). v6Addr is empty for this neighbor;
       //    2). v4 enabled and v4Addr is empty for this neighbor;
-      if (neighbor.transportAddressV6.addr_ref()->empty() ||
+      if (neighbor.transportAddressV6.addr()->empty() ||
           ((enableV4_ and not v4OverV6Nexthop_) &&
-           neighbor.transportAddressV4.addr_ref()->empty())) {
+           neighbor.transportAddressV4.addr()->empty())) {
         continue;
       }
       neighborDownWrapper(neighbor, ifName, neighborName);

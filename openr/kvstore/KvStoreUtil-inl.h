@@ -19,10 +19,10 @@ ThriftType
 parseThriftValue(thrift::Value const& value) {
   apache::thrift::CompactSerializer serializer;
 
-  DCHECK(value.value_ref().has_value());
+  DCHECK(value.value().has_value());
 
   auto buf = folly::IOBuf::wrapBufferAsValue(
-      value.value_ref()->data(), value.value_ref()->size());
+      value.value()->data(), value.value()->size());
   return readThriftObj<ThriftType>(buf, serializer);
 }
 
@@ -94,10 +94,10 @@ printKeyValInArea(
       areaTag,
       logStr,
       key,
-      *val.version_ref(),
-      *val.originatorId_ref(),
-      *val.ttlVersion_ref(),
-      *val.ttl_ref());
+      *val.version(),
+      *val.originatorId(),
+      *val.ttlVersion(),
+      *val.ttl());
 }
 
 // static method to dump KvStore key-val over multiple instances
@@ -121,9 +121,9 @@ dumpAllWithThriftClientFromMultiple(
   std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
-  *params.prefix_ref() = keyPrefix;
+  *params.prefix() = keyPrefix;
   if (not keyPrefix.empty()) {
-    params.keys_ref() = {keyPrefix};
+    params.keys() = {keyPrefix};
   }
 
   auto addrStrs =
@@ -212,7 +212,7 @@ dumpAllWithThriftClientFromMultiple(
             LOG(ERROR) << "Exception: "
                        << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
-            auto keyVals = *result.value().keyVals_ref();
+            auto keyVals = *result.value().keyVals();
             const auto deltaPub = mergeKeyValues(merged, keyVals).first;
 
             VLOG(3) << "Received kvstore publication with: " << keyVals.size()
@@ -250,7 +250,7 @@ dumpAllWithThriftClientFromMultiple(
 
   thrift::KeyDumpParams params;
   if (not keyPrefix.empty()) {
-    params.keys_ref() = {keyPrefix};
+    params.keys() = {keyPrefix};
   }
 
   auto startTime = std::chrono::steady_clock::now();
@@ -265,7 +265,7 @@ dumpAllWithThriftClientFromMultiple(
     if (result.hasException()) {
       LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
     } else if (result.hasValue()) {
-      auto keyVals = *result.value().keyVals_ref();
+      auto keyVals = *result.value().keyVals();
       const auto deltaPub = mergeKeyValues(merged, keyVals).first;
 
       VLOG(3) << "Received kvstore publication with: " << keyVals.size()

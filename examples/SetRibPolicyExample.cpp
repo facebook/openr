@@ -48,8 +48,8 @@ main(int argc, char* argv[]) {
 
   // Action weight
   thrift::RibRouteActionWeight actionWeight;
-  actionWeight.default_weight_ref() = FLAGS_default_weight;
-  actionWeight.area_to_weight_ref()->emplace(
+  actionWeight.default_weight() = FLAGS_default_weight;
+  actionWeight.area_to_weight()->emplace(
       Constants::kDefaultArea.toString(), FLAGS_area0_weight);
   // Parse neighbor->weight map and insert into the policy statement
   std::vector<std::string> neighborWeights;
@@ -68,20 +68,20 @@ main(int argc, char* argv[]) {
     }
     LOG(INFO) << "Neighbor: " << neighborWeightSplit.at(0)
               << " -> weight: " << weight;
-    actionWeight.neighbor_to_weight_ref()->emplace(
+    actionWeight.neighbor_to_weight()->emplace(
         neighborWeightSplit.at(0), weight);
   }
 
   // Create PolicyStatement
   thrift::RibPolicyStatement policyStatement;
-  policyStatement.matcher_ref()->prefixes_ref() = prefixes;
-  policyStatement.matcher_ref()->tags_ref() = tags;
-  policyStatement.action_ref()->set_weight_ref() = actionWeight;
+  policyStatement.matcher()->prefixes() = prefixes;
+  policyStatement.matcher()->tags() = tags;
+  policyStatement.action()->set_weight() = actionWeight;
 
   // Create RibPolicy
   thrift::RibPolicy policy;
-  policy.statements_ref()->emplace_back(policyStatement);
-  policy.ttl_secs_ref() = FLAGS_ttl_secs;
+  policy.statements()->emplace_back(policyStatement);
+  policy.ttl_secs() = FLAGS_ttl_secs;
 
   // Create OpenrClient and set policy
   LOG(INFO) << "Creating connection to host " << FLAGS_host;

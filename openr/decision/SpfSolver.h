@@ -73,11 +73,11 @@ class DecisionRouteDb {
     thrift::RouteDatabase tRouteDb;
     // unicast routes
     for (const auto& [_, entry] : unicastRoutes) {
-      tRouteDb.unicastRoutes_ref()->emplace_back(entry.toThrift());
+      tRouteDb.unicastRoutes()->emplace_back(entry.toThrift());
     }
     // mpls routes
     for (const auto& [_, entry] : mplsRoutes) {
-      tRouteDb.mplsRoutes_ref()->emplace_back(entry.toThrift());
+      tRouteDb.mplsRoutes()->emplace_back(entry.toThrift());
     }
     return tRouteDb;
   }

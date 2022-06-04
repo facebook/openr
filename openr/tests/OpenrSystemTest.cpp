@@ -123,8 +123,7 @@ using RouteMap = unordered_map<
 NextHop
 toNextHop(thrift::Adjacency adj, bool isV4 = false) {
   return {
-      *adj.ifName_ref(),
-      toIPAddress(isV4 ? *adj.nextHopV4_ref() : *adj.nextHopV6_ref())};
+      *adj.ifName(), toIPAddress(isV4 ? *adj.nextHopV4() : *adj.nextHopV6())};
 }
 
 // Note: routeMap will be modified
@@ -133,18 +132,18 @@ fillRouteMap(
     const string& node,
     RouteMap& routeMap,
     const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : *routeDb.unicastRoutes_ref()) {
-    auto prefix = toString(*route.dest_ref());
-    for (const auto& nextHop : *route.nextHops_ref()) {
-      const auto nextHopAddr = toIPAddress(*nextHop.address_ref());
-      assert(nextHop.address_ref()->ifName_ref());
+  for (auto const& route : *routeDb.unicastRoutes()) {
+    auto prefix = toString(*route.dest());
+    for (const auto& nextHop : *route.nextHops()) {
+      const auto nextHopAddr = toIPAddress(*nextHop.address());
+      assert(nextHop.address()->ifName());
       VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << nextHop.address_ref()->ifName_ref().value() << " : "
-              << nextHopAddr << " (" << *nextHop.metric_ref() << ")";
+              << nextHop.address()->ifName().value() << " : " << nextHopAddr
+              << " (" << *nextHop.metric() << ")";
 
       routeMap[make_pair(node, prefix)].insert(
-          {{nextHop.address_ref()->ifName_ref().value(), nextHopAddr},
-           *nextHop.metric_ref()});
+          {{nextHop.address()->ifName().value(), nextHopAddr},
+           *nextHop.metric()});
     }
   }
 }

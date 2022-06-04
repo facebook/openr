@@ -98,17 +98,17 @@ struct DecisionRouteUpdate {
 
     // unicast
     for (const auto& [_, route] : unicastRoutesToUpdate) {
-      delta.unicastRoutesToUpdate_ref()->emplace_back(route.toThrift());
+      delta.unicastRoutesToUpdate()->emplace_back(route.toThrift());
     }
     for (const auto& route : unicastRoutesToDelete) {
-      delta.unicastRoutesToDelete_ref()->emplace_back(toIpPrefix(route));
+      delta.unicastRoutesToDelete()->emplace_back(toIpPrefix(route));
     }
     // mpls
     for (const auto& [_, route] : mplsRoutesToUpdate) {
-      delta.mplsRoutesToUpdate_ref()->emplace_back(route.toThrift());
+      delta.mplsRoutesToUpdate()->emplace_back(route.toThrift());
     }
-    *delta.mplsRoutesToDelete_ref() = mplsRoutesToDelete;
-    delta.perfEvents_ref().from_optional(perfEvents);
+    *delta.mplsRoutesToDelete() = mplsRoutesToDelete;
+    delta.perfEvents().from_optional(perfEvents);
 
     return delta;
   }
@@ -120,18 +120,16 @@ struct DecisionRouteUpdate {
 
     // unicast
     for (const auto& [_, route] : unicastRoutesToUpdate) {
-      deltaDetail.unicastRoutesToUpdate_ref()->emplace_back(
-          route.toThriftDetail());
+      deltaDetail.unicastRoutesToUpdate()->emplace_back(route.toThriftDetail());
     }
     for (const auto& route : unicastRoutesToDelete) {
-      deltaDetail.unicastRoutesToDelete_ref()->emplace_back(toIpPrefix(route));
+      deltaDetail.unicastRoutesToDelete()->emplace_back(toIpPrefix(route));
     }
     // mpls
     for (const auto& [_, route] : mplsRoutesToUpdate) {
-      deltaDetail.mplsRoutesToUpdate_ref()->emplace_back(
-          route.toThriftDetail());
+      deltaDetail.mplsRoutesToUpdate()->emplace_back(route.toThriftDetail());
     }
-    *deltaDetail.mplsRoutesToDelete_ref() = mplsRoutesToDelete;
+    *deltaDetail.mplsRoutesToDelete() = mplsRoutesToDelete;
 
     return deltaDetail;
   }

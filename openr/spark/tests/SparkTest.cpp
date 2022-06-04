@@ -114,8 +114,8 @@ class SimpleSparkFixture : public SparkFixture {
   createConfig() {
     auto tConfig1 = getBasicOpenrConfig(nodeName1_);
     auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.thrift_server_ref()->openr_ctrl_port_ref() = 1;
-    tConfig2.thrift_server_ref()->openr_ctrl_port_ref() = 1;
+    tConfig1.thrift_server()->openr_ctrl_port() = 1;
+    tConfig2.thrift_server()->openr_ctrl_port() = 1;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -234,8 +234,8 @@ class InitializationTestFixture : public SimpleSparkFixture {
   createConfig() override {
     auto tConfig1 = getBasicOpenrConfig(nodeName1_);
     auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.enable_ordered_adj_publication_ref() = true;
-    tConfig2.enable_ordered_adj_publication_ref() = true;
+    tConfig1.enable_ordered_adj_publication() = true;
+    tConfig2.enable_ordered_adj_publication() = true;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -316,8 +316,8 @@ class InitializationBackwardCompatibilityTestFixture
   createConfig() override {
     auto tConfig1 = getBasicOpenrConfig(nodeName1_);
     auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.enable_ordered_adj_publication_ref() = true;
-    tConfig2.enable_ordered_adj_publication_ref() = false;
+    tConfig1.enable_ordered_adj_publication() = true;
+    tConfig2.enable_ordered_adj_publication() = false;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -383,13 +383,13 @@ TEST_F(SimpleSparkFixture, GetNeighborsTest) {
   auto neighbor2 = db1.back();
 
   EXPECT_EQ(
-      *neighbor1.state_ref(), apache::thrift::util::enumNameSafe(ESTABLISHED));
+      *neighbor1.state(), apache::thrift::util::enumNameSafe(ESTABLISHED));
   EXPECT_EQ(
-      *neighbor2.state_ref(), apache::thrift::util::enumNameSafe(ESTABLISHED));
-  EXPECT_EQ(*neighbor1.localIfName_ref(), iface2);
-  EXPECT_EQ(*neighbor1.remoteIfName_ref(), iface1);
-  EXPECT_EQ(*neighbor2.localIfName_ref(), iface1);
-  EXPECT_EQ(*neighbor2.remoteIfName_ref(), iface2);
+      *neighbor2.state(), apache::thrift::util::enumNameSafe(ESTABLISHED));
+  EXPECT_EQ(*neighbor1.localIfName(), iface2);
+  EXPECT_EQ(*neighbor1.remoteIfName(), iface1);
+  EXPECT_EQ(*neighbor2.localIfName(), iface1);
+  EXPECT_EQ(*neighbor2.remoteIfName(), iface2);
 }
 
 //
@@ -573,9 +573,9 @@ TEST_F(SimpleSparkFixture, GRTest) {
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        folly::copy(*node1_->getSparkConfig().graceful_restart_time_s_ref()));
+        folly::copy(*node1_->getSparkConfig().graceful_restart_time_s()));
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
-        folly::copy(*node2_->getSparkConfig().graceful_restart_time_s_ref()));
+        folly::copy(*node2_->getSparkConfig().graceful_restart_time_s()));
     EXPECT_FALSE(
         node1_
             ->waitForEvents(
@@ -604,8 +604,8 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
   LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
 
   auto startTime = std::chrono::steady_clock::now();
-  auto holdTime = *config1_->getSparkConfig().hold_time_s_ref();
-  auto grTime = *config1_->getSparkConfig().graceful_restart_time_s_ref();
+  auto holdTime = *config1_->getSparkConfig().hold_time_s();
+  auto grTime = *config1_->getSparkConfig().graceful_restart_time_s();
   node2_.reset();
 
   // Since node2 doesn't come back, will lose adj and declare DOWN
@@ -642,7 +642,7 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
   // Recreate Spark instance with a different attribute value of
   // `openr_ctrl_port`
   auto tConfigTmp = getBasicOpenrConfig(nodeName2_);
-  tConfigTmp.thrift_server_ref()->openr_ctrl_port_ref() = 2;
+  tConfigTmp.thrift_server()->openr_ctrl_port() = 2;
 
   node2_ = createSpark(nodeName2_, std::make_shared<Config>(tConfigTmp));
 
@@ -692,7 +692,7 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   // record time for future comparison
   auto startTime = std::chrono::steady_clock::now();
 
-  auto fastInitTime = *config1_->getSparkConfig().fastinit_hello_time_ms_ref();
+  auto fastInitTime = *config1_->getSparkConfig().fastinit_hello_time_ms();
   auto initialNbrHandlingTime =
       (3 * std::chrono::milliseconds(fastInitTime) +
        std::chrono::milliseconds(fastInitTime));
@@ -713,11 +713,11 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
     // initialNbrHandlingTime needs to be accounted.
     ASSERT_TRUE(
         initialNbrHandlingTime + endTime - startTime >=
-        std::chrono::seconds(*node1_->getSparkConfig().hold_time_s_ref()));
+        std::chrono::seconds(*node1_->getSparkConfig().hold_time_s()));
     ASSERT_TRUE(
         endTime - startTime <=
         std::chrono::seconds(
-            *node1_->getSparkConfig().graceful_restart_time_s_ref()));
+            *node1_->getSparkConfig().graceful_restart_time_s()));
   }
 }
 
@@ -739,7 +739,7 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   // since the removal of intf happens instantly. down event should
   // be reported ASAP.
   auto waitTime = std::chrono::seconds(
-      *config1_->getSparkConfig().graceful_restart_time_s_ref());
+      *config1_->getSparkConfig().graceful_restart_time_s());
 
   EXPECT_FALSE(
       node1_->waitForEvents(NB_DOWN, waitTime, waitTime * 2).has_value());
@@ -757,11 +757,11 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
 
   auto startTime = std::chrono::steady_clock::now();
   auto waitTime = std::chrono::seconds(
-      *config1_->getSparkConfig().graceful_restart_time_s_ref());
+      *config1_->getSparkConfig().graceful_restart_time_s());
   auto holdTime =
-      std::chrono::seconds(*config1_->getSparkConfig().hold_time_s_ref());
+      std::chrono::seconds(*config1_->getSparkConfig().hold_time_s());
   auto keepAliveTime =
-      std::chrono::seconds(*config1_->getSparkConfig().keepalive_time_s_ref());
+      std::chrono::seconds(*config1_->getSparkConfig().keepalive_time_s());
 
   // tell node1 to remove interface to mimick request from linkMonitor
   node1_->updateInterfaceDb({});
@@ -846,13 +846,12 @@ TEST_F(SparkFixture, ReadConfigTest) {
   const std::string nodeStark{"Stark"};
 
   auto tConfig1 = getBasicOpenrConfig(nodeLannister);
-  tConfig1.thrift_server_ref()->openr_ctrl_port_ref() =
-      Constants::kOpenrCtrlPort;
+  tConfig1.thrift_server()->openr_ctrl_port() = Constants::kOpenrCtrlPort;
   auto config1 = std::make_shared<Config>(tConfig1);
 
   auto tConfig2 = getBasicOpenrConfig(nodeStark);
   // ATTN: explicitly give a different port
-  tConfig2.thrift_server_ref()->openr_ctrl_port_ref() = 0;
+  tConfig2.thrift_server()->openr_ctrl_port() = 0;
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeLannister, config1);
@@ -962,11 +961,11 @@ TEST_F(SparkFixture, VersionTest) {
   // node3 can't form adj with neither node1 nor node2
   {
     const auto& restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
+        *config1->getSparkConfig().graceful_restart_time_s());
     const auto& restart_time_s2 = std::chrono::seconds(
-        *config2->getSparkConfig().graceful_restart_time_s_ref());
+        *config2->getSparkConfig().graceful_restart_time_s());
     const auto& restart_time_s3 = std::chrono::seconds(
-        *config3->getSparkConfig().graceful_restart_time_s_ref());
+        *config3->getSparkConfig().graceful_restart_time_s());
 
     EXPECT_FALSE(
         node1->waitForEvents(NB_UP, restart_time_s1, restart_time_s1 * 2)
@@ -1157,7 +1156,7 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     EXPECT_GE(
-        6 * *config1->getSparkConfig().fastinit_hello_time_ms_ref(),
+        6 * *config1->getSparkConfig().fastinit_hello_time_ms(),
         duration.count());
   }
 
@@ -1184,7 +1183,7 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
     EXPECT_GE(
-        6 * *config2->getSparkConfig().fastinit_hello_time_ms_ref(),
+        6 * *config2->getSparkConfig().fastinit_hello_time_ms(),
         duration.count());
   }
 }
@@ -1374,7 +1373,7 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   auto node2 = createSpark("node-2", config2);
 
   auto waitTime = std::chrono::seconds(
-      *config1->getSparkConfig().graceful_restart_time_s_ref());
+      *config1->getSparkConfig().graceful_restart_time_s());
 
   // start tracking interfaces
   node1->updateInterfaceDb({InterfaceInfo(
@@ -1440,7 +1439,7 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
+        *config1->getSparkConfig().graceful_restart_time_s());
     EXPECT_FALSE(
         node1
             ->waitForEvents(
@@ -1502,9 +1501,9 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   // won't form adj as v4 validation should fail
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
+        *config1->getSparkConfig().graceful_restart_time_s());
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
-        *config2->getSparkConfig().graceful_restart_time_s_ref());
+        *config2->getSparkConfig().graceful_restart_time_s());
     EXPECT_FALSE(
         node1
             ->waitForEvents(
@@ -1597,10 +1596,10 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   // won't form adj as v4 validation should fail
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
+        *config1->getSparkConfig().graceful_restart_time_s());
 
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
-        *config2->getSparkConfig().graceful_restart_time_s_ref());
+        *config2->getSparkConfig().graceful_restart_time_s());
 
     EXPECT_FALSE(
         node1
@@ -1761,9 +1760,9 @@ TEST_F(SparkFixture, NoAreaMatch) {
 
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
+        *config1->getSparkConfig().graceful_restart_time_s());
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
-        *config2->getSparkConfig().graceful_restart_time_s_ref());
+        *config2->getSparkConfig().graceful_restart_time_s());
 
     EXPECT_FALSE(
         node1
@@ -1840,9 +1839,9 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
 
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
-        *config1->getSparkConfig().graceful_restart_time_s_ref());
+        *config1->getSparkConfig().graceful_restart_time_s());
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
-        *config2->getSparkConfig().graceful_restart_time_s_ref());
+        *config2->getSparkConfig().graceful_restart_time_s());
 
     EXPECT_FALSE(
         node1

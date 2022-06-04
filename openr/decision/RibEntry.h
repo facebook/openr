@@ -73,7 +73,7 @@ struct RibUnicastEntry : RibEntry {
         bestPrefixEntry(std::move(bestPrefixEntryThrift)),
         bestArea(bestArea),
         doNotInstall(doNotInstall) {
-    bestPrefixEntry.weight_ref().from_optional(ucmpWeight);
+    bestPrefixEntry.weight().from_optional(ucmpWeight);
   }
 
   bool
@@ -92,10 +92,10 @@ struct RibUnicastEntry : RibEntry {
   thrift::UnicastRoute
   toThrift() const {
     thrift::UnicastRoute tUnicast;
-    tUnicast.dest_ref() = toIpPrefix(prefix);
-    tUnicast.nextHops_ref() =
+    tUnicast.dest() = toIpPrefix(prefix);
+    tUnicast.nextHops() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
-    tUnicast.counterID_ref().from_optional(counterID);
+    tUnicast.counterID().from_optional(counterID);
     return tUnicast;
   }
 
@@ -103,8 +103,8 @@ struct RibUnicastEntry : RibEntry {
   thrift::UnicastRouteDetail
   toThriftDetail() const {
     thrift::UnicastRouteDetail tUnicastDetail;
-    tUnicastDetail.unicastRoute_ref() = toThrift();
-    tUnicastDetail.bestRoute_ref() = bestPrefixEntry;
+    tUnicastDetail.unicastRoute() = toThrift();
+    tUnicastDetail.bestRoute() = bestPrefixEntry;
     return tUnicastDetail;
   }
 };
@@ -123,9 +123,9 @@ struct RibMplsEntry : RibEntry {
   static RibMplsEntry
   fromThrift(const thrift::MplsRoute& tMpls) {
     return RibMplsEntry(
-        *tMpls.topLabel_ref(),
+        *tMpls.topLabel(),
         std::unordered_set<thrift::NextHopThrift>(
-            tMpls.nextHops_ref()->begin(), tMpls.nextHops_ref()->end()));
+            tMpls.nextHops()->begin(), tMpls.nextHops()->end()));
   }
 
   bool
@@ -141,8 +141,8 @@ struct RibMplsEntry : RibEntry {
   thrift::MplsRoute
   toThrift() const {
     thrift::MplsRoute tMpls;
-    tMpls.topLabel_ref() = label;
-    tMpls.nextHops_ref() =
+    tMpls.topLabel() = label;
+    tMpls.nextHops() =
         std::vector<thrift::NextHopThrift>(nexthops.begin(), nexthops.end());
     return tMpls;
   }
@@ -150,7 +150,7 @@ struct RibMplsEntry : RibEntry {
   thrift::MplsRouteDetail
   toThriftDetail() const {
     thrift::MplsRouteDetail tMplsDetail;
-    tMplsDetail.mplsRoute_ref() = toThrift();
+    tMplsDetail.mplsRoute() = toThrift();
     return tMplsDetail;
   }
 
@@ -170,8 +170,8 @@ struct RibMplsEntry : RibEntry {
     // Deduce a unique MPLS action
     thrift::MplsActionCode mplsActionCode{thrift::MplsActionCode::SWAP};
     for (auto const& nextHop : nexthops) {
-      CHECK(nextHop.mplsAction_ref().has_value());
-      auto& action = *nextHop.mplsAction_ref()->action_ref();
+      CHECK(nextHop.mplsAction().has_value());
+      auto& action = *nextHop.mplsAction()->action();
       // Action can't be push (we don't push labels in MPLS routes)
       // or POP with multiple nexthops. It must be either SWAP or PHP
       CHECK(
@@ -184,7 +184,7 @@ struct RibMplsEntry : RibEntry {
 
     // Filter nexthop that do not match selected MPLS action
     for (auto it = nexthops.begin(); it != nexthops.end();) {
-      if (mplsActionCode != *it->mplsAction_ref()->action_ref()) {
+      if (mplsActionCode != *it->mplsAction()->action()) {
         it = nexthops.erase(it);
       } else {
         ++it;

@@ -17,9 +17,9 @@ namespace openr {
 
 Watchdog::Watchdog(std::shared_ptr<const Config> config)
     : myNodeName_(config->getNodeName()),
-      interval_(*config->getWatchdogConfig().interval_s_ref()),
-      threadTimeout_(*config->getWatchdogConfig().thread_timeout_s_ref()),
-      maxMemoryMB_(*config->getWatchdogConfig().max_memory_mb_ref()),
+      interval_(*config->getWatchdogConfig().interval_s()),
+      threadTimeout_(*config->getWatchdogConfig().thread_timeout_s()),
+      maxMemoryMB_(*config->getWatchdogConfig().max_memory_mb()),
       isDeadThreadDetected_(false) {
   // Schedule periodic timer for checking thread health
   watchdogTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {

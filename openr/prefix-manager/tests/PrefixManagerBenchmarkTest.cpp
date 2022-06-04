@@ -447,7 +447,7 @@ BM_RedistributeFibDeleteRoute(
     DecisionRouteUpdate routeUpdate;
     for (auto& prefixEntry : prefixesToRedistribute) {
       routeUpdate.unicastRoutesToDelete.emplace_back(
-          toIPNetwork(*prefixEntry.prefix_ref()));
+          toIPNetwork(*prefixEntry.prefix()));
     }
 
     if (record) {

@@ -43,11 +43,11 @@ createAreaConfig(
     const std::optional<std::string>& policy,
     const bool enableAdjLabels) {
   openr::thrift::AreaConfig areaConfig;
-  areaConfig.area_id_ref() = areaId;
-  areaConfig.neighbor_regexes_ref() = neighborRegexes;
-  areaConfig.include_interface_regexes_ref() = interfaceRegexes;
+  areaConfig.area_id() = areaId;
+  areaConfig.neighbor_regexes() = neighborRegexes;
+  areaConfig.include_interface_regexes() = interfaceRegexes;
   if (policy) {
-    areaConfig.import_policy_name_ref() = policy.value();
+    areaConfig.import_policy_name() = policy.value();
   }
 
   if (enableAdjLabels) {
@@ -55,12 +55,12 @@ createAreaConfig(
     openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
     openr::thrift::LabelRange lr;
 
-    lr.start_label_ref() = openr::MplsConstants::kSrLocalRange.first;
-    lr.end_label_ref() = openr::MplsConstants::kSrLocalRange.second;
+    lr.start_label() = openr::MplsConstants::kSrLocalRange.first;
+    lr.end_label() = openr::MplsConstants::kSrLocalRange.second;
     sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-    sr_adj_label.sr_adj_label_type_ref() = sr_adj_label_type;
-    sr_adj_label.adj_label_range_ref() = lr;
-    areaConfig.sr_adj_label_ref() = sr_adj_label;
+    sr_adj_label.sr_adj_label_type() = sr_adj_label_type;
+    sr_adj_label.adj_label_range() = lr;
+    areaConfig.sr_adj_label() = sr_adj_label;
   }
   return areaConfig;
 }
@@ -89,58 +89,58 @@ getBasicOpenrConfig(
   /*
    * [OVERRIDE] config knob toggling
    */
-  config.node_name_ref() = nodeName;
-  config.enable_v4_ref() = enableV4;
-  config.v4_over_v6_nexthop_ref() = enableV4OverV6Nexthop;
-  config.enable_segment_routing_ref() = enableSegmentRouting;
-  config.dryrun_ref() = dryrun;
-  config.ip_tos_ref() = 192;
+  config.node_name() = nodeName;
+  config.enable_v4() = enableV4;
+  config.v4_over_v6_nexthop() = enableV4OverV6Nexthop;
+  config.enable_segment_routing() = enableSegmentRouting;
+  config.dryrun() = dryrun;
+  config.ip_tos() = 192;
 
-  config.enable_rib_policy_ref() = true;
-  config.assume_drained_ref() = false;
-  config.prefix_hold_time_s_ref() = 0;
-  config.enable_new_gr_behavior_ref() = true;
+  config.enable_rib_policy() = true;
+  config.assume_drained() = false;
+  config.prefix_hold_time_s() = 0;
+  config.enable_new_gr_behavior() = true;
 
   /*
    * [OVERRIDE] thrift::LinkMonitorConfig
    */
   openr::thrift::LinkMonitorConfig lmConf;
-  lmConf.enable_perf_measurement_ref() = false;
-  lmConf.use_rtt_metric_ref() = true;
-  config.link_monitor_config_ref() = lmConf;
+  lmConf.enable_perf_measurement() = false;
+  lmConf.use_rtt_metric() = true;
+  config.link_monitor_config() = lmConf;
 
   /*
    * [OVERRIDE] thrift::KvStoreConfig
    */
   openr::thrift::KvstoreConfig kvstoreConfig;
-  config.kvstore_config_ref() = kvstoreConfig;
+  config.kvstore_config() = kvstoreConfig;
 
   /*
    * [OVERRIDE] thrift::SparkConfig
    */
   openr::thrift::SparkConfig sparkConfig;
-  sparkConfig.hello_time_s_ref() = 2;
-  sparkConfig.keepalive_time_s_ref() = 1;
-  sparkConfig.fastinit_hello_time_ms_ref() = 100;
-  sparkConfig.hold_time_s_ref() = 2;
-  sparkConfig.graceful_restart_time_s_ref() = 6;
-  config.spark_config_ref() = sparkConfig;
+  sparkConfig.hello_time_s() = 2;
+  sparkConfig.keepalive_time_s() = 1;
+  sparkConfig.fastinit_hello_time_ms() = 100;
+  sparkConfig.hold_time_s() = 2;
+  sparkConfig.graceful_restart_time_s() = 6;
+  config.spark_config() = sparkConfig;
 
   /*
    * [OVERRIDE] thrift::DecisionConfig
    */
   openr::thrift::DecisionConfig decisionConfig;
-  decisionConfig.enable_bgp_route_programming_ref() = true;
-  config.decision_config_ref() = decisionConfig;
+  decisionConfig.enable_bgp_route_programming() = true;
+  config.decision_config() = decisionConfig;
 
   /*
    * [OVERRIDE] thrift::AreaConfig
    */
   if (areaCfg.empty()) {
-    config.areas_ref() = {createAreaConfig(
+    config.areas() = {createAreaConfig(
         kTestingAreaName, {".*"}, {".*"}, std::nullopt, enableAdjLabels)};
   } else {
-    config.areas_ref() = areaCfg;
+    config.areas() = areaCfg;
   }
 
   /*
@@ -151,19 +151,15 @@ getBasicOpenrConfig(
     openr::thrift::MplsLabelRanges prepend_label_ranges;
     openr::thrift::LabelRange lr4;
     openr::thrift::LabelRange lr6;
-    lr4.start_label_ref() =
-        openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-    lr4.end_label_ref() =
-        openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-    lr6.start_label_ref() =
-        openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-    lr6.end_label_ref() =
-        openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-    prepend_label_ranges.v4_ref() = lr4;
-    prepend_label_ranges.v6_ref() = lr6;
-    srConfig.prepend_label_ranges_ref() = prepend_label_ranges;
+    lr4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+    lr4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+    lr6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+    lr6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+    prepend_label_ranges.v4() = lr4;
+    prepend_label_ranges.v6() = lr6;
+    srConfig.prepend_label_ranges() = prepend_label_ranges;
   }
-  config.segment_routing_config_ref() = srConfig;
+  config.segment_routing_config() = srConfig;
 
   return config;
 }
@@ -188,21 +184,21 @@ generateDecisionRouteUpdateFromPrefixEntries(
   // Borrow the settings for prefixEntries from PrefixManagerTest
   auto path1 =
       createNextHop(toBinaryAddress(folly::IPAddress("fe80::2")), "iface", 1);
-  path1.area_ref() = std::to_string(areaId);
+  path1.area() = std::to_string(areaId);
   DecisionRouteUpdate routeUpdate;
 
   for (auto& prefixEntry : prefixEntries) {
-    prefixEntry.area_stack_ref() = {"65000"};
-    prefixEntry.metrics_ref()->distance_ref() = 1;
-    prefixEntry.type_ref() = thrift::PrefixType::DEFAULT;
-    prefixEntry.forwardingAlgorithm_ref() =
+    prefixEntry.area_stack() = {"65000"};
+    prefixEntry.metrics()->distance() = 1;
+    prefixEntry.type() = thrift::PrefixType::DEFAULT;
+    prefixEntry.forwardingAlgorithm() =
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    prefixEntry.forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
-    prefixEntry.minNexthop_ref() = 10;
-    prefixEntry.prependLabel_ref() = 70000;
+    prefixEntry.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
+    prefixEntry.minNexthop() = 10;
+    prefixEntry.prependLabel() = 70000;
 
     auto unicastRoute = RibUnicastEntry(
-        toIPNetwork(*prefixEntry.prefix_ref()),
+        toIPNetwork(*prefixEntry.prefix()),
         {path1},
         prefixEntry,
         std::to_string(areaId),

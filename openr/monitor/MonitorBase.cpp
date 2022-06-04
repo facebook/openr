@@ -17,7 +17,7 @@ MonitorBase::MonitorBase(
     messaging::RQueue<LogSample> logSampleQueue)
     : category_{category},
       maxLogEvents_{
-          folly::to<uint32_t>(*config->getMonitorConfig().max_event_log_ref())},
+          folly::to<uint32_t>(*config->getMonitorConfig().max_event_log())},
       startTime_{std::chrono::steady_clock::now()} {
   // Initialize stats counter
   fb303::fbData->addStatExportType("monitor.log.publish.failure", fb303::COUNT);
@@ -64,7 +64,7 @@ MonitorBase::MonitorBase(
             auto inputLog = maybeLog.value();
             // add common attributes
             inputLog.addString("node_name", config->getNodeName());
-            inputLog.addString("domain", *config->getConfig().domain_ref());
+            inputLog.addString("domain", *config->getConfig().domain());
 
             // throws std::invalid_argument if not exist
             inputLog.getString("event");

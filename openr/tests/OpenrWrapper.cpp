@@ -36,44 +36,44 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       true /*dryrun*/);
 
   // link monitor config
-  auto& lmConf = *tConfig.link_monitor_config_ref();
-  lmConf.linkflap_initial_backoff_ms_ref() = linkFlapInitialBackoff.count();
-  lmConf.linkflap_max_backoff_ms_ref() = linkFlapMaxBackoff.count();
-  lmConf.use_rtt_metric_ref() = false;
-  lmConf.enable_perf_measurement_ref() = false;
-  tConfig.assume_drained_ref() = false;
+  auto& lmConf = *tConfig.link_monitor_config();
+  lmConf.linkflap_initial_backoff_ms() = linkFlapInitialBackoff.count();
+  lmConf.linkflap_max_backoff_ms() = linkFlapMaxBackoff.count();
+  lmConf.use_rtt_metric() = false;
+  lmConf.enable_perf_measurement() = false;
+  tConfig.assume_drained() = false;
 
   // decision config
-  tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
-  tConfig.decision_config_ref()->debounce_max_ms_ref() = 250;
-  tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
+  tConfig.decision_config()->debounce_min_ms() = 10;
+  tConfig.decision_config()->debounce_max_ms() = 250;
+  tConfig.decision_config()->enable_bgp_route_programming() = true;
 
   // prefix allocation config
-  tConfig.enable_prefix_allocation_ref() = true;
+  tConfig.enable_prefix_allocation() = true;
   thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.loopback_interface_ref() = "";
-  pfxAllocationConf.prefix_allocation_mode_ref() =
+  pfxAllocationConf.loopback_interface() = "";
+  pfxAllocationConf.prefix_allocation_mode() =
       thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
-  pfxAllocationConf.seed_prefix_ref() = "fc00:cafe:babe::/62";
-  pfxAllocationConf.allocate_prefix_len_ref() = 64;
-  tConfig.prefix_allocation_config_ref() = std::move(pfxAllocationConf);
+  pfxAllocationConf.seed_prefix() = "fc00:cafe:babe::/62";
+  pfxAllocationConf.allocate_prefix_len() = 64;
+  tConfig.prefix_allocation_config() = std::move(pfxAllocationConf);
 
   // watchdog
-  tConfig.enable_watchdog_ref() = true;
+  tConfig.enable_watchdog() = true;
   thrift::WatchdogConfig watchdogConf;
-  watchdogConf.interval_s_ref() = 1;
-  watchdogConf.thread_timeout_s_ref() = 60;
-  watchdogConf.max_memory_mb_ref() = memLimit;
-  tConfig.watchdog_config_ref() = std::move(watchdogConf);
+  watchdogConf.interval_s() = 1;
+  watchdogConf.thread_timeout_s() = 60;
+  watchdogConf.max_memory_mb() = memLimit;
+  tConfig.watchdog_config() = std::move(watchdogConf);
 
   // monitor
   thrift::MonitorConfig monitorConf;
   // disable log submission for testing
-  monitorConf.enable_event_log_submission_ref() = false;
-  tConfig.monitor_config_ref() = std::move(monitorConf);
+  monitorConf.enable_event_log_submission() = false;
+  tConfig.monitor_config() = std::move(monitorConf);
 
   // persistent config-store config
-  tConfig.persistent_config_store_path_ref() =
+  tConfig.persistent_config_store_path() =
       fmt::format("/tmp/{}_openr_config_store.bin", nodeId_);
 
   config_ = std::make_shared<Config>(tConfig);
@@ -126,7 +126,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
         }
         // Parse PrefixDb
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-            value.value().value_ref().value(), serializer_);
+            value.value().value().value(), serializer_);
         ipPrefix_.withWLock([&](auto& ipPrefix) {
           bool received = false;
           for (auto& prefix : *prefixDb.prefixEntries_ref()) {
@@ -386,9 +386,9 @@ OpenrWrapper<Serializer>::getIpPrefix() {
     const std::string keyPrefix = fmt::format("prefix:{}", nodeId_);
     try {
       thrift::KeyDumpParams params;
-      params.prefix_ref() = keyPrefix;
+      params.prefix() = keyPrefix;
       if (not keyPrefix.empty()) {
-        params.keys_ref() = {keyPrefix};
+        params.keys() = {keyPrefix};
       }
       auto maybeGetKey = kvStore_
                              ->semifuture_dumpKvStoreKeys(
@@ -396,7 +396,7 @@ OpenrWrapper<Serializer>::getIpPrefix() {
                              .getTry(Constants::kReadTimeout);
       if (maybeGetKey.hasValue()) {
         auto pub = *maybeGetKey.value()->begin();
-        keys = *pub.keyVals_ref();
+        keys = *pub.keyVals();
       } else {
         LOG(ERROR) << fmt::format(
             "Failed to retrieve keys with prefix: {} from KvStore in area: {}. "
@@ -426,7 +426,7 @@ OpenrWrapper<Serializer>::getIpPrefix() {
   ipPrefix_.withWLock([&](auto& ipPrefix) {
     for (const auto& key : keys.value()) {
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          key.second.value_ref().value(), serializer_);
+          key.second.value().value(), serializer_);
       if (*prefixDb.deletePrefix_ref()) {
         // Skip prefixes which are about to be deleted
         continue;
@@ -491,8 +491,8 @@ template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkPrefixExists(
     const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : *routeDb.unicastRoutes_ref()) {
-    if (prefix == *route.dest_ref()) {
+  for (auto const& route : *routeDb.unicastRoutes()) {
+    if (prefix == *route.dest()) {
       return true;
     }
   }

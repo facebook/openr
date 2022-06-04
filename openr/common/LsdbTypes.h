@@ -230,7 +230,7 @@ struct PrefixEntry {
       OpenrPolicyMatchData policyMatchData = OpenrPolicyMatchData())
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
-        network(toIPNetwork(*tPrefixEntry->prefix_ref())),
+        network(toIPNetwork(*tPrefixEntry->prefix())),
         policyActionData(policyActionData),
         policyMatchData(policyMatchData) {}
 
@@ -240,12 +240,12 @@ struct PrefixEntry {
       std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops)
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
-        network(toIPNetwork(*tPrefixEntry->prefix_ref())),
+        network(toIPNetwork(*tPrefixEntry->prefix())),
         nexthops(std::move(nexthops)) {}
 
   apache::thrift::field_ref<const thrift::PrefixMetrics&>
   metrics_ref() const& {
-    return tPrefixEntry->metrics_ref();
+    return tPrefixEntry->metrics();
   }
 
   /*
@@ -388,9 +388,9 @@ struct InterfaceInfo {
     }
 
     thrift::InterfaceInfo info;
-    info.isUp_ref() = isUp;
-    info.ifIndex_ref() = ifIndex;
-    info.networks_ref() = std::move(prefixes);
+    info.isUp() = isUp;
+    info.ifIndex() = ifIndex;
+    info.networks() = std::move(prefixes);
     return info;
   }
 };

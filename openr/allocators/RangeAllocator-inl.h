@@ -99,14 +99,14 @@ std::optional<thrift::KeyVals>
 RangeAllocator<T>::dumpKeysWithPrefix() const noexcept {
   try {
     thrift::KeyDumpParams params;
-    params.prefix_ref() = keyPrefix_;
-    params.keys_ref() = {keyPrefix_};
+    params.prefix() = keyPrefix_;
+    params.keys() = {keyPrefix_};
     auto maybeGetKey =
         kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area_})
             .getTry(Constants::kReadTimeout);
     if (maybeGetKey.hasValue()) {
       auto pub = *maybeGetKey.value()->begin();
-      auto keyMap = *pub.keyVals_ref();
+      auto keyMap = *pub.keyVals();
       return keyMap;
     } else {
       LOG(ERROR) << fmt::format(
@@ -221,19 +221,19 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
   const auto newKey = createKey(newVal);
   try {
     thrift::KeyGetParams getNewKeyParams;
-    getNewKeyParams.keys_ref()->emplace_back(newKey);
+    getNewKeyParams.keys()->emplace_back(newKey);
     const auto maybeGetKey =
         kvStore_->semifuture_getKvStoreKeyVals(area_, getNewKeyParams)
             .getTry(Constants::kReadTimeout);
     if (maybeGetKey.hasValue()) {
       auto pub = *maybeGetKey.value();
-      auto it = pub.keyVals_ref()->find(newKey);
-      if (it == pub.keyVals_ref()->end()) {
+      auto it = pub.keyVals()->find(newKey);
+      if (it == pub.keyVals()->end()) {
         LOG(ERROR) << "[RangeAllocator] Key: " << newKey
                    << " not found in KvStore, area: " << area_.t;
       } else {
         maybeThriftVal = it->second;
-        DCHECK_EQ(1, *maybeThriftVal->version_ref());
+        DCHECK_EQ(1, *maybeThriftVal->version());
       }
     } else {
       LOG(ERROR) << "[RangeAllocator] Failed to retrieve key: " << newKey;
@@ -244,21 +244,20 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
 
   // Check if we can own the value or not
   const bool shouldOwnOther = not maybeThriftVal or
-      (overrideOwner_ && nodeName_ > *maybeThriftVal->originatorId_ref()) or
+      (overrideOwner_ && nodeName_ > *maybeThriftVal->originatorId()) or
       // Following condition is to prefer range alloc keys with TTL over keys
       // without TTL. Old node will never try to steal keys from new node
       // if overrideOwner is set to false
       // We are trying this only when overrideOwner_ is set to false otherwise
       // nodes whose keys are stolen will try to get back their keys as well
-      (!overrideOwner_ &&
-       *maybeThriftVal->ttl_ref() == Constants::kTtlInfinity);
+      (!overrideOwner_ && *maybeThriftVal->ttl() == Constants::kTtlInfinity);
   const bool shouldOwnMine =
-      maybeThriftVal and (nodeName_ == *maybeThriftVal->originatorId_ref());
+      maybeThriftVal and (nodeName_ == *maybeThriftVal->originatorId());
 
   // If we cannot own then we should try some other value
   if (!shouldOwnOther && !shouldOwnMine) {
     VLOG(1) << "RangeAllocator: failed to allocate " << newVal << " bcoz of "
-            << *maybeThriftVal->originatorId_ref();
+            << *maybeThriftVal->originatorId();
     scheduleAllocate(newVal);
     return;
   }
@@ -274,8 +273,7 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     myRequestedValue_ = newVal;
     // Either no one owns it or owner has lower originator ID
     // Set new value in KvStore
-    auto ttlVersion =
-        maybeThriftVal ? *maybeThriftVal->ttlVersion_ref() + 1 : 0;
+    auto ttlVersion = maybeThriftVal ? *maybeThriftVal->ttlVersion() + 1 : 0;
     const auto ret = kvStoreClient_->setKey(
         area_,
         newKey,
@@ -289,13 +287,13 @@ RangeAllocator<T>::tryAllocate(const T newVal) noexcept {
     CHECK(ret.has_value());
   } else {
     CHECK(shouldOwnMine);
-    CHECK_EQ(nodeName_, *maybeThriftVal->originatorId_ref());
+    CHECK_EQ(nodeName_, *maybeThriftVal->originatorId());
     // We own it: this can occur if the node reboots w/ kvstore intact
     // Let the application know of newly allocated value
     // We set back via KvStoreClientInternal so that ttl is published regularly
     auto newValue = *maybeThriftVal;
-    *newValue.ttlVersion_ref() += 1; // bump ttl version
-    *newValue.ttl_ref() = rangeAllocTtl_.count(); // reset ttl
+    *newValue.ttlVersion() += 1; // bump ttl version
+    *newValue.ttl() = rangeAllocTtl_.count(); // reset ttl
     kvStoreClient_->setKey(area_, newKey, newValue);
     myValue_ = newVal;
     callback_(myValue_);
@@ -333,8 +331,8 @@ RangeAllocator<T>::scheduleAllocate(const T seedVal) noexcept {
       folly::gen::from(maybeKeyVals.value()) |
       folly::gen::map([](std::pair<std::string, thrift::Value> const& kv) {
         return std::make_pair(
-            details::binaryToPrimitive<T>(kv.second.value_ref().value()),
-            *kv.second.originatorId_ref());
+            details::binaryToPrimitive<T>(kv.second.value().value()),
+            *kv.second.originatorId());
       }) |
       folly::gen::as<
           std::unordered_map<T /* value */, std::string /* owner */>>();
@@ -366,10 +364,10 @@ template <typename T>
 void
 RangeAllocator<T>::keyValUpdated(
     const std::string& key, const thrift::Value& thriftVal) noexcept {
-  const T val = details::binaryToPrimitive<T>(thriftVal.value_ref().value());
+  const T val = details::binaryToPrimitive<T>(thriftVal.value().value());
 
   // Some sanity checks
-  CHECK_EQ(1, *thriftVal.version_ref());
+  CHECK_EQ(1, *thriftVal.version());
   // no timeout being scheduled
   CHECK(!timeout_->isScheduled());
   // only subscribed to requested/allocated value change
@@ -380,11 +378,11 @@ RangeAllocator<T>::keyValUpdated(
   // before my id or even higher id overrides it, an intermediate id2
   // (id1 < id2 < my id) overrides and triggers key update
   // just ignore it and wait for key update with my id or even higher id
-  if (*thriftVal.originatorId_ref() < nodeName_) {
+  if (*thriftVal.originatorId() < nodeName_) {
     return;
   }
 
-  if (nodeName_ == *thriftVal.originatorId_ref()) {
+  if (nodeName_ == *thriftVal.originatorId()) {
     VLOG(3) << "RangeAllocator " << nodeName_ << ": Won " << val;
     // Our own advertisement got echoed back
     // Let the application know of newly allocated value
@@ -396,11 +394,11 @@ RangeAllocator<T>::keyValUpdated(
   } else {
     // We lost the currently trying value or allocated value
     VLOG(3) << "RangeAllocator " << nodeName_ << ": Lost " << val
-            << " with battle against " << *thriftVal.originatorId_ref();
+            << " with battle against " << *thriftVal.originatorId();
 
     // Let user know of withdrawal of key if it has been allocated before
     if (myValue_) {
-      CHECK_LT(nodeName_, *thriftVal.originatorId_ref())
+      CHECK_LT(nodeName_, *thriftVal.originatorId())
           << "Lost to higher originatorId";
       CHECK_EQ(*myValue_, val);
       callback_(std::nullopt);

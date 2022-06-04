@@ -494,13 +494,13 @@ class PrefixManager final : public OpenrEventBase {
      */
     bool
     shouldInstall() const {
-      return originatedPrefix.install_to_fib_ref().value_or(false);
+      return originatedPrefix.install_to_fib().value_or(false);
     }
 
     bool
     shouldAdvertise() const {
       const auto& minSupportingRouteCnt =
-          *originatedPrefix.minimum_supporting_routes_ref();
+          *originatedPrefix.minimum_supporting_routes();
       return (not isAdvertised) and
           (supportingRoutes.size() >= minSupportingRouteCnt);
     }
@@ -508,14 +508,14 @@ class PrefixManager final : public OpenrEventBase {
     bool
     shouldWithdraw() const {
       const auto& minSupportingRouteCnt =
-          *originatedPrefix.minimum_supporting_routes_ref();
+          *originatedPrefix.minimum_supporting_routes();
       return isAdvertised and (supportingRoutes.size() < minSupportingRouteCnt);
     }
 
     bool
     supportingRoutesFulfilled() const {
       return supportingRoutes.size() >=
-          *originatedPrefix.minimum_supporting_routes_ref();
+          *originatedPrefix.minimum_supporting_routes();
     }
   };
 

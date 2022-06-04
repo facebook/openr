@@ -26,13 +26,13 @@ KvStore<ClientType>::KvStore(
     const std::unordered_set<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig)
     : kvParams_(
-          *kvStoreConfig.node_name_ref(),
+          *kvStoreConfig.node_name(),
           kvStoreUpdatesQueue,
           logSampleQueue,
           getKvStoreFilters(kvStoreConfig),
-          kvStoreConfig.flood_rate_ref().to_optional(),
-          std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms_ref()),
-          std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms_ref())) {
+          kvStoreConfig.flood_rate().to_optional(),
+          std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms()),
+          std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms())) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
@@ -43,12 +43,12 @@ KvStore<ClientType>::KvStore(
   counterUpdateTimer_->scheduleTimeout(Constants::kCounterSubmitInterval);
 
   // Get optional ip_tos from the config
-  kvParams_.maybeIpTos = kvStoreConfig.ip_tos_ref().to_optional();
+  kvParams_.maybeIpTos = kvStoreConfig.ip_tos().to_optional();
   if (kvParams_.maybeIpTos.has_value()) {
     XLOG(INFO) << fmt::format(
         "Set IP_TOS: {} for node: {}",
         kvParams_.maybeIpTos.value(),
-        *kvStoreConfig.node_name_ref());
+        *kvStoreConfig.node_name());
   }
 
   // Add reader to process peer updates from LinkMonitor
@@ -99,7 +99,7 @@ KvStore<ClientType>::KvStore(
             this,
             kvParams_,
             area,
-            *kvStoreConfig.node_name_ref(),
+            *kvStoreConfig.node_name(),
             std::bind(&KvStore::initialKvStoreDbSynced, this)));
   }
 }
@@ -242,7 +242,7 @@ KvStore<ClientType>::semifuture_getKvStoreKeyVals(
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "getKvStoreKeyVals");
 
-      auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys_ref());
+      auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys());
       updatePublicationTtl(
           kvStoreDb.getTtlCountdownQueue(),
           kvParams_.ttlDecr,
@@ -297,9 +297,8 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
         (selectAreas.empty()
              ? "all areas."
              : fmt::format("areas: {}", folly::join(", ", selectAreas))),
-        (keyDumpParams.senderId_ref().has_value()
-             ? keyDumpParams.senderId_ref().value()
-             : ""));
+        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                              : ""));
 
     auto result = std::make_unique<std::vector<thrift::Publication>>();
     for (auto& area : selectAreas) {
@@ -308,47 +307,47 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
         fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
         std::vector<std::string> keyPrefixList;
-        if (keyDumpParams.keys_ref().has_value()) {
-          keyPrefixList = *keyDumpParams.keys_ref();
+        if (keyDumpParams.keys().has_value()) {
+          keyPrefixList = *keyDumpParams.keys();
         } else {
-          folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
+          folly::split(",", *keyDumpParams.prefix(), keyPrefixList, true);
         }
 
         thrift::FilterOperator oper = thrift::FilterOperator::OR;
-        if (keyDumpParams.oper_ref().has_value()) {
-          oper = *keyDumpParams.oper_ref();
+        if (keyDumpParams.oper().has_value()) {
+          oper = *keyDumpParams.oper();
         }
         // KvStoreFilters contains `thrift::FilterOperator`
         // Default to thrift::FilterOperator::OR
 
-        const auto keyPrefixMatch = KvStoreFilters(
-            keyPrefixList, *keyDumpParams.originatorIds_ref(), oper);
+        const auto keyPrefixMatch =
+            KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds(), oper);
 
         auto thriftPub = dumpAllWithFilters(
             area,
             kvStoreDb.getKeyValueMap(),
             keyPrefixMatch,
-            *keyDumpParams.doNotPublishValue_ref());
-        if (keyDumpParams.keyValHashes_ref().has_value()) {
+            *keyDumpParams.doNotPublishValue());
+        if (keyDumpParams.keyValHashes().has_value()) {
           thriftPub = dumpDifference(
               area,
               *thriftPub.keyVals_ref(),
-              keyDumpParams.keyValHashes_ref().value());
+              keyDumpParams.keyValHashes().value());
         }
         updatePublicationTtl(
             kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
 
-        if (keyDumpParams.keyValHashes_ref().has_value() and
-            (*keyDumpParams.prefix_ref()).empty() and
-            (not keyDumpParams.keys_ref().has_value() or
-             (*keyDumpParams.keys_ref()).empty())) {
+        if (keyDumpParams.keyValHashes().has_value() and
+            (*keyDumpParams.prefix()).empty() and
+            (not keyDumpParams.keys().has_value() or
+             (*keyDumpParams.keys()).empty())) {
           // This usually comes from neighbor nodes
           size_t numMissingKeys = 0;
           if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
             numMissingKeys = thriftPub.tobeUpdatedKeys_ref()->size();
           }
           XLOG(INFO) << "[Thrift Sync] Processed full-sync request with "
-                     << keyDumpParams.keyValHashes_ref().value().size()
+                     << keyDumpParams.keyValHashes().value().size()
                      << " keyValHashes item(s). Sending "
                      << thriftPub.keyVals_ref()->size() << " key-vals and "
                      << numMissingKeys << " missing keys";
@@ -377,19 +376,18 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
     XLOG(DBG3) << fmt::format(
         "Dump all hashes requested for AREA: {}, by sender: {}",
         area,
-        (keyDumpParams.senderId_ref().has_value()
-             ? keyDumpParams.senderId_ref().value()
-             : ""));
+        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                              : ""));
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
       std::set<std::string> originator{};
       std::vector<std::string> keyPrefixList{};
-      if (keyDumpParams.keys_ref().has_value()) {
-        keyPrefixList = *keyDumpParams.keys_ref();
+      if (keyDumpParams.keys().has_value()) {
+        keyPrefixList = *keyDumpParams.keys();
       } else {
-        folly::split(",", *keyDumpParams.prefix_ref(), keyPrefixList, true);
+        folly::split(",", *keyDumpParams.prefix(), keyPrefixList, true);
       }
       KvStoreFilters kvFilters{keyPrefixList, originator};
       auto thriftPub =
@@ -418,9 +416,8 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
     XLOG(DBG3) << fmt::format(
         "Set key requested for AREA: {}, by sender: {}",
         area,
-        (keySetParams.senderId_ref().has_value()
-             ? keySetParams.senderId_ref().value()
-             : ""));
+        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                             : ""));
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
       kvStoreDb.setKeyVals(std::move(keySetParams));
@@ -488,11 +485,11 @@ KvStore<ClientType>::semifuture_getKvStoreAreaSummaryInternal(
     for (auto& [area, kvStoreDb] : kvStoreDb_) {
       thrift::KvStoreAreaSummary areaSummary;
 
-      areaSummary.area_ref() = area;
+      areaSummary.area() = area;
       auto kvDbCounters = kvStoreDb.getCounters();
-      areaSummary.keyValsCount_ref() = kvDbCounters["kvstore.num_keys"];
-      areaSummary.peersMap_ref() = kvStoreDb.dumpPeers();
-      areaSummary.keyValsBytes_ref() = kvStoreDb.getKeyValsSize();
+      areaSummary.keyValsCount() = kvDbCounters["kvstore.num_keys"];
+      areaSummary.peersMap() = kvStoreDb.dumpPeers();
+      areaSummary.keyValsBytes() = kvStoreDb.getKeyValsSize();
 
       result->emplace_back(std::move(areaSummary));
     }
@@ -805,7 +802,7 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
       areaTag(areaTag),
       peerSpec(ps),
       expBackoff(expBackoff) {
-  peerSpec.state_ref() = thrift::KvStorePeerState::IDLE;
+  peerSpec.state() = thrift::KvStorePeerState::IDLE;
   CHECK(not this->nodeName.empty());
   CHECK(not this->areaTag.empty());
   CHECK(not this->peerSpec.peerAddr_ref()->empty());
@@ -826,8 +823,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     XLOG(INFO) << fmt::format(
         "{} [Thrift Sync] Creating thrift client with addr: {}, port: {}, peerName: {}",
         areaTag,
-        *peerSpec.peerAddr_ref(),
-        *peerSpec.ctrlPort_ref(),
+        *peerSpec.peerAddr(),
+        *peerSpec.ctrlPort(),
         nodeName);
 
     // TODO: migrate to secure thrift connection
@@ -835,8 +832,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         ClientType,
         apache::thrift::HeaderClientChannel>(
         *(evb->getEvb()),
-        folly::IPAddress(*peerSpec.peerAddr_ref()), /* v6LinkLocal */
-        *peerSpec.ctrlPort_ref(), /* port to establish TCP connection */
+        folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
+        *peerSpec.ctrlPort(), /* port to establish TCP connection */
         Constants::kServiceConnTimeout, /* client connection timeout */
         Constants::kServiceProcTimeout, /* request processing timeout */
         folly::AsyncSocket::anyAddress(), /* bindAddress */
@@ -852,8 +849,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     XLOG(ERR) << fmt::format(
         "{} [Thrift Sync] Failed creating thrift client with addr: {}, port: {}, peerName: {}. Exception: {}",
         areaTag,
-        *peerSpec.peerAddr_ref(),
-        *peerSpec.ctrlPort_ref(),
+        *peerSpec.peerAddr(),
+        *peerSpec.ctrlPort(),
         nodeName,
         folly::exceptionStr(e));
 
@@ -911,8 +908,8 @@ KvStoreDb<ClientType>::KvStoreDb(
       evb_(evb) {
   if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
-        *kvParams_.floodRate->flood_msg_per_sec_ref(),
-        *kvParams_.floodRate->flood_msg_burst_size_ref());
+        *kvParams_.floodRate->flood_msg_per_sec(),
+        *kvParams_.floodRate->flood_msg_burst_size());
     pendingPublicationTimer_ =
         folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
           if (!floodLimiter_->consume(1)) {
@@ -1100,8 +1097,8 @@ KvStoreDb<ClientType>::checkKeyTtl() noexcept {
     //
     // 2. If the originator of this adj key is still connected to KvStore,
     // this is a strong signal that flooding topo is in bad state;
-    if (*v.ttl_ref() < kvParams_.keyTtl.count() / 2 and
-        thriftPeers_.count(*v.originatorId_ref())) {
+    if (*v.ttl() < kvParams_.keyTtl.count() / 2 and
+        thriftPeers_.count(*v.originatorId())) {
       cnt += 1;
     }
   }
@@ -1126,15 +1123,15 @@ KvStoreDb<ClientType>::setSelfOriginatedKey(
       kvParams_.keyTtl.count(),
       0 /* ttl version */,
       0 /* hash */);
-  CHECK(thriftValue.value_ref());
+  CHECK(thriftValue.value());
 
   // Use one version number higher than currently in KvStore if not specified
   if (not version) {
     auto it = kvStore_.find(key);
     if (it != kvStore_.end()) {
-      thriftValue.version_ref() = *it->second.version_ref() + 1;
+      thriftValue.version() = *it->second.version() + 1;
     } else {
-      thriftValue.version_ref() = 1;
+      thriftValue.version() = 1;
     }
   }
 
@@ -1146,7 +1143,7 @@ KvStoreDb<ClientType>::setSelfOriginatedKey(
   // Advertise key to KvStore
   std::unordered_map<std::string, thrift::Value> keyVals = {{key, thriftValue}};
   thrift::KeySetParams params;
-  params.keyVals_ref() = std::move(keyVals);
+  params.keyVals() = std::move(keyVals);
   setKeyVals(std::move(params));
 
   // Add ttl backoff and trigger selfOriginatedKeyTtlTimer_
@@ -1176,7 +1173,7 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
   //  6. hash - [OPTIONAL] - empty
   thrift::Value thriftValue =
       createThriftValue(0, kvParams_.nodeId, value, kvParams_.keyTtl.count());
-  CHECK(thriftValue.value_ref());
+  CHECK(thriftValue.value());
 
   // Two cases for this particular (k, v) pair:
   //  1) Key is first-time persisted:
@@ -1192,19 +1189,19 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
     auto keyIt = kvStore_.find(key);
     if (keyIt == kvStore_.end()) {
       // Key is not in KvStore. Set initial version and ready to advertise.
-      thriftValue.version_ref() = 1;
+      thriftValue.version() = 1;
       shouldAdvertise = true;
     } else {
       // Key is NOT persisted but can be found inside KvStore.
       // This can be keys advertised by our previous incarnation.
       thriftValue = keyIt->second;
       // TTL update pub is never saved in kvstore. Value is not std::nullopt.
-      DCHECK(thriftValue.value_ref());
+      DCHECK(thriftValue.value());
     }
   } else {
     // Key has been persisted before
     thriftValue = selfOriginatedKeyIt->second.value;
-    if (*thriftValue.value_ref() == value) {
+    if (*thriftValue.value() == value) {
       // this is a no op, return early and change no state
       return;
     }
@@ -1213,12 +1210,12 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
   // Override thrift::Value if
   //  1) the SAME key is originated by different node;
   //  2) the peristed value has changed;
-  if (*thriftValue.originatorId_ref() != kvParams_.nodeId or
-      *thriftValue.value_ref() != value) {
-    (*thriftValue.version_ref())++;
-    thriftValue.ttlVersion_ref() = 0;
-    thriftValue.value_ref() = value;
-    thriftValue.originatorId_ref() = kvParams_.nodeId;
+  if (*thriftValue.originatorId() != kvParams_.nodeId or
+      *thriftValue.value() != value) {
+    (*thriftValue.version())++;
+    thriftValue.ttlVersion() = 0;
+    thriftValue.value() = value;
+    thriftValue.originatorId() = kvParams_.nodeId;
     shouldAdvertise = true;
   }
 
@@ -1226,8 +1223,8 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
   // ATTN: When ttl changes but value doesn't, we should advertise ttl
   // immediately so that new ttl is in effect.
   const bool hasTtlChanged =
-      (kvParams_.keyTtl.count() != *thriftValue.ttl_ref()) ? true : false;
-  thriftValue.ttl_ref() = kvParams_.keyTtl.count();
+      (kvParams_.keyTtl.count() != *thriftValue.ttl()) ? true : false;
+  thriftValue.ttl() = kvParams_.keyTtl.count();
 
   // Cache it in selfOriginatedKeyVals. Override the existing one.
   if (selfOriginatedKeyIt == selfOriginatedKeyVals_.end()) {
@@ -1294,14 +1291,14 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
     printKeyValInArea(
         1 /*logLevel*/, "Advertising key update", AreaTag(), key, thriftValue);
     // Set in keyVals which is going to be advertise to the kvStore.
-    DCHECK(thriftValue.value_ref());
+    DCHECK(thriftValue.value());
     keyVals.emplace(key, thriftValue);
     keysToClear.emplace_back(key);
   }
 
   // Advertise key-vals to KvStore
   thrift::KeySetParams params;
-  params.keyVals_ref() = std::move(keyVals);
+  params.keyVals() = std::move(keyVals);
   setKeyVals(std::move(params));
 
   // clear out variable used for batching advertisements
@@ -1333,10 +1330,10 @@ KvStoreDb<ClientType>::unsetSelfOriginatedKey(
 
   // Overwrite all values and increment version.
   auto thriftValue = keyIt->second;
-  thriftValue.originatorId_ref() = kvParams_.nodeId;
-  (*thriftValue.version_ref())++;
-  thriftValue.ttlVersion_ref() = 0;
-  thriftValue.value_ref() = value;
+  thriftValue.originatorId() = kvParams_.nodeId;
+  (*thriftValue.version())++;
+  thriftValue.ttlVersion() = 0;
+  thriftValue.value() = value;
 
   keysToUnset_.emplace(key, std::move(thriftValue));
   // Send updates to KvStore via batch processing.
@@ -1390,7 +1387,7 @@ KvStoreDb<ClientType>::unsetPendingSelfOriginatedKeys() {
 
   // Send updates to KvStore
   thrift::KeySetParams params;
-  params.keyVals_ref() = std::move(keyVals);
+  params.keyVals() = std::move(keyVals);
   setKeyVals(std::move(params));
 
   // Empty out keysToUnset_
@@ -1447,19 +1444,19 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
     timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
     // Bump ttl version
-    (*thriftValue.ttlVersion_ref())++;
+    (*thriftValue.ttlVersion())++;
 
     // Create copy of thrift::Value without value field for bandwidth efficiency
     // when advertising
     auto advertiseValue = createThriftValue(
-        *thriftValue.version_ref(),
+        *thriftValue.version(),
         kvParams_.nodeId,
         std::nullopt, /* empty value */
-        *thriftValue.ttl_ref(), /* ttl */
-        *thriftValue.ttlVersion_ref()) /* ttl version */;
+        *thriftValue.ttl(), /* ttl */
+        *thriftValue.ttlVersion()) /* ttl version */;
 
     // Set in keyVals which will be advertised to the kvStore
-    DCHECK(not advertiseValue.value_ref());
+    DCHECK(not advertiseValue.value());
     printKeyValInArea(
         1 /* logLevel */,
         "Advertising ttl update",
@@ -1472,7 +1469,7 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
   // Advertise to KvStore
   if (not keyVals.empty()) {
     thrift::KeySetParams params;
-    params.keyVals_ref() = std::move(keyVals);
+    params.keyVals() = std::move(keyVals);
     setKeyVals(std::move(params));
   }
 
@@ -1491,17 +1488,17 @@ KvStoreDb<ClientType>::setKeyVals(thrift::KeySetParams&& setParams) {
   fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
 
   // Update hash for key-values
-  for (auto& [_, value] : *setParams.keyVals_ref()) {
-    if (value.value_ref().has_value()) {
-      value.hash_ref() = generateHash(
-          *value.version_ref(), *value.originatorId_ref(), value.value_ref());
+  for (auto& [_, value] : *setParams.keyVals()) {
+    if (value.value().has_value()) {
+      value.hash() =
+          generateHash(*value.version(), *value.originatorId(), value.value());
     }
   }
 
   // Create publication and merge it with local KvStore
   thrift::Publication rcvdPublication;
-  rcvdPublication.keyVals_ref() = std::move(*setParams.keyVals_ref());
-  rcvdPublication.nodeIds_ref().move_from(setParams.nodeIds_ref());
+  rcvdPublication.keyVals() = std::move(*setParams.keyVals());
+  rcvdPublication.nodeIds().move_from(setParams.nodeIds());
   mergePublication(rcvdPublication);
 }
 
@@ -1509,22 +1506,22 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::updateTtlCountdownQueue(
     const thrift::Publication& publication) {
-  for (const auto& [key, value] : *publication.keyVals_ref()) {
-    if (*value.ttl_ref() != Constants::kTtlInfinity) {
+  for (const auto& [key, value] : *publication.keyVals()) {
+    if (*value.ttl() != Constants::kTtlInfinity) {
       TtlCountdownQueueEntry queueEntry;
       queueEntry.expiryTime = std::chrono::steady_clock::now() +
-          std::chrono::milliseconds(*value.ttl_ref());
+          std::chrono::milliseconds(*value.ttl());
       queueEntry.key = key;
-      queueEntry.version = *value.version_ref();
-      queueEntry.ttlVersion = *value.ttlVersion_ref();
-      queueEntry.originatorId = *value.originatorId_ref();
+      queueEntry.version = *value.version();
+      queueEntry.ttlVersion = *value.ttlVersion();
+      queueEntry.originatorId = *value.originatorId();
 
       if ((ttlCountdownQueue_.empty() or
            (queueEntry.expiryTime <= ttlCountdownQueue_.top().expiryTime)) and
           ttlCountdownTimer_) {
         // Reschedule the shorter timeout
         ttlCountdownTimer_->scheduleTimeout(
-            std::chrono::milliseconds(*value.ttl_ref()));
+            std::chrono::milliseconds(*value.ttl()));
       }
 
       ttlCountdownQueue_.push(std::move(queueEntry));
@@ -1546,8 +1543,7 @@ KvStoreDb<ClientType>::getKeyValsSize() const {
 
   // loop through all key/vals and add size of each KV entry
   for (auto const& [key, value] : kvStore_) {
-    size += key.size() + value.originatorId_ref()->size() +
-        value.value_ref()->size();
+    size += key.size() + value.originatorId()->size() + value.value()->size();
   }
   size += fixed_size;
 
@@ -1560,14 +1556,14 @@ template <class ClientType>
 thrift::Publication
 KvStoreDb<ClientType>::getKeyVals(std::vector<std::string> const& keys) {
   thrift::Publication thriftPub;
-  thriftPub.area_ref() = area_;
+  thriftPub.area() = area_;
 
   for (auto const& key : keys) {
     // if requested key if found, respond with version and value
     auto it = kvStore_.find(key);
     if (it != kvStore_.end()) {
       // copy here
-      thriftPub.keyVals_ref()[key] = it->second;
+      thriftPub.keyVals()[key] = it->second;
     }
   }
   return thriftPub;
@@ -1622,20 +1618,19 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
       std::string keyPrefix =
           folly::join(",", kvParams_.filters.value().getKeyPrefixes());
       /* prefix is for backward compatibility */
-      params.prefix_ref() = keyPrefix;
+      params.prefix() = keyPrefix;
       if (not keyPrefix.empty()) {
-        params.keys_ref() = kvParams_.filters.value().getKeyPrefixes();
+        params.keys() = kvParams_.filters.value().getKeyPrefixes();
       }
-      params.originatorIds_ref() =
-          kvParams_.filters.value().getOriginatorIdList();
+      params.originatorIds() = kvParams_.filters.value().getOriginatorIdList();
     }
     KvStoreFilters kvFilters(
         std::vector<std::string>{}, /* keyPrefixList */
         std::set<std::string>{} /* originator */);
     // ATTN: dump hashes instead of full key-val pairs with values
     auto thriftPub = dumpHashWithFilters(area_, kvStore_, kvFilters);
-    params.keyValHashes_ref() = *thriftPub.keyVals_ref();
-    params.senderId_ref() = kvParams_.nodeId;
+    params.keyValHashes() = *thriftPub.keyVals();
+    params.senderId() = kvParams_.nodeId;
 
     // record telemetry for initial full-sync
     fb303::fbData->addStatValue(
@@ -1747,8 +1742,8 @@ KvStoreDb<ClientType>::processThriftSuccess(
   //       full-sync with peers.
   const auto kvUpdateCnt = mergePublication(pub, peerName);
   auto numMissingKeys = 0;
-  if (pub.tobeUpdatedKeys_ref().has_value()) {
-    numMissingKeys = pub.tobeUpdatedKeys_ref()->size();
+  if (pub.tobeUpdatedKeys().has_value()) {
+    numMissingKeys = pub.tobeUpdatedKeys()->size();
   }
 
   // record telemetry for thrift calls
@@ -1767,7 +1762,7 @@ KvStoreDb<ClientType>::processThriftSuccess(
              "[Thrift Sync] Full-sync response received from: {}", peerName)
       << fmt::format(
              " with {} key-vals and {} missing keys. ",
-             pub.keyVals_ref()->size(),
+             pub.keyVals()->size(),
              numMissingKeys)
       << fmt::format(
              "Incurred {} key-value updates. Processing time: {}ms",
@@ -1901,7 +1896,7 @@ KvStoreDb<ClientType>::addThriftPeers(
     std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
-    auto const& peerAddr = *newPeerSpec.peerAddr_ref();
+    auto const& peerAddr = *newPeerSpec.peerAddr();
 
     // try to connect with peer
     auto peerIter = thriftPeers_.find(peerName);
@@ -1913,7 +1908,7 @@ KvStoreDb<ClientType>::addThriftPeers(
                         peerAddr);
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
-      if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr_ref()) {
+      if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr()) {
         // case1: peerSpec updated(i.e. parallel adjacencies can
         //        potentially have peerSpec updated by LM)
         XLOG(INFO) << AreaTag()
@@ -2065,9 +2060,9 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
       break;
     }
     auto it = kvStore_.find(top.key);
-    if (it != kvStore_.end() and *it->second.version_ref() == top.version and
-        *it->second.originatorId_ref() == top.originatorId and
-        *it->second.ttlVersion_ref() == top.ttlVersion) {
+    if (it != kvStore_.end() and *it->second.version() == top.version and
+        *it->second.originatorId() == top.originatorId and
+        *it->second.ttlVersion() == top.ttlVersion) {
       expiredKeys.emplace_back(top.key);
       XLOG(WARNING)
           << AreaTag()
@@ -2075,10 +2070,10 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
           << fmt::format(
                  "({}, {}, {}, {}, {}, {})",
                  top.key,
-                 *it->second.version_ref(),
-                 *it->second.originatorId_ref(),
-                 *it->second.ttlVersion_ref(),
-                 *it->second.ttl_ref(),
+                 *it->second.version(),
+                 *it->second.originatorId(),
+                 *it->second.ttlVersion(),
+                 *it->second.ttl(),
                  kvParams_.nodeId);
       logKvEvent("KEY_EXPIRE", top.key);
       kvStore_.erase(it);
@@ -2105,8 +2100,8 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
   //       via replicate-queue. KvStore will NOT flood publication
   //       with expired keys ONLY to external peers.
   thrift::Publication expiredKeysPub{};
-  expiredKeysPub.expiredKeys_ref() = std::move(expiredKeys);
-  expiredKeysPub.area_ref() = area_;
+  expiredKeysPub.expiredKeys() = std::move(expiredKeys);
+  expiredKeysPub.area() = area_;
   floodPublication(std::move(expiredKeysPub));
 }
 
@@ -2115,13 +2110,13 @@ void
 KvStoreDb<ClientType>::bufferPublication(thrift::Publication&& publication) {
   fb303::fbData->addStatValue("kvstore.rate_limit_suppress", 1, fb303::COUNT);
   fb303::fbData->addStatValue(
-      "kvstore.rate_limit_keys", publication.keyVals_ref()->size(), fb303::AVG);
+      "kvstore.rate_limit_keys", publication.keyVals()->size(), fb303::AVG);
   std::optional<std::string> floodRootId{std::nullopt};
   // update or add keys
-  for (auto const& [key, _] : *publication.keyVals_ref()) {
+  for (auto const& [key, _] : *publication.keyVals()) {
     publicationBuffer_[floodRootId].emplace(key);
   }
-  for (auto const& key : *publication.expiredKeys_ref()) {
+  for (auto const& key : *publication.expiredKeys()) {
     publicationBuffer_[floodRootId].emplace(key);
   }
 }
@@ -2142,9 +2137,9 @@ KvStoreDb<ClientType>::floodBufferedUpdates() {
     for (const auto& key : keys) {
       auto kvStoreIt = kvStore_.find(key);
       if (kvStoreIt != kvStore_.end()) {
-        publication.keyVals_ref()->emplace(make_pair(key, kvStoreIt->second));
+        publication.keyVals()->emplace(make_pair(key, kvStoreIt->second));
       } else {
-        publication.expiredKeys_ref()->emplace_back(key);
+        publication.expiredKeys()->emplace_back(key);
       }
     }
     publications.emplace_back(std::move(publication));
@@ -2168,22 +2163,22 @@ KvStoreDb<ClientType>::finalizeFullSync(
   for (const auto& key : keys) {
     const auto& it = kvStore_.find(key);
     if (it != kvStore_.end()) {
-      updates.keyVals_ref()->emplace(key, it->second);
+      updates.keyVals()->emplace(key, it->second);
     }
   }
 
   // Update ttl values to remove expiring keys. Ignore the response if no
   // keys to be sent
   updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, updates);
-  if (not updates.keyVals_ref()->size()) {
+  if (not updates.keyVals()->size()) {
     return;
   }
 
   // Build params for final sync of 3-way handshake
   thrift::KeySetParams params;
-  params.keyVals_ref() = std::move(*updates.keyVals_ref());
-  params.timestamp_ms_ref() = getUnixTimeStampMs();
-  params.nodeIds_ref() = {kvParams_.nodeId};
+  params.keyVals() = std::move(*updates.keyVals());
+  params.timestamp_ms() = getUnixTimeStampMs();
+  params.nodeIds() = {kvParams_.nodeId};
 
   auto peerIt = thriftPeers_.find(senderId);
   if (peerIt == thriftPeers_.end()) {
@@ -2203,7 +2198,7 @@ KvStoreDb<ClientType>::finalizeFullSync(
     // Skip final full-sync with those peers.
     return;
   }
-  params.senderId_ref() = kvParams_.nodeId;
+  params.senderId() = kvParams_.nodeId;
   XLOG(INFO)
       << AreaTag()
       << fmt::format(
@@ -2290,8 +2285,7 @@ KvStoreDb<ClientType>::floodPublication(
   updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, publication);
 
   // If there are no changes then return
-  if (publication.keyVals_ref()->empty() &&
-      publication.expiredKeys_ref()->empty()) {
+  if (publication.keyVals()->empty() && publication.expiredKeys()->empty()) {
     return;
   }
 
@@ -2299,14 +2293,13 @@ KvStoreDb<ClientType>::floodPublication(
   // and hence second last entry is the node from whom we get this
   // publication
   std::optional<std::string> senderId;
-  if (publication.nodeIds_ref().has_value() and
-      publication.nodeIds_ref()->size()) {
-    senderId = publication.nodeIds_ref()->back();
+  if (publication.nodeIds().has_value() and publication.nodeIds()->size()) {
+    senderId = publication.nodeIds()->back();
   }
-  if (not publication.nodeIds_ref().has_value()) {
-    publication.nodeIds_ref() = std::vector<std::string>{};
+  if (not publication.nodeIds().has_value()) {
+    publication.nodeIds() = std::vector<std::string>{};
   }
-  publication.nodeIds_ref()->emplace_back(kvParams_.nodeId);
+  publication.nodeIds()->emplace_back(kvParams_.nodeId);
 
   // Flood publication to internal subscribers
   kvParams_.kvStoreUpdatesQueue.push(publication);
@@ -2316,12 +2309,12 @@ KvStoreDb<ClientType>::floodPublication(
   processPublicationForSelfOriginatedKey(publication);
 
   // Flood keyValue ONLY updates to external neighbors
-  if (publication.keyVals_ref()->empty()) {
+  if (publication.keyVals()->empty()) {
     return;
   }
 
   // Key collection to be flooded
-  auto keysToUpdate = folly::gen::from(*publication.keyVals_ref()) |
+  auto keysToUpdate = folly::gen::from(*publication.keyVals()) |
       folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
 
   XLOG(DBG2) << AreaTag()
@@ -2333,10 +2326,10 @@ KvStoreDb<ClientType>::floodPublication(
 
   // prepare thrift structure for flooding purpose
   thrift::KeySetParams params;
-  params.keyVals_ref() = *publication.keyVals_ref();
-  params.nodeIds_ref().copy_from(publication.nodeIds_ref());
-  params.timestamp_ms_ref() = getUnixTimeStampMs();
-  params.senderId_ref() = kvParams_.nodeId;
+  params.keyVals() = *publication.keyVals();
+  params.nodeIds().copy_from(publication.nodeIds());
+  params.timestamp_ms() = getUnixTimeStampMs();
+  params.senderId() = kvParams_.nodeId;
 
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     if (senderId.has_value() and senderId.value() == peerName) {
@@ -2350,7 +2343,7 @@ KvStoreDb<ClientType>::floodPublication(
       // Skip flooding to those peers if peer has NOT finished
       // initial sync(i.e. promoted to `INITIALIZED`)
       // store key for flooding after intialized
-      for (auto const& [key, _] : *params.keyVals_ref()) {
+      for (auto const& [key, _] : *params.keyVals()) {
         thriftPeer.pendingKeysDuringInitialization.insert(key);
       }
       continue;
@@ -2361,7 +2354,7 @@ KvStoreDb<ClientType>::floodPublication(
         "kvstore.thrift.num_flood_pub", 1, fb303::COUNT);
     fb303::fbData->addStatValue(
         "kvstore.thrift.num_flood_key_vals",
-        publication.keyVals_ref()->size(),
+        publication.keyVals()->size(),
         fb303::SUM);
 
     auto startTime = std::chrono::steady_clock::now();
@@ -2413,8 +2406,8 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
 
   // go through received publications to refresh self-originated key-vals if
   // necessary
-  for (auto const& [key, rcvdValue] : *publication.keyVals_ref()) {
-    if (not rcvdValue.value_ref().has_value()) {
+  for (auto const& [key, rcvdValue] : *publication.keyVals()) {
+    if (not rcvdValue.value().has_value()) {
       // ignore TTL update
       continue;
     }
@@ -2432,8 +2425,8 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
     // case-2: currValue < rcvdValue
     // case-3: currValue == rcvdValue
     auto& currValue = it->second.value;
-    const auto& currVersion = *currValue.version_ref();
-    const auto& rcvdVersion = *rcvdValue.version_ref();
+    const auto& currVersion = *currValue.version();
+    const auto& rcvdVersion = *rcvdValue.version();
     bool shouldOverride{false};
 
     if (currVersion > rcvdVersion) {
@@ -2447,8 +2440,8 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
       // conditionally override.
       // NOTE: similar operation in persistSelfOriginatedKey()
       // for key overriding.
-      if (*rcvdValue.originatorId_ref() != kvParams_.nodeId or
-          *currValue.value_ref() != *rcvdValue.value_ref()) {
+      if (*rcvdValue.originatorId() != kvParams_.nodeId or
+          *currValue.value() != *rcvdValue.value()) {
         shouldOverride = true;
       }
     }
@@ -2460,8 +2453,8 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
     //  - override value(do nothing since it is up-to-date);
     //  - honor the ttl from local value;
     if (shouldOverride) {
-      currValue.ttlVersion_ref() = 0;
-      currValue.version_ref() = *rcvdValue.version_ref() + 1;
+      currValue.ttlVersion() = 0;
+      currValue.version() = *rcvdValue.version() + 1;
       keysToAdvertise_.insert(key);
 
       XLOG(INFO)
@@ -2469,14 +2462,14 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
           << fmt::format(
                  "Override version for [key: {}, v: {}, originatorId: {}]",
                  key,
-                 *rcvdValue.version_ref(),
-                 *currValue.originatorId_ref());
+                 *rcvdValue.version(),
+                 *currValue.originatorId());
     } else {
       // update local ttlVersion if received higher ttlVersion.
       // NOTE: ttlVersion will be bumped up before ttl update.
       // It works fine to just update to latest ttlVersion, instead of +1.
-      if (*currValue.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
-        currValue.ttlVersion_ref() = *rcvdValue.ttlVersion_ref();
+      if (*currValue.ttlVersion() < *rcvdValue.ttlVersion()) {
+        currValue.ttlVersion() = *rcvdValue.ttlVersion();
       }
     }
   }
@@ -2498,18 +2491,18 @@ KvStoreDb<ClientType>::mergePublication(
       "kvstore.received_publications." + area_, 1, fb303::COUNT);
   fb303::fbData->addStatValue(
       "kvstore.received_key_vals",
-      rcvdPublication.keyVals_ref()->size(),
+      rcvdPublication.keyVals()->size(),
       fb303::SUM);
   fb303::fbData->addStatValue(
       "kvstore.received_key_vals." + area_,
-      rcvdPublication.keyVals_ref()->size(),
+      rcvdPublication.keyVals()->size(),
       fb303::SUM);
 
   static const std::vector<std::string> kUpdatedKeys = {};
 
   std::unordered_set<std::string> keysTobeUpdated;
-  for (auto const& key : rcvdPublication.tobeUpdatedKeys_ref()
-           ? rcvdPublication.tobeUpdatedKeys_ref().value()
+  for (auto const& key : rcvdPublication.tobeUpdatedKeys()
+           ? rcvdPublication.tobeUpdatedKeys().value()
            : kUpdatedKeys) {
     keysTobeUpdated.insert(key);
   }
@@ -2526,12 +2519,12 @@ KvStoreDb<ClientType>::mergePublication(
       senderId.has_value() and not keysTobeUpdated.empty();
 
   // This can happen when KvStore is emitting expired-key updates
-  if (rcvdPublication.keyVals_ref()->empty() and not needFinalizeFullSync) {
+  if (rcvdPublication.keyVals()->empty() and not needFinalizeFullSync) {
     return 0;
   }
 
   // Check for loop
-  const auto nodeIds = rcvdPublication.nodeIds_ref();
+  const auto nodeIds = rcvdPublication.nodeIds();
   if (nodeIds.has_value() and
       std::find(nodeIds->cbegin(), nodeIds->cend(), kvParams_.nodeId) !=
           nodeIds->cend()) {
@@ -2544,7 +2537,7 @@ KvStoreDb<ClientType>::mergePublication(
       : (nodeIds.has_value() ? std::optional(nodeIds->back()) : std::nullopt);
   // Generate delta with local KvStore
   auto [mergedKeyVals, stats] = mergeKeyValues(
-      kvStore_, *rcvdPublication.keyVals_ref(), kvParams_.filters, sender);
+      kvStore_, *rcvdPublication.keyVals(), kvParams_.filters, sender);
   if (stats.inconsistencyDetetectedWithOriginator) {
     // inconsistency detected: Received a TTL update from originator
     // but key version are mismatched
@@ -2560,24 +2553,24 @@ KvStoreDb<ClientType>::mergePublication(
 
   thrift::Publication deltaPublication;
 
-  deltaPublication.keyVals_ref() = std::move(mergedKeyVals);
-  deltaPublication.area_ref() = area_;
+  deltaPublication.keyVals() = std::move(mergedKeyVals);
+  deltaPublication.area() = area_;
 
-  const size_t kvUpdateCnt = deltaPublication.keyVals_ref()->size();
+  const size_t kvUpdateCnt = deltaPublication.keyVals()->size();
   fb303::fbData->addStatValue(
       "kvstore.updated_key_vals", kvUpdateCnt, fb303::SUM);
   fb303::fbData->addStatValue(
       "kvstore.updated_key_vals." + area_, kvUpdateCnt, fb303::SUM);
 
   // Populate nodeIds and our nodeId_ to the end
-  if (rcvdPublication.nodeIds_ref().has_value()) {
-    deltaPublication.nodeIds_ref().copy_from(rcvdPublication.nodeIds_ref());
+  if (rcvdPublication.nodeIds().has_value()) {
+    deltaPublication.nodeIds().copy_from(rcvdPublication.nodeIds());
   }
 
   // Update ttl values of keys
   updateTtlCountdownQueue(deltaPublication);
 
-  if (not deltaPublication.keyVals_ref()->empty()) {
+  if (not deltaPublication.keyVals()->empty()) {
     // Flood change to all of our neighbors/subscribers
     floodPublication(std::move(deltaPublication));
   } else {

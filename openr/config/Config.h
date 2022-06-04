@@ -34,24 +34,24 @@ using PrefixAllocationParams = std::pair<folly::CIDRNetwork, uint8_t>;
 class AreaConfiguration {
  public:
   explicit AreaConfiguration(thrift::AreaConfig const& area)
-      : areaId_(*area.area_id_ref()) {
+      : areaId_(*area.area_id()) {
     // parse non-optional fields
-    neighborRegexSet_ = compileRegexSet(*area.neighbor_regexes_ref());
+    neighborRegexSet_ = compileRegexSet(*area.neighbor_regexes());
     interfaceIncludeRegexSet_ =
-        compileRegexSet(*area.include_interface_regexes_ref());
+        compileRegexSet(*area.include_interface_regexes());
     interfaceExcludeRegexSet_ =
-        compileRegexSet(*area.exclude_interface_regexes_ref());
+        compileRegexSet(*area.exclude_interface_regexes());
     interfaceRedistRegexSet_ =
-        compileRegexSet(*area.redistribute_interface_regexes_ref());
+        compileRegexSet(*area.redistribute_interface_regexes());
 
     // parse optional fields
-    if (auto nodeLabel = area.area_sr_node_label_ref()) {
+    if (auto nodeLabel = area.area_sr_node_label()) {
       srNodeLabel_ = *nodeLabel;
     }
-    if (auto prependLabel = area.prepend_label_ranges_ref()) {
+    if (auto prependLabel = area.prepend_label_ranges()) {
       srPrependLLabelRanges_ = *prependLabel;
     }
-    if (auto policyName = area.import_policy_name_ref()) {
+    if (auto policyName = area.import_policy_name()) {
       importPolicyName_ = *policyName;
     }
   }
@@ -131,7 +131,7 @@ class Config {
 
   const std::string&
   getNodeName() const {
-    return *config_.node_name_ref();
+    return *config_.node_name();
   }
 
   //
@@ -140,20 +140,20 @@ class Config {
 
   bool
   isV4Enabled() const {
-    return config_.enable_v4_ref().value_or(false);
+    return config_.enable_v4().value_or(false);
   }
 
   bool
   isSegmentRoutingEnabled() const {
-    return config_.enable_segment_routing_ref().value_or(false);
+    return config_.enable_segment_routing().value_or(false);
   }
 
   bool
   isAdjacencyLabelsEnabled() const {
     if (isSegmentRoutingEnabled() && isSegmentRoutingConfigured()) {
       const auto& srConfig = getSegmentRoutingConfig();
-      return srConfig.sr_adj_label_ref().has_value() &&
-          srConfig.sr_adj_label_ref()->sr_adj_label_type_ref() !=
+      return srConfig.sr_adj_label().has_value() &&
+          srConfig.sr_adj_label()->sr_adj_label_type() !=
           thrift::SegmentRoutingAdjLabelType::DISABLED;
     }
     return false;
@@ -161,47 +161,47 @@ class Config {
 
   bool
   isNewGRBehaviorEnabled() const {
-    return *config_.enable_new_gr_behavior_ref();
+    return *config_.enable_new_gr_behavior();
   }
 
   bool
   isNetlinkFibHandlerEnabled() const {
-    return config_.enable_netlink_fib_handler_ref().value_or(false);
+    return config_.enable_netlink_fib_handler().value_or(false);
   }
 
   bool
   isFibServiceWaitingEnabled() const {
-    return *config_.enable_fib_service_waiting_ref();
+    return *config_.enable_fib_service_waiting();
   }
 
   bool
   isRibPolicyEnabled() const {
-    return *config_.enable_rib_policy_ref();
+    return *config_.enable_rib_policy();
   }
 
   bool
   isBestRouteSelectionEnabled() const {
-    return *config_.enable_best_route_selection_ref();
+    return *config_.enable_best_route_selection();
   }
 
   bool
   isLogSubmissionEnabled() const {
-    return *getMonitorConfig().enable_event_log_submission_ref();
+    return *getMonitorConfig().enable_event_log_submission();
   }
 
   bool
   isV4OverV6NexthopEnabled() const {
-    return config_.v4_over_v6_nexthop_ref().value_or(false);
+    return config_.v4_over_v6_nexthop().value_or(false);
   }
 
   bool
   isUcmpEnabled() const {
-    return *config_.enable_ucmp_ref();
+    return *config_.enable_ucmp();
   }
 
   bool
   isInitializationProcessEnabled() const {
-    return *config_.enable_initialization_process_ref();
+    return *config_.enable_initialization_process();
   }
 
   //
@@ -237,7 +237,7 @@ class Config {
   //
   const thrift::SparkConfig&
   getSparkConfig() const {
-    return *config_.spark_config_ref();
+    return *config_.spark_config();
   }
 
   //
@@ -247,13 +247,12 @@ class Config {
 
   const thrift::KvstoreConfig&
   getKvStoreConfig() const {
-    return *config_.kvstore_config_ref();
+    return *config_.kvstore_config();
   }
 
   std::chrono::milliseconds
   getKvStoreKeyTtl() const {
-    return std::chrono::milliseconds(
-        *config_.kvstore_config_ref()->key_ttl_ms_ref());
+    return std::chrono::milliseconds(*config_.kvstore_config()->key_ttl_ms());
   }
 
   //
@@ -261,7 +260,7 @@ class Config {
   //
   bool
   isBgpRouteProgrammingEnabled() const {
-    return *config_.decision_config_ref()->enable_bgp_route_programming_ref();
+    return *config_.decision_config()->enable_bgp_route_programming();
   }
 
   //
@@ -269,7 +268,7 @@ class Config {
   //
   const thrift::LinkMonitorConfig&
   getLinkMonitorConfig() const {
-    return *config_.link_monitor_config_ref();
+    return *config_.link_monitor_config();
   }
 
   //
@@ -277,20 +276,20 @@ class Config {
   //
   const thrift::SegmentRoutingConfig&
   getSegmentRoutingConfig() const {
-    return *config_.segment_routing_config_ref();
+    return *config_.segment_routing_config();
   }
 
   const thrift::SegmentRoutingAdjLabel&
   getAdjSegmentLabels() const {
     CHECK(
-        config_.segment_routing_config_ref().has_value() and
-        config_.segment_routing_config_ref()->sr_adj_label_ref().has_value());
-    return *config_.segment_routing_config_ref()->sr_adj_label_ref();
+        config_.segment_routing_config().has_value() and
+        config_.segment_routing_config()->sr_adj_label().has_value());
+    return *config_.segment_routing_config()->sr_adj_label();
   }
 
   bool
   isSegmentRoutingConfigured() const {
-    return config_.segment_routing_config_ref().has_value();
+    return config_.segment_routing_config().has_value();
   }
 
   //
@@ -298,13 +297,13 @@ class Config {
   //
   bool
   isPrefixAllocationEnabled() const {
-    return config_.enable_prefix_allocation_ref().value_or(false);
+    return config_.enable_prefix_allocation().value_or(false);
   }
 
   const thrift::PrefixAllocationConfig&
   getPrefixAllocationConfig() const {
     CHECK(isPrefixAllocationEnabled());
-    return *config_.prefix_allocation_config_ref();
+    return *config_.prefix_allocation_config();
   }
 
   PrefixAllocationParams
@@ -316,15 +315,15 @@ class Config {
   // MPLS labels
   bool
   isLabelRangeValid(thrift::LabelRange range) const {
-    if (not isMplsLabelValid(*range.start_label_ref())) {
+    if (not isMplsLabelValid(*range.start_label())) {
       return false;
     }
 
-    if (not isMplsLabelValid(*range.end_label_ref())) {
+    if (not isMplsLabelValid(*range.end_label())) {
       return false;
     }
 
-    if (*range.start_label_ref() > *range.end_label_ref()) {
+    if (*range.start_label() > *range.end_label()) {
       return false;
     }
 
@@ -336,19 +335,19 @@ class Config {
   //
   bool
   isBgpPeeringEnabled() const {
-    return config_.enable_bgp_peering_ref().value_or(false);
+    return config_.enable_bgp_peering().value_or(false);
   }
 
   const thrift::BgpConfig&
   getBgpConfig() const {
     CHECK(isBgpPeeringEnabled());
-    return *config_.bgp_config_ref();
+    return *config_.bgp_config();
   }
 
   const thrift::BgpRouteTranslationConfig&
   getBgpTranslationConfig() const {
     CHECK(isBgpPeeringEnabled());
-    return *config_.bgp_translation_config_ref();
+    return *config_.bgp_translation_config();
   }
 
   //
@@ -356,13 +355,13 @@ class Config {
   //
   bool
   isWatchdogEnabled() const {
-    return config_.enable_watchdog_ref().value_or(false);
+    return config_.enable_watchdog().value_or(false);
   }
 
   const thrift::WatchdogConfig&
   getWatchdogConfig() const {
     CHECK(isWatchdogEnabled());
-    return *config_.watchdog_config_ref();
+    return *config_.watchdog_config();
   }
 
   //
@@ -370,7 +369,7 @@ class Config {
   //
   const thrift::MonitorConfig&
   getMonitorConfig() const {
-    return *config_.monitor_config_ref();
+    return *config_.monitor_config();
   }
 
   //
@@ -378,7 +377,7 @@ class Config {
   //
   std::optional<neteng::config::routing_policy::PolicyConfig>
   getAreaPolicies() const {
-    return config_.area_policies_ref().to_optional();
+    return config_.area_policies().to_optional();
   }
 
   //
@@ -386,23 +385,23 @@ class Config {
   //
   const thrift::ThriftServerConfig
   getThriftServerConfig() const {
-    return *config_.thrift_server_ref();
+    return *config_.thrift_server();
   }
   bool
   isSecureThriftServerEnabled() const {
-    return *getThriftServerConfig().enable_secure_thrift_server_ref();
+    return *getThriftServerConfig().enable_secure_thrift_server();
   }
 
   bool
   isNonDefaultVrfThriftServerEnabled() const {
     return getThriftServerConfig()
-        .enable_non_default_vrf_thrift_server_ref()
+        .enable_non_default_vrf_thrift_server()
         .value_or(false);
   }
 
   const std::string
   getSSLCertPath() const {
-    auto certPath = getThriftServerConfig().x509_cert_path_ref();
+    auto certPath = getThriftServerConfig().x509_cert_path();
     if ((not certPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but x509_cert_path is empty");
@@ -412,7 +411,7 @@ class Config {
 
   const std::string
   getSSLEccCurve() const {
-    auto eccCurve = getThriftServerConfig().ecc_curve_name_ref();
+    auto eccCurve = getThriftServerConfig().ecc_curve_name();
     if ((not eccCurve) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but ecc_curve_name is empty");
@@ -422,7 +421,7 @@ class Config {
 
   const std::string
   getSSLCaPath() const {
-    auto caPath = getThriftServerConfig().x509_ca_path_ref();
+    auto caPath = getThriftServerConfig().x509_ca_path();
     if ((not caPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but x509_ca_path is empty");
@@ -433,7 +432,7 @@ class Config {
   const std::string
   getSSLKeyPath() const {
     std::string keyPath;
-    const auto& keyPathConfig = getThriftServerConfig().x509_key_path_ref();
+    const auto& keyPathConfig = getThriftServerConfig().x509_key_path();
 
     // If unspecified x509_key_path, will use x509_cert_path
     if (keyPathConfig) {
@@ -446,7 +445,7 @@ class Config {
 
   const std::string
   getSSLSeedPath() const {
-    auto seedPath = getThriftServerConfig().ticket_seed_path_ref();
+    auto seedPath = getThriftServerConfig().ticket_seed_path();
     if ((not seedPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but ticket_seed_path is empty");
@@ -457,13 +456,13 @@ class Config {
   const std::string
   getSSLAcceptablePeers() const {
     // If unspecified, will use accept connection from any authenticated peer
-    return getThriftServerConfig().acceptable_peers_ref().value_or("");
+    return getThriftServerConfig().acceptable_peers().value_or("");
   }
 
   folly::SSLContext::VerifyClientCertificate
   getSSLContextVerifyType() const {
     // Get the verify_client_type config
-    auto mode = getThriftServerConfig().verify_client_type_ref().value_or(
+    auto mode = getThriftServerConfig().verify_client_type().value_or(
         thrift::VerifyClientType::DO_NOT_REQUEST);
 
     // Set the folly::SSLContext::VerifyClientCertificate for thrift server
@@ -482,7 +481,7 @@ class Config {
   apache::thrift::SSLPolicy
   getSSLThriftPolicy() const {
     // Get the verify_client_type config
-    auto mode = getThriftServerConfig().verify_client_type_ref().value_or(
+    auto mode = getThriftServerConfig().verify_client_type().value_or(
         thrift::VerifyClientType::DO_NOT_REQUEST);
 
     // Set the apache::thrift::SSLPolicy for starting thrift server
@@ -503,7 +502,7 @@ class Config {
   //
   std::optional<thrift::ThriftClientConfig>
   getThriftClientConfig() const {
-    return config_.thrift_client_ref().to_optional();
+    return config_.thrift_client().to_optional();
   }
 
   //
@@ -511,7 +510,7 @@ class Config {
   //
   bool
   isVipServiceEnabled() const {
-    return config_.enable_vip_service_ref().value_or(false);
+    return config_.enable_vip_service().value_or(false);
   }
 
   //
@@ -520,7 +519,7 @@ class Config {
   const vipconfig::config::VipServiceConfig&
   getVipServiceConfig() const {
     CHECK(isVipServiceEnabled());
-    return *config_.vip_service_config_ref();
+    return *config_.vip_service_config();
   }
 
   //
@@ -528,12 +527,12 @@ class Config {
   //
   bool
   isAssumeDrained() const {
-    auto undrainedFlagPath = config_.undrained_flag_path_ref();
+    auto undrainedFlagPath = config_.undrained_flag_path();
     // Do not assume drain if the undrained_flag_path is set and the file exists
     if (undrainedFlagPath && fs::exists(*undrainedFlagPath)) {
       return false;
     }
-    return *config_.assume_drained_ref();
+    return *config_.assume_drained();
   }
 
   //
@@ -541,16 +540,16 @@ class Config {
   //
   bool
   isMemoryProfilingEnabled() const {
-    auto memProfileConf = config_.memory_profiling_config_ref();
+    auto memProfileConf = config_.memory_profiling_config();
     return memProfileConf.has_value() and
-        memProfileConf.value().enable_memory_profiling_ref().value();
+        memProfileConf.value().enable_memory_profiling().value();
   }
 
   std::chrono::seconds
   getMemoryProfilingInterval() const {
     if (isMemoryProfilingEnabled()) {
       return std::chrono::seconds(
-          *config_.memory_profiling_config_ref()->heap_dump_interval_s_ref());
+          *config_.memory_profiling_config()->heap_dump_interval_s());
     } else {
       throw std::invalid_argument(
           "Trying to set memory profile timer with heap_dump_interval_s, but enable_memory_profiling = false");

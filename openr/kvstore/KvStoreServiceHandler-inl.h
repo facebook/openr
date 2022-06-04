@@ -30,7 +30,7 @@ KvStoreServiceHandler<ClientType>::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
   thrift::KeyGetParams params;
-  params.keys_ref() = std::move(*filterKeys);
+  params.keys() = std::move(*filterKeys);
 
   return kvStore_->semifuture_getKvStoreKeyVals(
       std::move(*area), std::move(params));
