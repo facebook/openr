@@ -3,12 +3,14 @@ name: Documentation Autoformat check + Build
 on:
   push:
     paths:
+      - ".github/workflows/doc.yml"
       - ".prettierrc.json"
       - "openr/docs/**"
       - "README.md"
       - "CONTRIBUTING.md"
   pull_request:
     paths:
+      - ".github/workflows/doc.yml"
       - ".prettierrc.json"
       - "openr/docs/**"
       - "README.md"
@@ -28,7 +30,7 @@ jobs:
       - name: Link check markdown + yaml with prettier
         run: |
           npm install prettier
-          npx prettier --check .
+          npx prettier --check *.md openr/docs
 
       - name: Install docs dependencies
         run: |
