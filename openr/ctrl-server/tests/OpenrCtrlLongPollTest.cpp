@@ -21,7 +21,7 @@ class LongPollFixture : public ::testing::Test {
   SetUp() override {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
-    kvStoreConfig.node_name_ref() = nodeName_;
+    kvStoreConfig.node_name() = nodeName_;
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // Create KvStore module

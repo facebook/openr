@@ -45,9 +45,9 @@ main(int argc, char** argv) {
       areaKeyVals;
   XLOG(INFO) << "Stream is connected, updates will follow";
   for (auto const& pub : response.response) {
-    XLOG(INFO) << "Received " << pub.keyVals_ref()->size()
-               << " entries in initial dump for area: " << *pub.area_ref();
-    areaKeyVals[*pub.area_ref()] = *pub.keyVals_ref();
+    XLOG(INFO) << "Received " << pub.keyVals()->size()
+               << " entries in initial dump for area: " << *pub.area();
+    areaKeyVals[*pub.area()] = *pub.keyVals();
   }
   XLOG(INFO) << "";
 
@@ -63,7 +63,7 @@ main(int argc, char** argv) {
                 }
                 auto& pub = maybePub.value();
                 // Print expired key-vals
-                for (const auto& key : *pub.expiredKeys_ref()) {
+                for (const auto& key : *pub.expiredKeys()) {
                   std::cout << "Expired Key: " << key << std::endl;
                   std::cout << "" << std::endl;
                 }
@@ -71,19 +71,19 @@ main(int argc, char** argv) {
                 // Print updates
                 auto updatedKeyVals =
                     openr::mergeKeyValues(
-                        areaKeyVals.at(pub.get_area()), *pub.keyVals_ref())
+                        areaKeyVals.at(pub.get_area()), *pub.keyVals())
                         .first;
                 for (auto& [key, val] : updatedKeyVals) {
                   std::cout
-                      << (val.value_ref().has_value() ? "Updated" : "Refreshed")
+                      << (val.value().has_value() ? "Updated" : "Refreshed")
                       << " KeyVal: " << key << std::endl;
-                  std::cout << "  version: " << *val.version_ref() << std::endl;
-                  std::cout << "  originatorId: " << *val.originatorId_ref()
+                  std::cout << "  version: " << *val.version() << std::endl;
+                  std::cout << "  originatorId: " << *val.originatorId()
                             << std::endl;
-                  std::cout << "  ttl: " << *val.ttl_ref() << std::endl;
-                  std::cout << "  ttlVersion: " << *val.ttlVersion_ref()
+                  std::cout << "  ttl: " << *val.ttl() << std::endl;
+                  std::cout << "  ttlVersion: " << *val.ttlVersion()
                             << std::endl;
-                  std::cout << "  hash: " << val.hash_ref().value() << std::endl
+                  std::cout << "  hash: " << val.hash().value() << std::endl
                             << std::endl; // intended
                 }
               });

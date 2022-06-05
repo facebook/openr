@@ -18,11 +18,11 @@ namespace openr {
 //
 
 RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
-    : name_(*stmt.name_ref()),
-      action_(*stmt.action_ref()),
-      counterID_(stmt.counterID_ref().to_optional()) {
+    : name_(*stmt.name()),
+      action_(*stmt.action()),
+      counterID_(stmt.counterID().to_optional()) {
   // Verify that at-least one action must be specified
-  if (not stmt.action_ref()->set_weight_ref()) {
+  if (not stmt.action()->set_weight()) {
     thrift::OpenrError error;
     *error.message_ref() =
         "Missing policy_statement.action.set_weight attribute";
@@ -30,8 +30,7 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
   }
 
   // Verify that at-least one match criteria must be specified
-  if (not stmt.matcher_ref()->prefixes_ref() &&
-      not stmt.matcher_ref()->tags_ref()) {
+  if (not stmt.matcher()->prefixes() && not stmt.matcher()->tags()) {
     thrift::OpenrError error;
     *error.message_ref() =
         "Missing policy_statement.matcher.prefixes or policy_statement.matcher.tags attribute";
@@ -39,13 +38,13 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
   }
 
   // Populate the match fields
-  if (stmt.matcher_ref()->prefixes_ref()) {
-    for (const auto& tPrefix : *stmt.matcher_ref()->prefixes_ref()) {
+  if (stmt.matcher()->prefixes()) {
+    for (const auto& tPrefix : *stmt.matcher()->prefixes()) {
       prefixSet_.insert(toIPNetwork(tPrefix));
     }
   }
-  if (stmt.matcher_ref()->tags_ref()) {
-    for (const auto& tTag : *stmt.matcher_ref()->tags_ref()) {
+  if (stmt.matcher()->tags()) {
+    for (const auto& tTag : *stmt.matcher()->tags()) {
       tagSet_.insert(tTag);
     }
   }
@@ -54,19 +53,19 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
 thrift::RibPolicyStatement
 RibPolicyStatement::toThrift() const {
   thrift::RibPolicyStatement stmt;
-  *stmt.name_ref() = name_;
-  *stmt.action_ref() = action_;
-  stmt.counterID_ref().from_optional(counterID_);
+  *stmt.name() = name_;
+  *stmt.action() = action_;
+  stmt.counterID().from_optional(counterID_);
   if (!prefixSet_.empty()) {
-    stmt.matcher_ref()->prefixes_ref() = std::vector<thrift::IpPrefix>();
+    stmt.matcher()->prefixes() = std::vector<thrift::IpPrefix>();
     for (auto const& prefix : prefixSet_) {
-      stmt.matcher_ref()->prefixes_ref()->emplace_back(toIpPrefix(prefix));
+      stmt.matcher()->prefixes()->emplace_back(toIpPrefix(prefix));
     }
   }
   if (!tagSet_.empty()) {
-    stmt.matcher_ref()->tags_ref() = std::vector<std::string>();
+    stmt.matcher()->tags() = std::vector<std::string>();
     for (auto const& tag : tagSet_) {
-      stmt.matcher_ref()->tags_ref()->emplace_back(tag);
+      stmt.matcher()->tags()->emplace_back(tag);
     }
   }
 
@@ -86,8 +85,8 @@ RibPolicyStatement::match(const RibUnicastEntry& route) const {
   } else {
     for (const auto& tag : tagSet_) {
       // Find a match with at least one tag in the RibPolicyStatement
-      const auto tagFoundIt = route.bestPrefixEntry.tags_ref()->find(tag);
-      if (tagFoundIt != route.bestPrefixEntry.tags_ref()->end()) {
+      const auto tagFoundIt = route.bestPrefixEntry.tags()->find(tag);
+      if (tagFoundIt != route.bestPrefixEntry.tags()->end()) {
         tagMatch = true;
         break;
       }
@@ -118,30 +117,28 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   route.counterID = counterID_;
 
   // Iterate over all next-hops. NOTE that we iterate over rvalue
-  CHECK(action_.set_weight_ref().has_value());
-  auto const& weightAction = action_.set_weight_ref().value();
+  CHECK(action_.set_weight().has_value());
+  auto const& weightAction = action_.set_weight().value();
   std::unordered_set<thrift::NextHopThrift> newNexthops;
   for (auto& nh : route.nexthops) {
     // Next-hop inherits a RibPolicy weight with the following precedence
     // 1. Neighbor weight
     // 2. Area weight
     // 3. Default weight
-    auto new_weight = *weightAction.default_weight_ref();
-    if (nh.area_ref()) {
+    auto new_weight = *weightAction.default_weight();
+    if (nh.area()) {
       new_weight = folly::get_default(
-          *weightAction.area_to_weight_ref(),
-          nh.area_ref().value(),
-          new_weight);
+          *weightAction.area_to_weight(), nh.area().value(), new_weight);
     }
-    if (nh.neighborNodeName_ref()) {
+    if (nh.neighborNodeName()) {
       new_weight = folly::get_default(
-          *weightAction.neighbor_to_weight_ref(),
-          nh.neighborNodeName_ref().value(),
+          *weightAction.neighbor_to_weight(),
+          nh.neighborNodeName().value(),
           new_weight);
     }
     if (new_weight > 0) {
       auto newNh = nh;
-      newNh.weight_ref() = new_weight;
+      newNh.weight() = new_weight;
       newNexthops.emplace(std::move(newNh));
     }
     // We skip the next-hop with weight=0
@@ -171,15 +168,15 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
 RibPolicy::RibPolicy(thrift::RibPolicy const& policy)
     : validUntilTs_(
           std::chrono::steady_clock::now() +
-          std::chrono::seconds(*policy.ttl_secs_ref())) {
-  if (policy.statements_ref()->empty()) {
+          std::chrono::seconds(*policy.ttl_secs())) {
+  if (policy.statements()->empty()) {
     thrift::OpenrError error;
     *error.message_ref() = "Missing policy.statements attribute";
     throw error;
   }
 
   // Populate policy statements
-  for (auto const& statement : *policy.statements_ref()) {
+  for (auto const& statement : *policy.statements()) {
     policyStatements_.emplace_back(RibPolicyStatement(statement));
   }
 }
@@ -190,13 +187,13 @@ RibPolicy::toThrift() const {
 
   // Set statements
   for (auto const& statement : policyStatements_) {
-    policy.statements_ref()->emplace_back(statement.toThrift());
+    policy.statements()->emplace_back(statement.toThrift());
   }
 
   // Set ttl_secs
-  policy.ttl_secs_ref() = std::chrono::duration_cast<std::chrono::seconds>(
-                              validUntilTs_ - std::chrono::steady_clock::now())
-                              .count();
+  policy.ttl_secs() = std::chrono::duration_cast<std::chrono::seconds>(
+                          validUntilTs_ - std::chrono::steady_clock::now())
+                          .count();
 
   return policy;
 }

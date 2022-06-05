@@ -48,15 +48,14 @@ class PrefixAllocatorFixture : public ::testing::Test {
     evbThread_ = std::thread([&]() { evb_.run(); });
 
     auto tConfig = getBasicOpenrConfig(myNodeName_);
-    tConfig.enable_prefix_allocation_ref() = true;
+    tConfig.enable_prefix_allocation() = true;
 
     thrift::PrefixAllocationConfig pfxAllocationConf;
-    pfxAllocationConf.loopback_interface_ref() = "";
-    pfxAllocationConf.prefix_allocation_mode_ref() = mode;
+    pfxAllocationConf.loopback_interface() = "";
+    pfxAllocationConf.prefix_allocation_mode() = mode;
 
-    tConfig.prefix_allocation_config_ref() = pfxAllocationConf;
-    tConfig.persistent_config_store_path_ref() =
-        fmt::format("/tmp/openr.{}", tid);
+    tConfig.prefix_allocation_config() = pfxAllocationConf;
+    tConfig.persistent_config_store_path() = fmt::format("/tmp/openr.{}", tid);
     config_ = std::make_shared<Config>(tConfig);
 
     // Start KvStore and attach a client to it
@@ -312,11 +311,11 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
                           std::optional<thrift::Value> value) mutable noexcept {
       // Parse PrefixDb
       ASSERT_TRUE(value.has_value());
-      ASSERT_TRUE(value.value().value_ref().has_value());
+      ASSERT_TRUE(value.value().value().has_value());
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          value.value().value_ref().value(), serializer_);
-      auto prefixes = *prefixDb.prefixEntries_ref();
-      bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
+          value.value().value().value(), serializer_);
+      auto prefixes = *prefixDb.prefixEntries();
+      bool isPrefixDbDeleted = *prefixDb.deletePrefix();
 
       // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
       // ATTN: With per-prefix-key advertisement, `prefixEntries` can be
@@ -327,17 +326,17 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
         return;
       }
 
-      EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type_ref());
+      EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type());
       EXPECT_EQ(
-          std::set<std::string>({"AUTO-ALLOCATED"}), prefixes.at(0).tags_ref());
+          std::set<std::string>({"AUTO-ALLOCATED"}), prefixes.at(0).tags());
       EXPECT_EQ(
           Constants::kDefaultPathPreference,
-          prefixes.at(0).metrics_ref()->path_preference_ref());
+          prefixes.at(0).metrics()->path_preference());
       EXPECT_EQ(
           Constants::kDefaultSourcePreference,
-          prefixes.at(0).metrics_ref()->source_preference_ref());
+          prefixes.at(0).metrics()->source_preference());
 
-      auto prefix = toIPNetwork(*prefixes[0].prefix_ref());
+      auto prefix = toIPNetwork(*prefixes[0].prefix());
       EXPECT_EQ(kAllocPrefixLen, prefix.second);
       EXPECT_TRUE(prefix.first.inSubnet(
           usingNewSeedPrefix ? newSeedPrefix.first : seedPrefix.first,
@@ -428,7 +427,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // get a unique temp file name
       auto tempFileName = fmt::format("/tmp/openr.{}.{}", tid, i);
       auto tConfig1 = getBasicOpenrConfig();
-      tConfig1.persistent_config_store_path_ref() = tempFileName;
+      tConfig1.persistent_config_store_path() = tempFileName;
       auto config1 = std::make_shared<Config>(tConfig1);
       tempFileNames_.emplace_back(tempFileName);
 
@@ -442,7 +441,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       // used
       tempFileName = fmt::format("/tmp/openr.{}.{}.{}", tid, round, i);
       auto tConfig2 = getBasicOpenrConfig();
-      tConfig.persistent_config_store_path_ref() = tempFileName;
+      tConfig.persistent_config_store_path() = tempFileName;
       auto config2 = std::make_shared<Config>(tConfig2);
       tempFileNames_.emplace_back(tempFileName);
 
@@ -453,19 +452,19 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       tempConfigStore->waitUntilRunning();
 
       auto currTConfig = getBasicOpenrConfig(myNodeName);
-      currTConfig.enable_prefix_allocation_ref() = true;
+      currTConfig.enable_prefix_allocation() = true;
       thrift::PrefixAllocationConfig pfxAllocationConf;
-      *pfxAllocationConf.loopback_interface_ref() = "";
-      pfxAllocationConf.prefix_allocation_mode_ref() =
+      *pfxAllocationConf.loopback_interface() = "";
+      pfxAllocationConf.prefix_allocation_mode() =
           thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
       if (not emptySeedPrefix) {
-        pfxAllocationConf.prefix_allocation_mode_ref() =
+        pfxAllocationConf.prefix_allocation_mode() =
             thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
-        pfxAllocationConf.seed_prefix_ref() =
+        pfxAllocationConf.seed_prefix() =
             fmt::format("fc00:cafe:babe::/{}", kSeedPrefixLen);
-        pfxAllocationConf.allocate_prefix_len_ref() = kAllocPrefixLen;
+        pfxAllocationConf.allocate_prefix_len() = kAllocPrefixLen;
       }
-      currTConfig.prefix_allocation_config_ref() = pfxAllocationConf;
+      currTConfig.prefix_allocation_config() = pfxAllocationConf;
       auto currConfig = std::make_shared<Config>(currTConfig);
 
       // spin up prefix manager
@@ -636,15 +635,15 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
     // Ignore update if:
     //  1) val is std::nullopt;
     //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
-    if ((not val.has_value()) or (not val.value().value_ref())) {
+    if ((not val.has_value()) or (not val.value().value())) {
       return;
     }
 
     try {
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          *val.value().value_ref(), serializer);
-      auto prefixes = *prefixDb.prefixEntries_ref();
-      bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
+          *val.value().value(), serializer);
+      auto prefixes = *prefixDb.prefixEntries();
+      bool isPrefixDbDeleted = *prefixDb.deletePrefix();
 
       // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
       // ATTN: With per-prefix-key advertisement, `prefixEntries` will never
@@ -657,8 +656,8 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
         hasAllocPrefix.store(false, std::memory_order_relaxed);
       } else {
         EXPECT_EQ(
-            thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes.back().type_ref());
-        auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
+            thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes.back().type());
+        auto prefix = toIPNetwork(*prefixes.back().prefix());
         EXPECT_EQ(allocPrefixLen, prefix.second);
         allocPrefix.withWLock(
             [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
@@ -850,14 +849,14 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     while (true) {
       try {
         thrift::KeyDumpParams params;
-        params.prefix_ref() = expPrefixKey;
-        params.keys_ref() = {expPrefixKey};
+        params.prefix() = expPrefixKey;
+        params.keys() = {expPrefixKey};
         auto pub = *kvStoreWrapper_->getKvStore()
                         ->semifuture_dumpKvStoreKeys(
                             std::move(params), {kTestingAreaName})
                         .get()
                         ->begin();
-        maybeKeyVals = *pub.keyVals_ref();
+        maybeKeyVals = *pub.keyVals();
       } catch (const std::exception& ex) {
         LOG(ERROR) << fmt::format(
             "Failed to dump keys with prefix: {}. Exception: {}",
@@ -874,14 +873,14 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
 
     // verify allocated prefix
     for (const auto& [key, rawVal] : maybeKeyVals.value()) {
-      ASSERT_TRUE(rawVal.value_ref().has_value());
+      ASSERT_TRUE(rawVal.value().has_value());
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          rawVal.value_ref().value(), serializer);
-      auto prefixes = *prefixDb.prefixEntries_ref();
+          rawVal.value().value(), serializer);
+      auto prefixes = *prefixDb.prefixEntries();
       EXPECT_EQ(1, prefixes.size());
-      ASSERT_FALSE(*prefixDb.deletePrefix_ref());
+      ASSERT_FALSE(*prefixDb.deletePrefix());
 
-      auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
+      auto prefix = toIPNetwork(*prefixes.back().prefix());
       EXPECT_EQ(allocPrefixLen, prefix.second);
       EXPECT_TRUE(prefix.first.inSubnet(ip6));
       // record prefix for later injection
@@ -895,7 +894,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
   // prefix allocator subscribes to this key and should detect address
   // collision, and restart the prefix allocator to assign a different address
   thrift::StaticAllocation staticAlloc;
-  staticAlloc.nodePrefixes_ref()[myNodeName_] =
+  staticAlloc.nodePrefixes()[myNodeName_] =
       toIpPrefix(folly::IPAddress::networkToString(prevAllocPrefix));
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res0 = kvStoreClient_->setKey(
@@ -920,11 +919,11 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     while (true) {
       auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
       ASSERT_TRUE(maybeVal.has_value());
-      ASSERT_TRUE(maybeVal.value().value_ref().has_value());
+      ASSERT_TRUE(maybeVal.value().value().has_value());
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          maybeVal.value().value_ref().value(), serializer);
-      prefixes = *prefixDb.prefixEntries_ref();
-      if (*prefixDb.deletePrefix_ref()) {
+          maybeVal.value().value().value(), serializer);
+      prefixes = *prefixDb.prefixEntries();
+      if (*prefixDb.deletePrefix()) {
         break;
       }
       std::this_thread::yield();
@@ -934,7 +933,7 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
         << " has been withdrawn...";
 
     EXPECT_EQ(1, prefixes.size());
-    auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
+    auto prefix = toIPNetwork(*prefixes.back().prefix());
     EXPECT_EQ(allocPrefixLen, prefix.second);
     EXPECT_TRUE(prefix.first.inSubnet(ip6));
     EXPECT_EQ(prefix, prevAllocPrefix);
@@ -957,20 +956,13 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
   waitBaton.reset();
 
   auto expectedPrefix = "face:b00c:d00d:5::";
-  staticAlloc.nodePrefixes_ref()["dontcare0"] =
-      toIpPrefix("face:b00c:d00d:0::/64");
-  staticAlloc.nodePrefixes_ref()["dontcare1"] =
-      toIpPrefix("face:b00c:d00d:1::/64");
-  staticAlloc.nodePrefixes_ref()["dontcare2"] =
-      toIpPrefix("face:b00c:d00d:2::/64");
-  staticAlloc.nodePrefixes_ref()["dontcare3"] =
-      toIpPrefix("face:b00c:d00d:3::/64");
-  staticAlloc.nodePrefixes_ref()["dontcare4"] =
-      toIpPrefix("face:b00c:d00d:4::/64");
-  staticAlloc.nodePrefixes_ref()["dontcare6"] =
-      toIpPrefix("face:b00c:d00d:6::/64");
-  staticAlloc.nodePrefixes_ref()["dontcare7"] =
-      toIpPrefix("face:b00c:d00d:7::/64");
+  staticAlloc.nodePrefixes()["dontcare0"] = toIpPrefix("face:b00c:d00d:0::/64");
+  staticAlloc.nodePrefixes()["dontcare1"] = toIpPrefix("face:b00c:d00d:1::/64");
+  staticAlloc.nodePrefixes()["dontcare2"] = toIpPrefix("face:b00c:d00d:2::/64");
+  staticAlloc.nodePrefixes()["dontcare3"] = toIpPrefix("face:b00c:d00d:3::/64");
+  staticAlloc.nodePrefixes()["dontcare4"] = toIpPrefix("face:b00c:d00d:4::/64");
+  staticAlloc.nodePrefixes()["dontcare6"] = toIpPrefix("face:b00c:d00d:6::/64");
+  staticAlloc.nodePrefixes()["dontcare7"] = toIpPrefix("face:b00c:d00d:7::/64");
 
   evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
     auto res5 = kvStoreClient_->setKey(
@@ -998,14 +990,14 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
         allocPrefixLen);
     auto maybeVal = kvStoreClient_->getKey(kTestingAreaName, expPrefixKey);
     ASSERT_TRUE(maybeVal.has_value());
-    ASSERT_TRUE(maybeVal.value().value_ref().has_value());
+    ASSERT_TRUE(maybeVal.value().value().has_value());
     auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-        maybeVal.value().value_ref().value(), serializer);
-    auto prefixes = *prefixDb.prefixEntries_ref();
+        maybeVal.value().value().value(), serializer);
+    auto prefixes = *prefixDb.prefixEntries();
     EXPECT_EQ(1, prefixes.size());
-    ASSERT_FALSE(*prefixDb.deletePrefix_ref());
+    ASSERT_FALSE(*prefixDb.deletePrefix());
 
-    auto prefix = toIPNetwork(*prefixes.back().prefix_ref());
+    auto prefix = toIPNetwork(*prefixes.back().prefix());
     EXPECT_EQ(allocPrefixLen, prefix.second);
     EXPECT_TRUE(prefix.first.inSubnet(ip6));
     EXPECT_EQ(prefix.first.str(), expectedPrefix);
@@ -1032,14 +1024,14 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
     // Ignore update if:
     //  1) val is std::nullopt;
     //  2) val has no value field inside `thrift::Value`(e.g. ttl update)
-    if ((not val.has_value()) or (not val.value().value_ref())) {
+    if ((not val.has_value()) or (not val.value().value())) {
       return;
     }
     try {
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          *val.value().value_ref(), serializer);
-      auto prefixes = *prefixDb.prefixEntries_ref();
-      bool isPrefixDbDeleted = *prefixDb.deletePrefix_ref();
+          *val.value().value(), serializer);
+      auto prefixes = *prefixDb.prefixEntries();
+      bool isPrefixDbDeleted = *prefixDb.deletePrefix();
 
       // prefixDb marked by `deletedPrefix` to indicate prefix is stale.
       // ATTN: With per-prefix-key advertisement, `prefixEntries` will never
@@ -1051,9 +1043,8 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         LOG(INFO) << "Lost allocated prefix!";
         hasAllocPrefix.store(false, std::memory_order_relaxed);
       } else {
-        EXPECT_EQ(
-            thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type_ref());
-        auto prefix = toIPNetwork(*prefixes[0].prefix_ref());
+        EXPECT_EQ(thrift::PrefixType::PREFIX_ALLOCATOR, *prefixes[0].type());
+        auto prefix = toIPNetwork(*prefixes[0].prefix());
         allocPrefix.withWLock(
             [&](auto& allocatedPrefix) { allocatedPrefix = prefix; });
         LOG(INFO) << "Got new prefix allocation!";
@@ -1080,7 +1071,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         // 1) Set static allocation in KvStore
         //
         hasAllocPrefix.store(false, std::memory_order_relaxed);
-        staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("1.2.3.0/24");
+        staticAlloc.nodePrefixes()[myNodeName_] = toIpPrefix("1.2.3.0/24");
         evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
           auto res = kvStoreClient_->setKey(
               kTestingAreaName,
@@ -1184,7 +1175,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         // 3) Set prefix and expect new prefix to be advertised
         //
         hasAllocPrefix.store(false, std::memory_order_relaxed);
-        staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("3.2.1.0/24");
+        staticAlloc.nodePrefixes()[myNodeName_] = toIpPrefix("3.2.1.0/24");
         evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
           auto res2 = kvStoreClient_->setKey(
               kTestingAreaName,
@@ -1208,7 +1199,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         // 4) Change prefix in static config and expect the announcement
         //
         hasAllocPrefix.store(false, std::memory_order_relaxed);
-        staticAlloc.nodePrefixes_ref()[myNodeName_] = toIpPrefix("5.6.7.0/24");
+        staticAlloc.nodePrefixes()[myNodeName_] = toIpPrefix("5.6.7.0/24");
         evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
           auto res3 = kvStoreClient_->setKey(
               kTestingAreaName,
@@ -1232,7 +1223,7 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         // 5) Remove prefix in static config and expect the withdrawal
         //
         hasAllocPrefix.store(true, std::memory_order_relaxed);
-        staticAlloc.nodePrefixes_ref()->erase(myNodeName_);
+        staticAlloc.nodePrefixes()->erase(myNodeName_);
         evb_.getEvb()->runInEventBaseThreadAndWait([&]() {
           auto res4 = kvStoreClient_->setKey(
               kTestingAreaName,

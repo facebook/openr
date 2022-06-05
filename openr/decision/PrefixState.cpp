@@ -61,27 +61,19 @@ std::vector<thrift::ReceivedRouteDetail>
 PrefixState::getReceivedRoutesFiltered(
     thrift::ReceivedRouteFilter const& filter) const {
   std::vector<thrift::ReceivedRouteDetail> routes;
-  if (filter.prefixes_ref()) {
-    for (auto& prefix : filter.prefixes_ref().value()) {
+  if (filter.prefixes()) {
+    for (auto& prefix : filter.prefixes().value()) {
       auto it = prefixes_.find(toIPNetwork(prefix));
       if (it == prefixes_.end()) {
         continue;
       }
       filterAndAddReceivedRoute(
-          routes,
-          filter.nodeName_ref(),
-          filter.areaName_ref(),
-          it->first,
-          it->second);
+          routes, filter.nodeName(), filter.areaName(), it->first, it->second);
     }
   } else {
     for (auto& [prefix, prefixEntries] : prefixes_) {
       filterAndAddReceivedRoute(
-          routes,
-          filter.nodeName_ref(),
-          filter.areaName_ref(),
-          prefix,
-          prefixEntries);
+          routes, filter.nodeName(), filter.areaName(), prefix, prefixEntries);
     }
   }
   return routes;
@@ -100,7 +92,7 @@ PrefixState::filterAndAddReceivedRoute(
   }
 
   thrift::ReceivedRouteDetail routeDetail;
-  routeDetail.prefix_ref() = toIpPrefix(prefix);
+  routeDetail.prefix() = toIpPrefix(prefix);
 
   // Add prefix entries and honor the filter
   for (auto& [nodeAndArea, prefixEntry] : prefixEntries) {
@@ -110,15 +102,15 @@ PrefixState::filterAndAddReceivedRoute(
     if (areaFilter && *areaFilter != nodeAndArea.second) {
       continue;
     }
-    routeDetail.routes_ref()->emplace_back();
-    auto& route = routeDetail.routes_ref()->back();
-    route.key_ref()->node_ref() = nodeAndArea.first;
-    route.key_ref()->area_ref() = nodeAndArea.second;
-    route.route_ref() = *prefixEntry;
+    routeDetail.routes()->emplace_back();
+    auto& route = routeDetail.routes()->back();
+    route.key()->node() = nodeAndArea.first;
+    route.key()->area() = nodeAndArea.second;
+    route.route() = *prefixEntry;
   }
 
   // Add detail if there are entries to return
-  if (routeDetail.routes_ref()->size()) {
+  if (routeDetail.routes()->size()) {
     routes.emplace_back(std::move(routeDetail));
   }
 }

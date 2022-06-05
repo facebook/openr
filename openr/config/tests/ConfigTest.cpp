@@ -30,19 +30,19 @@ const uint8_t testAllocationPfxLen = 128;
 openr::thrift::KvstoreFloodRate
 getFloodRate() {
   openr::thrift::KvstoreFloodRate floodrate;
-  floodrate.flood_msg_per_sec_ref() = 1;
-  floodrate.flood_msg_burst_size_ref() = 1;
+  floodrate.flood_msg_per_sec() = 1;
+  floodrate.flood_msg_burst_size() = 1;
   return floodrate;
 }
 
 openr::thrift::PrefixAllocationConfig
 getPrefixAllocationConfig(openr::thrift::PrefixAllocationMode mode) {
   openr::thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.prefix_allocation_mode_ref() = mode;
+  pfxAllocationConf.prefix_allocation_mode() = mode;
   if (mode == openr::thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE) {
-    pfxAllocationConf.seed_prefix_ref() =
+    pfxAllocationConf.seed_prefix() =
         folly::IPAddress::networkToString(testSeedPrefix);
-    pfxAllocationConf.allocate_prefix_len_ref() = testAllocationPfxLen;
+    pfxAllocationConf.allocate_prefix_len() = testAllocationPfxLen;
   }
   return pfxAllocationConf;
 }
@@ -50,9 +50,9 @@ getPrefixAllocationConfig(openr::thrift::PrefixAllocationMode mode) {
 openr::thrift::AreaConfig
 getAreaConfig(const std::string& areaId) {
   openr::thrift::AreaConfig area;
-  area.area_id_ref() = areaId;
-  area.include_interface_regexes_ref()->emplace_back("fboss.*");
-  area.neighbor_regexes_ref()->emplace_back("rsw.*");
+  area.area_id() = areaId;
+  area.include_interface_regexes()->emplace_back("fboss.*");
+  area.neighbor_regexes()->emplace_back("rsw.*");
   return area;
 }
 
@@ -66,34 +66,30 @@ getSegmentRoutingConfig() {
   openr::thrift::LabelRange lrp6;
 
   // prepend labels
-  lrp4.start_label_ref() =
-      openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-  lrp4.end_label_ref() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-  lrp6.start_label_ref() =
-      openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-  lrp6.end_label_ref() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-  prepend_labels.v4_ref() = lrp4;
-  prepend_labels.v6_ref() = lrp6;
+  lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+  lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+  lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+  lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+  prepend_labels.v4() = lrp4;
+  prepend_labels.v6() = lrp6;
 
-  lrp4.start_label_ref() =
-      openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-  lrp4.end_label_ref() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+  lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+  lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
 
-  lrp6.start_label_ref() =
-      openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-  lrp6.end_label_ref() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+  lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+  lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
 
   // adj segment label range
   openr::thrift::LabelRange adj_label_range;
-  adj_label_range.start_label_ref() = openr::MplsConstants::kSrLocalRange.first;
-  adj_label_range.end_label_ref() = openr::MplsConstants::kSrLocalRange.second;
-  adj_segment_label.sr_adj_label_type_ref() =
+  adj_label_range.start_label() = openr::MplsConstants::kSrLocalRange.first;
+  adj_label_range.end_label() = openr::MplsConstants::kSrLocalRange.second;
+  adj_segment_label.sr_adj_label_type() =
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-  adj_segment_label.adj_label_range_ref() = adj_label_range;
+  adj_segment_label.adj_label_range() = adj_label_range;
 
   // segment routing config
-  segment_routing_config.sr_adj_label_ref() = adj_segment_label;
-  segment_routing_config.prepend_label_ranges_ref() = prepend_labels;
+  segment_routing_config.sr_adj_label() = adj_segment_label;
+  segment_routing_config.prepend_label_ranges() = prepend_labels;
 
   return segment_routing_config;
 }
@@ -145,9 +141,8 @@ TEST_F(ConfigTestFixture, ConstructFromFile) {
   // out of range enum: prefix_allocation_mode
   {
     auto validTConf = getBasicOpenrConfig();
-    validTConf.enable_prefix_allocation_ref() = true;
-    validTConf.prefix_allocation_config_ref() =
-        thrift::PrefixAllocationConfig();
+    validTConf.enable_prefix_allocation() = true;
+    validTConf.prefix_allocation_config() = thrift::PrefixAllocationConfig();
 
     std::string validConfStr;
     EXPECT_NO_THROW(apache::thrift::SimpleJSONSerializer().serialize(
@@ -182,24 +177,24 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // duplicate area id
   {
     auto confInvalidArea = getBasicOpenrConfig();
-    confInvalidArea.areas_ref()->emplace_back(getAreaConfig("1"));
-    confInvalidArea.areas_ref()->emplace_back(getAreaConfig("1"));
+    confInvalidArea.areas()->emplace_back(getAreaConfig("1"));
+    confInvalidArea.areas()->emplace_back(getAreaConfig("1"));
     EXPECT_THROW((Config(confInvalidArea)), std::invalid_argument);
   }
   // cannot find policy definition for area policy
   {
     auto confInvalidAreaPolicy = getBasicOpenrConfig();
     auto areaConfig = getAreaConfig("1");
-    areaConfig.import_policy_name_ref() = "BLA";
-    confInvalidAreaPolicy.areas_ref()->emplace_back(std::move(areaConfig));
+    areaConfig.import_policy_name() = "BLA";
+    confInvalidAreaPolicy.areas()->emplace_back(std::move(areaConfig));
     EXPECT_THROW((Config(confInvalidAreaPolicy)), std::invalid_argument);
   }
 
   // non-empty interface regex
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id_ref() = myArea;
-    areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
+    areaConfig.area_id() = myArea;
+    areaConfig.include_interface_regexes()->emplace_back("iface.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -208,8 +203,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id_ref() = myArea;
-    areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
+    areaConfig.area_id() = myArea;
+    areaConfig.neighbor_regexes()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -218,9 +213,9 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // non-empty neighbor and interface regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id_ref() = myArea;
-    areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
-    areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
+    areaConfig.area_id() = myArea;
+    areaConfig.include_interface_regexes()->emplace_back("iface.*");
+    areaConfig.neighbor_regexes()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", vec);
     EXPECT_NO_THROW((Config(confValidArea)));
@@ -228,9 +223,9 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id_ref() = myArea;
-    areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
-    areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
+    areaConfig.area_id() = myArea;
+    areaConfig.include_interface_regexes()->emplace_back("iface.*");
+    areaConfig.neighbor_regexes()->emplace_back("fsw.*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto confValidArea = getBasicOpenrConfig("node-1", vec);
     Config cfg = Config(confValidArea);
@@ -243,8 +238,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   // invalid include_interface_regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id_ref() = myArea;
-    areaConfig.include_interface_regexes_ref()->emplace_back("[0-9]++");
+    areaConfig.area_id() = myArea;
+    areaConfig.include_interface_regexes()->emplace_back("[0-9]++");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
@@ -252,8 +247,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   //  invalid exclude_interface_regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    *areaConfig.area_id_ref() = myArea;
-    areaConfig.exclude_interface_regexes_ref()->emplace_back("boom\\");
+    *areaConfig.area_id() = myArea;
+    areaConfig.exclude_interface_regexes()->emplace_back("boom\\");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
@@ -261,8 +256,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
   //  invalid redistribute_interface_regexes
   {
     openr::thrift::AreaConfig areaConfig;
-    areaConfig.area_id_ref() = myArea;
-    areaConfig.redistribute_interface_regexes_ref()->emplace_back("*");
+    areaConfig.area_id() = myArea;
+    areaConfig.redistribute_interface_regexes()->emplace_back("*");
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
@@ -274,48 +269,46 @@ TEST(ConfigTest, PopulateAreaConfig) {
     openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
 
     openr::thrift::SegmentRoutingNodeLabel node_segment_label;
-    areaConfig.area_sr_node_label_ref() = node_segment_label;
-    confAreaPolicy.areas_ref()->emplace_back(areaConfig);
+    areaConfig.area_sr_node_label() = node_segment_label;
+    confAreaPolicy.areas()->emplace_back(areaConfig);
 
     // Area config with incomplete segment node label config
     EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
 
     openr::thrift::LabelRange node_segment_label_range;
-    node_segment_label_range.start_label_ref() =
+    node_segment_label_range.start_label() =
         openr::MplsConstants::kSrGlobalRange.first;
-    node_segment_label_range.end_label_ref() =
+    node_segment_label_range.end_label() =
         openr::MplsConstants::kSrGlobalRange.second;
-    node_segment_label.node_segment_label_range_ref() =
-        node_segment_label_range;
+    node_segment_label.node_segment_label_range() = node_segment_label_range;
 
     // Type is AUTO
-    node_segment_label.sr_node_label_type_ref() =
+    node_segment_label.sr_node_label_type() =
         openr::thrift::SegmentRoutingNodeLabelType::AUTO;
 
-    for (auto& areaConf : *confAreaPolicy.areas_ref()) {
-      areaConf.area_sr_node_label_ref() = node_segment_label;
+    for (auto& areaConf : *confAreaPolicy.areas()) {
+      areaConf.area_sr_node_label() = node_segment_label;
     }
 
     // valid node segment label config
     EXPECT_NO_THROW((Config(confAreaPolicy)));
 
     // invalid label range and type is AUTO
-    node_segment_label_range.end_label_ref() =
+    node_segment_label_range.end_label() =
         openr::MplsConstants::kSrGlobalRange.first;
-    node_segment_label_range.start_label_ref() =
+    node_segment_label_range.start_label() =
         openr::MplsConstants::kSrGlobalRange.second;
-    node_segment_label.node_segment_label_range_ref() =
-        node_segment_label_range;
-    for (auto& areaConf : *confAreaPolicy.areas_ref()) {
-      areaConf.area_sr_node_label_ref() = node_segment_label;
+    node_segment_label.node_segment_label_range() = node_segment_label_range;
+    for (auto& areaConf : *confAreaPolicy.areas()) {
+      areaConf.area_sr_node_label() = node_segment_label;
     }
     EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
 
     // Type is STATIC but no static label provided
-    node_segment_label.sr_node_label_type_ref() =
+    node_segment_label.sr_node_label_type() =
         openr::thrift::SegmentRoutingNodeLabelType::STATIC;
-    for (auto& areaConf : *confAreaPolicy.areas_ref()) {
-      areaConf.area_sr_node_label_ref() = node_segment_label;
+    for (auto& areaConf : *confAreaPolicy.areas()) {
+      areaConf.area_sr_node_label() = node_segment_label;
     }
 
     EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
@@ -331,31 +324,23 @@ TEST(ConfigTest, PopulateAreaConfig) {
     openr::thrift::LabelRange lrp6;
 
     // prepend labels
-    lrp4.start_label_ref() =
-        openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-    lrp4.end_label_ref() =
-        openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-    lrp6.start_label_ref() =
-        openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-    lrp6.end_label_ref() =
-        openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-    prepend_labels.v4_ref() = lrp4;
-    prepend_labels.v6_ref() = lrp6;
+    lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+    lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+    lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+    lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+    prepend_labels.v4() = lrp4;
+    prepend_labels.v6() = lrp6;
 
-    lrp4.start_label_ref() =
-        openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-    lrp4.end_label_ref() =
-        openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
+    lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
+    lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
 
-    lrp6.start_label_ref() =
-        openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-    lrp6.end_label_ref() =
-        openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
+    lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
+    lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
 
-    areaConfig.prepend_label_ranges_ref() = prepend_labels;
+    areaConfig.prepend_label_ranges() = prepend_labels;
 
     // valid prepend label config
-    confAreaPolicy.areas_ref()->emplace_back(areaConfig);
+    confAreaPolicy.areas()->emplace_back(areaConfig);
     EXPECT_NO_THROW((Config(confAreaPolicy)));
   }
 
@@ -366,23 +351,21 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
     openr::thrift::SegmentRoutingAdjLabel adj_segment_label;
     openr::thrift::LabelRange adj_label_range;
-    adj_label_range.start_label_ref() =
-        openr::MplsConstants::kSrLocalRange.first;
-    adj_label_range.end_label_ref() =
-        openr::MplsConstants::kSrLocalRange.second;
-    adj_segment_label.sr_adj_label_type_ref() =
+    adj_label_range.start_label() = openr::MplsConstants::kSrLocalRange.first;
+    adj_label_range.end_label() = openr::MplsConstants::kSrLocalRange.second;
+    adj_segment_label.sr_adj_label_type() =
         openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-    adj_segment_label.adj_label_range_ref() = adj_label_range;
+    adj_segment_label.adj_label_range() = adj_label_range;
 
-    areaConfig.sr_adj_label_ref() = adj_segment_label;
+    areaConfig.sr_adj_label() = adj_segment_label;
 
     // valid adj label config
-    confAreaPolicy.areas_ref()->emplace_back(areaConfig);
+    confAreaPolicy.areas()->emplace_back(areaConfig);
     EXPECT_NO_THROW((Config(confAreaPolicy)));
 
     // disabled adj label
-    (*confAreaPolicy.areas_ref()).clear();
-    adj_segment_label.sr_adj_label_type_ref() =
+    (*confAreaPolicy.areas()).clear();
+    adj_segment_label.sr_adj_label_type() =
         openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
     EXPECT_NO_THROW((Config(confAreaPolicy)));
   }
@@ -390,12 +373,12 @@ TEST(ConfigTest, PopulateAreaConfig) {
 
 TEST(ConfigTest, AreaConfiguration) {
   openr::thrift::AreaConfig areaConfig;
-  areaConfig.area_id_ref() = "myArea";
-  areaConfig.include_interface_regexes_ref()->emplace_back("iface.*");
-  areaConfig.exclude_interface_regexes_ref()->emplace_back(".*400.*");
-  areaConfig.exclude_interface_regexes_ref()->emplace_back(".*450.*");
-  areaConfig.redistribute_interface_regexes_ref()->emplace_back("loopback1");
-  areaConfig.neighbor_regexes_ref()->emplace_back("fsw.*");
+  areaConfig.area_id() = "myArea";
+  areaConfig.include_interface_regexes()->emplace_back("iface.*");
+  areaConfig.exclude_interface_regexes()->emplace_back(".*400.*");
+  areaConfig.exclude_interface_regexes()->emplace_back(".*450.*");
+  areaConfig.redistribute_interface_regexes()->emplace_back("loopback1");
+  areaConfig.neighbor_regexes()->emplace_back("fsw.*");
   Config cfg{getBasicOpenrConfig("node-1", {areaConfig})};
 
   auto const& areaConf = cfg.getAreas().at("myArea");
@@ -417,32 +400,32 @@ TEST(ConfigTest, AreaConfiguration) {
 
 TEST(ConfigTest, BgpTranslationConfig) {
   auto tConfig = getBasicOpenrConfig();
-  tConfig.enable_bgp_peering_ref() = true;
-  tConfig.bgp_config_ref() = thrift::BgpConfig();
-  tConfig.bgp_translation_config_ref() = thrift::BgpRouteTranslationConfig();
-  auto& translationConfig = *tConfig.bgp_translation_config_ref();
+  tConfig.enable_bgp_peering() = true;
+  tConfig.bgp_config() = thrift::BgpConfig();
+  tConfig.bgp_translation_config() = thrift::BgpRouteTranslationConfig();
+  auto& translationConfig = *tConfig.bgp_translation_config();
 
   // Legacy translation disabled - But new translation hasn't been
   {
-    translationConfig.enable_bgp_to_openr_ref() = true;
-    translationConfig.enable_openr_to_bgp_ref() = false;
-    translationConfig.disable_legacy_translation_ref() = true;
+    translationConfig.enable_bgp_to_openr() = true;
+    translationConfig.enable_openr_to_bgp() = false;
+    translationConfig.disable_legacy_translation() = true;
     EXPECT_THROW((Config(tConfig)), std::invalid_argument);
   }
 
   // Legacy translation disabled - But new translation hasn't been
   {
-    translationConfig.enable_bgp_to_openr_ref() = false;
-    translationConfig.enable_openr_to_bgp_ref() = true;
-    translationConfig.disable_legacy_translation_ref() = true;
+    translationConfig.enable_bgp_to_openr() = false;
+    translationConfig.enable_openr_to_bgp() = true;
+    translationConfig.disable_legacy_translation() = true;
     EXPECT_THROW((Config(tConfig)), std::invalid_argument);
   }
 
   // Legacy translation disabled and new translation enabled
   {
-    translationConfig.enable_bgp_to_openr_ref() = true;
-    translationConfig.enable_openr_to_bgp_ref() = true;
-    translationConfig.disable_legacy_translation_ref() = true;
+    translationConfig.enable_bgp_to_openr() = true;
+    translationConfig.enable_openr_to_bgp() = true;
+    translationConfig.disable_legacy_translation() = true;
     EXPECT_NO_THROW((Config(tConfig)));
   }
 }
@@ -453,8 +436,8 @@ TEST(ConfigTest, PopulateInternalDb) {
   // KSP2_ED_ECMP with IP
   {
     auto confInvalid = getBasicOpenrConfig();
-    confInvalid.prefix_forwarding_type_ref() = thrift::PrefixForwardingType::IP;
-    confInvalid.prefix_forwarding_algorithm_ref() =
+    confInvalid.prefix_forwarding_type() = thrift::PrefixForwardingType::IP;
+    confInvalid.prefix_forwarding_algorithm() =
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
@@ -462,7 +445,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   // RibPolicy
   {
     auto conf = getBasicOpenrConfig();
-    conf.enable_rib_policy_ref() = true;
+    conf.enable_rib_policy() = true;
     EXPECT_TRUE(Config(conf).isRibPolicyEnabled());
   }
 
@@ -471,21 +454,19 @@ TEST(ConfigTest, PopulateInternalDb) {
   // flood_msg_per_sec <= 0
   {
     auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-    confInvalidFloodMsgPerSec.kvstore_config_ref()->flood_rate_ref() =
-        getFloodRate();
-    confInvalidFloodMsgPerSec.kvstore_config_ref()
-        ->flood_rate_ref()
-        ->flood_msg_per_sec_ref() = 0;
+    confInvalidFloodMsgPerSec.kvstore_config()->flood_rate() = getFloodRate();
+    confInvalidFloodMsgPerSec.kvstore_config()
+        ->flood_rate()
+        ->flood_msg_per_sec() = 0;
     EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
   // flood_msg_burst_size <= 0
   {
     auto confInvalidFloodMsgPerSec = getBasicOpenrConfig();
-    confInvalidFloodMsgPerSec.kvstore_config_ref()->flood_rate_ref() =
-        getFloodRate();
-    confInvalidFloodMsgPerSec.kvstore_config_ref()
-        ->flood_rate_ref()
-        ->flood_msg_burst_size_ref() = 0;
+    confInvalidFloodMsgPerSec.kvstore_config()->flood_rate() = getFloodRate();
+    confInvalidFloodMsgPerSec.kvstore_config()
+        ->flood_rate()
+        ->flood_msg_burst_size() = 0;
     EXPECT_THROW((Config(confInvalidFloodMsgPerSec)), std::out_of_range);
   }
 
@@ -494,55 +475,55 @@ TEST(ConfigTest, PopulateInternalDb) {
   // Exception: neighbor_discovery_port <= 0 or > 65535
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()->neighbor_discovery_port_ref() = -1;
+    confInvalidSpark.spark_config()->neighbor_discovery_port() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
 
-    confInvalidSpark.spark_config_ref()->neighbor_discovery_port_ref() = 65536;
+    confInvalidSpark.spark_config()->neighbor_discovery_port() = 65536;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: hello_time_s <= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()->hello_time_s_ref() = -1;
+    confInvalidSpark.spark_config()->hello_time_s() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: fastinit_hello_time_ms <= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()->fastinit_hello_time_ms_ref() = -1;
+    confInvalidSpark.spark_config()->fastinit_hello_time_ms() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: fastinit_hello_time_ms > hello_time_s
   {
     auto confInvalidSpark2 = getBasicOpenrConfig();
-    confInvalidSpark2.spark_config_ref()->fastinit_hello_time_ms_ref() = 10000;
-    confInvalidSpark2.spark_config_ref()->hello_time_s_ref() = 2;
+    confInvalidSpark2.spark_config()->fastinit_hello_time_ms() = 10000;
+    confInvalidSpark2.spark_config()->hello_time_s() = 2;
     EXPECT_THROW(auto c = Config(confInvalidSpark2), std::invalid_argument);
   }
 
   // Exception: keepalive_time_s <= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()->keepalive_time_s_ref() = -1;
+    confInvalidSpark.spark_config()->keepalive_time_s() = -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::out_of_range);
   }
 
   // Exception: keepalive_time_s > hold_time_s
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()->keepalive_time_s_ref() = 10;
-    confInvalidSpark.spark_config_ref()->hold_time_s_ref() = 5;
+    confInvalidSpark.spark_config()->keepalive_time_s() = 10;
+    confInvalidSpark.spark_config()->hold_time_s() = 5;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
   // Exception: graceful_restart_time_s < 3 * keepalive_time_s
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()->keepalive_time_s_ref() = 10;
-    confInvalidSpark.spark_config_ref()->graceful_restart_time_s_ref() = 20;
+    confInvalidSpark.spark_config()->keepalive_time_s() = 10;
+    confInvalidSpark.spark_config()->graceful_restart_time_s() = 20;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
@@ -552,21 +533,17 @@ TEST(ConfigTest, PopulateInternalDb) {
   //           step_detector_upper_threshold >= 0
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->fast_window_size_ref() = -1;
+    confInvalidSpark.spark_config()->step_detector_conf()->fast_window_size() =
+        -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->slow_window_size_ref() = -1;
+    confInvalidSpark.spark_config()->step_detector_conf()->slow_window_size() =
+        -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->lower_threshold_ref() = -1;
+    confInvalidSpark.spark_config()->step_detector_conf()->lower_threshold() =
+        -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->upper_threshold_ref() = -1;
+    confInvalidSpark.spark_config()->step_detector_conf()->upper_threshold() =
+        -1;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
@@ -574,20 +551,16 @@ TEST(ConfigTest, PopulateInternalDb) {
   //           step_detector_lower_threshold > step_detector_upper_threshold
   {
     auto confInvalidSpark = getBasicOpenrConfig();
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->fast_window_size_ref() = 10;
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->slow_window_size_ref() = 5;
+    confInvalidSpark.spark_config()->step_detector_conf()->fast_window_size() =
+        10;
+    confInvalidSpark.spark_config()->step_detector_conf()->slow_window_size() =
+        5;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
 
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->upper_threshold_ref() = 5;
-    confInvalidSpark.spark_config_ref()
-        ->step_detector_conf_ref()
-        ->lower_threshold_ref() = 10;
+    confInvalidSpark.spark_config()->step_detector_conf()->upper_threshold() =
+        5;
+    confInvalidSpark.spark_config()->step_detector_conf()->lower_threshold() =
+        10;
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
@@ -596,7 +569,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   // Exception monitor_max_event_log >= 0
   {
     auto confInvalidMon = getBasicOpenrConfig();
-    confInvalidMon.monitor_config_ref()->max_event_log_ref() = -1;
+    confInvalidMon.monitor_config()->max_event_log() = -1;
     EXPECT_THROW(auto c = Config(confInvalidMon), std::out_of_range);
   }
 
@@ -605,23 +578,20 @@ TEST(ConfigTest, PopulateInternalDb) {
   // linkflap_initial_backoff_ms < 0
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() =
-        -1;
+    confInvalidLm.link_monitor_config()->linkflap_initial_backoff_ms() = -1;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
   // linkflap_max_backoff_ms < 0
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = -1;
+    confInvalidLm.link_monitor_config()->linkflap_max_backoff_ms() = -1;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
   // linkflap_initial_backoff_ms > linkflap_max_backoff_ms
   {
     auto confInvalidLm = getBasicOpenrConfig();
-    confInvalidLm.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() =
-        360000;
-    confInvalidLm.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() =
-        300000;
+    confInvalidLm.link_monitor_config()->linkflap_initial_backoff_ms() = 360000;
+    confInvalidLm.link_monitor_config()->linkflap_max_backoff_ms() = 300000;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
 
@@ -630,17 +600,17 @@ TEST(ConfigTest, PopulateInternalDb) {
   // enable_prefix_allocation = true, prefix_allocation_config = null
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation_ref() = true;
+    confInvalidPa.enable_prefix_allocation() = true;
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and
   // allocate_prefix_len set
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation_ref() = true;
-    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+    confInvalidPa.enable_prefix_allocation() = true;
+    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode_ref() =
+    confInvalidPa.prefix_allocation_config()->prefix_allocation_mode() =
         thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
@@ -648,45 +618,41 @@ TEST(ConfigTest, PopulateInternalDb) {
   // allocate_prefix_len = null
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation_ref() = true;
-    confInvalidPa.prefix_allocation_config_ref() =
-        thrift::PrefixAllocationConfig();
-    confInvalidPa.prefix_allocation_config_ref()->prefix_allocation_mode_ref() =
+    confInvalidPa.enable_prefix_allocation() = true;
+    confInvalidPa.prefix_allocation_config() = thrift::PrefixAllocationConfig();
+    confInvalidPa.prefix_allocation_config()->prefix_allocation_mode() =
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
   // seed_prefix: invalid ipadrres format
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation_ref() = true;
-    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+    confInvalidPa.enable_prefix_allocation() = true;
+    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config_ref()->seed_prefix_ref() =
+    confInvalidPa.prefix_allocation_config()->seed_prefix() =
         "fc00:cafe:babe:/64";
     EXPECT_ANY_THROW((Config(confInvalidPa)));
   }
   // allocate_prefix_len: <= seed_prefix subnet length
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation_ref() = true;
-    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+    confInvalidPa.enable_prefix_allocation() = true;
+    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config_ref()->allocate_prefix_len_ref() =
-        60;
+    confInvalidPa.prefix_allocation_config()->allocate_prefix_len() = 60;
     EXPECT_THROW((Config(confInvalidPa)), std::out_of_range);
   }
   // seed_prefix v4, enable_v4 = false
   {
     auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_v4_ref() = false;
+    confInvalidPa.enable_v4() = false;
 
-    confInvalidPa.enable_prefix_allocation_ref() = true;
-    confInvalidPa.prefix_allocation_config_ref() = getPrefixAllocationConfig(
+    confInvalidPa.enable_prefix_allocation() = true;
+    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
         thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config_ref()->seed_prefix_ref() =
-        "127.0.0.1/24";
-    confInvalidPa.prefix_allocation_config_ref()->allocate_prefix_len_ref() =
-        32;
+    confInvalidPa.prefix_allocation_config()->seed_prefix() = "127.0.0.1/24";
+    confInvalidPa.prefix_allocation_config()->allocate_prefix_len() = 32;
     EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
   }
 
@@ -695,16 +661,16 @@ TEST(ConfigTest, PopulateInternalDb) {
   // bgp peering enabled with empty bgp_config
   {
     auto confInvalid = getBasicOpenrConfig();
-    confInvalid.enable_bgp_peering_ref() = true;
+    confInvalid.enable_bgp_peering() = true;
 
     // Both bgp-config & translation-config are none
-    confInvalid.bgp_config_ref().reset();
-    confInvalid.bgp_translation_config_ref().reset();
+    confInvalid.bgp_config().reset();
+    confInvalid.bgp_translation_config().reset();
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
 
     // bgp config is set but translation-config is not
-    confInvalid.bgp_config_ref() = thrift::BgpConfig();
-    confInvalid.bgp_translation_config_ref().reset();
+    confInvalid.bgp_config() = thrift::BgpConfig();
+    confInvalid.bgp_translation_config().reset();
     // TODO: Expect an exception instead of default initialization
     // EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
     EXPECT_EQ(
@@ -712,9 +678,8 @@ TEST(ConfigTest, PopulateInternalDb) {
         Config(confInvalid).getBgpTranslationConfig());
 
     // translation-config is set but bgp-config is not
-    confInvalid.bgp_config_ref().reset();
-    confInvalid.bgp_translation_config_ref() =
-        thrift::BgpRouteTranslationConfig();
+    confInvalid.bgp_config().reset();
+    confInvalid.bgp_translation_config() = thrift::BgpRouteTranslationConfig();
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 
@@ -723,7 +688,7 @@ TEST(ConfigTest, PopulateInternalDb) {
   // watchdog enabled with empty watchdog_config
   {
     auto confInvalid = getBasicOpenrConfig();
-    confInvalid.enable_watchdog_ref() = true;
+    confInvalid.enable_watchdog() = true;
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 
@@ -731,26 +696,24 @@ TEST(ConfigTest, PopulateInternalDb) {
   {
     auto conf = getBasicOpenrConfig();
     EXPECT_FALSE(Config(conf).isVipServiceEnabled());
-    conf.enable_vip_service_ref() = true;
+    conf.enable_vip_service() = true;
     EXPECT_THROW(Config(conf).isVipServiceEnabled(), std::invalid_argument);
     EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
-    conf.vip_service_config_ref() = {};
-    conf.vip_service_config_ref()->ingress_policy_ref() = "test_policy";
+    conf.vip_service_config() = {};
+    conf.vip_service_config()->ingress_policy() = "test_policy";
     // There is no area_policies, so should throw.
     EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
-    conf.area_policies_ref() = neteng::config::routing_policy::PolicyConfig();
-    conf.area_policies_ref()->filters_ref() =
+    conf.area_policies() = neteng::config::routing_policy::PolicyConfig();
+    conf.area_policies()->filters() =
         neteng::config::routing_policy::PolicyFilters();
-    conf.area_policies_ref()->filters_ref()->routePropagationPolicy_ref() =
+    conf.area_policies()->filters()->routePropagationPolicy() =
         neteng::config::routing_policy::Filters();
     // There is policies, but no vip ingress policy, should throw
     EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
     std::map<std::string, neteng::config::routing_policy::Filter> policy;
     policy["test_policy"] = neteng::config::routing_policy::Filter();
-    conf.area_policies_ref()
-        ->filters_ref()
-        ->routePropagationPolicy_ref()
-        ->objects_ref() = policy;
+    conf.area_policies()->filters()->routePropagationPolicy()->objects() =
+        policy;
     // There is vip ingress policy in area_policies, should pass
     EXPECT_NO_THROW(Config(conf).checkVipServiceConfig());
   }
@@ -758,13 +721,13 @@ TEST(ConfigTest, PopulateInternalDb) {
   // FIB route deletion
   {
     auto conf = getBasicOpenrConfig();
-    conf.route_delete_delay_ms_ref() = -1;
+    conf.route_delete_delay_ms() = -1;
     EXPECT_THROW((Config(conf)), std::invalid_argument);
 
-    conf.route_delete_delay_ms_ref() = 0;
+    conf.route_delete_delay_ms() = 0;
     EXPECT_NO_THROW((Config(conf)));
 
-    conf.route_delete_delay_ms_ref() = 1000;
+    conf.route_delete_delay_ms() = 1000;
     EXPECT_NO_THROW((Config(conf)));
   }
 }
@@ -801,7 +764,7 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isVipServiceEnabled());
 
     // getSparkConfig
-    EXPECT_EQ(*tConfig.spark_config_ref(), config.getSparkConfig());
+    EXPECT_EQ(*tConfig.spark_config(), config.getSparkConfig());
   }
 
   // config without bgp peering and only for v4_over_v6_nexthop
@@ -822,9 +785,9 @@ TEST(ConfigTest, GeneralGetter) {
   // config with watchdog
   {
     auto tConfig = getBasicOpenrConfig("fsw001");
-    tConfig.enable_watchdog_ref() = true;
+    tConfig.enable_watchdog() = true;
     const auto& watchdogConf = thrift::WatchdogConfig();
-    tConfig.watchdog_config_ref() = watchdogConf;
+    tConfig.watchdog_config() = watchdogConf;
 
     auto config = Config(tConfig);
 
@@ -848,7 +811,7 @@ TEST(ConfigTest, KvstoreGetter) {
 TEST(ConfigTest, LinkMonitorGetter) {
   auto tConfig = getBasicOpenrConfig();
   // set empty area list to see doamin get converted to area
-  tConfig.areas_ref().emplace();
+  tConfig.areas().emplace();
   auto config = Config(tConfig);
 
   // check to see the link monitor options got converted to an area config with
@@ -862,10 +825,10 @@ TEST(ConfigTest, LinkMonitorGetter) {
 
 TEST(ConfigTest, PrefixAllocatorGetter) {
   auto tConfig = getBasicOpenrConfig();
-  tConfig.enable_prefix_allocation_ref() = true;
+  tConfig.enable_prefix_allocation() = true;
   const auto paConf = getPrefixAllocationConfig(
       thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-  tConfig.prefix_allocation_config_ref() = paConf;
+  tConfig.prefix_allocation_config() = paConf;
   auto config = Config(tConfig);
 
   // isPrefixAllocationEnabled
@@ -882,35 +845,35 @@ TEST(ConfigTest, PrefixAllocatorGetter) {
 TEST(ConfigTest, SegmentRoutingConfig) {
   auto tConfig = getBasicOpenrConfig();
   const auto& srConf = getSegmentRoutingConfig();
-  tConfig.segment_routing_config_ref() = srConf;
+  tConfig.segment_routing_config() = srConf;
   auto config = Config(tConfig);
 
   // getSegmentRoutingConfig
   EXPECT_EQ(srConf, config.getSegmentRoutingConfig());
   EXPECT_EQ(
-      *config.getAdjSegmentLabels().sr_adj_label_type_ref(),
+      *config.getAdjSegmentLabels().sr_adj_label_type(),
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
 }
 
 TEST(ConfigTest, EorTime) {
   auto tConfig = getBasicOpenrConfig();
-  tConfig.spark_config_ref()->keepalive_time_s_ref() = 2;
+  tConfig.spark_config()->keepalive_time_s() = 2;
 
   // Create config without any explicit EOR and ensure that it is implicitly set
   {
-    EXPECT_FALSE(tConfig.eor_time_s_ref());
+    EXPECT_FALSE(tConfig.eor_time_s());
     auto config = Config(tConfig);
-    ASSERT_TRUE(config.getConfig().eor_time_s_ref());
-    EXPECT_EQ(6, *config.getConfig().eor_time_s_ref());
+    ASSERT_TRUE(config.getConfig().eor_time_s());
+    EXPECT_EQ(6, *config.getConfig().eor_time_s());
   }
 
   // Explicitly set eor time and make sure it is not altered
   {
-    EXPECT_FALSE(tConfig.eor_time_s_ref());
-    tConfig.eor_time_s_ref() = 2;
+    EXPECT_FALSE(tConfig.eor_time_s());
+    tConfig.eor_time_s() = 2;
     auto config = Config(tConfig);
-    ASSERT_TRUE(config.getConfig().eor_time_s_ref());
-    EXPECT_EQ(2, *config.getConfig().eor_time_s_ref());
+    ASSERT_TRUE(config.getConfig().eor_time_s());
+    EXPECT_EQ(2, *config.getConfig().eor_time_s());
   }
 }
 

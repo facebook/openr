@@ -106,8 +106,8 @@ thrift::KvStoreFloodRate
 createKvStoreFloodRate(
     int32_t flood_msg_per_sec, int32_t flood_msg_burst_size) {
   thrift::KvStoreFloodRate floodRate;
-  floodRate.flood_msg_per_sec_ref() = flood_msg_per_sec;
-  floodRate.flood_msg_burst_size_ref() = flood_msg_burst_size;
+  floodRate.flood_msg_per_sec() = flood_msg_per_sec;
+  floodRate.flood_msg_burst_size() = flood_msg_burst_size;
   return floodRate;
 }
 
@@ -121,15 +121,15 @@ createThriftValue(
     int64_t ttlVersion,
     std::optional<int64_t> hash) {
   thrift::Value value;
-  value.version_ref() = version;
-  value.originatorId_ref() = originatorId;
-  value.value_ref().from_optional(data);
-  value.ttl_ref() = ttl;
-  value.ttlVersion_ref() = ttlVersion;
+  value.version() = version;
+  value.originatorId() = originatorId;
+  value.value().from_optional(data);
+  value.ttl() = ttl;
+  value.ttlVersion() = ttlVersion;
   if (hash.has_value()) {
-    value.hash_ref().from_optional(hash);
+    value.hash().from_optional(hash);
   } else {
-    value.hash_ref() = generateHash(version, originatorId, data);
+    value.hash() = generateHash(version, originatorId, data);
   }
 
   return value;
@@ -140,12 +140,12 @@ createThriftValue(
 thrift::Value
 createThriftValueWithoutBinaryValue(const thrift::Value& val) {
   thrift::Value updatedVal;
-  updatedVal.version_ref() = *val.version_ref();
-  updatedVal.originatorId_ref() = *val.originatorId_ref();
-  updatedVal.ttl_ref() = *val.ttl_ref();
-  updatedVal.ttlVersion_ref() = *val.ttlVersion_ref();
-  if (val.hash_ref().has_value()) {
-    updatedVal.hash_ref() = *val.hash_ref();
+  updatedVal.version() = *val.version();
+  updatedVal.originatorId() = *val.originatorId();
+  updatedVal.ttl() = *val.ttl();
+  updatedVal.ttlVersion() = *val.ttlVersion();
+  if (val.hash().has_value()) {
+    updatedVal.hash() = *val.hash();
   }
   return updatedVal;
 }
@@ -158,11 +158,11 @@ createThriftPublication(
     const std::optional<std::vector<std::string>>& keysToUpdate,
     const std::string& area) {
   thrift::Publication pub;
-  pub.keyVals_ref() = kv;
-  pub.expiredKeys_ref() = expiredKeys;
-  pub.nodeIds_ref().from_optional(nodeIds);
-  pub.tobeUpdatedKeys_ref().from_optional(keysToUpdate);
-  pub.area_ref() = area;
+  pub.keyVals() = kv;
+  pub.expiredKeys() = expiredKeys;
+  pub.nodeIds().from_optional(nodeIds);
+  pub.tobeUpdatedKeys().from_optional(keysToUpdate);
+  pub.area() = area;
   return pub;
 }
 

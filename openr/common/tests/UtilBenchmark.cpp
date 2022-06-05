@@ -16,10 +16,10 @@ using namespace openr;
 std::shared_ptr<thrift::PrefixEntry>
 createPrefixEntry(size_t index) {
   auto entry = std::make_shared<thrift::PrefixEntry>();
-  auto metrics = entry->metrics_ref();
-  metrics->path_preference_ref() = index % 2;
-  metrics->source_preference_ref() = index % 4;
-  metrics->distance_ref() = index % 8;
+  auto metrics = entry->metrics();
+  metrics->path_preference() = index % 2;
+  metrics->source_preference() = index % 4;
+  metrics->distance() = index % 8;
   return entry;
 }
 

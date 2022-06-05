@@ -79,7 +79,7 @@ class MultipleStoreFixture : public ::testing::Test {
     auto makeStoreWrapper = [this](std::string nodeId) {
       // create KvStoreConfig
       thrift::KvStoreConfig kvStoreConfig;
-      kvStoreConfig.node_name_ref() = nodeId;
+      kvStoreConfig.node_name() = nodeId;
       const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
       return std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
@@ -183,7 +183,7 @@ class MultipleAreaFixture : public MultipleStoreFixture {
                                 std::unordered_set<std::string> areas) {
       // create KvStoreConfig
       thrift::KvStoreConfig kvStoreConfig;
-      kvStoreConfig.node_name_ref() = nodeId;
+      kvStoreConfig.node_name() = nodeId;
       return std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
           areas, kvStoreConfig);
     };
@@ -237,7 +237,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
-      value.value_ref() = "test_value1";
+      value.value() = "test_value1";
       client1->setKey(
           kTestingAreaName,
           "test_key1",
@@ -245,7 +245,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
           100);
     }
     {
-      value.value_ref() = "test_value2";
+      value.value() = "test_value2";
       client2->setKey(
           kTestingAreaName,
           "test_key2",
@@ -253,7 +253,7 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
           200);
     }
     {
-      value.value_ref() = "test_value3";
+      value.value() = "test_value3";
       client3->setKey(
           kTestingAreaName,
           "test_key3",
@@ -281,9 +281,9 @@ TEST_F(MultipleStoreFixture, dumpWithPrefixMultiple_differentKeys) {
   {
     auto dump = maybe.value();
     EXPECT_EQ(3, maybe.value().size());
-    EXPECT_EQ("test_value1", dump["test_key1"].value_ref());
-    EXPECT_EQ("test_value2", dump["test_key2"].value_ref());
-    EXPECT_EQ("test_value3", dump["test_key3"].value_ref());
+    EXPECT_EQ("test_value1", dump["test_key1"].value());
+    EXPECT_EQ("test_value2", dump["test_key2"].value());
+    EXPECT_EQ("test_value3", dump["test_key3"].value());
   }
 }
 
@@ -300,7 +300,7 @@ TEST_F(
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
-      value.value_ref() = "test_value1";
+      value.value() = "test_value1";
       client1->setKey(
           kTestingAreaName,
           "test_key",
@@ -308,7 +308,7 @@ TEST_F(
           300);
     }
     {
-      value.value_ref() = "test_value2";
+      value.value() = "test_value2";
       client2->setKey(
           kTestingAreaName,
           "test_key",
@@ -316,7 +316,7 @@ TEST_F(
           200);
     }
     {
-      value.value_ref() = "test_value3";
+      value.value() = "test_value3";
       client3->setKey(
           kTestingAreaName,
           "test_key",
@@ -344,7 +344,7 @@ TEST_F(
   {
     auto dump = maybe.value();
     EXPECT_EQ(1, dump.size());
-    EXPECT_EQ("test_value1", dump["test_key"].value_ref());
+    EXPECT_EQ("test_value1", dump["test_key"].value());
   }
 }
 
@@ -361,7 +361,7 @@ TEST_F(
   evb.runInEventBaseThread([&]() noexcept {
     thrift::Value value;
     {
-      value.value_ref() = "test_value1";
+      value.value() = "test_value1";
       client1->setKey(
           kTestingAreaName,
           "test_key",
@@ -369,7 +369,7 @@ TEST_F(
           1);
     }
     {
-      value.value_ref() = "test_value2";
+      value.value() = "test_value2";
       client2->setKey(
           kTestingAreaName,
           "test_key",
@@ -377,7 +377,7 @@ TEST_F(
           1);
     }
     {
-      value.value_ref() = "test_value3";
+      value.value() = "test_value3";
       client3->setKey(
           kTestingAreaName,
           "test_key",
@@ -405,7 +405,7 @@ TEST_F(
   {
     auto dump = maybe.value();
     EXPECT_EQ(1, dump.size());
-    EXPECT_EQ("test_value3", dump["test_key"].value_ref());
+    EXPECT_EQ("test_value3", dump["test_key"].value());
   }
 }
 
@@ -419,7 +419,7 @@ TEST(KvStoreClientInternal, ApiTest) {
 
   // Initialize and start KvStore with one fake peer
   thrift::KvStoreConfig kvStoreConfig;
-  kvStoreConfig.node_name_ref() = nodeId;
+  kvStoreConfig.node_name() = nodeId;
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
       std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
@@ -467,8 +467,8 @@ TEST(KvStoreClientInternal, ApiTest) {
       // 1st get key
       auto maybeVal1 = client2->getKey(kTestingAreaName, "test_key2");
       ASSERT_TRUE(maybeVal1.has_value());
-      EXPECT_EQ(1, *maybeVal1->version_ref());
-      EXPECT_EQ("test_value2", maybeVal1->value_ref());
+      EXPECT_EQ(1, *maybeVal1->version());
+      EXPECT_EQ("test_value2", maybeVal1->value());
 
       // persistKey with new value
       client2->setKey(kTestingAreaName, "test_key2", "test_value2-client2");
@@ -476,8 +476,8 @@ TEST(KvStoreClientInternal, ApiTest) {
       // 2nd getkey
       auto maybeVal2 = client2->getKey(kTestingAreaName, "test_key2");
       ASSERT_TRUE(maybeVal2.has_value());
-      EXPECT_EQ(2, *maybeVal2->version_ref());
-      EXPECT_EQ("test_value2-client2", maybeVal2->value_ref());
+      EXPECT_EQ(2, *maybeVal2->version());
+      EXPECT_EQ("test_value2-client2", maybeVal2->value());
 
       // get key with non-existing key
       auto maybeVal3 = client2->getKey(kTestingAreaName, "test_key3");
@@ -495,9 +495,7 @@ TEST(KvStoreClientInternal, ApiTest) {
         Constants::kTtlInfinity, // ttl
         0, // ttl version
         generateHash(
-            3,
-            "originator-id",
-            thrift::Value().value_ref() = "set_test_value"));
+            3, "originator-id", thrift::Value().value() = "set_test_value"));
 
     // Sync call to insert key-value into the KvStore
     openrEvb.getEvb()->runInEventBaseThreadAndWait(
@@ -515,10 +513,9 @@ TEST(KvStoreClientInternal, ApiTest) {
       const auto maybeKeyVals = client1->dumpAllWithPrefix(kTestingAreaName);
       ASSERT_TRUE(maybeKeyVals.has_value());
       ASSERT_EQ(3, maybeKeyVals->size());
-      EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value_ref());
-      EXPECT_EQ(
-          "test_value2-client2", maybeKeyVals->at("test_key2").value_ref());
-      EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value_ref());
+      EXPECT_EQ("test_value1", maybeKeyVals->at("test_key1").value());
+      EXPECT_EQ("test_value2-client2", maybeKeyVals->at("test_key2").value());
+      EXPECT_EQ("set_test_value", maybeKeyVals->at("set_test_key").value());
 
       const auto maybeKeyVals2 = client2->dumpAllWithPrefix(kTestingAreaName);
       ASSERT_TRUE(maybeKeyVals2.has_value());
@@ -529,11 +526,9 @@ TEST(KvStoreClientInternal, ApiTest) {
           client1->dumpAllWithPrefix(kTestingAreaName, "test");
       ASSERT_TRUE(maybePrefixedKeyVals.has_value());
       ASSERT_EQ(2, maybePrefixedKeyVals->size());
+      EXPECT_EQ("test_value1", maybePrefixedKeyVals->at("test_key1").value());
       EXPECT_EQ(
-          "test_value1", maybePrefixedKeyVals->at("test_key1").value_ref());
-      EXPECT_EQ(
-          "test_value2-client2",
-          maybePrefixedKeyVals->at("test_key2").value_ref());
+          "test_value2-client2", maybePrefixedKeyVals->at("test_key2").value());
     });
   });
 
@@ -571,14 +566,14 @@ TEST(KvStoreClientInternal, ApiTest) {
       LOG(INFO) << "received response.";
       auto maybeVal1 = client2->getKey(kTestingAreaName, "test_ttl_key1");
       ASSERT_TRUE(maybeVal1.has_value());
-      EXPECT_EQ("test_ttl_value1", maybeVal1->value_ref());
-      EXPECT_LT(500, *maybeVal1->ttlVersion_ref());
+      EXPECT_EQ("test_ttl_value1", maybeVal1->value());
+      EXPECT_LT(500, *maybeVal1->ttlVersion());
 
       auto maybeVal2 = client1->getKey(kTestingAreaName, "test_ttl_key2");
       ASSERT_TRUE(maybeVal2.has_value());
-      EXPECT_LT(1500, *maybeVal2->ttlVersion_ref());
-      EXPECT_EQ(1, *maybeVal2->version_ref());
-      EXPECT_EQ("test_ttl_value2", maybeVal2->value_ref());
+      EXPECT_LT(1500, *maybeVal2->ttlVersion());
+      EXPECT_EQ(1, *maybeVal2->version());
+      EXPECT_EQ("test_ttl_value2", maybeVal2->value());
     });
 
     // nuke client to mimick scenario user process dies and no ttl
@@ -599,17 +594,17 @@ TEST(KvStoreClientInternal, ApiTest) {
     const auto keyValResponse = store->dumpAll(kTestingAreaName);
     LOG(INFO) << "received response.";
     for (const auto& [key, val] : keyValResponse) {
-      VLOG(4) << "key: " << key << ", val: " << val.value_ref().value();
+      VLOG(4) << "key: " << key << ", val: " << val.value().value();
     }
     ASSERT_EQ(3, keyValResponse.size());
 
     auto const& value1 = keyValResponse.at("test_key1");
-    EXPECT_EQ("test_value1", value1.value_ref());
-    EXPECT_EQ(1, *value1.version_ref());
+    EXPECT_EQ("test_value1", value1.value());
+    EXPECT_EQ(1, *value1.version());
 
     auto const& value2 = keyValResponse.at("test_key2");
-    EXPECT_EQ("test_value2-client2", value2.value_ref());
-    EXPECT_LE(2, *value2.version_ref()); // client-2 must win over client-1
+    EXPECT_EQ("test_value2-client2", value2.value());
+    EXPECT_LE(2, *value2.version()); // client-2 must win over client-1
 
     EXPECT_EQ(1, keyValResponse.count("set_test_key"));
 
@@ -640,7 +635,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
 
   // Initialize and start KvStore with empty peer
   thrift::KvStoreConfig kvStoreConfig;
-  kvStoreConfig.node_name_ref() = nodeId;
+  kvStoreConfig.node_name() = nodeId;
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
       std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
@@ -666,8 +661,8 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         [&](std::string const& k, std::optional<thrift::Value> v) {
           // should be called when kvStore setKey() called for test_key1
           EXPECT_EQ("test_key1", k);
-          EXPECT_EQ(1, *v.value().version_ref());
-          EXPECT_EQ("test_value1", v.value().value_ref());
+          EXPECT_EQ(1, *v.value().version());
+          EXPECT_EQ("test_value1", v.value().value());
           key1CbCnt++;
         },
         false);
@@ -677,14 +672,14 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         [&](std::string const& k, std::optional<thrift::Value> v) {
           // should be called when setKet() called for test_key2
           EXPECT_EQ("test_key2", k);
-          EXPECT_LT(0, *v.value().version_ref());
-          EXPECT_GE(2, *v.value().version_ref());
-          switch (*v.value().version_ref()) {
+          EXPECT_LT(0, *v.value().version());
+          EXPECT_GE(2, *v.value().version());
+          switch (*v.value().version()) {
           case 1:
-            EXPECT_EQ("test_value2", *v.value().value_ref());
+            EXPECT_EQ("test_value2", *v.value().value());
             break;
           case 2:
-            EXPECT_EQ("test_value2-client2", *v.value().value_ref());
+            EXPECT_EQ("test_value2-client2", *v.value().value());
             break;
           }
           key2CbCnt++;
@@ -726,7 +721,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
         [&](std::string const&, std::optional<thrift::Value>) {},
         true);
     ASSERT_TRUE(keyValue.has_value());
-    EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value_ref());
+    EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value());
   });
 
   // test for expired keys update
@@ -784,7 +779,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
 
   // Initialize and start KvStore with empty peer
   thrift::KvStoreConfig kvStoreConfig;
-  kvStoreConfig.node_name_ref() = nodeId;
+  kvStoreConfig.node_name() = nodeId;
   const std::unordered_set<std::string> areaIds{kTestingAreaName};
   auto store =
       std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
@@ -808,8 +803,8 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
         [&](std::string const& k, std::optional<thrift::Value> v) {
           // cb will be triggered when setKey() is called for test_key1
           EXPECT_THAT(k, testing::StartsWith("test_"));
-          EXPECT_EQ(1, *v.value().version_ref());
-          EXPECT_EQ("test_key_val", *v.value().value_ref());
+          EXPECT_EQ(1, *v.value().version());
+          EXPECT_EQ("test_key_val", *v.value().value());
           key1CbCnt++;
         });
 
@@ -914,22 +909,22 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         // test addPeers
         for (auto& [_, spec] : peers1) {
-          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
+          spec.state() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store1->getPeers(planeArea), peers1);
 
         for (auto& [_, spec] : peers2PlaneArea) {
-          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
+          spec.state() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store2->getPeers(planeArea), peers2PlaneArea);
 
         for (auto& [_, spec] : peers2PodArea) {
-          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
+          spec.state() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store2->getPeers(podArea), peers2PodArea);
 
         for (auto& [_, spec] : peers3) {
-          spec.state_ref() = openr::thrift::KvStorePeerState::INITIALIZED;
+          spec.state() = openr::thrift::KvStorePeerState::INITIALIZED;
         }
         EXPECT_EQ(store3->getPeers(podArea), peers3);
       });
@@ -938,8 +933,8 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 50), [&]() noexcept {
         thrift::Value valuePlane1;
-        valuePlane1.version_ref() = 1;
-        valuePlane1.value_ref() = "test_value1";
+        valuePlane1.version() = 1;
+        valuePlane1.value() = "test_value1";
         // key set within invalid area, must return false
         EXPECT_FALSE(client1
                          ->setKey(
@@ -961,8 +956,8 @@ TEST_F(MultipleAreaFixture, MultipleAreasPeers) {
 
         // set key in pod are on node3
         thrift::Value valuePod1;
-        valuePod1.version_ref() = 1;
-        valuePod1.value_ref() = "test_value1";
+        valuePod1.version() = 1;
+        valuePod1.value() = "test_value1";
         EXPECT_TRUE(client3
                         ->setKey(
                             podArea,

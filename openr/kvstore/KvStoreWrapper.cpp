@@ -18,7 +18,7 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
     const thrift::KvStoreConfig& kvStoreConfig,
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
-    : nodeId_(*kvStoreConfig.node_name_ref()),
+    : nodeId_(*kvStoreConfig.node_name()),
       areaIds_(areaIds),
       kvStoreConfig_(kvStoreConfig) {
   // create kvStore instance
@@ -93,8 +93,8 @@ KvStoreWrapper<ClientType>::setKey(
     std::optional<std::vector<std::string>> nodeIds) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  params.keyVals_ref()->emplace(std::move(key), std::move(value));
-  params.nodeIds_ref().from_optional(std::move(nodeIds));
+  params.keyVals()->emplace(std::move(key), std::move(value));
+  params.nodeIds().from_optional(std::move(nodeIds));
 
   try {
     kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
@@ -113,9 +113,9 @@ KvStoreWrapper<ClientType>::setKeys(
     std::optional<std::vector<std::string>> nodeIds) {
   // Prepare KeySetParams
   thrift::KeySetParams params;
-  params.nodeIds_ref().from_optional(std::move(nodeIds));
+  params.nodeIds().from_optional(std::move(nodeIds));
   for (const auto& [key, val] : keyVals) {
-    params.keyVals_ref()->emplace(key, val);
+    params.keyVals()->emplace(key, val);
   }
 
   try {
@@ -133,8 +133,8 @@ KvStoreWrapper<ClientType>::pushToKvStoreUpdatesQueue(
     const AreaId& area,
     const std::unordered_map<std::string /* key */, thrift::Value>& keyVals) {
   thrift::Publication pub;
-  pub.area_ref() = area;
-  pub.keyVals_ref() = keyVals;
+  pub.area() = area;
+  pub.keyVals() = keyVals;
   kvStoreUpdatesQueue_.push(std::move(pub));
 }
 
@@ -143,7 +143,7 @@ std::optional<thrift::Value>
 KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string key) {
   // Prepare KeyGetParams
   thrift::KeyGetParams params;
-  params.keys_ref()->push_back(key);
+  params.keys()->push_back(key);
 
   thrift::Publication pub;
   try {
@@ -165,8 +165,8 @@ KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string key) {
   }
 
   // Return the result
-  auto it = pub.keyVals_ref()->find(key);
-  if (it == pub.keyVals_ref()->end()) {
+  auto it = pub.keyVals()->find(key);
+  if (it == pub.keyVals()->end()) {
     return std::nullopt; // No value found
   }
   return it->second;
@@ -180,11 +180,11 @@ KvStoreWrapper<ClientType>::dumpAll(
   thrift::KeyDumpParams params;
   if (filters.has_value()) {
     std::string keyPrefix = folly::join(",", filters.value().getKeyPrefixes());
-    params.prefix_ref() = keyPrefix;
-    params.originatorIds_ref() = filters.value().getOriginatorIdList();
-    params.senderId_ref() = nodeId_;
+    params.prefix() = keyPrefix;
+    params.originatorIds() = filters.value().getOriginatorIdList();
+    params.senderId() = nodeId_;
     if (not keyPrefix.empty()) {
-      params.keys_ref() = filters.value().getKeyPrefixes();
+      params.keys() = filters.value().getKeyPrefixes();
     }
   }
 
@@ -200,9 +200,9 @@ KvStoreWrapper<ClientType>::dumpHashes(
     AreaId const& area, std::string const& prefix) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-  params.prefix_ref() = prefix;
-  params.keys_ref() = {prefix};
-  params.senderId_ref() = nodeId_;
+  params.prefix() = prefix;
+  params.keys() = {prefix};
+  params.senderId() = nodeId_;
 
   auto pub =
       *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
@@ -223,8 +223,8 @@ KvStoreWrapper<ClientType>::syncKeyVals(
     AreaId const& area, thrift::KeyVals const& keyValHashes) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
-  params.keyValHashes_ref() = keyValHashes;
-  params.senderId_ref() = nodeId_;
+  params.keyValHashes() = keyValHashes;
+  params.senderId() = nodeId_;
 
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()

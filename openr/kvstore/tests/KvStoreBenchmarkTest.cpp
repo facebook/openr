@@ -80,7 +80,7 @@ class KvStoreBenchmarkTestFixture {
   explicit KvStoreBenchmarkTestFixture() {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
-    kvStoreConfig.node_name_ref() = nodeId_;
+    kvStoreConfig.node_name() = nodeId_;
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // start kvstore
@@ -123,11 +123,11 @@ class KvStoreBenchmarkTestFixture {
 
       TtlCountdownQueueEntry queueEntry;
       queueEntry.expiryTime = std::chrono::steady_clock::now() +
-          std::chrono::milliseconds(*keyValPair.second.ttl_ref());
+          std::chrono::milliseconds(*keyValPair.second.ttl());
       queueEntry.key = keyValPair.first;
-      queueEntry.version = *keyValPair.second.version_ref();
-      queueEntry.ttlVersion = *keyValPair.second.ttlVersion_ref();
-      queueEntry.originatorId = *keyValPair.second.originatorId_ref();
+      queueEntry.version = *keyValPair.second.version();
+      queueEntry.ttlVersion = *keyValPair.second.ttlVersion();
+      queueEntry.originatorId = *keyValPair.second.originatorId();
       ttlCountdownQueue.push(std::move(queueEntry));
     }
     return keyValsForReturn;
@@ -150,7 +150,7 @@ class KvStoreBenchmarkTestFixture {
       // stop measuring time as this is just parsing
       suspender.rehire();
       if (auto* pub = std::get_if<thrift::Publication>(&(thriftPub.value()))) {
-        total += pub->keyVals_ref()->size();
+        total += pub->keyVals()->size();
       }
 
       // start measuring time again
@@ -499,8 +499,8 @@ BM_KvStoreUpdatePubTtl(
 
     // Setup publication with the return keyVals
     thrift::Publication thriftPub;
-    thriftPub.keyVals_ref() = std::move(keyVals);
-    thriftPub.area_ref() = kTestingAreaName;
+    thriftPub.keyVals() = std::move(keyVals);
+    thriftPub.area() = kTestingAreaName;
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -572,11 +572,11 @@ BM_KvStoreDumpAllWithFilters(
         keyPrefixList.end(), prefixSet.begin(), prefixSet.end());
 
     for (int k = 0; k < numOfOriginatorIds; ++k) {
-      keyDumpParams.originatorIds_ref()->insert(std::to_string(k));
+      keyDumpParams.originatorIds()->insert(std::to_string(k));
     }
 
     const auto keyPrefixMatch =
-        KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
+        KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds());
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -646,11 +646,11 @@ BM_KvStoreDumpHashWithFilters(
         keyPrefixList.end(), prefixSet.begin(), prefixSet.end());
 
     for (int k = 0; k < numOfOriginatorIds; ++k) {
-      keyDumpParams.originatorIds_ref()->insert(std::to_string(k));
+      keyDumpParams.originatorIds()->insert(std::to_string(k));
     }
 
     const auto keyPrefixMatch =
-        KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds_ref());
+        KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds());
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();

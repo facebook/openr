@@ -24,7 +24,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     auto makeStoreWrapper = [this](std::string nodeId) {
       // create KvStoreConfig
       thrift::KvStoreConfig kvStoreConfig;
-      kvStoreConfig.node_name_ref() = nodeId;
+      kvStoreConfig.node_name() = nodeId;
       const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
       return std::make_shared<
@@ -95,7 +95,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    (*newKvIt->second.version_ref())++;
+    (*newKvIt->second.version())++;
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -105,7 +105,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    (*newKvIt->second.version_ref())--;
+    (*newKvIt->second.version())--;
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -115,7 +115,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    *newKvIt->second.originatorId_ref() = "node55";
+    *newKvIt->second.originatorId() = "node55";
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -125,7 +125,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    *newKvIt->second.originatorId_ref() = "node3";
+    *newKvIt->second.originatorId() = "node3";
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -135,7 +135,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value_ref() = "dummyValueTest";
+    newKvIt->second.value() = "dummyValueTest";
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -145,7 +145,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value_ref() = "dummy";
+    newKvIt->second.value() = "dummy";
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -155,22 +155,20 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value_ref().reset();
-    newKvIt->second.ttl_ref() = 123;
-    (*newKvIt->second.ttlVersion_ref())++;
+    newKvIt->second.value().reset();
+    newKvIt->second.ttl() = 123;
+    (*newKvIt->second.ttlVersion())++;
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     auto deltaKvIt = keyVals.find(key);
     // new ttl, ttlversion
-    EXPECT_EQ(
-        *myKvIt->second.ttlVersion_ref(), *newKvIt->second.ttlVersion_ref());
-    EXPECT_EQ(*myKvIt->second.ttl_ref(), *newKvIt->second.ttl_ref());
+    EXPECT_EQ(*myKvIt->second.ttlVersion(), *newKvIt->second.ttlVersion());
+    EXPECT_EQ(*myKvIt->second.ttl(), *newKvIt->second.ttl());
     // old value tho
-    EXPECT_EQ(myKvIt->second.value_ref(), oldKvIt->second.value_ref());
+    EXPECT_EQ(myKvIt->second.value(), oldKvIt->second.value());
 
-    EXPECT_EQ(
-        *deltaKvIt->second.ttlVersion_ref(), *newKvIt->second.ttlVersion_ref());
-    EXPECT_EQ(*deltaKvIt->second.ttl_ref(), *newKvIt->second.ttl_ref());
-    EXPECT_EQ(deltaKvIt->second.value_ref().has_value(), false);
+    EXPECT_EQ(*deltaKvIt->second.ttlVersion(), *newKvIt->second.ttlVersion());
+    EXPECT_EQ(*deltaKvIt->second.ttl(), *newKvIt->second.ttl());
+    EXPECT_EQ(deltaKvIt->second.value().has_value(), false);
   }
 
   // update ttl only (same version, originatorId and value,
@@ -178,8 +176,8 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.ttl_ref() = 123;
-    (*newKvIt->second.ttlVersion_ref())++;
+    newKvIt->second.ttl() = 123;
+    (*newKvIt->second.ttlVersion())++;
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, newStore);
     EXPECT_EQ(keyVals, newStore);
@@ -189,8 +187,8 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
-    newKvIt->second.value_ref() = "dummy";
-    (*newKvIt->second.ttlVersion_ref())++;
+    newKvIt->second.value() = "dummy";
+    (*newKvIt->second.ttlVersion())++;
     auto keyVals = mergeKeyValues(myStore, newStore).first;
     EXPECT_EQ(myStore, oldStore);
     EXPECT_EQ(keyVals.size(), 0);
@@ -200,7 +198,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   {
     std::unordered_map<std::string, thrift::Value> emptyStore;
     newKvIt->second = thriftValue;
-    newKvIt->second.ttl_ref() = -100;
+    newKvIt->second.ttl() = -100;
     auto keyVals = mergeKeyValues(emptyStore, newStore).first;
     EXPECT_EQ(keyVals.size(), 0);
     EXPECT_EQ(emptyStore.size(), 0);
@@ -224,7 +222,7 @@ TEST(KvStoreUtil, compareValuesTest) {
   // diff version
   v1 = refValue;
   v2 = refValue;
-  (*v1.version_ref())++;
+  (*v1.version())++;
   {
     ComparisonResult rc = compareValues(v1, v2);
     EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
@@ -233,7 +231,7 @@ TEST(KvStoreUtil, compareValuesTest) {
   // diff originatorId
   v1 = refValue;
   v2 = refValue;
-  *v2.originatorId_ref() = "node6";
+  *v2.originatorId() = "node6";
   {
     ComparisonResult rc = compareValues(v1, v2);
     EXPECT_EQ(rc, ComparisonResult::SECOND); // v2 is better
@@ -242,7 +240,7 @@ TEST(KvStoreUtil, compareValuesTest) {
   // diff ttlVersion
   v1 = refValue;
   v2 = refValue;
-  (*v1.ttlVersion_ref())++;
+  (*v1.ttlVersion())++;
   {
     ComparisonResult rc = compareValues(v1, v2);
     EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
@@ -259,8 +257,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   // hash and value are different
   v1 = refValue;
   v2 = refValue;
-  v1.value_ref() = "dummyValue1";
-  v1.hash_ref() = 445566;
+  v1.value() = "dummyValue1";
+  v1.hash() = 445566;
   {
     ComparisonResult rc = compareValues(v1, v2);
     EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
@@ -269,8 +267,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   // v2.hash is missing, values are different
   v1 = refValue;
   v2 = refValue;
-  v1.value_ref() = "dummyValue1";
-  v2.hash_ref().reset();
+  v1.value() = "dummyValue1";
+  v2.hash().reset();
   {
     ComparisonResult rc = compareValues(v1, v2);
     EXPECT_EQ(rc, ComparisonResult::FIRST); // v1 is better
@@ -279,8 +277,8 @@ TEST(KvStoreUtil, compareValuesTest) {
   // v1.hash and v1.value are missing
   v1 = refValue;
   v2 = refValue;
-  v1.value_ref().reset();
-  v1.hash_ref().reset();
+  v1.value().reset();
+  v1.hash().reset();
   {
     ComparisonResult rc = compareValues(v1, v2);
     EXPECT_EQ(rc, ComparisonResult::UNKNOWN); // unknown

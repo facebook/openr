@@ -45,7 +45,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
   createKvStore(const std::string& nodeId) {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
-    kvStoreConfig.node_name_ref() = nodeId;
+    kvStoreConfig.node_name() = nodeId;
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     stores_.emplace_back(
@@ -218,8 +218,8 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         kTestingAreaName));
 
     // dump peers to make sure they are aware of each other
-    peerSpec1.state_ref() = thrift::KvStorePeerState::INITIALIZED;
-    peerSpec2.state_ref() = thrift::KvStorePeerState::INITIALIZED;
+    peerSpec1.state() = thrift::KvStorePeerState::INITIALIZED;
+    peerSpec2.state() = thrift::KvStorePeerState::INITIALIZED;
     std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
         {store2->getNodeId(), peerSpec2}};
     std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
@@ -266,7 +266,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         thrift::KvStorePeerState::INITIALIZED,
         kTestingAreaName));
 
-    newPeerSpec.state_ref() = thrift::KvStorePeerState::INITIALIZED;
+    newPeerSpec.state() = thrift::KvStorePeerState::INITIALIZED;
     std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
         {store2->getNodeId(), newPeerSpec}};
     EXPECT_EQ(newExpPeer, store1->getPeers(kTestingAreaName));
@@ -316,8 +316,8 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
       store1->getThriftPort(), store2->getThriftPort()};
   const uint16_t dummyPort1 = generateRandomDiffPort(usedPorts);
   const uint16_t dummyPort2 = generateRandomDiffPort(usedPorts);
-  peerSpec1.ctrlPort_ref() = dummyPort1;
-  peerSpec2.ctrlPort_ref() = dummyPort2;
+  peerSpec1.ctrlPort() = dummyPort1;
+  peerSpec2.ctrlPort() = dummyPort2;
 
   EXPECT_TRUE(
       store1->addPeer(kTestingAreaName, store2->getNodeId(), peerSpec2));
@@ -390,7 +390,7 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
           node1 /* originatorId */,
           value2 /* value */);
       if (keyVer.first == k1) {
-        val.value_ref() = value1; // set same value for k1
+        val.value() = value1; // set same value for k1
       }
       EXPECT_TRUE(store2->setKey(kTestingAreaName, keyVer.first, val));
     }
@@ -408,8 +408,8 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
       auto val2 = store2->getKey(kTestingAreaName, key);
       EXPECT_TRUE(val1.has_value());
       EXPECT_TRUE(val2.has_value());
-      EXPECT_EQ(val1->value_ref().value(), val2->value_ref().value());
-      EXPECT_EQ(*val1->version_ref(), *val2->version_ref());
+      EXPECT_EQ(val1->value().value(), val2->value().value());
+      EXPECT_EQ(*val1->version(), *val2->version());
     }
   });
 
@@ -452,20 +452,20 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
   EXPECT_EQ(5, store2->dumpAll(kTestingAreaName).size());
 
   auto v0 = store1->getKey(kTestingAreaName, k0);
-  EXPECT_EQ(*v0->version_ref(), 5);
-  EXPECT_EQ(v0->value_ref().value(), value1);
+  EXPECT_EQ(*v0->version(), 5);
+  EXPECT_EQ(v0->value().value(), value1);
   auto v1 = store1->getKey(kTestingAreaName, k1);
-  EXPECT_EQ(*v1->version_ref(), 1);
-  EXPECT_EQ(v1->value_ref().value(), value1);
+  EXPECT_EQ(*v1->version(), 1);
+  EXPECT_EQ(v1->value().value(), value1);
   auto v2 = store1->getKey(kTestingAreaName, k2);
-  EXPECT_EQ(*v2->version_ref(), 9);
-  EXPECT_EQ(v2->value_ref().value(), value1);
+  EXPECT_EQ(*v2->version(), 9);
+  EXPECT_EQ(v2->value().value(), value1);
   auto v3 = store1->getKey(kTestingAreaName, k3);
-  EXPECT_EQ(*v3->version_ref(), 9);
-  EXPECT_EQ(v3->value_ref().value(), value2);
+  EXPECT_EQ(*v3->version(), 9);
+  EXPECT_EQ(v3->value().value(), value2);
   auto v4 = store1->getKey(kTestingAreaName, k4);
-  EXPECT_EQ(*v4->version_ref(), 6);
-  EXPECT_EQ(v4->value_ref().value(), value2);
+  EXPECT_EQ(*v4->version(), 6);
+  EXPECT_EQ(v4->value().value(), value2);
 }
 
 //

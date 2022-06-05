@@ -87,15 +87,15 @@ KvStoreClientInternal::setKey(
   // Create 'thrift::Value' object which will be sent to KvStore
   thrift::Value thriftValue = createThriftValue(
       version, nodeId_, value, ttl.count(), 0 /* ttl version */, 0 /* hash */);
-  CHECK(thriftValue.value_ref());
+  CHECK(thriftValue.value());
 
   // Use one version number higher than currently in KvStore if not specified
   if (not version) {
     auto maybeValue = getKey(area, key);
     if (maybeValue.has_value()) {
-      thriftValue.version_ref() = *maybeValue->version_ref() + 1;
+      thriftValue.version() = *maybeValue->version() + 1;
     } else {
-      thriftValue.version_ref() = 1;
+      thriftValue.version() = 1;
     }
   }
   return setKey(area, key, thriftValue);
@@ -107,7 +107,7 @@ KvStoreClientInternal::setKey(
     std::string const& key,
     thrift::Value const& thriftValue) {
   CHECK(eventBase_->getEvb()->isInEventBaseThread());
-  CHECK(thriftValue.value_ref());
+  CHECK(thriftValue.value());
 
   XLOG(DBG3) << "KvStoreClientInternal: setKey called for key " << key;
 
@@ -119,9 +119,9 @@ KvStoreClientInternal::setKey(
   scheduleTtlUpdates(
       area,
       key,
-      *thriftValue.version_ref(),
-      *thriftValue.ttlVersion_ref(),
-      *thriftValue.ttl_ref(),
+      *thriftValue.version(),
+      *thriftValue.ttlVersion(),
+      *thriftValue.ttl(),
       false /* advertiseImmediately */);
 
   return ret;
@@ -150,7 +150,7 @@ KvStoreClientInternal::scheduleTtlUpdates(
       std::nullopt, /* value */
       ttl, /* ttl */
       ttlVersion /* ttl version */);
-  CHECK(not ttlThriftValue.value_ref().has_value());
+  CHECK(not ttlThriftValue.value().has_value());
 
   // renew before Ttl expires about every ttl/3, i.e., try twice
   // use ExponentialBackoff to track remaining time
@@ -190,16 +190,16 @@ KvStoreClientInternal::getKey(AreaId const& area, std::string const& key) {
   thrift::Publication pub;
   try {
     thrift::KeyGetParams params;
-    params.keys_ref()->emplace_back(key);
+    params.keys()->emplace_back(key);
     pub = *(kvStore_->semifuture_getKvStoreKeyVals(area, params).get());
   } catch (const std::exception& ex) {
     XLOG(ERR) << "Failed to get keyvals from kvstore. Exception: " << ex.what();
     return std::nullopt;
   }
-  XLOG(DBG3) << "Received " << pub.keyVals_ref()->size() << " key-vals.";
+  XLOG(DBG3) << "Received " << pub.keyVals()->size() << " key-vals.";
 
-  auto it = pub.keyVals_ref()->find(key);
-  if (it == pub.keyVals_ref()->end()) {
+  auto it = pub.keyVals()->find(key);
+  if (it == pub.keyVals()->end()) {
     XLOG(DBG2) << "Key: " << key << " NOT found in kvstore. Area: " << area.t;
     return std::nullopt;
   }
@@ -214,9 +214,9 @@ KvStoreClientInternal::dumpAllWithPrefix(
   thrift::Publication pub;
   try {
     thrift::KeyDumpParams params;
-    *params.prefix_ref() = prefix;
+    *params.prefix() = prefix;
     if (not prefix.empty()) {
-      params.keys_ref() = {prefix};
+      params.keys() = {prefix};
     }
     pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                .get()
@@ -225,7 +225,7 @@ KvStoreClientInternal::dumpAllWithPrefix(
     XLOG(ERR) << "Failed to add peers to kvstore. Exception: " << ex.what();
     return std::nullopt;
   }
-  return *pub.keyVals_ref();
+  return *pub.keyVals();
 }
 
 std::optional<thrift::Value>
@@ -277,10 +277,10 @@ KvStoreClientInternal::unsubscribeKey(
 void
 KvStoreClientInternal::processExpiredKeys(
     thrift::Publication const& publication) {
-  auto const& expiredKeys = *publication.expiredKeys_ref();
+  auto const& expiredKeys = *publication.expiredKeys();
 
   // NOTE: default construct empty map if it didn't exist
-  auto& callbacks = keyCallbacks_[AreaId{*publication.area_ref()}];
+  auto& callbacks = keyCallbacks_[AreaId{*publication.area()}];
   for (auto const& key : expiredKeys) {
     /* key specific registered callback */
     auto cb = callbacks.find(key);
@@ -294,15 +294,15 @@ void
 KvStoreClientInternal::processPublication(
     thrift::Publication const& publication) {
   // Go through received key-values and find out the ones which need update
-  CHECK(not publication.area_ref()->empty());
-  AreaId area{*publication.area_ref()};
+  CHECK(not publication.area()->empty());
+  AreaId area{*publication.area()};
 
   // NOTE: default construct empty containers if they didn't exist
   auto& keyTtlBackoffs = keyTtlBackoffs_[area];
   auto& callbacks = keyCallbacks_[area];
 
-  for (auto const& [key, rcvdValue] : *publication.keyVals_ref()) {
-    if (not rcvdValue.value_ref().has_value()) {
+  for (auto const& [key, rcvdValue] : *publication.keyVals()) {
+    if (not rcvdValue.value().has_value()) {
       // ignore TTL update
       continue;
     }
@@ -315,29 +315,29 @@ KvStoreClientInternal::processPublication(
     // key set but not persisted
     if (sk != keyTtlBackoffs.end()) {
       auto& setValue = sk->second.first;
-      if (*rcvdValue.version_ref() > *setValue.version_ref() or
-          (*rcvdValue.version_ref() == *setValue.version_ref() and
-           *rcvdValue.originatorId_ref() > *setValue.originatorId_ref())) {
+      if (*rcvdValue.version() > *setValue.version() or
+          (*rcvdValue.version() == *setValue.version() and
+           *rcvdValue.originatorId() > *setValue.originatorId())) {
         // key lost, cancel TTL update
         keyTtlBackoffs.erase(sk);
       } else if (
-          *rcvdValue.version_ref() == *setValue.version_ref() and
-          *rcvdValue.originatorId_ref() == *setValue.originatorId_ref() and
-          *rcvdValue.ttlVersion_ref() > *setValue.ttlVersion_ref()) {
+          *rcvdValue.version() == *setValue.version() and
+          *rcvdValue.originatorId() == *setValue.originatorId() and
+          *rcvdValue.ttlVersion() > *setValue.ttlVersion()) {
         // If version, value and originatorId is same then we should look up
         // ttlVersion and update local value if rcvd ttlVersion is higher
         // NOTE: We don't need to advertise the value back
         if (sk != keyTtlBackoffs.end() and
-            *sk->second.first.ttlVersion_ref() < *rcvdValue.ttlVersion_ref()) {
+            *sk->second.first.ttlVersion() < *rcvdValue.ttlVersion()) {
           XLOG(DBG2) << fmt::format(
                             "Bumping TTL version for [key: {}, v: {}, "
                             "originatorId: {}]",
                             key,
-                            *rcvdValue.version_ref(),
-                            *rcvdValue.originatorId_ref())
-                     << " to " << (*rcvdValue.ttlVersion_ref() + 1) << " from "
-                     << *setValue.ttlVersion_ref();
-          setValue.ttlVersion_ref() = *rcvdValue.ttlVersion_ref() + 1;
+                            *rcvdValue.version(),
+                            *rcvdValue.originatorId())
+                     << " to " << (*rcvdValue.ttlVersion() + 1) << " from "
+                     << *setValue.ttlVersion();
+          setValue.ttlVersion() = *rcvdValue.ttlVersion() + 1;
         }
       }
     }
@@ -353,7 +353,7 @@ KvStoreClientInternal::processPublication(
     }
   } // for
 
-  if (publication.expiredKeys_ref()->size()) {
+  if (publication.expiredKeys()->size()) {
     processExpiredKeys(publication);
   }
 }
@@ -381,9 +381,9 @@ KvStoreClientInternal::advertiseTtlUpdates() {
       timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
       // bump ttl version
-      (*thriftValue.ttlVersion_ref())++;
+      (*thriftValue.ttlVersion())++;
       // Set in keyVals which is going to be advertised to the kvStore.
-      DCHECK(not thriftValue.value_ref());
+      DCHECK(not thriftValue.value());
       printKeyValInArea(
           1 /*logLevel*/,
           "Advertising ttl update",
@@ -424,7 +424,7 @@ KvStoreClientInternal::setKeysHelper(
   }
 
   thrift::KeySetParams params;
-  *params.keyVals_ref() = std::move(keyVals);
+  *params.keyVals() = std::move(keyVals);
 
   try {
     kvStore_->semifuture_setKvStoreKeyVals(area, params).get();

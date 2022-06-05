@@ -22,7 +22,7 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
   void
   SetUp() override {
     thrift::KvStoreConfig kvStoreConfig;
-    kvStoreConfig.node_name_ref() = nodeName_;
+    kvStoreConfig.node_name() = nodeName_;
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // Spawn kvStore instance with wrapper
@@ -64,7 +64,7 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
   {
     // set API
     thrift::KeySetParams params;
-    params.keyVals_ref() = kvs;
+    params.keyVals() = kvs;
     handler_
         ->semifuture_setKvStoreKeyVals(
             std::make_unique<thrift::KeySetParams>(std::move(params)),
@@ -82,7 +82,7 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kTestingAreaName))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(keyVals.at("key1"), kvs.at("key1"));
   }
@@ -97,7 +97,7 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kTestingAreaName))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(0, keyVals.size());
   }
   {
@@ -105,9 +105,9 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     //
     // positive test case
     thrift::KeyDumpParams params;
-    params.keys_ref() = {"key"};
-    params.originatorIds_ref() = {"fake_node"};
-    params.oper_ref() = thrift::FilterOperator::OR;
+    params.keys() = {"key"};
+    params.originatorIds() = {"fake_node"};
+    params.oper() = thrift::FilterOperator::OR;
 
     auto pub =
         handler_
@@ -115,7 +115,7 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kTestingAreaName))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(3, keyVals.size());
     EXPECT_EQ(keyVals.at("key1"), kvs.at("key1"));
     EXPECT_EQ(keyVals.at("key2"), kvs.at("key2"));
@@ -126,16 +126,16 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     //
     // negative test case
     thrift::KeyDumpParams params;
-    params.keys_ref() = {"key"};
-    params.originatorIds_ref() = {"fake_node"};
-    params.oper_ref() = thrift::FilterOperator::AND;
+    params.keys() = {"key"};
+    params.originatorIds() = {"fake_node"};
+    params.oper() = thrift::FilterOperator::AND;
 
     auto pub = handler_
                    ->semifuture_getKvStoreKeyValsFilteredArea(
                        std::make_unique<thrift::KeyDumpParams>(params),
                        std::make_unique<std::string>(kTestingAreaName))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(0, keyVals.size());
   }
 }

@@ -284,7 +284,7 @@ main(int argc, char** argv) {
 
   if (config->isFibServiceWaitingEnabled() and
       (not config->isNetlinkFibHandlerEnabled())) {
-    waitForFibService(mainEvb, *config->getConfig().fib_port_ref());
+    waitForFibService(mainEvb, *config->getConfig().fib_port());
   }
   logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
 
@@ -314,7 +314,7 @@ main(int argc, char** argv) {
     netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
-    netlinkFibServer->setPort(*config->getConfig().fib_port_ref());
+    netlinkFibServer->setPort(*config->getConfig().fib_port());
 
     netlinkFibServerThread =
         std::make_unique<std::thread>([&netlinkFibServer, &nlSock]() {

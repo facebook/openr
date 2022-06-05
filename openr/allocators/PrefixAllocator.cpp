@@ -34,14 +34,14 @@ PrefixAllocator::PrefixAllocator(
     : myNodeName_(config->getNodeName()),
       syncInterval_(syncInterval),
       setLoopbackAddress_(
-          *config->getPrefixAllocationConfig().set_loopback_addr_ref()),
+          *config->getPrefixAllocationConfig().set_loopback_addr()),
       overrideGlobalAddress_(
-          *config->getPrefixAllocationConfig().override_loopback_addr_ref()),
+          *config->getPrefixAllocationConfig().override_loopback_addr()),
       loopbackIfaceName_(
-          *config->getPrefixAllocationConfig().loopback_interface_ref()),
-      prefixForwardingType_(*config->getConfig().prefix_forwarding_type_ref()),
+          *config->getPrefixAllocationConfig().loopback_interface()),
+      prefixForwardingType_(*config->getConfig().prefix_forwarding_type()),
       prefixForwardingAlgorithm_(
-          *config->getConfig().prefix_forwarding_algorithm_ref()),
+          *config->getConfig().prefix_forwarding_algorithm()),
       area_(area),
       nlSock_(nlSock),
       kvStore_(kvStore),
@@ -58,7 +58,7 @@ PrefixAllocator::PrefixAllocator(
       std::make_unique<KvStoreClientInternal>(this, myNodeName_, kvStore);
 
   // Let the magic begin. Start allocation as per allocMode
-  switch (*config->getPrefixAllocationConfig().prefix_allocation_mode_ref()) {
+  switch (*config->getPrefixAllocationConfig().prefix_allocation_mode()) {
   case thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE:
     XLOG(INFO) << "DYNAMIC_LEAF_NODE";
     dynamicAllocationLeafNode();
@@ -113,7 +113,7 @@ PrefixAllocator::staticAllocation() {
     // 1) Get initial value from KvStore!
     try {
       thrift::KeyGetParams getStaticAllocParams;
-      getStaticAllocParams.keys_ref()->emplace_back(
+      getStaticAllocParams.keys()->emplace_back(
           Constants::kStaticPrefixAllocParamKey.toString());
       auto maybeGetKey =
           kvStore_->semifuture_getKvStoreKeyVals(area_, getStaticAllocParams)
@@ -125,9 +125,9 @@ PrefixAllocator::staticAllocation() {
             folly::exceptionStr(maybeGetKey.exception()));
       } else {
         auto pub = *maybeGetKey.value();
-        auto it = pub.keyVals_ref()->find(
+        auto it = pub.keyVals()->find(
             Constants::kStaticPrefixAllocParamKey.toString());
-        if (it == pub.keyVals_ref()->end()) {
+        if (it == pub.keyVals()->end()) {
           XLOG(ERR) << "Prefix allocation key: "
                     << Constants::kStaticPrefixAllocParamKey.toString()
                     << " not found in KvStore, area: " << area_.t;
@@ -148,10 +148,10 @@ PrefixAllocator::staticAllocation() {
         configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
     if (maybeThriftAllocPrefix.hasValue()) {
       const auto oldAllocParams = std::make_pair(
-          toIPNetwork(*maybeThriftAllocPrefix->seedPrefix_ref()),
-          static_cast<uint8_t>(*maybeThriftAllocPrefix->allocPrefixLen_ref()));
+          toIPNetwork(*maybeThriftAllocPrefix->seedPrefix()),
+          static_cast<uint8_t>(*maybeThriftAllocPrefix->allocPrefixLen()));
       allocParams_ = oldAllocParams;
-      applyMyPrefixIndex(*maybeThriftAllocPrefix->allocPrefixIndex_ref());
+      applyMyPrefixIndex(*maybeThriftAllocPrefix->allocPrefixIndex());
       return;
     }
 
@@ -206,7 +206,7 @@ PrefixAllocator::dynamicAllocationLeafNode() {
     // 1) Get initial value from KvStore!
     try {
       thrift::KeyGetParams params;
-      params.keys_ref()->emplace_back(
+      params.keys()->emplace_back(
           Constants::kSeedPrefixAllocParamKey.toString());
       auto maybeGetKey = kvStore_->semifuture_getKvStoreKeyVals(area_, params)
                              .getTry(Constants::kReadTimeout);
@@ -217,9 +217,9 @@ PrefixAllocator::dynamicAllocationLeafNode() {
             folly::exceptionStr(maybeGetKey.exception()));
       } else {
         auto pub = *maybeGetKey.value();
-        auto it = pub.keyVals_ref()->find(
-            Constants::kSeedPrefixAllocParamKey.toString());
-        if (it == pub.keyVals_ref()->end()) {
+        auto it =
+            pub.keyVals()->find(Constants::kSeedPrefixAllocParamKey.toString());
+        if (it == pub.keyVals()->end()) {
           XLOG(ERR) << "Seed prefix alloc key: "
                     << Constants::kSeedPrefixAllocParamKey.toString()
                     << " not found in KvStore, area: " << area_.t;
@@ -241,8 +241,8 @@ PrefixAllocator::dynamicAllocationLeafNode() {
         configStore_->loadThriftObj<thrift::AllocPrefix>(kConfigKey).get();
     if (maybeThriftAllocPrefix.hasValue()) {
       const auto oldAllocParams = std::make_pair(
-          toIPNetwork(*maybeThriftAllocPrefix->seedPrefix_ref()),
-          static_cast<uint8_t>(*maybeThriftAllocPrefix->allocPrefixLen_ref()));
+          toIPNetwork(*maybeThriftAllocPrefix->seedPrefix()),
+          static_cast<uint8_t>(*maybeThriftAllocPrefix->allocPrefixLen()));
       startAllocation(oldAllocParams);
       return;
     }
@@ -309,13 +309,13 @@ PrefixAllocator::parseParamsStr(const std::string& paramStr) {
 
 void
 PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
-  CHECK(value.value_ref().has_value());
+  CHECK(value.value().has_value());
 
   // Parse thrift::Value into thrift::StaticAllocation
   thrift::StaticAllocation staticAlloc;
   try {
-    staticAlloc = readThriftObjStr<thrift::StaticAllocation>(
-        *value.value_ref(), serializer_);
+    staticAlloc =
+        readThriftObjStr<thrift::StaticAllocation>(*value.value(), serializer_);
   } catch (std::exception const& e) {
     XLOG(ERR) << "Error parsing static prefix allocation value. Error: "
               << folly::exceptionStr(e);
@@ -328,10 +328,10 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   XLOG(DBG1) << "Processing static prefix allocation update";
 
   // Look for my prefix in static allocation map
-  auto myPrefixIt = staticAlloc.nodePrefixes_ref()->find(myNodeName_);
+  auto myPrefixIt = staticAlloc.nodePrefixes()->find(myNodeName_);
 
   // Withdraw my prefix if not found
-  if (myPrefixIt == staticAlloc.nodePrefixes_ref()->end() and allocParams_) {
+  if (myPrefixIt == staticAlloc.nodePrefixes()->end() and allocParams_) {
     XLOG(DBG2) << "Lost prefix";
     applyState_ = std::make_pair(true, std::nullopt);
     applyMyPrefixIndex(std::nullopt);
@@ -339,7 +339,7 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
   }
 
   // Advertise my prefix if found
-  if (myPrefixIt != staticAlloc.nodePrefixes_ref()->end()) {
+  if (myPrefixIt != staticAlloc.nodePrefixes()->end()) {
     XLOG(DBG2) << "Received new prefix";
     const auto prefix = toIPNetwork(myPrefixIt->second);
     const auto newParams = std::make_pair(prefix, prefix.second);
@@ -358,10 +358,10 @@ PrefixAllocator::processStaticPrefixAllocUpdate(thrift::Value const& value) {
 
 void
 PrefixAllocator::processAllocParamUpdate(thrift::Value const& value) {
-  CHECK(value.value_ref().has_value());
+  CHECK(value.value().has_value());
 
   std::optional<PrefixAllocationParams> params = std::nullopt;
-  auto paramStr = value.value_ref().value();
+  auto paramStr = value.value().value();
   try {
     params = parseParamsStr(paramStr);
   } catch (std::exception const& e) {
@@ -382,7 +382,7 @@ PrefixAllocator::checkE2eAllocIndex(uint32_t index) {
 void
 PrefixAllocator::processNetworkAllocationsUpdate(
     thrift::Value const& e2eValue) {
-  CHECK(e2eValue.value_ref().has_value());
+  CHECK(e2eValue.value().has_value());
   if (!allocParams_.has_value()) {
     return;
   }
@@ -392,18 +392,18 @@ PrefixAllocator::processNetworkAllocationsUpdate(
   thrift::StaticAllocation staticAlloc;
   try {
     staticAlloc = readThriftObjStr<thrift::StaticAllocation>(
-        *e2eValue.value_ref(), serializer_);
+        *e2eValue.value(), serializer_);
     /* skip if same version */
-    if (e2eAllocIndex_.first == *e2eValue.version_ref()) {
+    if (e2eAllocIndex_.first == *e2eValue.version()) {
       return;
     }
     XLOG(INFO) << fmt::format(
         "Updating prefix index from {}",
         Constants::kStaticPrefixAllocParamKey.toString());
     e2eAllocIndex_.second.clear();
-    e2eAllocIndex_.first = *e2eValue.version_ref();
+    e2eAllocIndex_.first = *e2eValue.version();
     // extract prefix index from e2e network allocations
-    for (auto const& ip : *staticAlloc.nodePrefixes_ref()) {
+    for (auto const& ip : *staticAlloc.nodePrefixes()) {
       const auto pfix = toIPNetwork(ip.second);
       auto index = bitStrValue(pfix.first, prefixLen, allocPrefixLen - 1);
       e2eAllocIndex_.second.emplace(index);
@@ -452,7 +452,7 @@ PrefixAllocator::loadPrefixIndexFromDisk() {
   if (maybeThriftAllocPrefix.hasError()) {
     return std::nullopt;
   }
-  return static_cast<uint32_t>(*maybeThriftAllocPrefix->allocPrefixIndex_ref());
+  return static_cast<uint32_t>(*maybeThriftAllocPrefix->allocPrefixIndex());
 }
 
 void
@@ -667,16 +667,16 @@ PrefixAllocator::updateMyPrefix(folly::CIDRNetwork prefix) {
   // PrefixManager
 
   auto prefixEntry = openr::thrift::PrefixEntry();
-  *prefixEntry.prefix_ref() = toIpPrefix(prefix);
-  prefixEntry.type_ref() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
-  prefixEntry.forwardingType_ref() = prefixForwardingType_;
-  prefixEntry.forwardingAlgorithm_ref() = prefixForwardingAlgorithm_;
-  prefixEntry.tags_ref()->emplace("AUTO-ALLOCATED");
+  *prefixEntry.prefix() = toIpPrefix(prefix);
+  prefixEntry.type() = openr::thrift::PrefixType::PREFIX_ALLOCATOR;
+  prefixEntry.forwardingType() = prefixForwardingType_;
+  prefixEntry.forwardingAlgorithm() = prefixForwardingAlgorithm_;
+  prefixEntry.tags()->emplace("AUTO-ALLOCATED");
   // Metrics
   {
-    auto& metrics = prefixEntry.metrics_ref().value();
-    metrics.path_preference_ref() = Constants::kDefaultPathPreference;
-    metrics.source_preference_ref() = Constants::kDefaultSourcePreference;
+    auto& metrics = prefixEntry.metrics().value();
+    metrics.path_preference() = Constants::kDefaultPathPreference;
+    metrics.source_preference() = Constants::kDefaultSourcePreference;
   }
 
   PrefixEvent event(

@@ -15,26 +15,26 @@ namespace openr {
 thrift::BuildInfo
 getBuildInfoThrift() noexcept {
   thrift::BuildInfo buildInfo;
-  buildInfo.buildUser_ref() = BuildInfo::getBuildUser();
-  buildInfo.buildTime_ref() = BuildInfo::getBuildTime();
-  buildInfo.buildTimeUnix_ref() =
+  buildInfo.buildUser() = BuildInfo::getBuildUser();
+  buildInfo.buildTime() = BuildInfo::getBuildTime();
+  buildInfo.buildTimeUnix() =
       static_cast<int64_t>(BuildInfo::getBuildTimeUnix());
-  buildInfo.buildHost_ref() = BuildInfo::getBuildHost();
-  buildInfo.buildPath_ref() = BuildInfo::getBuildPath();
-  buildInfo.buildRevision_ref() = BuildInfo::getBuildRevision();
-  buildInfo.buildRevisionCommitTimeUnix_ref() =
+  buildInfo.buildHost() = BuildInfo::getBuildHost();
+  buildInfo.buildPath() = BuildInfo::getBuildPath();
+  buildInfo.buildRevision() = BuildInfo::getBuildRevision();
+  buildInfo.buildRevisionCommitTimeUnix() =
       static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix());
-  buildInfo.buildUpstreamRevision_ref() = BuildInfo::getBuildUpstreamRevision();
-  buildInfo.buildUpstreamRevisionCommitTimeUnix_ref() =
+  buildInfo.buildUpstreamRevision() = BuildInfo::getBuildUpstreamRevision();
+  buildInfo.buildUpstreamRevisionCommitTimeUnix() =
       BuildInfo::getBuildUpstreamRevisionCommitTimeUnix();
-  buildInfo.buildPackageName_ref() = BuildInfo::getBuildPackageName();
-  buildInfo.buildPackageVersion_ref() = BuildInfo::getBuildPackageVersion();
-  buildInfo.buildPackageRelease_ref() = BuildInfo::getBuildPackageRelease();
-  buildInfo.buildPlatform_ref() = BuildInfo::getBuildPlatform();
-  buildInfo.buildRule_ref() = BuildInfo::getBuildRule();
-  buildInfo.buildType_ref() = BuildInfo::getBuildType();
-  buildInfo.buildTool_ref() = BuildInfo::getBuildTool();
-  buildInfo.buildMode_ref() = BuildInfo::getBuildMode();
+  buildInfo.buildPackageName() = BuildInfo::getBuildPackageName();
+  buildInfo.buildPackageVersion() = BuildInfo::getBuildPackageVersion();
+  buildInfo.buildPackageRelease() = BuildInfo::getBuildPackageRelease();
+  buildInfo.buildPlatform() = BuildInfo::getBuildPlatform();
+  buildInfo.buildRule() = BuildInfo::getBuildRule();
+  buildInfo.buildType() = BuildInfo::getBuildType();
+  buildInfo.buildTool() = BuildInfo::getBuildTool();
+  buildInfo.buildMode() = BuildInfo::getBuildMode();
   return buildInfo;
 }
 
@@ -42,9 +42,9 @@ getBuildInfoThrift() noexcept {
 thrift::PerfEvent
 createPerfEvent(std::string nodeName, std::string eventDescr, int64_t unixTs) {
   thrift::PerfEvent perfEvent;
-  perfEvent.nodeName_ref() = nodeName;
-  perfEvent.eventDescr_ref() = eventDescr;
-  perfEvent.unixTs_ref() = unixTs;
+  perfEvent.nodeName() = nodeName;
+  perfEvent.eventDescr() = eventDescr;
+  perfEvent.unixTs() = unixTs;
   return perfEvent;
 }
 
@@ -55,39 +55,39 @@ addPerfEvent(
     const std::string& eventDescr) noexcept {
   thrift::PerfEvent event =
       createPerfEvent(nodeName, eventDescr, getUnixTimeStampMs());
-  perfEvents.events_ref()->emplace_back(std::move(event));
+  perfEvents.events()->emplace_back(std::move(event));
 }
 
 std::vector<std::string>
 sprintPerfEvents(const thrift::PerfEvents& perfEvents) noexcept {
-  const auto& events = *perfEvents.events_ref();
+  const auto& events = *perfEvents.events();
   if (events.empty()) {
     return {};
   }
 
   std::vector<std::string> eventStrs;
-  auto recentTs = *events.front().unixTs_ref();
+  auto recentTs = *events.front().unixTs();
   for (auto const& event : events) {
-    auto durationMs = *event.unixTs_ref() - recentTs;
-    recentTs = *event.unixTs_ref();
+    auto durationMs = *event.unixTs() - recentTs;
+    recentTs = *event.unixTs();
     eventStrs.emplace_back(fmt::format(
         "node: {}, event: {}, duration: {}ms, unix-timestamp: {}",
-        *event.nodeName_ref(),
-        *event.eventDescr_ref(),
+        *event.nodeName(),
+        *event.eventDescr(),
         durationMs,
-        *event.unixTs_ref()));
+        *event.unixTs()));
   }
   return eventStrs;
 }
 
 std::chrono::milliseconds
 getTotalPerfEventsDuration(const thrift::PerfEvents& perfEvents) noexcept {
-  if (perfEvents.events_ref()->empty()) {
+  if (perfEvents.events()->empty()) {
     return std::chrono::milliseconds(0);
   }
 
-  auto recentTs = *perfEvents.events_ref()->front().unixTs_ref();
-  auto latestTs = *perfEvents.events_ref()->back().unixTs_ref();
+  auto recentTs = *perfEvents.events()->front().unixTs();
+  auto latestTs = *perfEvents.events()->back().unixTs();
   return std::chrono::milliseconds(latestTs - recentTs);
 }
 
@@ -97,27 +97,27 @@ getDurationBetweenPerfEvents(
     const std::string& firstName,
     const std::string& secondName) noexcept {
   auto search = std::find_if(
-      perfEvents.events_ref()->cbegin(),
-      perfEvents.events_ref()->cend(),
+      perfEvents.events()->cbegin(),
+      perfEvents.events()->cend(),
       [&firstName](const thrift::PerfEvent& event) {
-        return *event.eventDescr_ref() == firstName;
+        return *event.eventDescr() == firstName;
       });
-  if (search == perfEvents.events_ref()->cend()) {
+  if (search == perfEvents.events()->cend()) {
     return folly::makeUnexpected(
         fmt::format("Could not find first event: {}", firstName));
   }
-  int64_t first = *search->unixTs_ref();
+  int64_t first = *search->unixTs();
   search = std::find_if(
       search + 1,
-      perfEvents.events_ref()->cend(),
+      perfEvents.events()->cend(),
       [&secondName](const thrift::PerfEvent& event) {
-        return *event.eventDescr_ref() == secondName;
+        return *event.eventDescr() == secondName;
       });
-  if (search == perfEvents.events_ref()->cend()) {
+  if (search == perfEvents.events()->cend()) {
     return folly::makeUnexpected(
         fmt::format("Could not find second event: {}", secondName));
   }
-  int64_t second = *search->unixTs_ref();
+  int64_t second = *search->unixTs();
   if (second < first) {
     return folly::makeUnexpected(
         std::string{"Negative duration between first and second event"});
@@ -146,9 +146,9 @@ std::string
 toString(thrift::PrefixMetrics const& metrics) {
   return fmt::format(
       "Metrics: [SP={}, PP={}, D={}]",
-      *metrics.source_preference_ref(),
-      *metrics.path_preference_ref(),
-      *metrics.distance_ref());
+      *metrics.source_preference(),
+      *metrics.path_preference(),
+      *metrics.distance());
 }
 
 std::string
@@ -156,23 +156,23 @@ toString(thrift::PrefixEntry const& entry, bool detailed) {
   std::stringstream ss;
   ss << fmt::format(
       FMT_STRING("[{}], Forwarding: [{}, {}], {}, Type: {}"),
-      toString(*entry.prefix_ref()),
-      toString(*entry.forwardingType_ref()),
-      toString(*entry.forwardingAlgorithm_ref()),
-      toString(*entry.metrics_ref()),
-      toString(*entry.type_ref()));
-  if (entry.minNexthop_ref()) {
-    ss << ", NM: " << *entry.minNexthop_ref();
+      toString(*entry.prefix()),
+      toString(*entry.forwardingType()),
+      toString(*entry.forwardingAlgorithm()),
+      toString(*entry.metrics()),
+      toString(*entry.type()));
+  if (entry.minNexthop()) {
+    ss << ", NM: " << *entry.minNexthop();
   }
-  if (entry.prependLabel_ref()) {
-    ss << ", PL: " << *entry.prependLabel_ref();
+  if (entry.prependLabel()) {
+    ss << ", PL: " << *entry.prependLabel();
   }
-  if (entry.weight_ref()) {
-    ss << ", W: " << *entry.weight_ref();
+  if (entry.weight()) {
+    ss << ", W: " << *entry.weight();
   }
   if (detailed) {
-    ss << ", Tags: [" << folly::join(", ", *entry.tags_ref()) << "]";
-    ss << ", AreaStack: [" << folly::join(", ", *entry.area_stack_ref()) << "]";
+    ss << ", Tags: [" << folly::join(", ", *entry.tags()) << "]";
+    ss << ", AreaStack: [" << folly::join(", ", *entry.area_stack()) << "]";
   }
   return ss.str();
 }
@@ -286,89 +286,87 @@ createLoopbackPrefix(const folly::CIDRNetwork& prefix) noexcept {
 
 std::string
 getRemoteIfName(const thrift::Adjacency& adj) {
-  if (not adj.otherIfName_ref()->empty()) {
-    return *adj.otherIfName_ref();
+  if (not adj.otherIfName()->empty()) {
+    return *adj.otherIfName();
   }
-  return fmt::format("neigh-{}", *adj.ifName_ref());
+  return fmt::format("neigh-{}", *adj.ifName());
 }
 
 thrift::RouteDatabaseDelta
 findDeltaRoutes(
     const thrift::RouteDatabase& newRouteDb,
     const thrift::RouteDatabase& oldRouteDb) {
-  DCHECK(*newRouteDb.thisNodeName_ref() == *oldRouteDb.thisNodeName_ref());
+  DCHECK(*newRouteDb.thisNodeName() == *oldRouteDb.thisNodeName());
   // verify the input is sorted.
   CHECK(
       std::is_sorted(
-          newRouteDb.unicastRoutes_ref()->begin(),
-          newRouteDb.unicastRoutes_ref()->end()) &&
+          newRouteDb.unicastRoutes()->begin(),
+          newRouteDb.unicastRoutes()->end()) &&
       std::is_sorted(
-          oldRouteDb.unicastRoutes_ref()->begin(),
-          oldRouteDb.unicastRoutes_ref()->end()) &&
+          oldRouteDb.unicastRoutes()->begin(),
+          oldRouteDb.unicastRoutes()->end()) &&
       std::is_sorted(
-          newRouteDb.mplsRoutes_ref()->begin(),
-          newRouteDb.mplsRoutes_ref()->end()) &&
+          newRouteDb.mplsRoutes()->begin(), newRouteDb.mplsRoutes()->end()) &&
       std::is_sorted(
-          oldRouteDb.mplsRoutes_ref()->begin(),
-          oldRouteDb.mplsRoutes_ref()->end()));
+          oldRouteDb.mplsRoutes()->begin(), oldRouteDb.mplsRoutes()->end()));
 
   // Find unicast routes to be added/updated or removed
   std::vector<thrift::UnicastRoute> unicastRoutesToUpdate;
   std::set_difference(
-      newRouteDb.unicastRoutes_ref()->begin(),
-      newRouteDb.unicastRoutes_ref()->end(),
-      oldRouteDb.unicastRoutes_ref()->begin(),
-      oldRouteDb.unicastRoutes_ref()->end(),
+      newRouteDb.unicastRoutes()->begin(),
+      newRouteDb.unicastRoutes()->end(),
+      oldRouteDb.unicastRoutes()->begin(),
+      oldRouteDb.unicastRoutes()->end(),
       std::inserter(unicastRoutesToUpdate, unicastRoutesToUpdate.begin()));
   std::vector<thrift::UnicastRoute> unicastRoutesToDelete;
   std::set_difference(
-      oldRouteDb.unicastRoutes_ref()->begin(),
-      oldRouteDb.unicastRoutes_ref()->end(),
-      newRouteDb.unicastRoutes_ref()->begin(),
-      newRouteDb.unicastRoutes_ref()->end(),
+      oldRouteDb.unicastRoutes()->begin(),
+      oldRouteDb.unicastRoutes()->end(),
+      newRouteDb.unicastRoutes()->begin(),
+      newRouteDb.unicastRoutes()->end(),
       std::inserter(unicastRoutesToDelete, unicastRoutesToDelete.begin()));
 
   // Find mpls routes to be added/updated or removed
   std::vector<thrift::MplsRoute> mplsRoutesToUpdate;
   std::set_difference(
-      newRouteDb.mplsRoutes_ref()->begin(),
-      newRouteDb.mplsRoutes_ref()->end(),
-      oldRouteDb.mplsRoutes_ref()->begin(),
-      oldRouteDb.mplsRoutes_ref()->end(),
+      newRouteDb.mplsRoutes()->begin(),
+      newRouteDb.mplsRoutes()->end(),
+      oldRouteDb.mplsRoutes()->begin(),
+      oldRouteDb.mplsRoutes()->end(),
       std::inserter(mplsRoutesToUpdate, mplsRoutesToUpdate.begin()));
   std::vector<thrift::MplsRoute> mplsRoutesToDelete;
   std::set_difference(
-      oldRouteDb.mplsRoutes_ref()->begin(),
-      oldRouteDb.mplsRoutes_ref()->end(),
-      newRouteDb.mplsRoutes_ref()->begin(),
-      newRouteDb.mplsRoutes_ref()->end(),
+      oldRouteDb.mplsRoutes()->begin(),
+      oldRouteDb.mplsRoutes()->end(),
+      newRouteDb.mplsRoutes()->begin(),
+      newRouteDb.mplsRoutes()->end(),
       std::inserter(mplsRoutesToDelete, mplsRoutesToDelete.begin()));
 
   // Find entry of prefix to be removed
   std::set<thrift::IpPrefix> prefixesToRemove;
   for (const auto& route : unicastRoutesToDelete) {
-    prefixesToRemove.emplace(*route.dest_ref());
+    prefixesToRemove.emplace(*route.dest());
   }
   for (const auto& route : unicastRoutesToUpdate) {
-    prefixesToRemove.erase(*route.dest_ref());
+    prefixesToRemove.erase(*route.dest());
   }
 
   // Find labels to be removed
   std::set<int32_t> labelsToRemove;
   for (const auto& route : mplsRoutesToDelete) {
-    labelsToRemove.emplace(*route.topLabel_ref());
+    labelsToRemove.emplace(*route.topLabel());
   }
   for (const auto& route : mplsRoutesToUpdate) {
-    labelsToRemove.erase(*route.topLabel_ref());
+    labelsToRemove.erase(*route.topLabel());
   }
 
   // Build routes to be programmed.
   thrift::RouteDatabaseDelta routeDbDelta;
-  routeDbDelta.unicastRoutesToUpdate_ref() = std::move(unicastRoutesToUpdate);
-  routeDbDelta.unicastRoutesToDelete_ref() = {
+  routeDbDelta.unicastRoutesToUpdate() = std::move(unicastRoutesToUpdate);
+  routeDbDelta.unicastRoutesToDelete() = {
       prefixesToRemove.begin(), prefixesToRemove.end()};
-  routeDbDelta.mplsRoutesToUpdate_ref() = std::move(mplsRoutesToUpdate);
-  routeDbDelta.mplsRoutesToDelete_ref() = {
+  routeDbDelta.mplsRoutesToUpdate() = std::move(mplsRoutesToUpdate);
+  routeDbDelta.mplsRoutesToDelete() = {
       labelsToRemove.begin(), labelsToRemove.end()};
 
   return routeDbDelta;
@@ -394,12 +392,10 @@ getPrefixForwardingTypeAndAlgorithm(
     }
 
     if (!r) {
-      r = {
-          *prefixEntry->forwardingType_ref(),
-          *prefixEntry->forwardingAlgorithm_ref()};
+      r = {*prefixEntry->forwardingType(), *prefixEntry->forwardingAlgorithm()};
     } else {
-      r->first = std::min(r->first, *prefixEntry->forwardingType_ref());
-      r->second = std::min(r->second, *prefixEntry->forwardingAlgorithm_ref());
+      r->first = std::min(r->first, *prefixEntry->forwardingType());
+      r->second = std::min(r->second, *prefixEntry->forwardingAlgorithm());
     }
 
     // Optimization case for most common algorithm and forwarding type
@@ -418,9 +414,9 @@ createPeerSpec(
     const int32_t port,
     const thrift::KvStorePeerState state) {
   thrift::PeerSpec peerSpec;
-  peerSpec.peerAddr_ref() = peerAddr;
-  peerSpec.ctrlPort_ref() = port;
-  peerSpec.state_ref() = state;
+  peerSpec.peerAddr() = peerAddr;
+  peerSpec.ctrlPort() = port;
+  peerSpec.state() = state;
   return peerSpec;
 }
 
@@ -439,18 +435,18 @@ createThriftAdjacency(
     const std::string& remoteIfName,
     bool adjOnlyUsedByOtherNode) {
   thrift::Adjacency adj;
-  adj.otherNodeName_ref() = nodeName;
-  adj.ifName_ref() = ifName;
-  adj.nextHopV6_ref() = toBinaryAddress(folly::IPAddress(nextHopV6));
-  adj.nextHopV4_ref() = toBinaryAddress(folly::IPAddress(nextHopV4));
-  adj.metric_ref() = metric;
-  adj.adjLabel_ref() = adjLabel;
-  adj.isOverloaded_ref() = isOverloaded;
-  adj.rtt_ref() = rtt;
-  adj.timestamp_ref() = timestamp;
-  adj.weight_ref() = weight;
-  adj.otherIfName_ref() = remoteIfName;
-  adj.adjOnlyUsedByOtherNode_ref() = adjOnlyUsedByOtherNode;
+  adj.otherNodeName() = nodeName;
+  adj.ifName() = ifName;
+  adj.nextHopV6() = toBinaryAddress(folly::IPAddress(nextHopV6));
+  adj.nextHopV4() = toBinaryAddress(folly::IPAddress(nextHopV4));
+  adj.metric() = metric;
+  adj.adjLabel() = adjLabel;
+  adj.isOverloaded() = isOverloaded;
+  adj.rtt() = rtt;
+  adj.timestamp() = timestamp;
+  adj.weight() = weight;
+  adj.otherIfName() = remoteIfName;
+  adj.adjOnlyUsedByOtherNode() = adjOnlyUsedByOtherNode;
   return adj;
 }
 
@@ -488,11 +484,11 @@ createAdjDb(
     bool overLoadBit,
     const std::string& area) {
   thrift::AdjacencyDatabase adjDb;
-  adjDb.thisNodeName_ref() = nodeName;
-  adjDb.isOverloaded_ref() = overLoadBit;
-  adjDb.adjacencies_ref() = adjs;
-  adjDb.nodeLabel_ref() = nodeLabel;
-  adjDb.area_ref() = area;
+  adjDb.thisNodeName() = nodeName;
+  adjDb.isOverloaded() = overLoadBit;
+  adjDb.adjacencies() = adjs;
+  adjDb.nodeLabel() = nodeLabel;
+  adjDb.area() = area;
   return adjDb;
 }
 
@@ -502,9 +498,9 @@ createPrefixDb(
     const std::vector<thrift::PrefixEntry>& prefixEntries,
     bool withdraw) {
   thrift::PrefixDatabase prefixDb;
-  prefixDb.thisNodeName_ref() = nodeName;
-  prefixDb.prefixEntries_ref() = prefixEntries;
-  prefixDb.deletePrefix_ref() = withdraw;
+  prefixDb.thisNodeName() = nodeName;
+  prefixDb.prefixEntries() = prefixEntries;
+  prefixDb.deletePrefix() = withdraw;
   return prefixDb;
 }
 
@@ -523,16 +519,16 @@ createPrefixEntry(
     std::optional<int64_t> minNexthop,
     std::optional<int64_t> weight) {
   thrift::PrefixEntry prefixEntry;
-  prefixEntry.prefix_ref() = prefix;
-  prefixEntry.type_ref() = type;
+  prefixEntry.prefix() = prefix;
+  prefixEntry.type() = type;
   if (not data.empty()) {
-    prefixEntry.data_ref() = data;
+    prefixEntry.data() = data;
   }
-  prefixEntry.forwardingType_ref() = forwardingType;
-  prefixEntry.forwardingAlgorithm_ref() = forwardingAlgorithm;
-  prefixEntry.mv_ref().from_optional(mv);
-  prefixEntry.minNexthop_ref().from_optional(minNexthop);
-  prefixEntry.weight_ref().from_optional(weight);
+  prefixEntry.forwardingType() = forwardingType;
+  prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
+  prefixEntry.mv().from_optional(mv);
+  prefixEntry.minNexthop().from_optional(minNexthop);
+  prefixEntry.weight().from_optional(weight);
   return prefixEntry;
 }
 
@@ -543,7 +539,7 @@ thrift::PrefixEntry
 createPrefixEntryWithPrependLabel(
     thrift::IpPrefix prefix, std::optional<int32_t> prependLabel) {
   auto prefixEntry = createPrefixEntry(prefix, thrift::PrefixType::BGP);
-  prefixEntry.prependLabel_ref().from_optional(prependLabel);
+  prefixEntry.prependLabel().from_optional(prependLabel);
   return prefixEntry;
 }
 
@@ -551,9 +547,9 @@ createPrefixEntryWithPrependLabel(
 thrift::PrefixMetrics
 createMetrics(int32_t pp, int32_t sp, int32_t d) {
   thrift::PrefixMetrics metrics;
-  metrics.path_preference_ref() = pp;
-  metrics.source_preference_ref() = sp;
-  metrics.distance_ref() = d;
+  metrics.path_preference() = pp;
+  metrics.source_preference() = sp;
+  metrics.distance() = d;
   return metrics;
 }
 
@@ -563,7 +559,7 @@ createPrefixEntryWithMetrics(
     thrift::PrefixType const& type,
     thrift::PrefixMetrics const& metrics) {
   auto prefixEntry = createPrefixEntry(prefix, type);
-  prefixEntry.metrics_ref() = metrics;
+  prefixEntry.metrics() = metrics;
   return prefixEntry;
 }
 
@@ -574,9 +570,9 @@ createAllocPrefix(
     int64_t allocPrefixLen,
     int64_t allocPrefixIndex) {
   thrift::AllocPrefix allocPrefix;
-  allocPrefix.seedPrefix_ref() = seedPrefix;
-  allocPrefix.allocPrefixLen_ref() = allocPrefixLen;
-  allocPrefix.allocPrefixIndex_ref() = allocPrefixIndex;
+  allocPrefix.seedPrefix() = seedPrefix;
+  allocPrefix.allocPrefixLen() = allocPrefixLen;
+  allocPrefix.allocPrefixIndex() = allocPrefixIndex;
   return allocPrefix;
 }
 
@@ -586,8 +582,8 @@ createOpenrVersions(
     const thrift::OpenrVersion& version,
     const thrift::OpenrVersion& lowestSupportedVersion) {
   thrift::OpenrVersions openrVersions;
-  openrVersions.version_ref() = version;
-  openrVersions.lowestSupportedVersion_ref() = lowestSupportedVersion;
+  openrVersions.version() = version;
+  openrVersions.lowestSupportedVersion() = lowestSupportedVersion;
   return openrVersions;
 }
 
@@ -608,7 +604,7 @@ createPrefixKeyAndDb(
     const std::string& area,
     bool withdraw) {
   return {
-      PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix_ref()), area),
+      PrefixKey(nodeName, toIPNetwork(*prefixEntry.prefix()), area),
       createPrefixDb(nodeName, {prefixEntry}, withdraw)};
 }
 
@@ -644,9 +640,9 @@ createOriginatedPrefixEntry(
     const std::vector<std::string>& supportingPrefixes,
     bool installed) {
   thrift::OriginatedPrefixEntry entry;
-  entry.prefix_ref() = originatedPrefix;
-  entry.supporting_prefixes_ref() = supportingPrefixes;
-  entry.installed_ref() = installed;
+  entry.prefix() = originatedPrefix;
+  entry.supporting_prefixes() = supportingPrefixes;
+  entry.installed() = installed;
   return entry;
 }
 
@@ -660,13 +656,13 @@ createNextHop(
     const std::optional<std::string>& neighborNodeName,
     int64_t weight) {
   thrift::NextHopThrift nextHop;
-  nextHop.address_ref() = addr;
-  nextHop.address_ref()->ifName_ref().from_optional(std::move(ifName));
-  nextHop.metric_ref() = metric;
-  nextHop.mplsAction_ref().from_optional(maybeMplsAction);
-  nextHop.area_ref().from_optional(area);
-  nextHop.neighborNodeName_ref().from_optional(neighborNodeName);
-  nextHop.weight_ref() = weight;
+  nextHop.address() = addr;
+  nextHop.address()->ifName().from_optional(std::move(ifName));
+  nextHop.metric() = metric;
+  nextHop.mplsAction().from_optional(maybeMplsAction);
+  nextHop.area().from_optional(area);
+  nextHop.neighborNodeName().from_optional(neighborNodeName);
+  nextHop.weight() = weight;
   return nextHop;
 }
 
@@ -676,9 +672,9 @@ createMplsAction(
     std::optional<int32_t> maybeSwapLabel,
     std::optional<std::vector<int32_t>> maybePushLabels) {
   thrift::MplsAction mplsAction;
-  mplsAction.action_ref() = mplsActionCode;
-  mplsAction.swapLabel_ref().from_optional(maybeSwapLabel);
-  mplsAction.pushLabels_ref().from_optional(maybePushLabels);
+  mplsAction.action() = mplsActionCode;
+  mplsAction.swapLabel().from_optional(maybeSwapLabel);
+  mplsAction.pushLabels().from_optional(maybePushLabels);
   checkMplsAction(mplsAction); // sanity checks
   return mplsAction;
 }
@@ -687,9 +683,9 @@ thrift::UnicastRoute
 createUnicastRoute(
     thrift::IpPrefix dest, std::vector<thrift::NextHopThrift> nextHops) {
   thrift::UnicastRoute unicastRoute;
-  unicastRoute.dest_ref() = std::move(dest);
+  unicastRoute.dest() = std::move(dest);
   std::sort(nextHops.begin(), nextHops.end());
-  unicastRoute.nextHops_ref() = std::move(nextHops);
+  unicastRoute.nextHops() = std::move(nextHops);
   return unicastRoute;
 }
 
@@ -699,8 +695,8 @@ createUnicastRouteDetail(
     std::vector<thrift::NextHopThrift> nextHops,
     std::optional<thrift::PrefixEntry> maybeBestRoute) {
   thrift::UnicastRouteDetail unicastRouteDetail;
-  unicastRouteDetail.unicastRoute_ref() = createUnicastRoute(dest, nextHops);
-  unicastRouteDetail.bestRoute_ref().from_optional(maybeBestRoute);
+  unicastRouteDetail.unicastRoute() = createUnicastRoute(dest, nextHops);
+  unicastRouteDetail.bestRoute().from_optional(maybeBestRoute);
   return unicastRouteDetail;
 }
 
@@ -709,13 +705,13 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
   // Sanity checks
   CHECK(isMplsLabelValid(topLabel));
   for (auto const& nextHop : nextHops) {
-    CHECK(nextHop.mplsAction_ref().has_value());
+    CHECK(nextHop.mplsAction().has_value());
   }
 
   thrift::MplsRoute mplsRoute;
-  mplsRoute.topLabel_ref() = topLabel;
+  mplsRoute.topLabel() = topLabel;
   std::sort(nextHops.begin(), nextHops.end());
-  mplsRoute.nextHops_ref() = std::move(nextHops);
+  mplsRoute.nextHops() = std::move(nextHops);
   return mplsRoute;
 }
 
@@ -775,7 +771,7 @@ selectShortestDistance(
     if (prefixEntries.count(nodeArea) == 0) {
       continue;
     }
-    int32_t dist = *prefixEntries.at(nodeArea)->metrics_ref()->distance_ref();
+    int32_t dist = *prefixEntries.at(nodeArea)->metrics()->distance();
     if (dist > shortestDist) {
       continue;
     }
@@ -845,10 +841,10 @@ selectRoutes(
       std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::min()};
   std::set<NodeAndArea> nodeAreaSet;
   for (auto& [key, metricsWrapper] : prefixEntries) {
-    auto& metrics = *metricsWrapper->metrics_ref();
+    auto& metrics = *metricsWrapper->metrics();
     std::tuple<int32_t, int32_t> metricsTuple{
-        *metrics.path_preference_ref(), /* prefer-higher */
-        *metrics.source_preference_ref() /* prefer-higher */};
+        *metrics.path_preference(), /* prefer-higher */
+        *metrics.source_preference() /* prefer-higher */};
 
     if (metricsTuple < bestMetricsTuple) {
       continue;
@@ -882,8 +878,8 @@ namespace MetricVectorUtils {
 
 std::optional<const openr::thrift::MetricEntity>
 getMetricEntityByType(const openr::thrift::MetricVector& mv, int64_t type) {
-  for (auto& me : *mv.metrics_ref()) {
-    if (*me.type_ref() == type) {
+  for (auto& me : *mv.metrics()) {
+    if (*me.type() == type) {
       return me;
     }
   }
@@ -900,11 +896,11 @@ createMetricEntity(
     const std::vector<int64_t>& metric) {
   thrift::MetricEntity me;
 
-  me.type_ref() = type;
-  me.priority_ref() = priority;
-  me.op_ref() = op;
-  me.isBestPathTieBreaker_ref() = isBestPathTieBreaker;
-  me.metric_ref() = metric;
+  me.type() = type;
+  me.priority() = priority;
+  me.op() = op;
+  me.isBestPathTieBreaker() = isBestPathTieBreaker;
+  me.metric() = metric;
 
   return me;
 }
@@ -943,11 +939,11 @@ isDecisive(CompareResult const& result) {
 bool
 isSorted(thrift::MetricVector const& mv) {
   int64_t priorPriority = std::numeric_limits<int64_t>::max();
-  for (auto const& ent : *mv.metrics_ref()) {
-    if (*ent.priority_ref() > priorPriority) {
+  for (auto const& ent : *mv.metrics()) {
+    if (*ent.priority() > priorPriority) {
       return false;
     }
-    priorPriority = *ent.priority_ref();
+    priorPriority = *ent.priority();
   }
   return true;
 }
@@ -959,12 +955,12 @@ sortMetricVector(thrift::MetricVector const& mv) {
     return;
   }
   std::vector<thrift::MetricEntity>& metrics =
-      const_cast<std::vector<thrift::MetricEntity>&>(*mv.metrics_ref());
+      const_cast<std::vector<thrift::MetricEntity>&>(*mv.metrics());
   std::sort(
       metrics.begin(),
       metrics.end(),
       [](thrift::MetricEntity& l, thrift::MetricEntity& r) {
-        return *l.priority_ref() > *r.priority_ref();
+        return *l.priority() > *r.priority();
       });
 }
 
@@ -989,12 +985,12 @@ compareMetrics(
 
 CompareResult
 resultForLoner(thrift::MetricEntity const& entity) {
-  if (thrift::CompareType::WIN_IF_PRESENT == *entity.op_ref()) {
-    return *entity.isBestPathTieBreaker_ref() ? CompareResult::TIE_WINNER
-                                              : CompareResult::WINNER;
-  } else if (thrift::CompareType::WIN_IF_NOT_PRESENT == *entity.op_ref()) {
-    return *entity.isBestPathTieBreaker_ref() ? CompareResult::TIE_LOOSER
-                                              : CompareResult::LOOSER;
+  if (thrift::CompareType::WIN_IF_PRESENT == *entity.op()) {
+    return *entity.isBestPathTieBreaker() ? CompareResult::TIE_WINNER
+                                          : CompareResult::WINNER;
+  } else if (thrift::CompareType::WIN_IF_NOT_PRESENT == *entity.op()) {
+    return *entity.isBestPathTieBreaker() ? CompareResult::TIE_LOOSER
+                                          : CompareResult::LOOSER;
   }
   // IGNORE_IF_NOT_PRESENT
   return CompareResult::TIE;
@@ -1012,35 +1008,34 @@ compareMetricVectors(
     thrift::MetricVector const& l, thrift::MetricVector const& r) {
   CompareResult result = CompareResult::TIE;
 
-  if (*l.version_ref() != *r.version_ref()) {
+  if (*l.version() != *r.version()) {
     return CompareResult::ERROR;
   }
 
   sortMetricVector(l);
   sortMetricVector(r);
 
-  auto lIter = l.metrics_ref()->begin();
-  auto rIter = r.metrics_ref()->begin();
+  auto lIter = l.metrics()->begin();
+  auto rIter = r.metrics()->begin();
   while (!isDecisive(result) &&
-         (lIter != l.metrics_ref()->end() && rIter != r.metrics_ref()->end())) {
-    if (*lIter->type_ref() == *rIter->type_ref()) {
-      if (*lIter->isBestPathTieBreaker_ref() !=
-          *rIter->isBestPathTieBreaker_ref()) {
+         (lIter != l.metrics()->end() && rIter != r.metrics()->end())) {
+    if (*lIter->type() == *rIter->type()) {
+      if (*lIter->isBestPathTieBreaker() != *rIter->isBestPathTieBreaker()) {
         maybeUpdate(result, CompareResult::ERROR);
       } else {
         maybeUpdate(
             result,
             compareMetrics(
-                *lIter->metric_ref(),
-                *rIter->metric_ref(),
-                *lIter->isBestPathTieBreaker_ref()));
+                *lIter->metric(),
+                *rIter->metric(),
+                *lIter->isBestPathTieBreaker()));
       }
       ++lIter;
       ++rIter;
-    } else if (*lIter->priority_ref() > *rIter->priority_ref()) {
+    } else if (*lIter->priority() > *rIter->priority()) {
       maybeUpdate(result, resultForLoner(*lIter));
       ++lIter;
-    } else if (*lIter->priority_ref() < *rIter->priority_ref()) {
+    } else if (*lIter->priority() < *rIter->priority()) {
       maybeUpdate(result, !resultForLoner(*rIter));
       ++rIter;
     } else {
@@ -1048,11 +1043,11 @@ compareMetricVectors(
       maybeUpdate(result, CompareResult::ERROR);
     }
   }
-  while (!isDecisive(result) && lIter != l.metrics_ref()->end()) {
+  while (!isDecisive(result) && lIter != l.metrics()->end()) {
     maybeUpdate(result, resultForLoner(*lIter));
     ++lIter;
   }
-  while (!isDecisive(result) && rIter != r.metrics_ref()->end()) {
+  while (!isDecisive(result) && rIter != r.metrics()->end()) {
     maybeUpdate(result, !resultForLoner(*rIter));
     ++rIter;
   }

@@ -20,7 +20,7 @@ TEST(KvStorePublisher, OnlyExpiredKeysFilterTest) {
   thrift::KeyDumpParams filter;
   std::vector<std::string> keys = {Constants::kAdjDbMarker.toString()};
   // We only keep the keys with prefix "adj:"
-  filter.keys_ref() = keys;
+  filter.keys() = keys;
 
   auto streamAndPublisher =
       apache::thrift::ServerStream<thrift::Publication>::createPublisher();
@@ -33,10 +33,10 @@ TEST(KvStorePublisher, OnlyExpiredKeysFilterTest) {
       0);
 
   thrift::Publication publication;
-  publication.expiredKeys_ref()->push_back("adj:test1");
-  publication.expiredKeys_ref()->push_back("prefix:test2");
+  publication.expiredKeys()->push_back("adj:test1");
+  publication.expiredKeys()->push_back("prefix:test2");
 
-  publication.area_ref() = "default";
+  publication.area() = "default";
 
   kvStorePublisher->publish(publication);
 
@@ -51,8 +51,8 @@ TEST(KvStorePublisher, OnlyExpiredKeysFilterTest) {
               folly::Try<thrift::Publication>&& receivedPublication) {
             if (receivedPublication.hasValue()) {
               // we wil receive one key: adj:test1
-              EXPECT_EQ(1, receivedPublication->expiredKeys_ref()->size());
-              for (auto& key : *receivedPublication->expiredKeys_ref()) {
+              EXPECT_EQ(1, receivedPublication->expiredKeys()->size());
+              for (auto& key : *receivedPublication->expiredKeys()) {
                 EXPECT_TRUE(prefixMatcher.match(key));
               }
             }

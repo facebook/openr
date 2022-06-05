@@ -42,9 +42,9 @@ class OpenrCtrlFixture : public ::testing::Test {
     std::vector<openr::thrift::AreaConfig> areaConfig;
     for (auto id : {kSpineAreaId, kPlaneAreaId, kPodAreaId}) {
       thrift::AreaConfig area;
-      area.area_id_ref() = id;
-      area.include_interface_regexes_ref() = {"po.*"};
-      area.neighbor_regexes_ref() = {".*"};
+      area.area_id() = id;
+      area.include_interface_regexes() = {"po.*"};
+      area.neighbor_regexes() = {".*"};
       areaConfig.emplace_back(std::move(area));
     }
     auto tConfig = getBasicOpenrConfig(
@@ -56,7 +56,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     config = std::make_shared<Config>(tConfig);
 
     // Create the PersistentStore and start fresh
-    std::remove((*tConfig.persistent_config_store_path_ref()).data());
+    std::remove((*tConfig.persistent_config_store_path()).data());
     persistentStore = std::make_unique<PersistentStore>(config);
     persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
 
@@ -180,15 +180,15 @@ class OpenrCtrlFixture : public ::testing::Test {
   thrift::PrefixEntry
   createPrefixEntry(const std::string& prefix, thrift::PrefixType prefixType) {
     thrift::PrefixEntry prefixEntry;
-    *prefixEntry.prefix_ref() = toIpPrefix(prefix);
-    prefixEntry.type_ref() = prefixType;
+    *prefixEntry.prefix() = toIpPrefix(prefix);
+    prefixEntry.type() = prefixType;
     return prefixEntry;
   }
 
   void
   setKvStoreKeyVals(const thrift::KeyVals& keyVals, const std::string& area) {
     thrift::KeySetParams setParams;
-    setParams.keyVals_ref() = keyVals;
+    setParams.keyVals() = keyVals;
 
     handler_
         ->semifuture_setKvStoreKeyVals(
@@ -323,9 +323,9 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     auto db = handler_->semifuture_getRouteDb().get();
-    EXPECT_EQ(nodeName_, *db->thisNodeName_ref());
-    EXPECT_EQ(0, db->unicastRoutes_ref()->size());
-    EXPECT_EQ(0, db->mplsRoutes_ref()->size());
+    EXPECT_EQ(nodeName_, *db->thisNodeName());
+    EXPECT_EQ(0, db->unicastRoutes()->size());
+    EXPECT_EQ(0, db->mplsRoutes()->size());
   }
 
   {
@@ -333,9 +333,9 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
                   ->semifuture_getRouteDbComputed(
                       std::make_unique<std::string>(nodeName_))
                   .get();
-    EXPECT_EQ(nodeName_, *db->thisNodeName_ref());
-    EXPECT_EQ(0, db->unicastRoutes_ref()->size());
-    EXPECT_EQ(0, db->mplsRoutes_ref()->size());
+    EXPECT_EQ(nodeName_, *db->thisNodeName());
+    EXPECT_EQ(0, db->unicastRoutes()->size());
+    EXPECT_EQ(0, db->mplsRoutes()->size());
   }
 
   {
@@ -344,9 +344,9 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
                   ->semifuture_getRouteDbComputed(
                       std::make_unique<std::string>(testNode))
                   .get();
-    EXPECT_EQ(testNode, *db->thisNodeName_ref());
-    EXPECT_EQ(0, db->unicastRoutes_ref()->size());
-    EXPECT_EQ(0, db->mplsRoutes_ref()->size());
+    EXPECT_EQ(testNode, *db->thisNodeName());
+    EXPECT_EQ(0, db->unicastRoutes()->size());
+    EXPECT_EQ(0, db->mplsRoutes()->size());
   }
 
   {
@@ -378,7 +378,7 @@ TEST_F(OpenrCtrlFixture, RouteApis) {
 
 TEST_F(OpenrCtrlFixture, PerfApis) {
   auto db = handler_->semifuture_getPerfDb().get();
-  EXPECT_EQ(nodeName_, *db->thisNodeName_ref());
+  EXPECT_EQ(nodeName_, *db->thisNodeName());
 }
 
 TEST_F(OpenrCtrlFixture, DecisionApis) {
@@ -416,12 +416,12 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
     folly::IPAddress v4Addr = folly::IPAddress("11.0.0.1");
     folly::IPAddress v6Addr = folly::IPAddress("fe80::1");
     thrift::IpPrefix v4Prefix, v6Prefix;
-    v4Prefix.prefixAddress_ref() = toBinaryAddress(v4Addr);
-    v4Prefix.prefixLength_ref() = 36; // ATTN: max mask length is 32 for IPV4
-    v6Prefix.prefixAddress_ref() = toBinaryAddress(v6Addr);
-    v6Prefix.prefixLength_ref() = 130; // ATTN: max mask length is 32 for IPV4
+    v4Prefix.prefixAddress() = toBinaryAddress(v4Addr);
+    v4Prefix.prefixLength() = 36; // ATTN: max mask length is 32 for IPV4
+    v6Prefix.prefixAddress() = toBinaryAddress(v6Addr);
+    v6Prefix.prefixLength() = 130; // ATTN: max mask length is 32 for IPV4
 
-    filter.prefixes_ref() = {v4Prefix};
+    filter.prefixes() = {v4Prefix};
     EXPECT_THROW(
         handler_
             ->semifuture_getReceivedRoutesFiltered(
@@ -429,7 +429,7 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
             .get(),
         thrift::OpenrError);
 
-    filter.prefixes_ref() = {v6Prefix};
+    filter.prefixes() = {v6Prefix};
     EXPECT_THROW(
         handler_
             ->semifuture_getReceivedRoutesFiltered(
@@ -469,8 +469,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
     std::unordered_set<std::string> areas;
-    for (auto const& area : *config->areas_ref()) {
-      areas.insert(*area.area_id_ref());
+    for (auto const& area : *config->areas()) {
+      areas.insert(*area.area_id());
     }
     EXPECT_THAT(areas, testing::SizeIs(3));
     EXPECT_THAT(
@@ -493,7 +493,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
     EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
@@ -508,16 +508,16 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kPodAreaId))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
   }
 
   {
     thrift::KeyDumpParams params;
-    params.prefix_ref() = "key3";
-    params.originatorIds_ref()->insert("node3");
-    params.keys_ref() = {"key3"};
+    params.prefix() = "key3";
+    params.originatorIds()->insert("node3");
+    params.keys() = {"key3"};
 
     auto pub =
         handler_
@@ -525,7 +525,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(3, keyVals.size());
     EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
@@ -535,9 +535,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // with areas
   {
     thrift::KeyDumpParams params;
-    params.prefix_ref() = "keyP";
-    params.originatorIds_ref()->insert("node1");
-    params.keys_ref() = {"keyP"};
+    params.prefix() = "keyP";
+    params.originatorIds()->insert("node1");
+    params.keys() = {"keyP"};
 
     auto pub =
         handler_
@@ -545,7 +545,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kPlaneAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
@@ -553,9 +553,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::KeyDumpParams params;
-    params.prefix_ref() = "key3";
-    params.originatorIds_ref()->insert("node3");
-    params.keys_ref() = {"key3"};
+    params.prefix() = "key3";
+    params.originatorIds()->insert("node3");
+    params.keys() = {"key3"};
 
     auto pub =
         handler_
@@ -563,14 +563,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(3, keyVals.size());
     auto value3 = kvs.at("key3");
-    value3.value_ref().reset();
+    value3.value().reset();
     auto value33 = kvs.at("key33");
-    value33.value_ref().reset();
+    value33.value().reset();
     auto value333 = kvs.at("key333");
-    value333.value_ref().reset();
+    value333.value().reset();
     EXPECT_EQ(value3, keyVals["key3"]);
     EXPECT_EQ(value33, keyVals["key33"]);
     EXPECT_EQ(value333, keyVals["key333"]);
@@ -594,12 +594,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_THAT(*summary, testing::SizeIs(3));
 
     // map each area to the # of keyVals in each area
-    areaKVCountMap[*summary->at(0).area_ref()] =
-        *summary->at(0).keyValsCount_ref();
-    areaKVCountMap[*summary->at(1).area_ref()] =
-        *summary->at(1).keyValsCount_ref();
-    areaKVCountMap[*summary->at(2).area_ref()] =
-        *summary->at(2).keyValsCount_ref();
+    areaKVCountMap[*summary->at(0).area()] = *summary->at(0).keyValsCount();
+    areaKVCountMap[*summary->at(1).area()] = *summary->at(1).keyValsCount();
+    areaKVCountMap[*summary->at(2).area()] = *summary->at(2).keyValsCount();
     // test # of keyVals for each area, as per config above.
     // area names are being implicitly tested as well
     EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);
@@ -679,8 +676,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // key values.
   {
     thrift::KeyDumpParams params;
-    params.originatorIds_ref()->insert("node3");
-    params.keys_ref() = {"key3"};
+    params.originatorIds()->insert("node3");
+    params.keys() = {"key3"};
 
     auto pub =
         handler_
@@ -688,7 +685,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(3, keyVals.size());
     EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
@@ -697,8 +694,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::KeyDumpParams params;
-    params.originatorIds_ref() = {"node33"};
-    params.keys_ref() = {"key33"};
+    params.originatorIds() = {"node33"};
+    params.keys() = {"key33"};
 
     auto pub =
         handler_
@@ -706,7 +703,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
     EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
@@ -716,15 +713,15 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
     // Two updates because the operator is OR and originator ids for keys
     // key33 and key333 are same.
     thrift::KeyDumpParams params;
-    params.originatorIds_ref() = {"node33"};
-    params.keys_ref() = {"key333"};
+    params.originatorIds() = {"node33"};
+    params.keys() = {"key333"};
     auto pub =
         handler_
             ->semifuture_getKvStoreKeyValsFilteredArea(
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
     EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
@@ -734,8 +731,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // instead.
   {
     thrift::KeyDumpParams params;
-    params.originatorIds_ref()->insert("node1");
-    params.keys_ref() = {"keyP", "keyPl"};
+    params.originatorIds()->insert("node1");
+    params.keys() = {"keyP", "keyPl"};
 
     auto pub =
         handler_
@@ -743,7 +740,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kPlaneAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
@@ -753,8 +750,8 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // Use HashFiltered
   {
     thrift::KeyDumpParams params;
-    params.originatorIds_ref() = {"node3"};
-    params.keys_ref() = {"key3"};
+    params.originatorIds() = {"node3"};
+    params.keys() = {"key3"};
 
     auto pub =
         handler_
@@ -762,14 +759,14 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
                 std::make_unique<thrift::KeyDumpParams>(std::move(params)),
                 std::make_unique<std::string>(kSpineAreaId))
             .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(3, keyVals.size());
     auto value3 = kvs.at("key3");
-    value3.value_ref().reset();
+    value3.value().reset();
     auto value33 = kvs.at("key33");
-    value33.value_ref().reset();
+    value33.value().reset();
     auto value333 = kvs.at("key333");
-    value333.value_ref().reset();
+    value333.value().reset();
     EXPECT_EQ(value3, keyVals["key3"]);
     EXPECT_EQ(value33, keyVals["key33"]);
     EXPECT_EQ(value333, keyVals["key333"]);
@@ -828,10 +825,10 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(1, keyVals.size());
-    EXPECT_EQ(3, *(keyVals.at(key).version_ref()));
-    EXPECT_EQ("value1", keyVals.at(key).value_ref().value());
+    EXPECT_EQ(3, *(keyVals.at(key).version()));
+    EXPECT_EQ("value1", keyVals.at(key).value().value());
   }
 
   {
@@ -846,12 +843,11 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     // Expect 10 keys in the initial dump
     // NOTE: there may be extra keys from PrefixManager & LinkMonitor)
     EXPECT_LE(
-        10, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+        10, (*responseAndSubscription.response.begin()->keyVals()).size());
     ASSERT_EQ(
-        1,
-        (*responseAndSubscription.response.begin()->keyVals_ref()).count(key));
+        1, (*responseAndSubscription.response.begin()->keyVals()).count(key));
     EXPECT_EQ(
-        responseAndSubscription.response.begin()->keyVals_ref()->at(key),
+        responseAndSubscription.response.begin()->keyVals()->at(key),
         createThriftValue(3, "node1", std::string("value1")));
 
     auto subscription =
@@ -925,9 +921,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     const std::string random_key{"random_key"};
     std::vector<std::string> keys = {key, random_key};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = keys;
-    filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
-    filter.oper_ref() = thrift::FilterOperator::AND;
+    filter.keys() = keys;
+    filter.originatorIds() = {"node1", "node2", "node3", "node33"};
+    filter.oper() = thrift::FilterOperator::AND;
 
     auto handler_other = handler_;
     auto responseAndSubscription =
@@ -945,18 +941,14 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .get();
 
     /* key4 and random_key don't exist already */
+    EXPECT_LE(0, (*responseAndSubscription.response.begin()->keyVals()).size());
+    ASSERT_EQ(
+        0, (*responseAndSubscription.response.begin()->keyVals()).count(key));
     EXPECT_LE(
-        0, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+        0, (*responseAndSubscription_other.response.begin()->keyVals()).size());
     ASSERT_EQ(
         0,
-        (*responseAndSubscription.response.begin()->keyVals_ref()).count(key));
-    EXPECT_LE(
-        0,
-        (*responseAndSubscription_other.response.begin()->keyVals_ref())
-            .size());
-    ASSERT_EQ(
-        0,
-        (*responseAndSubscription_other.response.begin()->keyVals_ref())
+        (*responseAndSubscription_other.response.begin()->keyVals())
             .count(key));
 
     auto subscription =
@@ -1034,9 +1026,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::atomic<int> received{0};
     const std::string key{"key333"};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = {"key33"};
-    filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
-    filter.oper_ref() = thrift::FilterOperator::AND;
+    filter.keys() = {"key33"};
+    filter.originatorIds() = {"node1", "node2", "node3", "node33"};
+    filter.oper() = thrift::FilterOperator::AND;
 
     auto responseAndSubscription =
         handler_
@@ -1046,14 +1038,12 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .get();
 
     /* prefix key is key33. kv store has key33 and key333 */
-    EXPECT_LE(
-        2, responseAndSubscription.response.begin()->keyVals_ref()->size());
+    EXPECT_LE(2, responseAndSubscription.response.begin()->keyVals()->size());
     ASSERT_EQ(
-        1, responseAndSubscription.response.begin()->keyVals_ref()->count(key));
+        1, responseAndSubscription.response.begin()->keyVals()->count(key));
     ASSERT_EQ(
         1,
-        responseAndSubscription.response.begin()->keyVals_ref()->count(
-            "key333"));
+        responseAndSubscription.response.begin()->keyVals()->count("key333"));
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1104,9 +1094,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     const std::string key{"key33.*"};
     std::vector<std::string> keys = {"key33.*"};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = keys;
-    filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
-    filter.oper_ref() = thrift::FilterOperator::OR;
+    filter.keys() = keys;
+    filter.originatorIds() = {"node1", "node2", "node3", "node33"};
+    filter.oper() = thrift::FilterOperator::OR;
 
     std::unordered_map<std::string, std::string> keyvals;
     keyvals["key33"] = "value33";
@@ -1119,16 +1109,13 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
 
-    EXPECT_LE(
-        2, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(2, (*responseAndSubscription.response.begin()->keyVals()).size());
     ASSERT_EQ(
         1,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key33"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key33"));
     ASSERT_EQ(
         1,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key333"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key333"));
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1191,9 +1178,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     keyvals[key] = "value1";
 
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = keys;
-    filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
-    filter.oper_ref() = thrift::FilterOperator::AND;
+    filter.keys() = keys;
+    filter.originatorIds() = {"node1", "node2", "node3", "node33"};
+    filter.oper() = thrift::FilterOperator::AND;
 
     auto responseAndSubscription =
         handler_
@@ -1202,19 +1189,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
 
-    EXPECT_LE(
-        3, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(3, (*responseAndSubscription.response.begin()->keyVals()).size());
     EXPECT_EQ(
-        0,
-        (*responseAndSubscription.response.begin()->keyVals_ref()).count(key));
+        0, (*responseAndSubscription.response.begin()->keyVals()).count(key));
     ASSERT_EQ(
         1,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key1"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key1"));
     ASSERT_EQ(
         1,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key3"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key3"));
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1283,9 +1266,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     const std::string key{"test-key"};
     std::vector<std::string> keys = {"key1", key, "key3"};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = keys;
-    filter.originatorIds_ref() = {"node1", "node2", "node3", "node33"};
-    filter.oper_ref() = thrift::FilterOperator::OR;
+    filter.keys() = keys;
+    filter.originatorIds() = {"node1", "node2", "node3", "node33"};
+    filter.oper() = thrift::FilterOperator::OR;
 
     std::unordered_map<std::string, std::string> keyvals;
     keyvals["key1"] = "value1";
@@ -1300,19 +1283,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
 
-    EXPECT_LE(
-        3, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(3, (*responseAndSubscription.response.begin()->keyVals()).size());
     EXPECT_EQ(
-        1,
-        (*responseAndSubscription.response.begin()->keyVals_ref()).count(key));
+        1, (*responseAndSubscription.response.begin()->keyVals()).count(key));
     ASSERT_EQ(
         1,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key1"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key1"));
     ASSERT_EQ(
         1,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key3"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key3"));
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1384,9 +1363,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     const std::string key{"test_key"};
     std::vector<std::string> keys = {"key1", "key2", "key3", key};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = keys;
-    filter.originatorIds_ref()->insert("node10");
-    filter.oper_ref() = thrift::FilterOperator::AND;
+    filter.keys() = keys;
+    filter.originatorIds()->insert("node10");
+    filter.oper() = thrift::FilterOperator::AND;
 
     auto responseAndSubscription =
         handler_
@@ -1396,8 +1375,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .get();
 
     /* The key is not in kv store */
-    EXPECT_LE(
-        0, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(0, (*responseAndSubscription.response.begin()->keyVals()).size());
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1442,9 +1420,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::atomic<int> received{0};
     const std::string key{"test_key"};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = {"key1", "key2", "key3", key};
-    filter.originatorIds_ref()->insert("node10");
-    filter.oper_ref() = thrift::FilterOperator::OR;
+    filter.keys() = {"key1", "key2", "key3", key};
+    filter.originatorIds()->insert("node10");
+    filter.oper() = thrift::FilterOperator::OR;
 
     std::unordered_map<std::string, std::string> keyvals;
     keyvals["key1"] = "value1";
@@ -1460,8 +1438,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
 
-    EXPECT_LE(
-        0, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(0, (*responseAndSubscription.response.begin()->keyVals()).size());
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1553,10 +1530,10 @@ TEST_F(
     const std::string key{"key1"};
     const std::unordered_map<std::string, std::string> keyvals{{key, "value1"}};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = {key};
-    filter.ignoreTtl_ref() = false;
-    filter.originatorIds_ref()->insert("node1");
-    filter.oper_ref() = thrift::FilterOperator::AND;
+    filter.keys() = {key};
+    filter.ignoreTtl() = false;
+    filter.originatorIds()->insert("node1");
+    filter.oper() = thrift::FilterOperator::AND;
 
     const auto value = createThriftValue(
         1 /* version */,
@@ -1567,7 +1544,7 @@ TEST_F(
         0 /* hash */);
 
     auto thriftValue = value;
-    thriftValue.value_ref().reset();
+    thriftValue.value().reset();
     kvStoreWrapper_->setKey(kSpineAreaId, "key1", thriftValue);
 
     auto responseAndSubscription =
@@ -1577,25 +1554,22 @@ TEST_F(
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
 
-    EXPECT_LE(
-        3, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(3, (*responseAndSubscription.response.begin()->keyVals()).size());
     for (const auto& key_ : {"key1", "key11", "key111"}) {
       EXPECT_EQ(
           1,
-          (*responseAndSubscription.response.begin()->keyVals_ref())
-              .count(key_));
+          (*responseAndSubscription.response.begin()->keyVals()).count(key_));
     }
 
     EXPECT_EQ(
         0,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key2"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key2"));
     const auto& val1 =
-        (*responseAndSubscription.response.begin()->keyVals_ref())["key1"];
-    ASSERT_EQ(true, val1.value_ref().has_value()); /* value is non-null */
-    EXPECT_EQ(1, *val1.version_ref());
-    EXPECT_LT(10000, *val1.ttl_ref());
-    EXPECT_EQ(5, *val1.ttlVersion_ref()); /* Reflects updated TTL version */
+        (*responseAndSubscription.response.begin()->keyVals())["key1"];
+    ASSERT_EQ(true, val1.value().has_value()); /* value is non-null */
+    EXPECT_EQ(1, *val1.version());
+    EXPECT_LT(10000, *val1.ttl());
+    EXPECT_EQ(5, *val1.ttlVersion()); /* Reflects updated TTL version */
 
     std::atomic<bool> newTtlVersionSeen = false;
     auto subscription =
@@ -1629,9 +1603,9 @@ TEST_F(
 
     // TTL update
     auto thriftValue2 = value;
-    thriftValue2.value_ref().reset();
-    thriftValue2.ttl_ref() = 50000;
-    *thriftValue2.ttlVersion_ref() += 1;
+    thriftValue2.value().reset();
+    thriftValue2.ttl() = 50000;
+    *thriftValue2.ttlVersion() += 1;
     kvStoreWrapper_->setKey(kSpineAreaId, key, thriftValue2);
 
     // Wait until new TTL version is seen.
@@ -1654,13 +1628,13 @@ TEST_F(
   {
     const std::string key{"key3"};
     thrift::KeyDumpParams filter;
-    filter.keys_ref() = {key};
-    filter.ignoreTtl_ref() = true;
-    filter.originatorIds_ref()->insert("node3");
-    filter.originatorIds_ref()->insert("node33");
+    filter.keys() = {key};
+    filter.ignoreTtl() = true;
+    filter.originatorIds()->insert("node3");
+    filter.originatorIds()->insert("node33");
     std::unordered_map<std::string, std::string> keyvals;
     keyvals[key] = "value3";
-    filter.oper_ref() = thrift::FilterOperator::AND;
+    filter.oper() = thrift::FilterOperator::AND;
 
     const auto value = createThriftValue(
         1 /* version */,
@@ -1671,7 +1645,7 @@ TEST_F(
         0 /* hash */);
 
     auto thriftValue = value;
-    thriftValue.value_ref().reset();
+    thriftValue.value().reset();
     kvStoreWrapper_->setKey(kSpineAreaId, "key3", thriftValue);
     auto responseAndSubscription =
         handler_
@@ -1680,25 +1654,22 @@ TEST_F(
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
 
-    EXPECT_LE(
-        3, (*responseAndSubscription.response.begin()->keyVals_ref()).size());
+    EXPECT_LE(3, (*responseAndSubscription.response.begin()->keyVals()).size());
     for (const auto& key_ : {"key3", "key33", "key333"}) {
       EXPECT_EQ(
           1,
-          (*responseAndSubscription.response.begin()->keyVals_ref())
-              .count(key_));
+          (*responseAndSubscription.response.begin()->keyVals()).count(key_));
     }
 
     EXPECT_EQ(
         0,
-        (*responseAndSubscription.response.begin()->keyVals_ref())
-            .count("key2"));
+        (*responseAndSubscription.response.begin()->keyVals()).count("key2"));
     const auto& val1 =
-        (*responseAndSubscription.response.begin()->keyVals_ref())["key3"];
-    ASSERT_EQ(true, val1.value_ref().has_value());
-    EXPECT_EQ(1, *val1.version_ref());
-    EXPECT_LT(10000, *val1.ttl_ref());
-    EXPECT_EQ(5, *val1.ttlVersion_ref()); /* Reflects updated TTL version */
+        (*responseAndSubscription.response.begin()->keyVals())["key3"];
+    ASSERT_EQ(true, val1.value().has_value());
+    EXPECT_EQ(1, *val1.version());
+    EXPECT_LT(10000, *val1.ttl());
+    EXPECT_EQ(5, *val1.ttlVersion()); /* Reflects updated TTL version */
 
     auto subscription =
         std::move(responseAndSubscription.stream)
@@ -1726,9 +1697,9 @@ TEST_F(
 
     // TTL update
     auto thriftValue2 = value;
-    thriftValue2.value_ref().reset();
-    thriftValue2.ttl_ref() = 30000;
-    *thriftValue2.ttlVersion_ref() += 1;
+    thriftValue2.value().reset();
+    thriftValue2.ttl() = 30000;
+    *thriftValue2.ttlVersion() += 1;
     /* No TTL update message should be received */
     kvStoreWrapper_->setKey(kSpineAreaId, key, thriftValue2);
 
@@ -1740,11 +1711,11 @@ TEST_F(
                            std::move(filterKeys)),
                        std::make_unique<std::string>(kSpineAreaId))
                    .get();
-    auto keyVals = *pub->keyVals_ref();
+    auto keyVals = *pub->keyVals();
     EXPECT_EQ(1, keyVals.size());
-    EXPECT_EQ(1, *(keyVals.at(key).version_ref()));
-    EXPECT_EQ(true, keyVals.at(key).value_ref().has_value());
-    EXPECT_EQ(thriftValue2.ttlVersion_ref(), keyVals.at(key).ttlVersion_ref());
+    EXPECT_EQ(1, *(keyVals.at(key).version()));
+    EXPECT_EQ(true, keyVals.at(key).value().has_value());
+    EXPECT_EQ(thriftValue2.ttlVersion(), keyVals.at(key).ttlVersion());
 
     // Check we should receive 0 update.
     std::this_thread::yield();
@@ -1778,8 +1749,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
   // ignoreTTL = false is specified in filter.
   // Client should receive publication associated with TTL update
   thrift::KeyDumpParams filter;
-  filter.ignoreTtl_ref() = false;
-  filter.doNotPublishValue_ref() = true;
+  filter.ignoreTtl() = false;
+  filter.doNotPublishValue() = true;
 
   auto responseAndSubscription =
       handler_
@@ -1789,16 +1760,16 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
           .get();
 
   auto initialPub = responseAndSubscription.response.begin();
-  EXPECT_EQ(2, (*initialPub->keyVals_ref()).size());
+  EXPECT_EQ(2, (*initialPub->keyVals()).size());
   // Verify timestamp is set
-  EXPECT_TRUE(initialPub->timestamp_ms_ref().has_value());
+  EXPECT_TRUE(initialPub->timestamp_ms().has_value());
   for (const auto& key_ : {"key1", "key2"}) {
-    EXPECT_EQ(1, (*initialPub->keyVals_ref()).count(key_));
-    const auto& val1 = (*initialPub->keyVals_ref())[key_];
-    ASSERT_EQ(false, val1.value_ref().has_value()); /* value is null */
-    EXPECT_EQ(1, *val1.version_ref());
-    EXPECT_LT(10000, *val1.ttl_ref());
-    EXPECT_EQ(1, *val1.ttlVersion_ref());
+    EXPECT_EQ(1, (*initialPub->keyVals()).count(key_));
+    const auto& val1 = (*initialPub->keyVals())[key_];
+    ASSERT_EQ(false, val1.value().has_value()); /* value is null */
+    EXPECT_EQ(1, *val1.version());
+    EXPECT_LT(10000, *val1.ttl());
+    EXPECT_EQ(1, *val1.ttlVersion());
   }
 
   std::atomic<bool> newUpdateSeen = false;
@@ -1817,9 +1788,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
                 }
 
                 auto& pub = *t;
-                ASSERT_EQ(1, (*pub.keyVals_ref()).count(test_key));
-                const auto& val = (*pub.keyVals_ref())[test_key];
-                if (*val.ttlVersion_ref() < 2) {
+                ASSERT_EQ(1, (*pub.keyVals()).count(test_key));
+                const auto& val = (*pub.keyVals())[test_key];
+                if (*val.ttlVersion() < 2) {
                   // Ignore this version since it is NOT the update
                   // the subscriber interested in
                   return;
@@ -1827,21 +1798,21 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
 
                 newUpdateSeen = true;
                 // Verify no value seen in update
-                ASSERT_EQ(false, val.value_ref().has_value());
+                ASSERT_EQ(false, val.value().has_value());
                 // Verify ttl timestamp
-                EXPECT_LE(30000, *val.ttl_ref());
-                EXPECT_GE(50000, *val.ttl_ref());
+                EXPECT_LE(30000, *val.ttl());
+                EXPECT_GE(50000, *val.ttl());
                 // Verify timestamp is set
-                EXPECT_TRUE(pub.timestamp_ms_ref().has_value());
+                EXPECT_TRUE(pub.timestamp_ms().has_value());
               });
 
   EXPECT_EQ(1, handler_->getNumKvStorePublishers());
 
   // Update value and publish to verify incremental update also filters value
   auto thriftValue2 = keyVals[test_key];
-  thriftValue2.value_ref() = "value_updated";
-  thriftValue2.ttl_ref() = 50000;
-  *thriftValue2.ttlVersion_ref() += 1;
+  thriftValue2.value() = "value_updated";
+  thriftValue2.ttl() = 50000;
+  *thriftValue2.ttlVersion() += 1;
   kvStoreWrapper_->setKey(kSpineAreaId, test_key, thriftValue2);
 
   // Wait until new update is seen by stream subscriber
@@ -1925,42 +1896,42 @@ TEST_F(OpenrCtrlFixture, LinkMonitorApis) {
 
   {
     auto reply = handler_->semifuture_getInterfaces().get();
-    EXPECT_EQ(nodeName_, *reply->thisNodeName_ref());
-    EXPECT_FALSE(*reply->isOverloaded_ref());
-    EXPECT_EQ(1, reply->interfaceDetails_ref()->size());
+    EXPECT_EQ(nodeName_, *reply->thisNodeName());
+    EXPECT_FALSE(*reply->isOverloaded());
+    EXPECT_EQ(1, reply->interfaceDetails()->size());
   }
 
   {
     auto ret = handler_->semifuture_getOpenrVersion().get();
-    EXPECT_LE(*(ret->lowestSupportedVersion_ref()), *(ret->version_ref()));
+    EXPECT_LE(*(ret->lowestSupportedVersion()), *(ret->version()));
   }
 
   {
     auto info = handler_->semifuture_getBuildInfo().get();
-    EXPECT_NE("", *(info->buildMode_ref()));
+    EXPECT_NE("", *(info->buildMode()));
   }
 
   {
     thrift::AdjacenciesFilter filter;
-    filter.selectAreas_ref() = {kSpineAreaId};
+    filter.selectAreas() = {kSpineAreaId};
     auto adjDbs =
         handler_
             ->semifuture_getLinkMonitorAdjacenciesFiltered(
                 std::make_unique<thrift::AdjacenciesFilter>(std::move(filter)))
             .get();
-    EXPECT_EQ(0, adjDbs->begin()->adjacencies_ref()->size());
+    EXPECT_EQ(0, adjDbs->begin()->adjacencies()->size());
   }
 
   {
     thrift::AdjacenciesFilter filter;
-    filter.selectAreas_ref() = {kSpineAreaId};
+    filter.selectAreas() = {kSpineAreaId};
     auto adjDbs =
         handler_
             ->semifuture_getLinkMonitorAreaAdjacenciesFiltered(
                 std::make_unique<thrift::AdjacenciesFilter>(std::move(filter)))
             .get();
     EXPECT_EQ(
-        0, adjDbs->operator[](kSpineAreaId).begin()->adjacencies_ref()->size());
+        0, adjDbs->operator[](kSpineAreaId).begin()->adjacencies()->size());
   }
 }
 
@@ -2006,15 +1977,14 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
   {
     // Create valid rib policy
     thrift::RibRouteActionWeight actionWeight;
-    actionWeight.area_to_weight_ref()->emplace("test-area", 2);
-    actionWeight.neighbor_to_weight_ref()->emplace("nbr", 3);
+    actionWeight.area_to_weight()->emplace("test-area", 2);
+    actionWeight.neighbor_to_weight()->emplace("nbr", 3);
     thrift::RibPolicyStatement policyStatement;
-    policyStatement.matcher_ref()->prefixes_ref() =
-        std::vector<thrift::IpPrefix>();
-    policyStatement.action_ref()->set_weight_ref() = actionWeight;
+    policyStatement.matcher()->prefixes() = std::vector<thrift::IpPrefix>();
+    policyStatement.action()->set_weight() = actionWeight;
     thrift::RibPolicy policy;
-    policy.statements_ref()->emplace_back(policyStatement);
-    policy.ttl_secs_ref() = 1;
+    policy.statements()->emplace_back(policyStatement);
+    policy.ttl_secs() = 1;
 
     EXPECT_NO_THROW(handler_
                         ->semifuture_setRibPolicy(

@@ -47,7 +47,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
   initKvStore(std::string nodeId) {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
-    kvStoreConfig.node_name_ref() = nodeId;
+    kvStoreConfig.node_name() = nodeId;
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // start kvstore
@@ -150,19 +150,16 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         // 2. dumpHashes request returns key values as expected
         const auto hashDump = store->dumpHashes(kTestingAreaName);
         for (const auto& [key, value] : dump) {
-          EXPECT_TRUE(value.hash_ref().value() != 0);
+          EXPECT_TRUE(value.hash().value() != 0);
           if (!hashDump.count(key)) {
             continue;
           }
-          EXPECT_EQ(
-              value.hash_ref().value(), hashDump.at(key).hash_ref().value());
+          EXPECT_EQ(value.hash().value(), hashDump.at(key).hash().value());
         }
 
         // Update hash
-        thriftVal.hash_ref() = generateHash(
-            *thriftVal.version_ref(),
-            *thriftVal.originatorId_ref(),
-            thriftVal.value_ref());
+        thriftVal.hash() = generateHash(
+            *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
         // Add this to expected key/vals
         expectedKeyVals.emplace(key, thriftVal);
         expectedGlobalKeyVals.emplace(key, thriftVal);
@@ -184,7 +181,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
           std::map<std::string, thrift::Value> receivedKeyVals;
           while (receivedKeyVals.size() < kNumKeys) {
             auto publication = store->recvPublication();
-            for (auto const& kv : *publication.keyVals_ref()) {
+            for (auto const& kv : *publication.keyVals()) {
               receivedKeyVals.emplace(kv);
             }
           }
@@ -199,8 +196,8 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
             VLOG(4) << fmt::format(
                 "\tkey: {},  value: {}, version: {}",
                 key,
-                val.value_ref() ? *val.value_ref() : "",
-                *val.version_ref());
+                val.value() ? *val.value() : "",
+                *val.version());
           }
         } // for `j < kNumStores`
 
@@ -210,10 +207,9 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
           const auto hashDump = store->dumpHashes(kTestingAreaName);
           EXPECT_EQ(expectedGlobalKeyVals, dump);
           for (const auto& [key, value] : dump) {
-            EXPECT_TRUE(value.hash_ref().value() != 0);
+            EXPECT_TRUE(value.hash().value() != 0);
             EXPECT_TRUE(hashDump.count(key) != 0);
-            EXPECT_EQ(
-                value.hash_ref().value(), hashDump.at(key).hash_ref().value());
+            EXPECT_EQ(value.hash().value(), hashDump.at(key).hash().value());
           }
         }
       } else {
@@ -228,7 +224,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
               VLOG(2) << store->getNodeId() << " still has " << keyVals.size()
                       << " keys remaining";
               for (auto& [key, val] : keyVals) {
-                VLOG(2) << "  " << key << ", ttl: " << *val.ttl_ref();
+                VLOG(2) << "  " << key << ", ttl: " << *val.ttl();
               }
               allStoreEmpty = false;
               break;

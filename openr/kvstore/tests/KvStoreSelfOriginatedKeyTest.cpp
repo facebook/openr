@@ -50,8 +50,8 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
     // Override ttl for kvstore self-originated keys
-    kvStoreConfig.node_name_ref() = nodeId;
-    kvStoreConfig.key_ttl_ms_ref() = keyTtl;
+    kvStoreConfig.node_name() = nodeId;
+    kvStoreConfig.key_ttl_ms() = keyTtl;
 
     // start kvstore
     kvStore_ =
@@ -90,26 +90,26 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, ProcessSetKeyValueRequest) {
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
     // wait for kvstore handle SetKeyValue request and flood new key-val
     auto pub = kvStore_->recvPublication();
-    EXPECT_EQ(1, pub.keyVals_ref()->size());
-    EXPECT_EQ(0, *(pub.keyVals_ref()->at(key).ttlVersion_ref()));
+    EXPECT_EQ(1, pub.keyVals()->size());
+    EXPECT_EQ(0, *(pub.keyVals()->at(key).ttlVersion()));
 
     // check advertised self-originated key-value was stored in kvstore
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(1, kvStoreCache.size());
-    EXPECT_EQ(value, *kvStoreCache.at(key).value.value_ref());
+    EXPECT_EQ(value, *kvStoreCache.at(key).value.value());
 
     // check that ttl version was bumped up and
     // key-val with updated ttl version was flooded
     auto pub2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pub2.keyVals_ref()->size());
-    EXPECT_EQ(1, *(pub2.keyVals_ref()->at(key).ttlVersion_ref()));
+    EXPECT_EQ(1, pub2.keyVals()->size());
+    EXPECT_EQ(1, *(pub2.keyVals()->at(key).ttlVersion()));
   });
 
   // check that key-val was not expired after ttl time has passed
   evb.scheduleTimeout(std::chrono::milliseconds(kShortTtl * 2), [&]() noexcept {
     auto recVal = kvStore_->getKey(kTestingAreaName, key);
     EXPECT_TRUE(recVal.has_value());
-    EXPECT_GE(*(recVal.value().ttlVersion_ref()), 4);
+    EXPECT_GE(*(recVal.value().ttlVersion()), 4);
     evb.stop();
   });
 
@@ -135,9 +135,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
 
   // Key is new to KvStore. Value version should be 1.
   auto pubFirst = kvStore_->recvPublication();
-  EXPECT_EQ(1, pubFirst.keyVals_ref()->size());
-  EXPECT_EQ(1, *pubFirst.keyVals_ref()->at(key).version_ref());
-  EXPECT_EQ(valueFirst, *pubFirst.keyVals_ref()->at(key).value_ref());
+  EXPECT_EQ(1, pubFirst.keyVals()->size());
+  EXPECT_EQ(1, *pubFirst.keyVals()->at(key).version());
+  EXPECT_EQ(valueFirst, *pubFirst.keyVals()->at(key).value());
 
   // Create request to set same key, different value.
   const std::string valueSecond = "value-second";
@@ -147,15 +147,15 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
 
   // Check value is updated and version is bumped.
   auto pubSecond = kvStore_->recvPublication();
-  EXPECT_EQ(1, pubSecond.keyVals_ref()->size());
-  EXPECT_EQ(2, *pubSecond.keyVals_ref()->at(key).version_ref());
-  EXPECT_EQ(valueSecond, *pubSecond.keyVals_ref()->at(key).value_ref());
+  EXPECT_EQ(1, pubSecond.keyVals()->size());
+  EXPECT_EQ(2, *pubSecond.keyVals()->at(key).version());
+  EXPECT_EQ(valueSecond, *pubSecond.keyVals()->at(key).value());
 
   // Validate that advertised self-originated key-value matches KvStore cache.
   auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
   EXPECT_EQ(1, kvStoreCache.size());
-  EXPECT_EQ(2, *kvStoreCache.at(key).value.version_ref());
-  EXPECT_EQ(valueSecond, *kvStoreCache.at(key).value.value_ref());
+  EXPECT_EQ(2, *kvStoreCache.at(key).value.version());
+  EXPECT_EQ(valueSecond, *kvStoreCache.at(key).value.value());
 }
 
 /**
@@ -175,13 +175,13 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
 
   // Key is new to KvStore. Value version should be 1.
   auto pubFirst = kvStore_->recvPublication();
-  EXPECT_EQ(1, pubFirst.keyVals_ref()->size());
-  EXPECT_EQ(version, *pubFirst.keyVals_ref()->at(key).version_ref());
+  EXPECT_EQ(1, pubFirst.keyVals()->size());
+  EXPECT_EQ(version, *pubFirst.keyVals()->at(key).version());
 
   // Validate that advertised self-originated key-value matches KvStore cache.
   auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
   EXPECT_EQ(1, kvStoreCache.size());
-  EXPECT_EQ(version, *kvStoreCache.at(key).value.version_ref());
+  EXPECT_EQ(version, *kvStoreCache.at(key).value.version());
 }
 
 /**
@@ -213,20 +213,20 @@ TEST_F(
 
       // wait for kvstore handle PersistKeyValue request and flood new key-val
       auto pub = kvStore_->recvPublication();
-      EXPECT_EQ(1, pub.keyVals_ref()->size());
-      EXPECT_EQ(0, *(pub.keyVals_ref()->at(key).ttlVersion_ref()));
-      EXPECT_EQ(1, *(pub.keyVals_ref()->at(key).version_ref()));
+      EXPECT_EQ(1, pub.keyVals()->size());
+      EXPECT_EQ(0, *(pub.keyVals()->at(key).ttlVersion()));
+      EXPECT_EQ(1, *(pub.keyVals()->at(key).version()));
 
       // check advertised self-originated key-value was stored in kvstore
       auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
       EXPECT_EQ(1, kvStoreCache.size());
-      EXPECT_EQ(value, *kvStoreCache.at(key).value.value_ref());
+      EXPECT_EQ(value, *kvStoreCache.at(key).value.value());
 
       // check that ttl version was bumped up and
       // key-val with updated ttl version was flooded
       auto pub2 = kvStore_->recvPublication();
-      EXPECT_EQ(1, pub2.keyVals_ref()->size());
-      EXPECT_EQ(1, *(pub2.keyVals_ref()->at(key).ttlVersion_ref()));
+      EXPECT_EQ(1, pub2.keyVals()->size());
+      EXPECT_EQ(1, *(pub2.keyVals()->at(key).ttlVersion()));
     }
 
     // Test 2: - persist same key with a different value
@@ -240,14 +240,14 @@ TEST_F(
 
       // new key-value will be advertised and version will be bumped up
       auto newValPub = kvStore_->recvPublication();
-      EXPECT_EQ(1, newValPub.keyVals_ref()->size());
-      EXPECT_EQ(0, *(newValPub.keyVals_ref()->at(key).ttlVersion_ref()));
-      EXPECT_EQ(2, *(newValPub.keyVals_ref()->at(key).version_ref()));
+      EXPECT_EQ(1, newValPub.keyVals()->size());
+      EXPECT_EQ(0, *(newValPub.keyVals()->at(key).ttlVersion()));
+      EXPECT_EQ(2, *(newValPub.keyVals()->at(key).version()));
 
       // check cache of self-originated key-vals has stored the new value
       auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
       EXPECT_EQ(1, updatedCache.size());
-      EXPECT_EQ(newValue, *updatedCache.at(key).value.value_ref());
+      EXPECT_EQ(newValue, *updatedCache.at(key).value.value());
     }
 
     // Test 3: - persist same key with same value
@@ -268,8 +268,8 @@ TEST_F(
 
     // Test 3 (continued):
     // Check that version is the same and ttl version has been bumped.
-    EXPECT_EQ(2, *(recVal.value().version_ref()));
-    EXPECT_GE(*(recVal.value().ttlVersion_ref()), 4);
+    EXPECT_EQ(2, *(recVal.value().version()));
+    EXPECT_GE(*(recVal.value().ttlVersion()), 4);
     evb.stop();
   });
 
@@ -307,12 +307,12 @@ TEST_F(
     kvRequestQueue_.push(std::move(persistKvRequest));
 
     auto pub1 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pub1.keyVals_ref()->size());
+    EXPECT_EQ(1, pub1.keyVals()->size());
 
     // validate version = 1
-    const auto tVal1 = pub1.keyVals_ref()->at(key);
-    EXPECT_EQ(1, *tVal1.version_ref());
-    EXPECT_EQ(nodeId, *tVal1.originatorId_ref());
+    const auto tVal1 = pub1.keyVals()->at(key);
+    EXPECT_EQ(1, *tVal1.version());
+    EXPECT_EQ(nodeId, *tVal1.originatorId());
 
     //
     // Step2: - manually set key X with existing version + 1 to mimick receiving
@@ -323,22 +323,22 @@ TEST_F(
         kTestingAreaName,
         key,
         createThriftValue(
-            *tVal1.version_ref() + 1 /* version */,
+            *tVal1.version() + 1 /* version */,
             nodeId /* originatorId */,
             val /* value */,
             Constants::kTtlInfinity /* ttl */));
 
     // validate setKey() takes effect
     auto pub2 = kvStore_->recvPublication();
-    const auto tVal2 = pub2.keyVals_ref()->at(key);
-    EXPECT_EQ(*tVal1.version_ref() + 1, *tVal2.version_ref());
-    EXPECT_EQ(nodeId, *tVal2.originatorId_ref());
+    const auto tVal2 = pub2.keyVals()->at(key);
+    EXPECT_EQ(*tVal1.version() + 1, *tVal2.version());
+    EXPECT_EQ(nodeId, *tVal2.originatorId());
 
     // validate version is overridden
     auto pub3 = kvStore_->recvPublication();
-    const auto tVal3 = pub3.keyVals_ref()->at(key);
-    EXPECT_EQ(*tVal1.version_ref() + 2, *tVal3.version_ref());
-    EXPECT_EQ(nodeId, *tVal3.originatorId_ref());
+    const auto tVal3 = pub3.keyVals()->at(key);
+    EXPECT_EQ(*tVal1.version() + 2, *tVal3.version());
+    EXPECT_EQ(nodeId, *tVal3.originatorId());
   }
 
   //
@@ -356,8 +356,8 @@ TEST_F(
     // Ensure key exists
     auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
     ASSERT_TRUE(maybeVal.has_value());
-    EXPECT_NE(1, *maybeVal->version_ref());
-    EXPECT_EQ(val, maybeVal->value_ref());
+    EXPECT_NE(1, *maybeVal->version());
+    EXPECT_EQ(val, maybeVal->value());
   }
 
   //
@@ -372,7 +372,7 @@ TEST_F(
     //
     auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
     ASSERT_TRUE(maybeVal.has_value());
-    const auto version = *maybeVal->version_ref();
+    const auto version = *maybeVal->version();
     kvStore_->setKey(
         kTestingAreaName,
         key,
@@ -384,17 +384,17 @@ TEST_F(
 
     // validate setKey() takes effect
     auto pub1 = kvStore_->recvPublication();
-    const auto tVal1 = pub1.keyVals_ref()->at(key);
-    EXPECT_EQ(version, *tVal1.version_ref());
-    EXPECT_EQ(diffVal, *tVal1.value_ref());
-    EXPECT_EQ(nodeId, *tVal1.originatorId_ref());
+    const auto tVal1 = pub1.keyVals()->at(key);
+    EXPECT_EQ(version, *tVal1.version());
+    EXPECT_EQ(diffVal, *tVal1.value());
+    EXPECT_EQ(nodeId, *tVal1.originatorId());
 
     // validate version is overridden
     auto pub2 = kvStore_->recvPublication();
-    const auto tVal2 = pub2.keyVals_ref()->at(key);
-    EXPECT_EQ(version + 1, *tVal2.version_ref());
-    EXPECT_EQ(val, *tVal2.value_ref());
-    EXPECT_EQ(nodeId, *tVal2.originatorId_ref());
+    const auto tVal2 = pub2.keyVals()->at(key);
+    EXPECT_EQ(version + 1, *tVal2.version());
+    EXPECT_EQ(val, *tVal2.value());
+    EXPECT_EQ(nodeId, *tVal2.originatorId());
 
     //
     // Step2: - manually set key X with SAME version to mimick receiving
@@ -413,17 +413,17 @@ TEST_F(
 
     // validate setKey() takes effect
     auto pub3 = kvStore_->recvPublication();
-    const auto tVal3 = pub3.keyVals_ref()->at(key);
-    EXPECT_EQ(version + 1, *tVal3.version_ref());
-    EXPECT_EQ(val, *tVal3.value_ref());
-    EXPECT_EQ(diffNodeId, *tVal3.originatorId_ref());
+    const auto tVal3 = pub3.keyVals()->at(key);
+    EXPECT_EQ(version + 1, *tVal3.version());
+    EXPECT_EQ(val, *tVal3.value());
+    EXPECT_EQ(diffNodeId, *tVal3.originatorId());
 
     // validate version is overridden
     auto pub4 = kvStore_->recvPublication();
-    const auto tVal4 = pub4.keyVals_ref()->at(key);
-    EXPECT_EQ(version + 2, *tVal4.version_ref());
-    EXPECT_EQ(val, *tVal4.value_ref());
-    EXPECT_EQ(nodeId, *tVal4.originatorId_ref());
+    const auto tVal4 = pub4.keyVals()->at(key);
+    EXPECT_EQ(version + 2, *tVal4.version());
+    EXPECT_EQ(val, *tVal4.value());
+    EXPECT_EQ(nodeId, *tVal4.originatorId());
   }
 }
 
@@ -449,16 +449,16 @@ TEST_F(
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       generateHash(
-          1, otherNodeId, thrift::Value().value_ref() = std::string(value)));
+          1, otherNodeId, thrift::Value().value() = std::string(value)));
   kvStore_->setKey(kTestingAreaName, key, thriftVal);
 
   // First publication is from flooding the set key. Check that originator is
   // other node.
   auto setPub = kvStore_->recvPublication();
-  EXPECT_EQ(1, setPub.keyVals_ref()->size());
-  EXPECT_EQ(0, *(setPub.keyVals_ref()->at(key).ttlVersion_ref()));
-  EXPECT_EQ(1, *(setPub.keyVals_ref()->at(key).version_ref()));
-  EXPECT_EQ(otherNodeId, *(setPub.keyVals_ref()->at(key).originatorId_ref()));
+  EXPECT_EQ(1, setPub.keyVals()->size());
+  EXPECT_EQ(0, *(setPub.keyVals()->at(key).ttlVersion()));
+  EXPECT_EQ(1, *(setPub.keyVals()->at(key).version()));
+  EXPECT_EQ(otherNodeId, *(setPub.keyVals()->at(key).originatorId()));
 
   // Persist key-val using request queue.
   auto persistKvRequest = PersistKeyValueRequest(kTestingAreaName, key, value);
@@ -468,11 +468,11 @@ TEST_F(
   // Check that key-val has been overridden and originator has changed to my
   // node.
   auto persistPub = kvStore_->recvPublication();
-  EXPECT_EQ(1, persistPub.keyVals_ref()->size());
-  EXPECT_EQ(2, *(persistPub.keyVals_ref()->at(key).version_ref()));
-  EXPECT_EQ(myNodeId, *(persistPub.keyVals_ref()->at(key).originatorId_ref()));
+  EXPECT_EQ(1, persistPub.keyVals()->size());
+  EXPECT_EQ(2, *(persistPub.keyVals()->at(key).version()));
+  EXPECT_EQ(myNodeId, *(persistPub.keyVals()->at(key).originatorId()));
   // TTL refresh could happen before persist publication.
-  auto ttlVersion = *(persistPub.keyVals_ref()->at(key).ttlVersion_ref());
+  auto ttlVersion = *(persistPub.keyVals()->at(key).ttlVersion());
   EXPECT_TRUE(0 == ttlVersion || 1 == ttlVersion);
 }
 
@@ -512,10 +512,10 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, PersistKeyChangeTtlTest) {
         // Ensure key exists
         auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
         ASSERT_TRUE(maybeVal.has_value());
-        EXPECT_EQ(1, *maybeVal->version_ref());
-        EXPECT_EQ(val, maybeVal->value_ref());
-        EXPECT_LT(0, *maybeVal->ttl_ref());
-        EXPECT_GE(kShortTtl, *maybeVal->ttl_ref());
+        EXPECT_EQ(1, *maybeVal->version());
+        EXPECT_EQ(val, maybeVal->value());
+        EXPECT_LT(0, *maybeVal->ttl());
+        EXPECT_GE(kShortTtl, *maybeVal->ttl());
 
         // Set key with smaller kShortTtl=5s(default with KvStore)
         auto persistKvRequest =
@@ -529,10 +529,10 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, PersistKeyChangeTtlTest) {
         // Ensure key exists
         auto maybeVal = kvStore_->getKey(kTestingAreaName, key);
         ASSERT_TRUE(maybeVal.has_value());
-        EXPECT_EQ(1, *maybeVal->version_ref());
-        EXPECT_EQ(val, maybeVal->value_ref());
-        EXPECT_LT(kShortTtl, *maybeVal->ttl_ref());
-        EXPECT_GE(kLongTtl, *maybeVal->ttl_ref());
+        EXPECT_EQ(1, *maybeVal->version());
+        EXPECT_EQ(val, maybeVal->value());
+        EXPECT_LT(kShortTtl, *maybeVal->ttl());
+        EXPECT_GE(kLongTtl, *maybeVal->ttl());
 
         evb.stop();
       });
@@ -568,9 +568,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 
     // Receive publication for "erase-key" key.
     auto pubSetKey = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKey.keyVals_ref()->size());
-    EXPECT_EQ(0, *(pubSetKey.keyVals_ref()->at(eraseKey).ttlVersion_ref()));
-    EXPECT_EQ(1, *(pubSetKey.keyVals_ref()->at(eraseKey).version_ref()));
+    EXPECT_EQ(1, pubSetKey.keyVals()->size());
+    EXPECT_EQ(0, *(pubSetKey.keyVals()->at(eraseKey).ttlVersion()));
+    EXPECT_EQ(1, *(pubSetKey.keyVals()->at(eraseKey).version()));
 
     // Push SetKeyValue request for "set-key" key to queue.
     auto setKvRequest = SetKeyValueRequest(kTestingAreaName, setKey, setValue);
@@ -578,15 +578,15 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 
     // Receive publication for "set-key" key.
     auto pubSetKey2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKey2.keyVals_ref()->size());
-    EXPECT_EQ(0, *(pubSetKey2.keyVals_ref()->at(setKey).ttlVersion_ref()));
-    EXPECT_EQ(1, *(pubSetKey2.keyVals_ref()->at(setKey).version_ref()));
+    EXPECT_EQ(1, pubSetKey2.keyVals()->size());
+    EXPECT_EQ(0, *(pubSetKey2.keyVals()->at(setKey).ttlVersion()));
+    EXPECT_EQ(1, *(pubSetKey2.keyVals()->at(setKey).version()));
 
     // Make sure "erase-key" key is in self-originated cache.
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(2, kvStoreCache.size());
     EXPECT_EQ(1, kvStoreCache.count(eraseKey));
-    EXPECT_EQ(eraseValue, *kvStoreCache.at(eraseKey).value.value_ref());
+    EXPECT_EQ(eraseValue, *kvStoreCache.at(eraseKey).value.value());
 
     /** Erase one key. Check that erased key does NOT emit ttl updates. **/
 
@@ -596,10 +596,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 
     // Receive ttl refresh publication for "set-key" (ttl version 1).
     auto pubSetKeyTtlUpdate = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals_ref()->size());
-    EXPECT_EQ(
-        1, *(pubSetKeyTtlUpdate.keyVals_ref()->at(setKey).ttlVersion_ref()));
-    EXPECT_EQ(1, *(pubSetKeyTtlUpdate.keyVals_ref()->at(setKey).version_ref()));
+    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals()->size());
+    EXPECT_EQ(1, *(pubSetKeyTtlUpdate.keyVals()->at(setKey).ttlVersion()));
+    EXPECT_EQ(1, *(pubSetKeyTtlUpdate.keyVals()->at(setKey).version()));
 
     // Erased key is still in KvStore but not in self-originated cache.
     auto recVal = kvStore_->getKey(kTestingAreaName, eraseKey);
@@ -611,11 +610,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 
     // Receive ttl refresh publication for "set-key" (ttl version 2).
     auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals_ref()->size());
-    EXPECT_EQ(
-        2, *(pubSetKeyTtlUpdate2.keyVals_ref()->at(setKey).ttlVersion_ref()));
-    EXPECT_EQ(
-        1, *(pubSetKeyTtlUpdate2.keyVals_ref()->at(setKey).version_ref()));
+    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals()->size());
+    EXPECT_EQ(2, *(pubSetKeyTtlUpdate2.keyVals()->at(setKey).ttlVersion()));
+    EXPECT_EQ(1, *(pubSetKeyTtlUpdate2.keyVals()->at(setKey).version()));
   });
 
   // After ttl time, erased key should expire.
@@ -656,19 +653,19 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
         SetKeyValueRequest(kTestingAreaName, unsetKey, valueBeforeUnset);
     kvRequestQueue_.push(std::move(setKvRequestToUnset));
     auto pubSetKey = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKey.keyVals_ref()->count(unsetKey));
+    EXPECT_EQ(1, pubSetKey.keyVals()->count(unsetKey));
 
     // Push SetKeyValue request for "set-key" key to queue. Check key was set
     // correctly.
     auto setKvRequest = SetKeyValueRequest(kTestingAreaName, setKey, setValue);
     kvRequestQueue_.push(std::move(setKvRequest));
     auto pubSetKey2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKey2.keyVals_ref()->count(setKey));
+    EXPECT_EQ(1, pubSetKey2.keyVals()->count(setKey));
 
     // Make sure "unset-key" key is in self-originated cache.
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(1, kvStoreCache.count(unsetKey));
-    EXPECT_EQ(valueBeforeUnset, *kvStoreCache.at(unsetKey).value.value_ref());
+    EXPECT_EQ(valueBeforeUnset, *kvStoreCache.at(unsetKey).value.value());
 
     /** Unset one key. Check that unset key does NOT emit ttl updates. **/
 
@@ -680,32 +677,29 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
     // Receive publication for new value set to "unset-key". Version should be
     // bumped up and ttl version should be reset.
     auto pubUnsetKey = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubUnsetKey.keyVals_ref()->count(unsetKey));
-    EXPECT_EQ(2, *pubUnsetKey.keyVals_ref()->at(unsetKey).version_ref());
-    EXPECT_EQ(0, *pubUnsetKey.keyVals_ref()->at(unsetKey).ttlVersion_ref());
-    EXPECT_EQ(
-        valueAfterUnset, *pubUnsetKey.keyVals_ref()->at(unsetKey).value_ref());
+    EXPECT_EQ(1, pubUnsetKey.keyVals()->count(unsetKey));
+    EXPECT_EQ(2, *pubUnsetKey.keyVals()->at(unsetKey).version());
+    EXPECT_EQ(0, *pubUnsetKey.keyVals()->at(unsetKey).ttlVersion());
+    EXPECT_EQ(valueAfterUnset, *pubUnsetKey.keyVals()->at(unsetKey).value());
 
     // "unset-key" should still be in KvStore with new value but NOT in
     // self-originated cache.
     auto recVal = kvStore_->getKey(kTestingAreaName, unsetKey);
     auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_TRUE(recVal.has_value());
-    EXPECT_EQ(valueAfterUnset, *recVal.value().value_ref());
+    EXPECT_EQ(valueAfterUnset, *recVal.value().value());
     EXPECT_EQ(1, updatedCache.size());
     EXPECT_EQ(0, updatedCache.count(unsetKey));
 
     // Receive ttl refresh publication for "set-key" (version 1).
     auto pubSetKeyTtlUpdate = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals_ref()->count(setKey));
-    EXPECT_EQ(
-        1, *(pubSetKeyTtlUpdate.keyVals_ref()->at(setKey).ttlVersion_ref()));
+    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals()->count(setKey));
+    EXPECT_EQ(1, *(pubSetKeyTtlUpdate.keyVals()->at(setKey).ttlVersion()));
 
     // Receive ttl refresh publication for "set-key" (version 2).
     auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals_ref()->count(setKey));
-    EXPECT_EQ(
-        2, *(pubSetKeyTtlUpdate2.keyVals_ref()->at(setKey).ttlVersion_ref()));
+    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals()->count(setKey));
+    EXPECT_EQ(2, *(pubSetKeyTtlUpdate2.keyVals()->at(setKey).ttlVersion()));
   });
 
   // After ttl time, unset key should expire.
@@ -780,7 +774,7 @@ TEST_F(
         // Wait for throttling. Verify k1 has been populated to KvStore.
         auto maybeThriftVal = kvStore_->getKey(kTestingAreaName, key);
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
+        EXPECT_EQ(val, maybeThriftVal.value().value());
 
         // unsetKey() call with throttled fashion
         auto unsetKvRequest =
@@ -799,7 +793,7 @@ TEST_F(
         // without corruption by unsetKey() call
         auto maybeThriftVal = kvStore_->getKey(kTestingAreaName, key);
         ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_EQ(val, maybeThriftVal.value().value_ref());
+        EXPECT_EQ(val, maybeThriftVal.value().value());
 
         // End test.
         evb.stop();

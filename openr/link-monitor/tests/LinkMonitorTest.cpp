@@ -160,18 +160,16 @@ const auto adj_3_2 = createThriftAdjacency(
 
 void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
-  LOG(INFO) << "Node: " << *adjDb.thisNodeName_ref()
-            << ", Overloaded: " << *adjDb.isOverloaded_ref()
-            << ", Label: " << *adjDb.nodeLabel_ref()
-            << ", area: " << *adjDb.area_ref();
-  for (auto const& adj : *adjDb.adjacencies_ref()) {
-    LOG(INFO) << "  " << *adj.otherNodeName_ref() << "@" << *adj.ifName_ref()
-              << ", metric: " << *adj.metric_ref()
-              << ", label: " << *adj.adjLabel_ref()
-              << ", overloaded: " << *adj.isOverloaded_ref()
-              << ", rtt: " << *adj.rtt_ref() << ", ts: " << *adj.timestamp_ref()
-              << ", " << toString(*adj.nextHopV4_ref()) << ", "
-              << toString(*adj.nextHopV6_ref());
+  LOG(INFO) << "Node: " << *adjDb.thisNodeName()
+            << ", Overloaded: " << *adjDb.isOverloaded()
+            << ", Label: " << *adjDb.nodeLabel() << ", area: " << *adjDb.area();
+  for (auto const& adj : *adjDb.adjacencies()) {
+    LOG(INFO) << "  " << *adj.otherNodeName() << "@" << *adj.ifName()
+              << ", metric: " << *adj.metric() << ", label: " << *adj.adjLabel()
+              << ", overloaded: " << *adj.isOverloaded()
+              << ", rtt: " << *adj.rtt() << ", ts: " << *adj.timestamp() << ", "
+              << toString(*adj.nextHopV4()) << ", "
+              << toString(*adj.nextHopV6());
   }
 }
 
@@ -295,15 +293,15 @@ class LinkMonitorTestFixture : public testing::Test {
 
     // create basic openr config
     auto tConfig = getBasicOpenrConfig("node-1", areaCfgs, true, true);
-    tConfig.persistent_config_store_path_ref() = kConfigStorePath;
+    tConfig.persistent_config_store_path() = kConfigStorePath;
 
     // override LM config
-    tConfig.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() = 1;
-    tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 8;
-    tConfig.link_monitor_config_ref()->use_rtt_metric_ref() = false;
+    tConfig.link_monitor_config()->linkflap_initial_backoff_ms() = 1;
+    tConfig.link_monitor_config()->linkflap_max_backoff_ms() = 8;
+    tConfig.link_monitor_config()->use_rtt_metric() = false;
 
     // override feature toggling
-    tConfig.enable_ordered_adj_publication_ref() = true;
+    tConfig.enable_ordered_adj_publication() = true;
 
     return tConfig;
   }
@@ -325,8 +323,8 @@ class LinkMonitorTestFixture : public testing::Test {
   populateSegmentRoutingNodeLabel(
       thrift::SegmentRoutingNodeLabelType nodeLabelType, int32_t nodeLabel) {
     thrift::SegmentRoutingNodeLabel srNodeLabel;
-    srNodeLabel.sr_node_label_type_ref() = nodeLabelType;
-    srNodeLabel.node_segment_label_ref() = nodeLabel;
+    srNodeLabel.sr_node_label_type() = nodeLabelType;
+    srNodeLabel.node_segment_label() = nodeLabel;
     return srNodeLabel;
   }
 
@@ -344,34 +342,31 @@ class LinkMonitorTestFixture : public testing::Test {
     // iterate and construct config
     for (auto areaId : areas) {
       thrift::AreaConfig cfg;
-      cfg.area_id_ref() = areaId;
-      cfg.include_interface_regexes_ref() = {
-          kTestVethNamePrefix + ".*", "iface.*"};
-      cfg.redistribute_interface_regexes_ref() = {"loopback"};
+      cfg.area_id() = areaId;
+      cfg.include_interface_regexes() = {kTestVethNamePrefix + ".*", "iface.*"};
+      cfg.redistribute_interface_regexes() = {"loopback"};
 
       auto it = areaMap.find(areaId);
       if (it == areaMap.end()) {
-        cfg.area_sr_node_label_ref() = populateSegmentRoutingNodeLabel(
+        cfg.area_sr_node_label() = populateSegmentRoutingNodeLabel(
             thrift::SegmentRoutingNodeLabelType::STATIC, nodeLabelBase++);
       } else {
         thrift::SegmentRoutingNodeLabel srNodeLabel;
         openr::thrift::LabelRange labelRange;
-        srNodeLabel.sr_node_label_type_ref() =
-            *it->second.sr_node_label_type_ref();
+        srNodeLabel.sr_node_label_type() = *it->second.sr_node_label_type();
 
-        if (it->second.node_segment_label_range_ref().has_value()) {
-          labelRange.start_label_ref() =
-              *it->second.node_segment_label_range_ref()->start_label_ref();
-          labelRange.end_label_ref() =
-              *it->second.node_segment_label_range_ref()->end_label_ref();
-          srNodeLabel.node_segment_label_range_ref() = labelRange;
+        if (it->second.node_segment_label_range().has_value()) {
+          labelRange.start_label() =
+              *it->second.node_segment_label_range()->start_label();
+          labelRange.end_label() =
+              *it->second.node_segment_label_range()->end_label();
+          srNodeLabel.node_segment_label_range() = labelRange;
         }
 
-        if (it->second.node_segment_label_ref().has_value()) {
-          srNodeLabel.node_segment_label_ref() =
-              *it->second.node_segment_label_ref();
+        if (it->second.node_segment_label().has_value()) {
+          srNodeLabel.node_segment_label() = *it->second.node_segment_label();
         }
-        cfg.area_sr_node_label_ref() = srNodeLabel;
+        cfg.area_sr_node_label() = srNodeLabel;
       }
       areaConfig.emplace_back(std::move(cfg));
     }
@@ -494,17 +489,17 @@ class LinkMonitorTestFixture : public testing::Test {
     LOG(INFO) << "Waiting to receive publication for key " << key << " area "
               << area;
     auto pub = kvStoreWrapper->recvPublication();
-    if (*pub.area_ref() != area) {
+    if (*pub.area() != area) {
       return std::nullopt;
     }
 
-    VLOG(1) << "Received publication with keys in area " << *pub.area_ref();
-    for (auto const& kv : *pub.keyVals_ref()) {
+    VLOG(1) << "Received publication with keys in area " << *pub.area();
+    for (auto const& kv : *pub.keyVals()) {
       VLOG(1) << "  " << kv.first;
     }
 
-    auto kv = pub.keyVals_ref()->find(key);
-    if (kv == pub.keyVals_ref()->end() or !kv->second.value_ref()) {
+    auto kv = pub.keyVals()->find(key);
+    if (kv == pub.keyVals()->end() or !kv->second.value()) {
       return std::nullopt;
     }
 
@@ -535,12 +530,12 @@ class LinkMonitorTestFixture : public testing::Test {
       }
 
       auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
-          value->value_ref().value(), serializer);
+          value->value().value(), serializer);
       // we can not know what the nodeLabel will be
-      adjDb.nodeLabel_ref() = kNodeLabel;
+      adjDb.nodeLabel() = kNodeLabel;
       // nor the timestamp, so we override with our predefinded const values
-      for (auto& adj : *adjDb.adjacencies_ref()) {
-        adj.timestamp_ref() = kTimestamp;
+      for (auto& adj : *adjDb.adjacencies()) {
+        adj.timestamp() = kTimestamp;
       }
 
       LOG(INFO) << "[RECEIVED ADJ]";
@@ -582,8 +577,8 @@ class LinkMonitorTestFixture : public testing::Test {
     if (!peers.count(nodeName)) {
       return;
     }
-    EXPECT_EQ(*peers.at(nodeName).peerAddr_ref(), *peerSpec.peerAddr_ref());
-    EXPECT_EQ(*peers.at(nodeName).ctrlPort_ref(), *peerSpec.ctrlPort_ref());
+    EXPECT_EQ(*peers.at(nodeName).peerAddr(), *peerSpec.peerAddr());
+    EXPECT_EQ(*peers.at(nodeName).ctrlPort(), *peerSpec.ctrlPort());
   }
 
   std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry>
@@ -596,15 +591,15 @@ class LinkMonitorTestFixture : public testing::Test {
         {Constants::kPrefixDbMarker.toString()}, {originatorId})};
     auto kvs = kvStoreWrapper->dumpAll(area, std::move(kvFilters));
     for (const auto& [key, val] : kvs) {
-      if (auto value = val.value_ref()) {
+      if (auto value = val.value()) {
         auto prefixDb =
             readThriftObjStr<thrift::PrefixDatabase>(*value, serializer);
         // skip prefix entries marked as deleted
-        if (*prefixDb.deletePrefix_ref()) {
+        if (*prefixDb.deletePrefix()) {
           continue;
         }
-        for (auto const& prefixEntry : *prefixDb.prefixEntries_ref()) {
-          prefixes.emplace(toIPNetwork(*prefixEntry.prefix_ref()), prefixEntry);
+        for (auto const& prefixEntry : *prefixDb.prefixEntries()) {
+          prefixes.emplace(toIPNetwork(*prefixEntry.prefix()), prefixEntry);
         }
       }
     }
@@ -680,8 +675,8 @@ TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
   // Check that key was correctly persisted.
   auto maybeValue = getPublicationValueForKey(nodeKey);
   EXPECT_TRUE(maybeValue.has_value());
-  EXPECT_EQ(*maybeValue.value().version_ref(), 1);
-  EXPECT_EQ(*maybeValue.value().value_ref(), adjacencies);
+  EXPECT_EQ(*maybeValue.value().version(), 1);
+  EXPECT_EQ(*maybeValue.value().value(), adjacencies);
 }
 
 // Start LinkMonitor and ensure empty adjacency database and prefixes are
@@ -700,7 +695,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   // isOverloaded should be read from assume_drain, = false
   auto res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
-  EXPECT_FALSE(*res->isOverloaded_ref());
+  EXPECT_FALSE(*res->isOverloaded());
 
   // 2. restart with persistent store info
   // override_drain_state = false, persistent store has overload = true
@@ -710,7 +705,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   {
     // Save isOverloaded to be true in config store
     thrift::LinkMonitorState state;
-    state.isOverloaded_ref() = true;
+    state.isOverloaded() = true;
     auto resp = configStore->storeThriftObj(kConfigKey, state).get();
     EXPECT_EQ(folly::Unit(), resp);
   }
@@ -725,7 +720,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
-  EXPECT_TRUE(*res->isOverloaded_ref());
+  EXPECT_TRUE(*res->isOverloaded());
 
   // 3. restart with override_drain_state = true
   // override_drain_state = true, assume_drain = false, persistent store has
@@ -742,7 +737,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
 
   res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
-  EXPECT_FALSE(*res->isOverloaded_ref());
+  EXPECT_FALSE(*res->isOverloaded());
 }
 
 // receive neighbor up/down events from "spark"
@@ -773,36 +768,36 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     {
       // expect node overload bit set
       auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link metric value override
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric() = linkMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link overloaded bit set
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
-      adj_2_1_modified.isOverloaded_ref() = true;
+      adj_2_1_modified.metric() = linkMetric;
+      adj_2_1_modified.isOverloaded() = true;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect node overloaded bit unset
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
-      adj_2_1_modified.isOverloaded_ref() = true;
+      adj_2_1_modified.metric() = linkMetric;
+      adj_2_1_modified.isOverloaded() = true;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
@@ -811,7 +806,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     {
       // expect link overloaded bit unset
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric() = linkMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
@@ -826,37 +821,37 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     {
       // expect node overload bit set
       auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect link metric value override
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric() = linkMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // set adjacency metric, this should override the link metric
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = adjMetric;
+      adj_2_1_modified.metric() = adjMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // unset adjacency metric, this will remove the override
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric() = linkMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -864,39 +859,38 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // expect node-level metric increment value set on the link override
       // metric
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = nodeMetric + linkMetric;
+      adj_2_1_modified.metric() = nodeMetric + linkMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
 
       // change node-level metric
       // it will add the new metric to the previous the link override metric
       adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = changeNodeMetric + linkMetric;
+      adj_2_1_modified.metric() = changeNodeMetric + linkMetric;
 
       adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // add interface-level metric
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() =
-          changeNodeMetric + linkMetric + linkIncMetric;
+      adj_2_1_modified.metric() = changeNodeMetric + linkMetric + linkIncMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
 
       // change interface-level metric
       adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() =
+      adj_2_1_modified.metric() =
           changeNodeMetric + linkMetric + changelinkIncMetric;
 
       adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -904,25 +898,25 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // expect node-level metric increment value unset, only keeping metric
       // override + interface-level metric increment
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric + changelinkIncMetric;
+      adj_2_1_modified.metric() = linkMetric + changelinkIncMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
       // expect interface-level metric increment value unset, only keeping
       // metric override
       adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric() = linkMetric;
 
       adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect neighbor down
       auto adjDb = createAdjDb("node-1", {}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -930,17 +924,17 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // link-monitor and config-store is restarted but state will be
       // retained. expect neighbor up with overrides
       auto adj_2_1_modified = adj_2_1;
-      adj_2_1_modified.metric_ref() = linkMetric;
+      adj_2_1_modified.metric() = linkMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
       // expect neighbor down
       auto adjDb = createAdjDb("node-1", {}, kNodeLabel);
-      adjDb.isOverloaded_ref() = true;
+      adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
   }
@@ -986,13 +980,12 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
     auto res = linkMonitor->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
-    EXPECT_TRUE(*res->isOverloaded_ref());
-    EXPECT_EQ(1, res->interfaceDetails_ref()->size());
-    EXPECT_FALSE(
-        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
-    EXPECT_FALSE(res->interfaceDetails_ref()
+    EXPECT_TRUE(*res->isOverloaded());
+    EXPECT_EQ(1, res->interfaceDetails()->size());
+    EXPECT_FALSE(*res->interfaceDetails()->at(interfaceName).isOverloaded());
+    EXPECT_FALSE(res->interfaceDetails()
                      ->at(interfaceName)
-                     .metricOverride_ref()
+                     .metricOverride()
                      .has_value());
 
     LOG(INFO) << "2. Testing set link metric command!";
@@ -1008,30 +1001,22 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
     res = linkMonitor->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
-    EXPECT_TRUE(*res->isOverloaded_ref());
-    EXPECT_TRUE(
-        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
+    EXPECT_TRUE(*res->isOverloaded());
+    EXPECT_TRUE(*res->interfaceDetails()->at(interfaceName).isOverloaded());
     EXPECT_EQ(
         linkMetric,
-        res->interfaceDetails_ref()
-            ->at(interfaceName)
-            .metricOverride_ref()
-            .value());
+        res->interfaceDetails()->at(interfaceName).metricOverride().value());
 
     LOG(INFO) << "4. Testing unset node overload command!";
     ret = linkMonitor->semifuture_setNodeOverload(false).get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
     res = linkMonitor->semifuture_getInterfaces().get();
-    EXPECT_FALSE(*res->isOverloaded_ref());
-    EXPECT_TRUE(
-        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
+    EXPECT_FALSE(*res->isOverloaded());
+    EXPECT_TRUE(*res->interfaceDetails()->at(interfaceName).isOverloaded());
     EXPECT_EQ(
         linkMetric,
-        res->interfaceDetails_ref()
-            ->at(interfaceName)
-            .metricOverride_ref()
-            .value());
+        res->interfaceDetails()->at(interfaceName).metricOverride().value());
 
     LOG(INFO) << "5. Testing unset link overload command!";
     ret = linkMonitor->semifuture_setInterfaceOverload(interfaceName, false)
@@ -1046,12 +1031,11 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
 
     res = linkMonitor->semifuture_getInterfaces().get();
-    EXPECT_FALSE(*res->isOverloaded_ref());
-    EXPECT_FALSE(
-        *res->interfaceDetails_ref()->at(interfaceName).isOverloaded_ref());
-    EXPECT_FALSE(res->interfaceDetails_ref()
+    EXPECT_FALSE(*res->isOverloaded());
+    EXPECT_FALSE(*res->interfaceDetails()->at(interfaceName).isOverloaded());
+    EXPECT_FALSE(res->interfaceDetails()
                      ->at(interfaceName)
-                     .metricOverride_ref()
+                     .metricOverride()
                      .has_value());
 
     LOG(INFO) << "7. Testing set node overload command( AGAIN )!";
@@ -1292,7 +1276,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer events: peerSpec_2_2
-    checkPeerDump(*adj_2_2.otherNodeName_ref(), peerSpec_2_2);
+    checkPeerDump(*adj_2_2.otherNodeName(), peerSpec_2_2);
   }
 
   // neighbor 2 up on iface_2_1
@@ -1306,7 +1290,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     checkNextAdjPub("adj:node-1");
 
     // kvstore still have peerSpec_2_2
-    checkPeerDump(*adj_2_2.otherNodeName_ref(), peerSpec_2_2);
+    checkPeerDump(*adj_2_2.otherNodeName(), peerSpec_2_2);
   }
 
   // neighbor 2 down on iface_2_2
@@ -1320,7 +1304,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer spec change to peerSpec_2_1
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
 
   // neighbor 2 down on iface_2_1
@@ -1352,7 +1336,7 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer events: peerSpec_2_2
-    checkPeerDump(*adj_2_2.otherNodeName_ref(), peerSpec_2_2);
+    checkPeerDump(*adj_2_2.otherNodeName(), peerSpec_2_2);
   }
 
   // neighbor 3: both adj up
@@ -1419,7 +1403,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore received peer event
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
 
   // neighbor 2 up on adj_2_2
@@ -1436,7 +1420,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer spec still have peerSpec_2_1
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
 
   // neighbor restarting on iface_2_1 (GR)
@@ -1483,7 +1467,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   {
     // wait for this peer change to propogate
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
     // neighbor started GR, no adj update should happen
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
   }
@@ -1568,7 +1552,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore received peer event
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
 
   // neighbor 2 up on adj_2_2
@@ -1585,7 +1569,7 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore peer spec still have peerSpec_2_1
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
 
   // neighbor restarting on iface_2_1 (GR)
@@ -1666,8 +1650,8 @@ class DampenLinkTestFixture : public LinkMonitorTestFixture {
     auto tConfig = LinkMonitorTestFixture::createConfig();
 
     // override LM config
-    tConfig.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() = 2000;
-    tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 4000;
+    tConfig.link_monitor_config()->linkflap_initial_backoff_ms() = 2000;
+    tConfig.link_monitor_config()->linkflap_max_backoff_ms() = 4000;
 
     return tConfig;
   }
@@ -1721,12 +1705,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
 
   // at this point, both interface should have no backoff
   auto links = linkMonitor->semifuture_getInterfaces().get();
-  EXPECT_EQ(2, links->interfaceDetails_ref()->size());
+  EXPECT_EQ(2, links->interfaceDetails()->size());
   for (const auto& ifName : ifNames) {
-    EXPECT_FALSE(links->interfaceDetails_ref()
-                     ->at(ifName)
-                     .linkFlapBackOffMs_ref()
-                     .has_value());
+    EXPECT_FALSE(
+        links->interfaceDetails()->at(ifName).linkFlapBackOffMs().has_value());
   }
 
   VLOG(2) << "*** bring down 2 interfaces ***";
@@ -1749,21 +1731,15 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
     auto res = collateIfUpdates(sparkIfDb);
     auto links1 = linkMonitor->semifuture_getInterfaces().get();
     EXPECT_EQ(2, res.size());
-    EXPECT_EQ(2, links1->interfaceDetails_ref()->size());
+    EXPECT_EQ(2, links1->interfaceDetails()->size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
       EXPECT_GE(
-          links1->interfaceDetails_ref()
-              ->at(ifName)
-              .linkFlapBackOffMs_ref()
-              .value(),
+          links1->interfaceDetails()->at(ifName).linkFlapBackOffMs().value(),
           0);
       EXPECT_LE(
-          links1->interfaceDetails_ref()
-              ->at(ifName)
-              .linkFlapBackOffMs_ref()
-              .value(),
+          links1->interfaceDetails()->at(ifName).linkFlapBackOffMs().value(),
           2000);
     }
   }
@@ -1832,7 +1808,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
-    EXPECT_EQ(2, links2->interfaceDetails_ref()->size());
+    EXPECT_EQ(2, links2->interfaceDetails()->size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(0, res.at(ifName).isUpCount);
       EXPECT_EQ(1, res.at(ifName).isDownCount);
@@ -1841,16 +1817,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
       EXPECT_GE(
-          links2->interfaceDetails_ref()
-              ->at(ifName)
-              .linkFlapBackOffMs_ref()
-              .value(),
+          links2->interfaceDetails()->at(ifName).linkFlapBackOffMs().value(),
           2000);
       EXPECT_LE(
-          links2->interfaceDetails_ref()
-              ->at(ifName)
-              .linkFlapBackOffMs_ref()
-              .value(),
+          links2->interfaceDetails()->at(ifName).linkFlapBackOffMs().value(),
           4000);
     }
   }
@@ -1888,7 +1858,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
 
     // messages for 2 interfaces
     EXPECT_EQ(2, res.size());
-    EXPECT_EQ(2, links3->interfaceDetails_ref()->size());
+    EXPECT_EQ(2, links3->interfaceDetails()->size());
     for (const auto& ifName : ifNames) {
       EXPECT_EQ(1, res.at(ifName).isUpCount);
       EXPECT_EQ(0, res.at(ifName).isDownCount);
@@ -1896,9 +1866,9 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v4AddrsMinCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMaxCount);
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
-      EXPECT_FALSE(links3->interfaceDetails_ref()
+      EXPECT_FALSE(links3->interfaceDetails()
                        ->at(ifName)
-                       .linkFlapBackOffMs_ref()
+                       .linkFlapBackOffMs()
                        .has_value());
     }
   }
@@ -2186,11 +2156,11 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
     auto tConfig = getBasicOpenrConfig("node-1", areaCfgs, true, true);
 
     // override LM config
-    tConfig.node_name_ref() = fmt::format("lm{}", i + 1);
-    tConfig.persistent_config_store_path_ref() = kConfigStorePath;
-    tConfig.link_monitor_config_ref()->linkflap_initial_backoff_ms_ref() = 1;
-    tConfig.link_monitor_config_ref()->linkflap_max_backoff_ms_ref() = 8;
-    tConfig.link_monitor_config_ref()->use_rtt_metric_ref() = false;
+    tConfig.node_name() = fmt::format("lm{}", i + 1);
+    tConfig.persistent_config_store_path() = kConfigStorePath;
+    tConfig.link_monitor_config()->linkflap_initial_backoff_ms() = 1;
+    tConfig.link_monitor_config()->linkflap_max_backoff_ms() = 8;
+    tConfig.link_monitor_config()->use_rtt_metric() = false;
     auto currConfig = std::make_shared<Config>(tConfig);
 
     // create lm instances
@@ -2223,21 +2193,21 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
   while (label2NodeMap1.size() < kNumNodesToTest or
          label2NodeMap2.size() < kNumNodesToTest) {
     auto pub = kvStoreWrapper->recvPublication();
-    for (auto const& [key, val] : *pub.keyVals_ref()) {
+    for (auto const& [key, val] : *pub.keyVals()) {
       // skip non-adj key update or ttl update
-      if (key.find("adj:") != 0 or (not val.value_ref())) {
+      if (key.find("adj:") != 0 or (not val.value())) {
         continue;
       }
 
       auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
-          val.value_ref().value(), serializer);
-      if (*pub.area_ref() == static_cast<std::string>(kTestingAreaName)) {
+          val.value().value(), serializer);
+      if (*pub.area() == static_cast<std::string>(kTestingAreaName)) {
         // kTestingAreaName node segment label
-        label2NodeMap1[*adjDb.nodeLabel_ref()] = *adjDb.thisNodeName_ref();
+        label2NodeMap1[*adjDb.nodeLabel()] = *adjDb.thisNodeName();
       } else if (
-          pub.area_ref() == static_cast<std::string>(kTestingSpineAreaName)) {
+          pub.area() == static_cast<std::string>(kTestingSpineAreaName)) {
         // kTestingSpineAreaName node segment label
-        label2NodeMap2[*adjDb.nodeLabel_ref()] = *adjDb.thisNodeName_ref();
+        label2NodeMap2[*adjDb.nodeLabel()] = *adjDb.thisNodeName();
       } else {
         unknownAreaPublications++;
       }
@@ -2383,14 +2353,14 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
         prefixesArea1.at(folly::IPAddress::createNetwork(loopbackAddrV6_2));
     EXPECT_EQ(
         Constants::kDefaultPathPreference,
-        prefixEntry.metrics_ref()->path_preference_ref());
+        prefixEntry.metrics()->path_preference());
     EXPECT_EQ(
         Constants::kDefaultSourcePreference,
-        prefixEntry.metrics_ref()->source_preference_ref());
+        prefixEntry.metrics()->source_preference());
     EXPECT_EQ(
         std::set<std::string>(
             {"INTERFACE_SUBNET", fmt::format("{}:loopback", nodeName)}),
-        prefixEntry.tags_ref());
+        prefixEntry.tags());
 
     // Both area should report the same set of prefixes
     EXPECT_EQ(prefixesArea1, prefixesArea2);
@@ -2454,8 +2424,8 @@ class InitializationTestFixture : public LinkMonitorTestFixture {
     auto tConfig = LinkMonitorTestFixture::createConfig();
 
     // override LM config
-    tConfig.enable_new_gr_behavior_ref() = true;
-    tConfig.enable_ordered_adj_publication_ref() = true;
+    tConfig.enable_new_gr_behavior() = true;
+    tConfig.enable_ordered_adj_publication() = true;
 
     return tConfig;
   }
@@ -2490,7 +2460,7 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     // NOTE: adjacency db will contain adj_2_1 with
     // `adjOnlyUsedByOtherNode=true`
     auto adj_2_1Copy = folly::copy(adj_2_1);
-    adj_2_1Copy.adjOnlyUsedByOtherNode_ref() = true;
+    adj_2_1Copy.adjOnlyUsedByOtherNode() = true;
     auto adjDb = createAdjDb("node-1", {adj_2_1Copy}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     checkNextAdjPub("adj:node-1");
@@ -2509,7 +2479,7 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     checkNextAdjPub("adj:node-1");
 
     // check kvstore received peer event
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
 }
 

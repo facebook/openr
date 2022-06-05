@@ -82,25 +82,25 @@ class PrefixStateTestFixture : public ::testing::Test {
 TEST_F(PrefixStateTestFixture, BasicOperation) {
   auto& [nodeArea, entry] = *(initialEntries_.begin()->second.begin());
   const PrefixKey key(
-      nodeArea.first, toIPNetwork(*entry->prefix_ref()), nodeArea.second);
+      nodeArea.first, toIPNetwork(*entry->prefix()), nodeArea.second);
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
 
-  entry->type_ref() = thrift::PrefixType::BREEZE;
+  entry->type() = thrift::PrefixType::BREEZE;
   EXPECT_THAT(
       state_.updatePrefix(key, *entry),
       testing::UnorderedElementsAre(key.getCIDRNetwork()));
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
-      *state_.prefixes().at(toIPNetwork(*entry->prefix_ref())).at(nodeArea),
+      *state_.prefixes().at(toIPNetwork(*entry->prefix())).at(nodeArea),
       *entry);
 
-  entry->forwardingType_ref() = thrift::PrefixForwardingType::SR_MPLS;
+  entry->forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
   EXPECT_THAT(
       state_.updatePrefix(key, *entry),
       testing::UnorderedElementsAre(key.getCIDRNetwork()));
   EXPECT_TRUE(state_.updatePrefix(key, *entry).empty());
   EXPECT_EQ(
-      *state_.prefixes().at(toIPNetwork(*entry->prefix_ref())).at(nodeArea),
+      *state_.prefixes().at(toIPNetwork(*entry->prefix())).at(nodeArea),
       *entry);
 }
 
@@ -115,16 +115,16 @@ TEST(PrefixState, GetReceivedRoutes) {
   // prefix1 -> (node0, area0), (node0, area1), (node1, area1)
   //
   const auto prefixEntry = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
-  PrefixKey k1("node0", toIPNetwork(*prefixEntry.prefix_ref()), "area0");
+  PrefixKey k1("node0", toIPNetwork(*prefixEntry.prefix()), "area0");
   state.updatePrefix(k1, prefixEntry);
-  PrefixKey k2("node0", toIPNetwork(*prefixEntry.prefix_ref()), "area1");
+  PrefixKey k2("node0", toIPNetwork(*prefixEntry.prefix()), "area1");
   state.updatePrefix(k2, prefixEntry);
-  PrefixKey k3("node1", toIPNetwork(*prefixEntry.prefix_ref()), "area1");
+  PrefixKey k3("node1", toIPNetwork(*prefixEntry.prefix()), "area1");
   state.updatePrefix(k3, prefixEntry);
 
   thrift::NodeAndArea bestKey;
-  bestKey.node_ref() = "";
-  bestKey.area_ref() = "";
+  bestKey.node() = "";
+  bestKey.area() = "";
 
   //
   // Empty filter
@@ -135,10 +135,10 @@ TEST(PrefixState, GetReceivedRoutes) {
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
-    EXPECT_EQ(*prefixEntry.prefix_ref(), *routeDetail.prefix_ref());
-    EXPECT_EQ(bestKey, *routeDetail.bestKey_ref());
-    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
-    EXPECT_EQ(3, routeDetail.routes_ref()->size());
+    EXPECT_EQ(*prefixEntry.prefix(), *routeDetail.prefix());
+    EXPECT_EQ(bestKey, *routeDetail.bestKey());
+    EXPECT_EQ(0, routeDetail.bestKeys()->size());
+    EXPECT_EQ(3, routeDetail.routes()->size());
   }
 
   //
@@ -146,17 +146,16 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    filter.prefixes_ref() =
-        std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
+    filter.prefixes() = std::vector<thrift::IpPrefix>{*prefixEntry.prefix()};
 
     auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
-    EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
-    EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
-    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
-    EXPECT_EQ(3, routeDetail.routes_ref()->size());
+    EXPECT_EQ(*routeDetail.prefix(), *prefixEntry.prefix());
+    EXPECT_EQ(*routeDetail.bestKey(), bestKey);
+    EXPECT_EQ(0, routeDetail.bestKeys()->size());
+    EXPECT_EQ(3, routeDetail.routes()->size());
   }
 
   //
@@ -164,7 +163,7 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    filter.prefixes_ref() =
+    filter.prefixes() =
         std::vector<thrift::IpPrefix>({toIpPrefix("11.0.0.0/8")});
 
     auto routes = state.getReceivedRoutesFiltered(filter);
@@ -176,9 +175,9 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    filter.prefixes_ref() = std::vector<thrift::IpPrefix>();
+    filter.prefixes() = std::vector<thrift::IpPrefix>();
 
-    filter.prefixes_ref()->clear();
+    filter.prefixes()->clear();
     auto routes = state.getReceivedRoutesFiltered(filter);
     EXPECT_EQ(0, routes.size());
   }
@@ -188,22 +187,21 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    filter.prefixes_ref() =
-        std::vector<thrift::IpPrefix>{*prefixEntry.prefix_ref()};
-    filter.nodeName_ref() = "node1";
+    filter.prefixes() = std::vector<thrift::IpPrefix>{*prefixEntry.prefix()};
+    filter.nodeName() = "node1";
 
     auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
-    EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
-    EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
-    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
-    ASSERT_EQ(1, routeDetail.routes_ref()->size());
+    EXPECT_EQ(*routeDetail.prefix(), *prefixEntry.prefix());
+    EXPECT_EQ(*routeDetail.bestKey(), bestKey);
+    EXPECT_EQ(0, routeDetail.bestKeys()->size());
+    ASSERT_EQ(1, routeDetail.routes()->size());
 
-    auto& route = routeDetail.routes_ref()->at(0);
-    EXPECT_EQ("node1", route.key_ref()->node_ref().value());
-    EXPECT_EQ("area1", route.key_ref()->area_ref().value());
+    auto& route = routeDetail.routes()->at(0);
+    EXPECT_EQ("node1", route.key()->node().value());
+    EXPECT_EQ("area1", route.key()->area().value());
   }
 
   //
@@ -211,20 +209,20 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    filter.areaName_ref() = "area0";
+    filter.areaName() = "area0";
 
     auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(1, routes.size());
 
     auto& routeDetail = routes.at(0);
-    EXPECT_EQ(*routeDetail.prefix_ref(), *prefixEntry.prefix_ref());
-    EXPECT_EQ(*routeDetail.bestKey_ref(), bestKey);
-    EXPECT_EQ(0, routeDetail.bestKeys_ref()->size());
-    ASSERT_EQ(1, routeDetail.routes_ref()->size());
+    EXPECT_EQ(*routeDetail.prefix(), *prefixEntry.prefix());
+    EXPECT_EQ(*routeDetail.bestKey(), bestKey);
+    EXPECT_EQ(0, routeDetail.bestKeys()->size());
+    ASSERT_EQ(1, routeDetail.routes()->size());
 
-    auto& route = routeDetail.routes_ref()->at(0);
-    EXPECT_EQ("node0", route.key_ref()->node_ref().value());
-    EXPECT_EQ("area0", route.key_ref()->area_ref().value());
+    auto& route = routeDetail.routes()->at(0);
+    EXPECT_EQ("node0", route.key()->node().value());
+    EXPECT_EQ("area0", route.key()->area().value());
   }
 
   //
@@ -232,7 +230,7 @@ TEST(PrefixState, GetReceivedRoutes) {
   //
   {
     thrift::ReceivedRouteFilter filter;
-    filter.areaName_ref() = "unknown";
+    filter.areaName() = "unknown";
 
     auto routes = state.getReceivedRoutesFiltered(filter);
     ASSERT_EQ(0, routes.size());
@@ -248,8 +246,8 @@ TEST(PrefixState, FilterReceivedRoutes) {
   thrift::ReceivedRouteFilter filter;
   PrefixState::filterAndAddReceivedRoute(
       routes,
-      filter.nodeName_ref(),
-      filter.areaName_ref(),
+      filter.nodeName(),
+      filter.areaName(),
       folly::CIDRNetwork(),
       prefixEntries);
   EXPECT_TRUE(routes.empty());

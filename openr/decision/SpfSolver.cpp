@@ -264,13 +264,13 @@ SpfSolver::createRouteForPrefix(
   // TODO: With new PrefixMetrics we no longer treat routes differently based
   // on their origin source aka `prefixEntry.type`
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-    bool isBGP = prefixEntry->type_ref().value() == thrift::PrefixType::BGP;
+    bool isBGP = prefixEntry->type().value() == thrift::PrefixType::BGP;
     hasBGP |= isBGP;
     hasNonBGP |= !isBGP;
     if (nodeAndArea.first == myNodeName) {
-      hasSelfPrependLabel &= prefixEntry->prependLabel_ref().has_value();
+      hasSelfPrependLabel &= prefixEntry->prependLabel().has_value();
     }
-    if (isBGP and not prefixEntry->mv_ref().has_value()) {
+    if (isBGP and not prefixEntry->mv().has_value()) {
       missingMv = true;
       XLOG_IF(ERR, not enableBestRouteSelection_)
           << "Prefix entry for " << folly::IPAddress::networkToString(prefix)
@@ -345,7 +345,7 @@ SpfSolver::createRouteForPrefix(
 
   // Avoid duplicated efforts with selectBestRoutes() in case of
   // SHORTEST_DISTANCE route selection algorithm.
-  auto routeSelectionAlgo = *routeComputationRules.routeSelectionAlgo_ref();
+  auto routeSelectionAlgo = *routeComputationRules.routeSelectionAlgo();
   if (routeSelectionAlgo !=
       thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE) {
     extendRoutes(
@@ -369,7 +369,7 @@ SpfSolver::createRouteForPrefix(
   std::optional<int64_t> ucmpWeight;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
   for (const auto& [area, areaRules] :
-       *routeComputationRules.areaPathComputationRules_ref()) {
+       *routeComputationRules.areaPathComputationRules()) {
     const auto& linkState = areaLinkStates.find(area);
     if (linkState == areaLinkStates.end()) {
       // Possible if the route computation rules are based of a configured SR
@@ -380,7 +380,7 @@ SpfSolver::createRouteForPrefix(
       continue;
     }
 
-    switch (*areaRules.forwardingAlgo_ref()) {
+    switch (*areaRules.forwardingAlgo()) {
     case thrift::PrefixForwardingAlgorithm::SP_ECMP:
     case thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION:
     case thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION: {
@@ -390,10 +390,10 @@ SpfSolver::createRouteForPrefix(
           routeSelectionResult,
           prefixEntries,
           hasBGP,
-          *areaRules.forwardingType_ref(),
+          *areaRules.forwardingType(),
           area,
           linkState->second,
-          *areaRules.forwardingAlgo_ref());
+          *areaRules.forwardingAlgo());
       // Only use next-hops in areas with the shortest IGP metric
       //
       // TODO: bypass this code to allow UCMP paths between areas if
@@ -427,7 +427,7 @@ SpfSolver::createRouteForPrefix(
           routeSelectionResult,
           prefixEntries,
           hasBGP,
-          *areaRules.forwardingType_ref(),
+          *areaRules.forwardingType(),
           area,
           linkState->second);
       ksp2NextHops.insert(areaNextHops.begin(), areaNextHops.end());
@@ -435,7 +435,7 @@ SpfSolver::createRouteForPrefix(
     default:
       XLOG(ERR)
           << "Unknown prefix algorithm type "
-          << apache::thrift::util::enumNameSafe(*areaRules.forwardingAlgo_ref())
+          << apache::thrift::util::enumNameSafe(*areaRules.forwardingAlgo())
           << " for prefix " << folly::IPAddress::networkToString(prefix);
       break;
     }
@@ -505,8 +505,8 @@ SpfSolver::buildRouteDb(
         labelToNode;
     for (const auto& [area, linkState] : areaLinkStates) {
       for (const auto& [_, adjDb] : linkState.getAdjacencyDatabases()) {
-        const auto topLabel = *adjDb.nodeLabel_ref();
-        const auto& nodeName = *adjDb.thisNodeName_ref();
+        const auto topLabel = *adjDb.nodeLabel();
+        const auto& nodeName = *adjDb.thisNodeName();
         // Top label is not set => Non-SR mode
         if (topLabel == 0) {
           XLOG(INFO) << "Ignoring node label " << topLabel << " of node "
@@ -541,11 +541,11 @@ SpfSolver::buildRouteDb(
         }
 
         // Install POP_AND_LOOKUP for next layer
-        if (*adjDb.thisNodeName_ref() == myNodeName) {
+        if (*adjDb.thisNodeName() == myNodeName) {
           thrift::NextHopThrift nh;
-          nh.address_ref() = toBinaryAddress(folly::IPAddressV6("::"));
-          nh.area_ref() = area;
-          nh.mplsAction_ref() =
+          nh.address() = toBinaryAddress(folly::IPAddressV6("::"));
+          nh.area() = area;
+          nh.mplsAction() =
               createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
           labelToNode.erase(topLabel);
           labelToNode.emplace(
@@ -557,7 +557,7 @@ SpfSolver::buildRouteDb(
         // Get best nexthop towards the node
         auto metricNhs = getNextHopsWithMetric(
             myNodeName,
-            {{adjDb.thisNodeName_ref().value(), area}},
+            {{adjDb.thisNodeName().value(), area}},
             false,
             linkState);
         if (metricNhs.second.empty()) {
@@ -577,12 +577,12 @@ SpfSolver::buildRouteDb(
         labelToNode.emplace(
             topLabel,
             std::make_pair(
-                adjDb.thisNodeName_ref().value(),
+                adjDb.thisNodeName().value(),
                 RibMplsEntry(
                     topLabel,
                     getNextHopsThrift(
                         myNodeName,
-                        {{adjDb.thisNodeName_ref().value(), area}},
+                        {{adjDb.thisNodeName().value(), area}},
                         false /* isV4 */,
                         v4OverV6Nexthop_,
                         false /* perDestination */,
@@ -707,11 +707,10 @@ SpfSolver::getMinNextHopThreshold(
   std::optional<int64_t> maxMinNexthopForPrefix = std::nullopt;
   for (const auto& nodeArea : nodes.allNodeAreas) {
     const auto& prefixEntry = prefixEntries.at(nodeArea);
-    maxMinNexthopForPrefix = prefixEntry->minNexthop_ref().has_value() &&
+    maxMinNexthopForPrefix = prefixEntry->minNexthop().has_value() &&
             (not maxMinNexthopForPrefix.has_value() ||
-             prefixEntry->minNexthop_ref().value() >
-                 maxMinNexthopForPrefix.value())
-        ? prefixEntry->minNexthop_ref().value()
+             prefixEntry->minNexthop().value() > maxMinNexthopForPrefix.value())
+        ? prefixEntry->minNexthop().value()
         : maxMinNexthopForPrefix;
   }
   return maxMinNexthopForPrefix;
@@ -754,13 +753,13 @@ SpfSolver::runBestPathSelectionBgp(
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
     switch (bestVector.has_value()
                 ? MetricVectorUtils::compareMetricVectors(
-                      can_throw(*prefixEntry->mv_ref()), *bestVector)
+                      can_throw(*prefixEntry->mv()), *bestVector)
                 : MetricVectorUtils::CompareResult::WINNER) {
     case MetricVectorUtils::CompareResult::WINNER:
       ret.allNodeAreas.clear();
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_WINNER:
-      bestVector = can_throw(*prefixEntry->mv_ref());
+      bestVector = can_throw(*prefixEntry->mv());
       ret.bestNodeArea = nodeAndArea;
       FOLLY_FALLTHROUGH;
     case MetricVectorUtils::CompareResult::TIE_LOOSER:
@@ -808,7 +807,7 @@ SpfSolver::selectBestPathsSpf(
   auto filteredBestNodeAreas = routeSelectionResult.allNodeAreas;
   if (routeSelectionResult.hasNode(myNodeName) and perDestination) {
     for (const auto& [nodeAndArea, prefixEntry] : prefixEntries) {
-      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel_ref()) {
+      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel()) {
         filteredBestNodeAreas.erase(nodeAndArea);
         break;
       }
@@ -938,9 +937,9 @@ SpfSolver::selectBestPathsKsp2(
       cost += link->getMetricFromNode(nextNodeName);
       nextNodeName = link->getOtherNodeName(nextNodeName);
       auto& adjDb = linkState.getAdjacencyDatabases().at(nextNodeName);
-      labels.push_front(*adjDb.nodeLabel_ref());
-      if (not isMplsLabelValid(*adjDb.nodeLabel_ref())) {
-        invalidNodes.emplace_back(*adjDb.thisNodeName_ref());
+      labels.push_front(*adjDb.nodeLabel());
+      if (not isMplsLabelValid(*adjDb.nodeLabel())) {
+        invalidNodes.emplace_back(*adjDb.thisNodeName());
       }
     }
     // Ignore paths including nodes with invalid node labels.
@@ -956,9 +955,9 @@ SpfSolver::selectBestPathsKsp2(
     // Add prepend label of last node in the path.
     auto lastNodeInPath = nextNodeName;
     auto& prefixEntry = prefixEntries.at({lastNodeInPath, area});
-    if (prefixEntry->prependLabel_ref()) {
+    if (prefixEntry->prependLabel()) {
       // add prepend label to bottom of the stack
-      labels.push_front(prefixEntry->prependLabel_ref().value());
+      labels.push_front(prefixEntry->prependLabel().value());
     }
 
     // Create nexthop
@@ -1021,8 +1020,8 @@ SpfSolver::addBestPaths(
   if (routeSelectionResult.hasNode(myNodeName)) {
     std::optional<int32_t> prependLabel;
     for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel_ref()) {
-        prependLabel = prefixEntry->prependLabel_ref().value();
+      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel()) {
+        prependLabel = prefixEntry->prependLabel().value();
         break;
       }
     }
@@ -1034,8 +1033,8 @@ SpfSolver::addBestPaths(
     auto routeIter = staticMplsRoutes_.find(prependLabel.value());
     if (routeIter != staticMplsRoutes_.end()) {
       for (const auto& nh : routeIter->second.nexthops) {
-        nextHops.emplace(createNextHop(
-            nh.address_ref().value(), std::nullopt, 0, std::nullopt));
+        nextHops.emplace(
+            createNextHop(nh.address().value(), std::nullopt, 0, std::nullopt));
       }
     } else {
       XLOG(ERR) << "Static nexthops do not exist for static mpls label "
@@ -1151,11 +1150,11 @@ SpfSolver::getNodeUcmpResult(
     }
 
     // Ignore routes that have no weight or a weight of zero.
-    if (not prefixEntry->weight_ref() || 0 == *prefixEntry->weight_ref()) {
+    if (not prefixEntry->weight() || 0 == *prefixEntry->weight()) {
       return std::nullopt;
     }
 
-    dstWeights.emplace(dstNode, *prefixEntry->weight_ref());
+    dstWeights.emplace(dstNode, *prefixEntry->weight());
   }
 
   // Resolve UCMP weights. This API returns the UCMP results
@@ -1248,8 +1247,8 @@ SpfSolver::getNextHopsThrift(
 
         // Add destination prepend label if any.
         auto& dstPrefixEntry = prefixEntries.at({dstNode, area});
-        if (dstPrefixEntry->prependLabel_ref()) {
-          pushLabels.emplace_back(dstPrefixEntry->prependLabel_ref().value());
+        if (dstPrefixEntry->prependLabel()) {
+          pushLabels.emplace_back(dstPrefixEntry->prependLabel().value());
           if (not isMplsLabelValid(pushLabels.back())) {
             continue;
           }
@@ -1258,7 +1257,7 @@ SpfSolver::getNextHopsThrift(
         // Add destination node label if it is not neighbor node
         if (dstNode != neighborNode) {
           pushLabels.emplace_back(
-              *linkState.getAdjacencyDatabases().at(dstNode).nodeLabel_ref());
+              *linkState.getAdjacencyDatabases().at(dstNode).nodeLabel());
           if (not isMplsLabelValid(pushLabels.back())) {
             continue;
           }
@@ -1310,7 +1309,7 @@ SpfSolver::getRouteComputationRules(
   //    attributes
   // 3. Prepend label = None
   thrift::RouteComputationRules defaultRules;
-  defaultRules.routeSelectionAlgo_ref() =
+  defaultRules.routeSelectionAlgo() =
       thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE;
   for (const auto& [areaId, _] : areaLinkStates) {
     const auto areaPathComputationRules = getPrefixForwardingTypeAndAlgorithm(
@@ -1321,9 +1320,9 @@ SpfSolver::getRouteComputationRules(
     }
 
     thrift::AreaPathComputationRules areaRules;
-    areaRules.forwardingType_ref() = areaPathComputationRules->first;
-    areaRules.forwardingAlgo_ref() = areaPathComputationRules->second;
-    defaultRules.areaPathComputationRules_ref()->emplace(
+    areaRules.forwardingType() = areaPathComputationRules->first;
+    areaRules.forwardingAlgo() = areaPathComputationRules->second;
+    defaultRules.areaPathComputationRules()->emplace(
         areaId, std::move(areaRules));
   }
 

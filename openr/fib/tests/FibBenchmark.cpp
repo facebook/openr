@@ -89,7 +89,7 @@ class FibWrapper {
         enableSegmentRouting /*enableSegmentRouting*/,
         false /*orderedFibProgramming*/,
         false /*dryrun*/);
-    tConfig.fib_port_ref() = fibThriftThread.getAddress()->getPort();
+    tConfig.fib_port() = fibThriftThread.getAddress()->getPort();
     config = std::make_shared<Config>(tConfig);
 
     // Creat Fib module and start fib thread

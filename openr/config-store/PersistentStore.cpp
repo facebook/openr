@@ -27,7 +27,7 @@ PersistentStore::PersistentStore(
     std::shared_ptr<const Config> config,
     bool dryrun,
     bool periodicallySaveToDisk)
-    : storageFilePath_(*config->getConfig().persistent_config_store_path_ref()),
+    : storageFilePath_(*config->getConfig().persistent_config_store_path()),
       dryrun_(dryrun) {
   if (periodicallySaveToDisk) {
     // Create timer and backoff mechanism only if backoff is requested

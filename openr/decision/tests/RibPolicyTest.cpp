@@ -26,14 +26,14 @@ createPolicyStatement(
     std::map<std::string, int32_t> nbrToWeight = {},
     std::optional<thrift::RouteCounterID> const& counterID = std::nullopt) {
   thrift::RibPolicyStatement p;
-  *p.name_ref() = "TestPolicyStatement";
-  p.matcher_ref()->prefixes_ref().from_optional(prefixes);
-  p.matcher_ref()->tags_ref().from_optional(tags);
-  p.action_ref()->set_weight_ref() = thrift::RibRouteActionWeight{};
-  p.action_ref()->set_weight_ref()->default_weight_ref() = defaultWeight;
-  *p.action_ref()->set_weight_ref()->area_to_weight_ref() = areaToWeight;
-  *p.action_ref()->set_weight_ref()->neighbor_to_weight_ref() = nbrToWeight;
-  p.counterID_ref().from_optional(counterID);
+  *p.name() = "TestPolicyStatement";
+  p.matcher()->prefixes().from_optional(prefixes);
+  p.matcher()->tags().from_optional(tags);
+  p.action()->set_weight() = thrift::RibRouteActionWeight{};
+  p.action()->set_weight()->default_weight() = defaultWeight;
+  *p.action()->set_weight()->area_to_weight() = areaToWeight;
+  *p.action()->set_weight()->neighbor_to_weight() = nbrToWeight;
+  p.counterID().from_optional(counterID);
   return p;
 }
 
@@ -41,8 +41,8 @@ thrift::RibPolicy
 createPolicy(
     std::vector<thrift::RibPolicyStatement> statements, int32_t ttl_secs) {
   thrift::RibPolicy policy;
-  *policy.statements_ref() = std::move(statements);
-  policy.ttl_secs_ref() = ttl_secs;
+  *policy.statements() = std::move(statements);
+  policy.ttl_secs() = ttl_secs;
   return policy;
 }
 
@@ -52,14 +52,14 @@ TEST(RibPolicyStatement, Error) {
   // Create RibPolicyStatement with no action
   {
     thrift::RibPolicyStatement stmt;
-    stmt.matcher_ref()->prefixes_ref() = std::vector<thrift::IpPrefix>{};
+    stmt.matcher()->prefixes() = std::vector<thrift::IpPrefix>{};
     EXPECT_THROW((RibPolicyStatement(stmt)), thrift::OpenrError);
   }
 
   // Create RibPolicyStatement with no matcher
   {
     thrift::RibPolicyStatement stmt;
-    stmt.action_ref()->set_weight_ref() = thrift::RibRouteActionWeight{};
+    stmt.action()->set_weight() = thrift::RibRouteActionWeight{};
     EXPECT_THROW((RibPolicyStatement(stmt)), thrift::OpenrError);
   }
 }
@@ -109,10 +109,10 @@ TEST(RibPolicyStatement, ApplyAction) {
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto nhDefaultModified = nhDefault;
-    nhDefaultModified.weight_ref() = 1;
+    nhDefaultModified.weight() = 1;
 
     auto nh2Modified = nh2;
-    nh2Modified.weight_ref() = 2;
+    nh2Modified.weight() = 2;
 
     EXPECT_THAT(
         entry.nexthops,
@@ -131,12 +131,12 @@ TEST(RibPolicyStatement, Match) {
 
     // Verify match
     RibUnicastEntry match(folly::IPAddress::createNetwork("10.0.0.0/8"));
-    match.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    match.bestPrefixEntry.tags()->insert("COMMODITY:EGRESS");
     EXPECT_TRUE(policyStatement.match(match));
 
     // Verify no match
     RibUnicastEntry noMatch(folly::IPAddress::createNetwork("11.0.0.0/8"));
-    noMatch.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    noMatch.bestPrefixEntry.tags()->insert("COMMODITY:EGRESS");
     EXPECT_FALSE(policyStatement.match(noMatch));
   }
 
@@ -149,12 +149,12 @@ TEST(RibPolicyStatement, Match) {
 
     // Verify match
     RibUnicastEntry match(folly::IPAddress::createNetwork("11.0.0.0/8"));
-    match.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    match.bestPrefixEntry.tags()->insert("COMMODITY:EGRESS");
     EXPECT_TRUE(policyStatement.match(match));
 
     // Verify no match
     RibUnicastEntry noMatch(folly::IPAddress::createNetwork("11.0.0.0/8"));
-    noMatch.bestPrefixEntry.tags_ref()->insert("COMMODITY:INGRESS:pod1");
+    noMatch.bestPrefixEntry.tags()->insert("COMMODITY:INGRESS:pod1");
     EXPECT_FALSE(policyStatement.match(noMatch));
   }
 
@@ -168,25 +168,24 @@ TEST(RibPolicyStatement, Match) {
 
     // Verify match
     RibUnicastEntry match(folly::IPAddress::createNetwork("10.0.0.0/8"));
-    match.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    match.bestPrefixEntry.tags()->insert("COMMODITY:EGRESS");
     EXPECT_TRUE(policyStatement.match(match));
 
     // Verify prefix doesn't match
     RibUnicastEntry noMatchPrefix(
         folly::IPAddress::createNetwork("11.0.0.0/8"));
-    noMatchPrefix.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    noMatchPrefix.bestPrefixEntry.tags()->insert("COMMODITY:EGRESS");
     EXPECT_FALSE(policyStatement.match(noMatchPrefix));
 
     // Verify tag doesn't match
     RibUnicastEntry noMatchTag(folly::IPAddress::createNetwork("10.0.0.0/8"));
-    noMatchTag.bestPrefixEntry.tags_ref()->insert("COMMODITY:INGRESS:pod1");
+    noMatchTag.bestPrefixEntry.tags()->insert("COMMODITY:INGRESS:pod1");
     EXPECT_FALSE(policyStatement.match(noMatchTag));
 
     // Verify tag doesn't match
     RibUnicastEntry noMatchPrefixTag(
         folly::IPAddress::createNetwork("11.0.0.0/8"));
-    noMatchPrefixTag.bestPrefixEntry.tags_ref()->insert(
-        "COMMODITY:INGRES:pod1");
+    noMatchPrefixTag.bestPrefixEntry.tags()->insert("COMMODITY:INGRES:pod1");
     EXPECT_FALSE(policyStatement.match(noMatchPrefixTag));
   }
 
@@ -200,7 +199,7 @@ TEST(RibPolicyStatement, Match) {
 
     // Statement will not match with anything
     RibUnicastEntry noMatch(folly::IPAddress::createNetwork("10.0.0.0/8"));
-    noMatch.bestPrefixEntry.tags_ref()->insert("COMMODITY:EGRESS");
+    noMatch.bestPrefixEntry.tags()->insert("COMMODITY:EGRESS");
     EXPECT_FALSE(policyStatement.match(noMatch));
   }
 }
@@ -218,17 +217,16 @@ TEST(RibPolicy, ApiTest) {
     auto thriftPolicyCopy = policy.toThrift();
 
     // Verify ttl. It must be less or equal
-    EXPECT_LE(*thriftPolicyCopy.ttl_secs_ref(), *thriftPolicy.ttl_secs_ref());
+    EXPECT_LE(*thriftPolicyCopy.ttl_secs(), *thriftPolicy.ttl_secs());
 
     // NOTE: Make ttl equal for comparing policy. Everything else
     // must be same
-    thriftPolicyCopy.ttl_secs_ref() = *thriftPolicy.ttl_secs_ref();
+    thriftPolicyCopy.ttl_secs() = *thriftPolicy.ttl_secs();
     EXPECT_EQ(thriftPolicyCopy, thriftPolicy);
   }
 
   // Verify getTtlDuration(). Remaining time must be less or equal
-  EXPECT_LE(
-      policy.getTtlDuration().count(), *thriftPolicy.ttl_secs_ref() * 1000);
+  EXPECT_LE(policy.getTtlDuration().count(), *thriftPolicy.ttl_secs() * 1000);
 
   // Verify isActive()
   EXPECT_TRUE(policy.isActive());
@@ -236,12 +234,12 @@ TEST(RibPolicy, ApiTest) {
   // Verify match
   {
     RibUnicastEntry matchEntry(folly::IPAddress::createNetwork("10.0.0.0/8"));
-    matchEntry.bestPrefixEntry.tags_ref()->insert("TAG1");
+    matchEntry.bestPrefixEntry.tags()->insert("TAG1");
     EXPECT_TRUE(policy.match(matchEntry));
 
     RibUnicastEntry nonMatchEntry(
         folly::IPAddress::createNetwork("99.0.0.0/8"));
-    nonMatchEntry.bestPrefixEntry.tags_ref()->insert("TAG1");
+    nonMatchEntry.bestPrefixEntry.tags()->insert("TAG1");
     EXPECT_FALSE(policy.match(nonMatchEntry));
   }
 }
@@ -291,10 +289,10 @@ TEST(RibPolicy, ApplyAction) {
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto expectNh1 = nh1;
-    expectNh1.weight_ref() = 99;
+    expectNh1.weight() = 99;
 
     auto expectNh2 = nh2;
-    expectNh2.weight_ref() = 1;
+    expectNh2.weight() = 1;
 
     EXPECT_THAT(
         entry.nexthops, testing::UnorderedElementsAre(expectNh1, expectNh2));
@@ -309,10 +307,10 @@ TEST(RibPolicy, ApplyAction) {
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto expectNh1 = nh1;
-    expectNh1.weight_ref() = 1;
+    expectNh1.weight() = 1;
 
     auto expectNh2 = nh2;
-    expectNh2.weight_ref() = 99;
+    expectNh2.weight() = 99;
 
     EXPECT_THAT(
         entry.nexthops, testing::UnorderedElementsAre(expectNh1, expectNh2));
@@ -367,13 +365,13 @@ TEST(RibPolicy, ApplyPolicy) {
     EXPECT_THAT(entries, testing::SizeIs(2));
 
     auto expectNh1 = nh1;
-    expectNh1.weight_ref() = 99;
+    expectNh1.weight() = 99;
 
     auto expectNh2 = nh2;
-    expectNh2.weight_ref() = 1;
+    expectNh2.weight() = 1;
 
     auto expectNh3 = nh3;
-    expectNh3.weight_ref() = 98;
+    expectNh3.weight() = 98;
 
     EXPECT_THAT(
         entries.at(entry1.prefix).nexthops,

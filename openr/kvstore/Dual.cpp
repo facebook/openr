@@ -169,18 +169,18 @@ void
 Dual::floodUpdates(
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
   thrift::DualMessage msg;
-  msg.dstId_ref() = rootId;
-  msg.distance_ref() = info_.reportDistance;
-  msg.type_ref() = thrift::DualMessageType::UPDATE;
+  msg.dstId() = rootId;
+  msg.distance() = info_.reportDistance;
+  msg.type() = thrift::DualMessageType::UPDATE;
 
   for (const auto& [neighbor, ld] : localDistances_) {
     if (ld == std::numeric_limits<int64_t>::max()) {
       // skip down neighbor
       continue;
     }
-    msgsToSend[neighbor].messages_ref()->emplace_back(msg);
-    (*counters_[neighbor].updateSent_ref())++;
-    (*counters_[neighbor].totalSent_ref())++;
+    msgsToSend[neighbor].messages()->emplace_back(msg);
+    (*counters_[neighbor].updateSent())++;
+    (*counters_[neighbor].totalSent())++;
   }
 }
 
@@ -221,9 +221,9 @@ Dual::diffusingComputation(
   bool success = false;
 
   thrift::DualMessage msg;
-  msg.dstId_ref() = rootId;
-  msg.distance_ref() = info_.reportDistance;
-  msg.type_ref() = thrift::DualMessageType::QUERY;
+  msg.dstId() = rootId;
+  msg.distance() = info_.reportDistance;
+  msg.type() = thrift::DualMessageType::QUERY;
 
   for (const auto& [neighbor, ld] : localDistances_) {
     if (ld == std::numeric_limits<int64_t>::max()) {
@@ -231,9 +231,9 @@ Dual::diffusingComputation(
       continue;
     }
 
-    msgsToSend[neighbor].messages_ref()->emplace_back(msg);
-    (*counters_[neighbor].querySent_ref())++;
-    (*counters_[neighbor].totalSent_ref())++;
+    msgsToSend[neighbor].messages()->emplace_back(msg);
+    (*counters_[neighbor].querySent())++;
+    (*counters_[neighbor].totalSent())++;
     info_.neighborInfos[neighbor].expectReply = true;
     success = true;
   }
@@ -294,14 +294,14 @@ Dual::getStatusString() const noexcept {
     counterStrs.emplace_back(fmt::format(
         "{}: Q ({}, {}), R ({}, {}), U ({}, {}), total ({}, {})",
         neighbor,
-        *counters.querySent_ref(),
-        *counters.queryRecv_ref(),
-        *counters.replySent_ref(),
-        *counters.replyRecv_ref(),
-        *counters.updateSent_ref(),
-        *counters.updateRecv_ref(),
-        *counters.totalSent_ref(),
-        *counters.totalRecv_ref()));
+        *counters.querySent(),
+        *counters.queryRecv(),
+        *counters.replySent(),
+        *counters.replyRecv(),
+        *counters.updateSent(),
+        *counters.updateRecv(),
+        *counters.totalSent(),
+        *counters.totalRecv()));
   }
   return fmt::format(
       "root({})::{}: {}\n{}",
@@ -424,9 +424,9 @@ Dual::peerUp(
       // this is equivlent to receiving a reply
 
       thrift::DualMessage msg;
-      msg.dstId_ref() = rootId;
-      msg.distance_ref() = info_.neighborInfos[neighbor].reportDistance;
-      msg.type_ref() = thrift::DualMessageType::REPLY;
+      msg.dstId() = rootId;
+      msg.distance() = info_.neighborInfos[neighbor].reportDistance;
+      msg.type() = thrift::DualMessageType::REPLY;
       processReply(neighbor, msg, msgsToSend);
     }
   }
@@ -436,23 +436,23 @@ Dual::peerUp(
   // (2nd update will just be ignored by our neighbor)
 
   thrift::DualMessage msg;
-  msg.dstId_ref() = rootId;
-  msg.distance_ref() = info_.reportDistance;
-  msg.type_ref() = thrift::DualMessageType::UPDATE;
-  msgsToSend[neighbor].messages_ref()->emplace_back(std::move(msg));
-  (*counters_[neighbor].updateSent_ref())++;
-  (*counters_[neighbor].totalSent_ref())++;
+  msg.dstId() = rootId;
+  msg.distance() = info_.reportDistance;
+  msg.type() = thrift::DualMessageType::UPDATE;
+  msgsToSend[neighbor].messages()->emplace_back(std::move(msg));
+  (*counters_[neighbor].updateSent())++;
+  (*counters_[neighbor].totalSent())++;
 
   if (info_.neighborInfos[neighbor].needToReply) {
     info_.neighborInfos.at(neighbor).needToReply = false;
 
     thrift::DualMessage reply;
-    reply.dstId_ref() = rootId;
-    reply.distance_ref() = info_.reportDistance;
-    reply.type_ref() = thrift::DualMessageType::REPLY;
-    msgsToSend[neighbor].messages_ref()->emplace_back(std::move(reply));
-    (*counters_[neighbor].replySent_ref())++;
-    (*counters_[neighbor].totalSent_ref())++;
+    reply.dstId() = rootId;
+    reply.distance() = info_.reportDistance;
+    reply.type() = thrift::DualMessageType::REPLY;
+    msgsToSend[neighbor].messages()->emplace_back(std::move(reply));
+    (*counters_[neighbor].replySent())++;
+    (*counters_[neighbor].totalSent())++;
   }
 }
 
@@ -485,9 +485,9 @@ Dual::peerDown(
       // equivlent to receing a reply from this guy with max-distance.
 
       thrift::DualMessage msg;
-      msg.dstId_ref() = rootId;
-      msg.distance_ref() = std::numeric_limits<int64_t>::max();
-      msg.type_ref() = thrift::DualMessageType::REPLY;
+      msg.dstId() = rootId;
+      msg.distance() = std::numeric_limits<int64_t>::max();
+      msg.type() = thrift::DualMessageType::REPLY;
       processReply(neighbor, msg, msgsToSend);
     }
   }
@@ -498,16 +498,16 @@ Dual::processUpdate(
     const std::string& neighbor,
     const thrift::DualMessage& update,
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
-  CHECK(*update.type_ref() == thrift::DualMessageType::UPDATE);
-  CHECK_EQ(*update.dstId_ref(), rootId)
-      << "received update dst-id: " << *update.dstId_ref()
+  CHECK(*update.type() == thrift::DualMessageType::UPDATE);
+  CHECK_EQ(*update.dstId(), rootId)
+      << "received update dst-id: " << *update.dstId()
       << " != my-root-id: " << rootId;
 
-  const auto& rd = *update.distance_ref();
+  const auto& rd = *update.distance();
   XLOG(DBG2) << rootId << "::" << nodeId << ": received UPDATE from ("
              << neighbor << ", " << rd << ")";
-  (*counters_[neighbor].updateRecv_ref())++;
-  (*counters_[neighbor].totalRecv_ref())++;
+  (*counters_[neighbor].updateRecv())++;
+  (*counters_[neighbor].totalRecv())++;
 
   // update report-distance
   info_.neighborInfos[neighbor].reportDistance = rd;
@@ -551,13 +551,13 @@ Dual::sendReply(
   }
 
   thrift::DualMessage msg;
-  msg.dstId_ref() = rootId;
-  msg.distance_ref() = info_.reportDistance;
-  msg.type_ref() = thrift::DualMessageType::REPLY;
+  msg.dstId() = rootId;
+  msg.distance() = info_.reportDistance;
+  msg.type() = thrift::DualMessageType::REPLY;
 
-  msgsToSend[dstNode].messages_ref()->emplace_back(std::move(msg));
-  (*counters_[dstNode].replySent_ref())++;
-  (*counters_[dstNode].totalSent_ref())++;
+  msgsToSend[dstNode].messages()->emplace_back(std::move(msg));
+  (*counters_[dstNode].replySent())++;
+  (*counters_[dstNode].totalSent())++;
 }
 
 void
@@ -565,16 +565,16 @@ Dual::processQuery(
     const std::string& neighbor,
     const thrift::DualMessage& query,
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
-  CHECK(*query.type_ref() == thrift::DualMessageType::QUERY);
-  CHECK_EQ(*query.dstId_ref(), rootId)
-      << "received query dst-id: " << *query.dstId_ref()
+  CHECK(*query.type() == thrift::DualMessageType::QUERY);
+  CHECK_EQ(*query.dstId(), rootId)
+      << "received query dst-id: " << *query.dstId()
       << " != my-root-id: " << rootId;
 
-  const auto& rd = *query.distance_ref();
+  const auto& rd = *query.distance();
   XLOG(DBG2) << rootId << "::" << nodeId << ": received QUERY from ("
              << neighbor << ", " << rd << ")";
-  (*counters_[neighbor].queryRecv_ref())++;
-  (*counters_[neighbor].totalRecv_ref())++;
+  (*counters_[neighbor].queryRecv())++;
+  (*counters_[neighbor].totalRecv())++;
 
   // update report-distance
   info_.neighborInfos[neighbor].reportDistance = rd;
@@ -604,16 +604,16 @@ Dual::processReply(
     const std::string& neighbor,
     const thrift::DualMessage& reply,
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
-  CHECK(*reply.type_ref() == thrift::DualMessageType::REPLY);
-  CHECK_EQ(*reply.dstId_ref(), rootId)
-      << "received reply dst-id: " << *reply.dstId_ref()
+  CHECK(*reply.type() == thrift::DualMessageType::REPLY);
+  CHECK_EQ(*reply.dstId(), rootId)
+      << "received reply dst-id: " << *reply.dstId()
       << " != my-root-id: " << rootId;
 
-  const auto& reportDistance = *reply.distance_ref();
+  const auto& reportDistance = *reply.distance();
   XLOG(DBG2) << rootId << "::" << nodeId << ": received REPLY from ("
              << neighbor << ", " << reportDistance << ")";
-  (*counters_[neighbor].replyRecv_ref())++;
-  (*counters_[neighbor].totalRecv_ref())++;
+  (*counters_[neighbor].replyRecv())++;
+  (*counters_[neighbor].totalRecv())++;
 
   if (not info_.neighborInfos[neighbor].expectReply) {
     // received a reply when I don't expect to receive a reply from it
@@ -770,17 +770,17 @@ DualNode::getSptPeers(const std::optional<std::string>& rootId) const noexcept {
 void
 DualNode::processDualMessages(const thrift::DualMessages& messages) {
   std::unordered_map<std::string, thrift::DualMessages> msgsToSend;
-  const auto& neighbor = *messages.srcId_ref();
+  const auto& neighbor = *messages.srcId();
 
-  (*counters_[neighbor].pktRecv_ref())++;
-  counters_[neighbor].msgRecv_ref() =
-      *counters_[neighbor].msgRecv_ref() + messages.messages_ref()->size();
+  (*counters_[neighbor].pktRecv())++;
+  counters_[neighbor].msgRecv() =
+      *counters_[neighbor].msgRecv() + messages.messages()->size();
 
-  for (const auto& msg : *messages.messages_ref()) {
-    const auto& rootId = *msg.dstId_ref();
+  for (const auto& msg : *messages.messages()) {
+    const auto& rootId = *msg.dstId();
     addDual(rootId);
     auto& dual = duals_.at(rootId);
-    switch (*msg.type_ref()) {
+    switch (*msg.type()) {
     case thrift::DualMessageType::UPDATE: {
       dual.processUpdate(neighbor, msg, msgsToSend);
       break;
@@ -837,10 +837,10 @@ DualNode::getStatusStrings() const noexcept {
     strs.emplace_back(fmt::format(
         "{}: pkt ({}, {}), msg ({}, {})",
         neighbor,
-        *counters.pktSent_ref(),
-        *counters.pktRecv_ref(),
-        *counters.msgSent_ref(),
-        *counters.msgRecv_ref()));
+        *counters.pktSent(),
+        *counters.pktRecv(),
+        *counters.msgSent(),
+        *counters.msgRecv()));
   }
 
   std::unordered_map<std::string, std::string> allStatus;
@@ -863,9 +863,9 @@ DualNode::neighborUp(const std::string& neighbor) const noexcept {
 thrift::DualCounters
 DualNode::getCounters() const noexcept {
   thrift::DualCounters counters;
-  counters.neighborCounters_ref() = counters_;
+  counters.neighborCounters() = counters_;
   for (const auto& kv : duals_) {
-    counters.rootCounters_ref()->emplace(kv.first, kv.second.getCounters());
+    counters.rootCounters()->emplace(kv.first, kv.second.getCounters());
   }
   return counters;
 }
@@ -886,20 +886,20 @@ DualNode::sendAllDualMessages(
   for (auto& kv : msgsToSend) {
     const auto& neighbor = kv.first;
     auto& msgs = kv.second;
-    if (msgs.messages_ref()->empty()) {
+    if (msgs.messages()->empty()) {
       // ignore empty messages
       continue;
     }
 
     // set srcId = myNodeId
-    msgs.srcId_ref() = nodeId;
+    msgs.srcId() = nodeId;
     if (not sendDualMessages(neighbor, msgs)) {
       XLOG(ERR) << "failed to send dual messages to " << kv.first;
       continue;
     }
-    (*counters_[neighbor].pktSent_ref())++;
-    counters_[neighbor].msgSent_ref() =
-        *counters_[neighbor].msgSent_ref() + msgs.messages_ref()->size();
+    (*counters_[neighbor].pktSent())++;
+    counters_[neighbor].msgSent() =
+        *counters_[neighbor].msgSent() + msgs.messages()->size();
   }
 }
 

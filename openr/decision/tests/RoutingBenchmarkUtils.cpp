@@ -59,27 +59,27 @@ sendRecvInitialUpdate(
   std::unordered_map<std::string, thrift::Value> keyVals;
   apache::thrift::CompactSerializer serializer;
   for (auto& [key, adjDb] : adjDbs) {
-    adjDb.perfEvents_ref() = perfEvents;
+    adjDb.perfEvents() = perfEvents;
     keyVals.emplace(
         key,
         createThriftValue(
             1,
-            *adjDb.thisNodeName_ref(),
+            *adjDb.thisNodeName(),
             writeThriftObjStr(std::move(adjDb), serializer)));
   }
   for (auto& [key, prefixDb] : prefixDbs) {
-    prefixDb.perfEvents_ref() = perfEvents;
+    prefixDb.perfEvents() = perfEvents;
     keyVals.emplace(
         key,
         createThriftValue(
             1,
-            *prefixDb.thisNodeName_ref(),
+            *prefixDb.thisNodeName(),
             writeThriftObjStr(std::move(prefixDb), serializer)));
   }
 
   thrift::Publication pub;
-  pub.area_ref() = kTestingAreaName;
-  pub.keyVals_ref() = std::move(keyVals);
+  pub.area() = kTestingAreaName;
+  pub.keyVals() = std::move(keyVals);
   decisionWrapper->sendKvPublication(pub);
   decisionWrapper->sendKvStoreSyncedEvent();
 
@@ -96,11 +96,11 @@ sendRecvAdjUpdate(
     bool overloadBit) {
   LOG(INFO) << "Advertising adj update";
   thrift::Publication pub;
-  pub.area_ref() = kTestingAreaName;
+  pub.area() = kTestingAreaName;
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_ADJ_UPDATE");
 
-  pub.keyVals_ref() = {
+  pub.keyVals() = {
       {fmt::format("adj:{}", nodeName),
        decisionWrapper->createAdjValue(
            nodeName, 2, adjs, std::move(perfEvents), overloadBit)}};
@@ -115,11 +115,11 @@ sendRecvPrefixUpdate(
     folly::BenchmarkSuspender& suspender) {
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_INIT_UPDATE");
-  keyDbPair.second.perfEvents_ref() = std::move(perfEvents);
+  keyDbPair.second.perfEvents() = std::move(perfEvents);
   apache::thrift::CompactSerializer serializer;
   thrift::Publication pub;
-  pub.area_ref() = kTestingAreaName;
-  pub.keyVals_ref() = {
+  pub.area() = kTestingAreaName;
+  pub.keyVals() = {
       {keyDbPair.first.getPrefixKeyV2(),
        createThriftValue(
            1,
@@ -327,7 +327,7 @@ createSswsAdjacencies(
         createFabricAdjacency(nodeName, fswMarker, podId, planeId, adjs);
 
         // Add to publication
-        (*initialPub.keyVals_ref())
+        (*initialPub.keyVals())
             .emplace(
                 fmt::format("adj:{}", nodeName),
                 decisionWrapper->createAdjValue(
@@ -377,7 +377,7 @@ createFswsAdjacencies(
       }
 
       // Add to publication
-      (*initialPub.keyVals_ref())
+      (*initialPub.keyVals())
           .emplace(
               fmt::format("adj:{}", nodeName),
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
@@ -414,7 +414,7 @@ createRswsAdjacencies(
       }
 
       // Add to publication
-      (*initialPub.keyVals_ref())
+      (*initialPub.keyVals())
           .emplace(
               fmt::format("adj:{}", nodeName),
               decisionWrapper->createAdjValue(nodeName, 1, adjs, std::nullopt));
@@ -438,7 +438,7 @@ createFabric(
         listOfNodenames) {
   LOG(INFO) << "Pods number: " << numOfPods;
   thrift::Publication initialPub;
-  initialPub.area_ref() = kTestingAreaName;
+  initialPub.area() = kTestingAreaName;
 
   // ssw: each ssw connects to one fsw of each pod
   // auto numOfPlanes = numOfFswsPerPod;
@@ -574,12 +574,12 @@ updateRandomGridPrefixes(
       auto prefixEntries =
           generatePrefixEntries(prefixGenerator, numOfUpdatePrefixes);
       for (auto& prefixEntry : prefixEntries) {
-        prefixEntry.forwardingType_ref() =
+        prefixEntry.forwardingType() =
             (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
                      forwardingAlgorithm
                  ? thrift::PrefixForwardingType::SR_MPLS
                  : thrift::PrefixForwardingType::IP);
-        prefixEntry.forwardingAlgorithm_ref() = forwardingAlgorithm;
+        prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
         auto keyDbPair = createPrefixKeyAndDb(nodeName, prefixEntry);
         keyVals.emplace(
             keyDbPair.first.getPrefixKeyV2(),
@@ -591,8 +591,8 @@ updateRandomGridPrefixes(
     }
   }
   thrift::Publication pub;
-  pub.area_ref() = kTestingAreaName;
-  pub.keyVals_ref() = std::move(keyVals);
+  pub.area() = kTestingAreaName;
+  pub.keyVals() = std::move(keyVals);
   suspender.dismiss();
   sendRecvUpdate(decisionWrapper, pub);
   suspender.rehire();
@@ -613,12 +613,12 @@ generatePrefixUpdatePublication(
       auto prefixEntries =
           generatePrefixEntries(prefixGenerator, numOfPrefixes);
       for (auto& prefixEntry : prefixEntries) {
-        prefixEntry.forwardingType_ref() =
+        prefixEntry.forwardingType() =
             (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
                      forwardingAlgorithm
                  ? thrift::PrefixForwardingType::SR_MPLS
                  : thrift::PrefixForwardingType::IP);
-        prefixEntry.forwardingAlgorithm_ref() = forwardingAlgorithm;
+        prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
         auto keyDbPair = createPrefixKeyAndDb(nodeName, prefixEntry);
         keyVals.emplace(
             keyDbPair.first.getPrefixKeyV2(),
@@ -629,7 +629,7 @@ generatePrefixUpdatePublication(
       }
     }
   }
-  initialPub.keyVals_ref()->merge(std::move(keyVals));
+  initialPub.keyVals()->merge(std::move(keyVals));
 }
 
 void
@@ -865,7 +865,7 @@ BM_DecisionFabricPrefixUpdates(
     }
 
     thrift::Publication pub;
-    pub.area_ref() = kTestingAreaName;
+    pub.area() = kTestingAreaName;
     generatePrefixUpdatePublication(
         numOfUpdatePrefixes, listOfNodenames, forwardingAlgorithm, pub);
 

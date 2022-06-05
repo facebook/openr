@@ -108,15 +108,15 @@ checkEqualUnicastRoutes(
       rhsRoutes;
   for (auto const& route : lhs) {
     lhsRoutes.emplace(
-        toIPNetwork(*route.dest_ref()),
+        toIPNetwork(*route.dest()),
         std::set<thrift::NextHopThrift>(
-            route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
+            route.nextHops()->begin(), route.nextHops()->end()));
   }
   for (auto const& route : rhs) {
     rhsRoutes.emplace(
-        toIPNetwork(*route.dest_ref()),
+        toIPNetwork(*route.dest()),
         std::set<thrift::NextHopThrift>(
-            route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
+            route.nextHops()->begin(), route.nextHops()->end()));
   }
 
   for (auto const& kv : lhsRoutes) {
@@ -143,8 +143,7 @@ checkEqualUnicastRoutes(
 bool
 checkEqualRouteDatabaseUnicast(
     const thrift::RouteDatabase& lhs, const thrift::RouteDatabase& rhs) {
-  return checkEqualUnicastRoutes(
-      *lhs.unicastRoutes_ref(), *rhs.unicastRoutes_ref());
+  return checkEqualUnicastRoutes(*lhs.unicastRoutes(), *rhs.unicastRoutes());
 }
 
 // Check if two lists of unicastRouteDetail's are equal.
@@ -160,19 +159,19 @@ checkEqualUnicastRoutesDetail(
   std::vector<thrift::UnicastRoute> uLhs;
   std::vector<thrift::UnicastRoute> uRhs;
   for (auto const& route : lhs) {
-    uLhs.emplace_back(*route.unicastRoute_ref());
+    uLhs.emplace_back(*route.unicastRoute());
 
     // Check bestRoute has been filled out properly with correct prefix
-    if (*route.dest_ref() != *route.bestRoute_ref()->prefix_ref()) {
+    if (*route.dest_ref() != *route.bestRoute()->prefix()) {
       return false;
     }
   }
 
   for (auto const& route : rhs) {
-    uRhs.emplace_back(*route.unicastRoute_ref());
+    uRhs.emplace_back(*route.unicastRoute());
 
     // Check bestRoute has been filled out properly with correct prefix
-    if (*route.dest_ref() != *route.bestRoute_ref()->prefix_ref()) {
+    if (*route.dest_ref() != *route.bestRoute()->prefix()) {
       return false;
     }
   }
@@ -185,28 +184,28 @@ checkEqualRouteDatabaseUnicastDetail(
     const thrift::RouteDatabaseDetail& lhs,
     const thrift::RouteDatabaseDetail& rhs) {
   return checkEqualUnicastRoutesDetail(
-      *lhs.unicastRoutes_ref(), *rhs.unicastRoutes_ref());
+      *lhs.unicastRoutes(), *rhs.unicastRoutes());
 }
 
 bool
 checkEqualRouteDatabaseMpls(
     const thrift::RouteDatabase& lhs, const thrift::RouteDatabase& rhs) {
-  if (lhs.mplsRoutes_ref()->size() != rhs.mplsRoutes_ref()->size()) {
+  if (lhs.mplsRoutes()->size() != rhs.mplsRoutes()->size()) {
     return false;
   }
   std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> lhsRoutes;
   std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> rhsRoutes;
-  for (auto const& route : *lhs.mplsRoutes_ref()) {
+  for (auto const& route : *lhs.mplsRoutes()) {
     lhsRoutes.emplace(
-        *route.topLabel_ref(),
+        *route.topLabel(),
         std::set<thrift::NextHopThrift>(
-            route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
+            route.nextHops()->begin(), route.nextHops()->end()));
   }
-  for (auto const& route : *rhs.mplsRoutes_ref()) {
+  for (auto const& route : *rhs.mplsRoutes()) {
     rhsRoutes.emplace(
-        *route.topLabel_ref(),
+        *route.topLabel(),
         std::set<thrift::NextHopThrift>(
-            route.nextHops_ref()->begin(), route.nextHops_ref()->end()));
+            route.nextHops()->begin(), route.nextHops()->end()));
   }
 
   for (auto const& kv : lhsRoutes) {
@@ -237,21 +236,21 @@ checkEqualRouteDatabaseDeltaUnicast(
     const thrift::RouteDatabaseDelta& rhs) {
   // Check routes to update
   if (not checkEqualUnicastRoutes(
-          *lhs.unicastRoutesToUpdate_ref(), *rhs.unicastRoutesToUpdate_ref())) {
+          *lhs.unicastRoutesToUpdate(), *rhs.unicastRoutesToUpdate())) {
     return false;
   }
   // Check routes to delete
-  if ((*lhs.unicastRoutesToDelete_ref()).size() !=
-      (*rhs.unicastRoutesToDelete_ref()).size()) {
+  if ((*lhs.unicastRoutesToDelete()).size() !=
+      (*rhs.unicastRoutesToDelete()).size()) {
     return false;
   }
 
   std::set<thrift::IpPrefix> lhsRoutesToDelete(
-      (*lhs.unicastRoutesToDelete_ref()).begin(),
-      (*lhs.unicastRoutesToDelete_ref()).end());
+      (*lhs.unicastRoutesToDelete()).begin(),
+      (*lhs.unicastRoutesToDelete()).end());
   std::set<thrift::IpPrefix> rhsRoutesToDelete(
-      (*rhs.unicastRoutesToDelete_ref()).begin(),
-      (*rhs.unicastRoutesToDelete_ref()).end());
+      (*rhs.unicastRoutesToDelete()).begin(),
+      (*rhs.unicastRoutesToDelete()).end());
 
   return lhsRoutesToDelete == rhsRoutesToDelete;
 }
@@ -264,21 +263,21 @@ checkEqualRouteDatabaseDeltaDetailUnicast(
     const thrift::RouteDatabaseDeltaDetail& rhs) {
   // Check routes to update
   if (not checkEqualUnicastRoutesDetail(
-          *lhs.unicastRoutesToUpdate_ref(), *rhs.unicastRoutesToUpdate_ref())) {
+          *lhs.unicastRoutesToUpdate(), *rhs.unicastRoutesToUpdate())) {
     return false;
   }
   // Check routes to delete
-  if ((*lhs.unicastRoutesToDelete_ref()).size() !=
-      (*rhs.unicastRoutesToDelete_ref()).size()) {
+  if ((*lhs.unicastRoutesToDelete()).size() !=
+      (*rhs.unicastRoutesToDelete()).size()) {
     return false;
   }
 
   std::set<thrift::IpPrefix> lhsRoutesToDelete(
-      (*lhs.unicastRoutesToDelete_ref()).begin(),
-      (*lhs.unicastRoutesToDelete_ref()).end());
+      (*lhs.unicastRoutesToDelete()).begin(),
+      (*lhs.unicastRoutesToDelete()).end());
   std::set<thrift::IpPrefix> rhsRoutesToDelete(
-      (*rhs.unicastRoutesToDelete_ref()).begin(),
-      (*rhs.unicastRoutesToDelete_ref()).end());
+      (*rhs.unicastRoutesToDelete()).begin(),
+      (*rhs.unicastRoutesToDelete()).end());
 
   return lhsRoutesToDelete == rhsRoutesToDelete;
 }
@@ -336,8 +335,8 @@ class FibTestFixture : public ::testing::Test {
         true /*enableSegmentRouting*/,
         false /*orderedFibProgramming*/,
         false /*dryrun*/);
-    tConfig.route_delete_delay_ms_ref() = routeDeleteDelay_;
-    tConfig.fib_port_ref() = fibThriftThread.getAddress()->getPort();
+    tConfig.route_delete_delay_ms() = routeDeleteDelay_;
+    tConfig.fib_port() = fibThriftThread.getAddress()->getPort();
 
     config_ = make_shared<Config>(tConfig);
 
@@ -568,7 +567,7 @@ TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
       handler_->semifuture_subscribeAndGetFib().get();
 
   thrift::RouteDatabase routeDbExpected1;
-  (*routeDbExpected1.unicastRoutes_ref())
+  (*routeDbExpected1.unicastRoutes())
       .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
   EXPECT_TRUE(checkEqualRouteDatabaseUnicast(
       routeDbExpected1, responseAndSubscription.response));
@@ -590,7 +589,7 @@ TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
   // Case 3: Verify delta unicast route addition is published.
   // Mimic decision publishing unicast route addition (incremental)
   thrift::RouteDatabaseDelta routeDbExpected3;
-  (*routeDbExpected3.unicastRoutesToUpdate_ref())
+  (*routeDbExpected3.unicastRoutesToUpdate())
       .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
   DecisionRouteUpdate routeUpdate3;
   routeUpdate3.unicastRoutesToUpdate.emplace(
@@ -599,7 +598,7 @@ TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
 
   // Case 4: Verify delta unicast route deletion is published.
   thrift::RouteDatabaseDelta routeDbExpected4;
-  (*routeDbExpected4.unicastRoutesToDelete_ref()) = {prefix3};
+  (*routeDbExpected4.unicastRoutesToDelete()) = {prefix3};
   DecisionRouteUpdate routeUpdate4;
   routeUpdate4.unicastRoutesToDelete = {toIPNetwork(prefix3)};
 
@@ -668,7 +667,7 @@ TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
   // Case 1: Verify initial full dump is received properly.
   // Mimic decision publishing RouteDatabase (Full initial dump)
   thrift::RouteDatabase routeDbExpected1;
-  (*routeDbExpected1.unicastRoutes_ref())
+  (*routeDbExpected1.unicastRoutes())
       .emplace_back(createUnicastRoute(prefix1, {path1_2_1, path1_2_2}));
   DecisionRouteUpdate routeUpdate1;
   routeUpdate1.unicastRoutesToUpdate.emplace(
@@ -695,7 +694,7 @@ TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
   // Case 2: Verify delta unicast route addition is published.
   // Mimic decision publishing unicast route addition (incremental)
   thrift::RouteDatabaseDelta routeDbExpected2;
-  (*routeDbExpected2.unicastRoutesToUpdate_ref())
+  (*routeDbExpected2.unicastRoutesToUpdate())
       .emplace_back(createUnicastRoute(prefix3, {path1_2_1, path1_2_2}));
   DecisionRouteUpdate routeUpdate2;
   routeUpdate2.unicastRoutesToUpdate.emplace(
@@ -764,7 +763,7 @@ TEST_F(FibTestFixture, fibDetailStreaming) {
   // Case 1: Verify initial full dump is received properly.
   // Mimic decision publishing RouteDatabaseDetail (Full initial dump)
   thrift::RouteDatabaseDetail routeDbExpected1;
-  (*routeDbExpected1.unicastRoutes_ref())
+  (*routeDbExpected1.unicastRoutes())
       .emplace_back(createUnicastRouteDetail(
           prefix1, {path1_2_1, path1_2_2}, bestRoute1));
   DecisionRouteUpdate routeUpdate1;
@@ -790,7 +789,7 @@ TEST_F(FibTestFixture, fibDetailStreaming) {
   // Verify delta unicast route addition is published.
   // Mimic decision publishing unicast route addition (incremental)
   thrift::RouteDatabaseDeltaDetail routeDbExpected2;
-  (*routeDbExpected2.unicastRoutesToUpdate_ref())
+  (*routeDbExpected2.unicastRoutesToUpdate())
       .emplace_back(createUnicastRouteDetail(
           prefix3, {path1_2_1, path1_2_2}, bestRoute3));
   DecisionRouteUpdate routeUpdate2;
@@ -864,12 +863,12 @@ TEST_F(FibTestFixture, processRouteDb) {
   // Mimic decision pub sock publishing RouteDatabaseDelta and
   // RouteDatabaseDeltaDetail
   thrift::RouteDatabase routeDb;
-  *routeDb.thisNodeName_ref() = "node-1";
-  routeDb.unicastRoutes_ref()->emplace_back(
+  *routeDb.thisNodeName() = "node-1";
+  routeDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
   thrift::RouteDatabaseDetail routeDetailDb;
-  *routeDetailDb.thisNodeName_ref() = "node-1";
-  routeDetailDb.unicastRoutes_ref()->emplace_back(
+  *routeDetailDb.thisNodeName() = "node-1";
+  routeDetailDb.unicastRoutes()->emplace_back(
       createUnicastRouteDetail(prefix2, {path1_2_1, path1_2_2}, bestRoute2));
 
   DecisionRouteUpdate routeUpdate1;
@@ -897,9 +896,9 @@ TEST_F(FibTestFixture, processRouteDb) {
   // Update routes
   countAdd = mockFibHandler_->getAddRoutesCount();
   int64_t countDel = mockFibHandler_->getDelRoutesCount();
-  routeDb.unicastRoutes_ref()->emplace_back(
+  routeDb.unicastRoutes()->emplace_back(
       RibUnicastEntry(toIPNetwork(prefix3), {path1_3_1, path1_3_2}).toThrift());
-  routeDetailDb.unicastRoutes_ref()->emplace_back(
+  routeDetailDb.unicastRoutes()->emplace_back(
       RibUnicastEntry(
           toIPNetwork(prefix3), {path1_3_1, path1_3_2}, bestRoute3, "0")
           .toThriftDetail());
@@ -926,15 +925,15 @@ TEST_F(FibTestFixture, processRouteDb) {
 
   // Update routes by removing some nextHop
   countAdd = mockFibHandler_->getAddRoutesCount();
-  routeDb.unicastRoutes_ref()->clear();
-  routeDb.unicastRoutes_ref()->emplace_back(
+  routeDb.unicastRoutes()->clear();
+  routeDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix2, {path1_2_2, path1_2_3}));
-  routeDb.unicastRoutes_ref()->emplace_back(
+  routeDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix3, {path1_3_2}));
-  routeDetailDb.unicastRoutes_ref()->clear();
-  routeDetailDb.unicastRoutes_ref()->emplace_back(
+  routeDetailDb.unicastRoutes()->clear();
+  routeDetailDb.unicastRoutes()->emplace_back(
       createUnicastRouteDetail(prefix2, {path1_2_2, path1_2_3}, bestRoute2));
-  routeDetailDb.unicastRoutes_ref()->emplace_back(
+  routeDetailDb.unicastRoutes()->emplace_back(
       createUnicastRouteDetail(prefix3, {path1_3_2}, bestRoute3));
 
   DecisionRouteUpdate routeUpdate3;
@@ -1047,29 +1046,28 @@ TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
       new std::vector<int32_t>({1, 1, 3})); // matching route1 and route3
   thrift::RouteDatabase responseDb;
   const auto& filteredRoutes = getMplsRoutesFiltered(std::move(labels));
-  *responseDb.mplsRoutes_ref() = filteredRoutes;
+  *responseDb.mplsRoutes() = filteredRoutes;
   // expected routesDB after filtering - delete duplicate entries
   thrift::RouteDatabase expectedDb;
-  *expectedDb.thisNodeName_ref() = "node-1";
-  *expectedDb.mplsRoutes_ref() = {tRoute1, tRoute3};
+  *expectedDb.thisNodeName() = "node-1";
+  *expectedDb.mplsRoutes() = {tRoute1, tRoute3};
   EXPECT_TRUE(checkEqualRouteDatabaseMpls(responseDb, expectedDb));
 
   // 2. check getting all MPLS routes API
   thrift::RouteDatabase allRoutesDb;
-  *allRoutesDb.mplsRoutes_ref() = getMplsRoutes();
+  *allRoutesDb.mplsRoutes() = getMplsRoutes();
   // expected routesDB for all MPLS Routes
   thrift::RouteDatabase allRoutesExpectedDb;
-  *allRoutesExpectedDb.thisNodeName_ref() = "node-1";
-  *allRoutesExpectedDb.mplsRoutes_ref() = {tRoute1, tRoute2, tRoute3};
-  *expectedDb.mplsRoutes_ref() = {tRoute1, tRoute2, tRoute3};
+  *allRoutesExpectedDb.thisNodeName() = "node-1";
+  *allRoutesExpectedDb.mplsRoutes() = {tRoute1, tRoute2, tRoute3};
+  *expectedDb.mplsRoutes() = {tRoute1, tRoute2, tRoute3};
   EXPECT_TRUE(checkEqualRouteDatabaseMpls(allRoutesDb, allRoutesExpectedDb));
 
   // 3. check filtering API with empty input list - return all MPLS routes
   auto emptyLabels =
       std::unique_ptr<std::vector<int32_t>>(new std::vector<int32_t>({}));
   thrift::RouteDatabase responseAllDb;
-  *responseAllDb.mplsRoutes_ref() =
-      getMplsRoutesFiltered(std::move(emptyLabels));
+  *responseAllDb.mplsRoutes() = getMplsRoutesFiltered(std::move(emptyLabels));
   EXPECT_TRUE(checkEqualRouteDatabaseMpls(responseAllDb, allRoutesExpectedDb));
 
   // 4. check if no result found
@@ -1139,33 +1137,33 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 
   // expected routesDB after filtering - delete duplicate entries
   thrift::RouteDatabase expectedDb;
-  *expectedDb.thisNodeName_ref() = "node-1";
-  expectedDb.unicastRoutes_ref()->emplace_back(tRoute1);
-  expectedDb.unicastRoutes_ref()->emplace_back(tRoute2);
-  expectedDb.unicastRoutes_ref()->emplace_back(tRoute4);
+  *expectedDb.thisNodeName() = "node-1";
+  expectedDb.unicastRoutes()->emplace_back(tRoute1);
+  expectedDb.unicastRoutes()->emplace_back(tRoute2);
+  expectedDb.unicastRoutes()->emplace_back(tRoute4);
   // check if match correctly
   thrift::RouteDatabase responseDb;
   const auto& responseRoutes = getUnicastRoutesFiltered(std::move(filter));
-  *responseDb.unicastRoutes_ref() = responseRoutes;
+  *responseDb.unicastRoutes() = responseRoutes;
   EXPECT_TRUE(checkEqualRouteDatabaseUnicast(expectedDb, responseDb));
 
   // check when get empty input - return all unicast routes
   thrift::RouteDatabase allRouteDb;
-  allRouteDb.unicastRoutes_ref()->emplace_back(tRoute1);
-  allRouteDb.unicastRoutes_ref()->emplace_back(tRoute2);
-  allRouteDb.unicastRoutes_ref()->emplace_back(tRoute3);
-  allRouteDb.unicastRoutes_ref()->emplace_back(tRoute4);
+  allRouteDb.unicastRoutes()->emplace_back(tRoute1);
+  allRouteDb.unicastRoutes()->emplace_back(tRoute2);
+  allRouteDb.unicastRoutes()->emplace_back(tRoute3);
+  allRouteDb.unicastRoutes()->emplace_back(tRoute4);
   auto emptyParamRet =
       std::unique_ptr<std::vector<std::string>>(new std::vector<std::string>());
   const auto& allRoutes = getUnicastRoutesFiltered(std::move(emptyParamRet));
   thrift::RouteDatabase allRoutesRespDb;
-  *allRoutesRespDb.unicastRoutes_ref() = allRoutes;
+  *allRoutesRespDb.unicastRoutes() = allRoutes;
   EXPECT_TRUE(checkEqualRouteDatabaseUnicast(allRouteDb, allRoutesRespDb));
 
   // check getUnicastRoutes() API - return all unicast routes
   const auto& allRoute = getUnicastRoutes();
   thrift::RouteDatabase allRoutesApiDb;
-  *allRoutesApiDb.unicastRoutes_ref() = allRoute;
+  *allRoutesApiDb.unicastRoutes() = allRoute;
   EXPECT_TRUE(checkEqualRouteDatabaseUnicast(allRouteDb, allRoutesApiDb));
 
   // check when no result found

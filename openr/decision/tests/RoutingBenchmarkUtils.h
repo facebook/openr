@@ -113,9 +113,9 @@ class DecisionWrapper {
   explicit DecisionWrapper(const std::string& nodeName) {
     auto tConfig = getBasicOpenrConfig(nodeName);
     // decision config
-    tConfig.decision_config_ref()->debounce_min_ms_ref() = 10;
-    tConfig.decision_config_ref()->debounce_max_ms_ref() = 500;
-    tConfig.decision_config_ref()->enable_bgp_route_programming_ref() = true;
+    tConfig.decision_config()->debounce_min_ms() = 10;
+    tConfig.decision_config()->debounce_max_ms() = 500;
+    tConfig.decision_config()->enable_bgp_route_programming() = true;
     config = std::make_shared<Config>(tConfig);
 
     decision = std::make_shared<Decision>(
@@ -164,7 +164,7 @@ class DecisionWrapper {
       bool overloadBit = false) {
     auto adjDb = createAdjDb(nodeId, adjs, 0, overloadBit);
     if (perfEvents.has_value()) {
-      adjDb.perfEvents_ref().from_optional(perfEvents);
+      adjDb.perfEvents().from_optional(perfEvents);
     }
     return createThriftValue(
         version,

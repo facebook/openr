@@ -130,7 +130,7 @@ struct PrefixKeyEntry {
 thrift::PrefixEntry
 createPrefixEntry(int32_t pp, int32_t sp, int32_t d) {
   thrift::PrefixEntry prefixEntry;
-  prefixEntry.metrics_ref() = createMetrics(pp, sp, d);
+  prefixEntry.metrics() = createMetrics(pp, sp, d);
   return prefixEntry;
 };
 
@@ -164,10 +164,10 @@ TEST(UtilTest, NetworkUtilTest) {
     thrift::IpPrefix prefixV4 = toIpPrefix(v4Addr);
     thrift::IpPrefix prefixV6 = toIpPrefix(v6Addr);
 
-    EXPECT_EQ("10.1.1.1", toString(*prefixV4.prefixAddress_ref()));
-    EXPECT_EQ(32, *prefixV4.prefixLength_ref());
-    EXPECT_EQ("2620::1", toString(*prefixV6.prefixAddress_ref()));
-    EXPECT_EQ(128, *prefixV6.prefixLength_ref());
+    EXPECT_EQ("10.1.1.1", toString(*prefixV4.prefixAddress()));
+    EXPECT_EQ(32, *prefixV4.prefixLength());
+    EXPECT_EQ("2620::1", toString(*prefixV6.prefixAddress()));
+    EXPECT_EQ(128, *prefixV6.prefixLength());
 
     // Negative test for invalid ip addr length(V4 + V6)
     const std::string invalidV4Addr{"10.1.1.1/36"};
@@ -188,10 +188,10 @@ TEST(UtilTest, NetworkUtilTest) {
     const uint16_t invalidV6Len = 130; // ATTN: max mask length is 128 for IPV6
 
     thrift::IpPrefix v4Prefix, v6Prefix;
-    v4Prefix.prefixAddress_ref() = toBinaryAddress(v4Addr);
-    v4Prefix.prefixLength_ref() = invalidV4Len;
-    v6Prefix.prefixAddress_ref() = toBinaryAddress(v6Addr);
-    v6Prefix.prefixLength_ref() = invalidV6Len;
+    v4Prefix.prefixAddress() = toBinaryAddress(v4Addr);
+    v4Prefix.prefixLength() = invalidV4Len;
+    v6Prefix.prefixAddress() = toBinaryAddress(v6Addr);
+    v6Prefix.prefixLength() = invalidV6Len;
 
     EXPECT_THROW(toIPNetwork(v4Prefix), thrift::OpenrError);
     EXPECT_THROW(toIPNetwork(v6Prefix), thrift::OpenrError);
@@ -206,8 +206,8 @@ TEST(UtilTest, NetworkUtilTest) {
     const uint16_t v4Len = 32;
 
     thrift::IpPrefix v4Prefix = createIpPrefix(v4AddrBin, v4Len);
-    EXPECT_EQ(v4Prefix.prefixAddress_ref().value(), v4AddrBin);
-    EXPECT_EQ(v4Prefix.prefixLength_ref().value(), v4Len);
+    EXPECT_EQ(v4Prefix.prefixAddress().value(), v4AddrBin);
+    EXPECT_EQ(v4Prefix.prefixLength().value(), v4Len);
   }
 }
 
@@ -457,20 +457,20 @@ TEST(UtilTest, addPerfEventTest) {
   {
     thrift::PerfEvents perfEvents;
     addPerfEvent(perfEvents, "node1", "LINK_UP");
-    EXPECT_EQ(perfEvents.events_ref()->size(), 1);
-    EXPECT_EQ(*perfEvents.events_ref()[0].nodeName_ref(), "node1");
-    EXPECT_EQ(*perfEvents.events_ref()[0].eventDescr_ref(), "LINK_UP");
+    EXPECT_EQ(perfEvents.events()->size(), 1);
+    EXPECT_EQ(*perfEvents.events()[0].nodeName(), "node1");
+    EXPECT_EQ(*perfEvents.events()[0].eventDescr(), "LINK_UP");
   }
 
   {
     thrift::PerfEvents perfEvents;
     addPerfEvent(perfEvents, "node1", "LINK_UP");
     addPerfEvent(perfEvents, "node2", "LINK_DOWN");
-    EXPECT_EQ(perfEvents.events_ref()->size(), 2);
-    EXPECT_EQ(*perfEvents.events_ref()[0].nodeName_ref(), "node1");
-    EXPECT_EQ(*perfEvents.events_ref()[0].eventDescr_ref(), "LINK_UP");
-    EXPECT_EQ(*perfEvents.events_ref()[1].nodeName_ref(), "node2");
-    EXPECT_EQ(*perfEvents.events_ref()[1].eventDescr_ref(), "LINK_DOWN");
+    EXPECT_EQ(perfEvents.events()->size(), 2);
+    EXPECT_EQ(*perfEvents.events()[0].nodeName(), "node1");
+    EXPECT_EQ(*perfEvents.events()[0].eventDescr(), "LINK_UP");
+    EXPECT_EQ(*perfEvents.events()[1].nodeName(), "node2");
+    EXPECT_EQ(*perfEvents.events()[1].eventDescr(), "LINK_DOWN");
   }
 }
 
@@ -502,11 +502,11 @@ TEST(UtilTest, getTotalPerfEventsDurationTest) {
   {
     thrift::PerfEvents perfEvents;
     thrift::PerfEvent event1 = createPerfEvent("node1", "LINK_UP", 100);
-    perfEvents.events_ref()->emplace_back(std::move(event1));
+    perfEvents.events()->emplace_back(std::move(event1));
     thrift::PerfEvent event2 = createPerfEvent("node1", "DECISION_RECVD", 200);
-    perfEvents.events_ref()->emplace_back(std::move(event2));
+    perfEvents.events()->emplace_back(std::move(event2));
     thrift::PerfEvent event3 = createPerfEvent("node1", "SPF_CALCULATE", 300);
-    perfEvents.events_ref()->emplace_back(std::move(event3));
+    perfEvents.events()->emplace_back(std::move(event3));
     auto duration = getTotalPerfEventsDuration(perfEvents);
     EXPECT_EQ(duration.count(), 200);
   }
@@ -523,11 +523,11 @@ TEST(UtilTest, getDurationBetweenPerfEventsTest) {
   {
     thrift::PerfEvents perfEvents;
     thrift::PerfEvent event1 = createPerfEvent("node1", "LINK_UP", 100);
-    perfEvents.events_ref()->emplace_back(std::move(event1));
+    perfEvents.events()->emplace_back(std::move(event1));
     thrift::PerfEvent event2 = createPerfEvent("node1", "DECISION_RECVD", 200);
-    perfEvents.events_ref()->emplace_back(std::move(event2));
+    perfEvents.events()->emplace_back(std::move(event2));
     thrift::PerfEvent event3 = createPerfEvent("node1", "SPF_CALCULATE", 300);
-    perfEvents.events_ref()->emplace_back(std::move(event3));
+    perfEvents.events()->emplace_back(std::move(event3));
     auto maybeDuration =
         getDurationBetweenPerfEvents(perfEvents, "LINK_UP", "SPF_CALCULATE");
     EXPECT_EQ(maybeDuration.value().count(), 200);
@@ -548,55 +548,55 @@ TEST(UtilTest, getDurationBetweenPerfEventsTest) {
 
 TEST(UtilTest, findDeltaRoutes) {
   thrift::RouteDatabase oldRouteDb;
-  *oldRouteDb.thisNodeName_ref() = "node-1";
-  oldRouteDb.unicastRoutes_ref()->emplace_back(
+  *oldRouteDb.thisNodeName() = "node-1";
+  oldRouteDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
-  oldRouteDb.mplsRoutes_ref()->emplace_back(
+  oldRouteDb.mplsRoutes()->emplace_back(
       createMplsRoute(2, {path1_2_1_swap, path1_2_2_swap}));
 
   thrift::RouteDatabase newRouteDb;
-  *newRouteDb.thisNodeName_ref() = "node-1";
-  newRouteDb.unicastRoutes_ref()->emplace_back(
+  *newRouteDb.thisNodeName() = "node-1";
+  newRouteDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2, path1_2_3}));
-  newRouteDb.mplsRoutes_ref()->emplace_back(
+  newRouteDb.mplsRoutes()->emplace_back(
       createMplsRoute(2, {path1_2_1_swap, path1_2_2_swap, path1_2_3_swap}));
 
   const auto& res1 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
 
-  EXPECT_EQ(res1.unicastRoutesToUpdate_ref()->size(), 1);
-  EXPECT_EQ(*res1.unicastRoutesToUpdate_ref(), *newRouteDb.unicastRoutes_ref());
-  EXPECT_EQ(res1.unicastRoutesToDelete_ref()->size(), 0);
-  EXPECT_EQ(res1.mplsRoutesToUpdate_ref()->size(), 1);
-  EXPECT_EQ(*res1.mplsRoutesToUpdate_ref(), *newRouteDb.mplsRoutes_ref());
-  EXPECT_EQ(res1.mplsRoutesToDelete_ref()->size(), 0);
+  EXPECT_EQ(res1.unicastRoutesToUpdate()->size(), 1);
+  EXPECT_EQ(*res1.unicastRoutesToUpdate(), *newRouteDb.unicastRoutes());
+  EXPECT_EQ(res1.unicastRoutesToDelete()->size(), 0);
+  EXPECT_EQ(res1.mplsRoutesToUpdate()->size(), 1);
+  EXPECT_EQ(*res1.mplsRoutesToUpdate(), *newRouteDb.mplsRoutes());
+  EXPECT_EQ(res1.mplsRoutesToDelete()->size(), 0);
 
   // add more unicastRoutes in newRouteDb
-  newRouteDb.unicastRoutes_ref()->emplace_back(
+  newRouteDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix3, {path1_3_1, path1_3_2}));
-  newRouteDb.mplsRoutes_ref()->emplace_back(
+  newRouteDb.mplsRoutes()->emplace_back(
       createMplsRoute(3, {path1_3_1_swap, path1_3_2_swap}));
 
   const auto& res2 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
-  EXPECT_EQ(res2.unicastRoutesToUpdate_ref()->size(), 2);
-  EXPECT_EQ(*res2.unicastRoutesToUpdate_ref(), *newRouteDb.unicastRoutes_ref());
-  EXPECT_EQ(res2.unicastRoutesToDelete_ref()->size(), 0);
-  EXPECT_EQ(res2.mplsRoutesToUpdate_ref()->size(), 2);
-  EXPECT_EQ(*res2.mplsRoutesToUpdate_ref(), *newRouteDb.mplsRoutes_ref());
-  EXPECT_EQ(res2.mplsRoutesToDelete_ref()->size(), 0);
+  EXPECT_EQ(res2.unicastRoutesToUpdate()->size(), 2);
+  EXPECT_EQ(*res2.unicastRoutesToUpdate(), *newRouteDb.unicastRoutes());
+  EXPECT_EQ(res2.unicastRoutesToDelete()->size(), 0);
+  EXPECT_EQ(res2.mplsRoutesToUpdate()->size(), 2);
+  EXPECT_EQ(*res2.mplsRoutesToUpdate(), *newRouteDb.mplsRoutes());
+  EXPECT_EQ(res2.mplsRoutesToDelete()->size(), 0);
 
   // empty out newRouteDb
-  newRouteDb.unicastRoutes_ref()->clear();
-  newRouteDb.mplsRoutes_ref()->clear();
+  newRouteDb.unicastRoutes()->clear();
+  newRouteDb.mplsRoutes()->clear();
   const auto& res3 =
       findDeltaRoutes(std::move(newRouteDb), std::move(oldRouteDb));
-  EXPECT_EQ(res3.unicastRoutesToUpdate_ref()->size(), 0);
-  EXPECT_EQ(res3.unicastRoutesToDelete_ref()->size(), 1);
-  EXPECT_EQ(res3.unicastRoutesToDelete_ref()->at(0), prefix2);
-  EXPECT_EQ(res3.mplsRoutesToUpdate_ref()->size(), 0);
-  EXPECT_EQ(res3.mplsRoutesToDelete_ref()->size(), 1);
-  EXPECT_EQ(res3.mplsRoutesToDelete_ref()->at(0), 2);
+  EXPECT_EQ(res3.unicastRoutesToUpdate()->size(), 0);
+  EXPECT_EQ(res3.unicastRoutesToDelete()->size(), 1);
+  EXPECT_EQ(res3.unicastRoutesToDelete()->at(0), prefix2);
+  EXPECT_EQ(res3.mplsRoutesToUpdate()->size(), 0);
+  EXPECT_EQ(res3.mplsRoutesToDelete()->size(), 1);
+  EXPECT_EQ(res3.mplsRoutesToDelete()->at(0), 2);
 }
 
 TEST(UtilTest, MplsActionValidate) {
@@ -605,16 +605,16 @@ TEST(UtilTest, MplsActionValidate) {
   //
   {
     thrift::MplsAction mplsAction;
-    mplsAction.action_ref() = thrift::MplsActionCode::PHP;
+    mplsAction.action() = thrift::MplsActionCode::PHP;
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
 
-    mplsAction.swapLabel_ref() = 1;
+    mplsAction.swapLabel() = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel_ref().reset();
+    mplsAction.swapLabel().reset();
 
-    mplsAction.pushLabels_ref() = std::vector<int32_t>();
+    mplsAction.pushLabels() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels_ref().reset();
+    mplsAction.pushLabels().reset();
   }
 
   //
@@ -622,16 +622,16 @@ TEST(UtilTest, MplsActionValidate) {
   //
   {
     thrift::MplsAction mplsAction;
-    mplsAction.action_ref() = thrift::MplsActionCode::POP_AND_LOOKUP;
+    mplsAction.action() = thrift::MplsActionCode::POP_AND_LOOKUP;
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
 
-    mplsAction.swapLabel_ref() = 1;
+    mplsAction.swapLabel() = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel_ref().reset();
+    mplsAction.swapLabel().reset();
 
-    mplsAction.pushLabels_ref() = std::vector<int32_t>();
+    mplsAction.pushLabels() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels_ref().reset();
+    mplsAction.pushLabels().reset();
   }
 
   //
@@ -639,15 +639,15 @@ TEST(UtilTest, MplsActionValidate) {
   //
   {
     thrift::MplsAction mplsAction;
-    mplsAction.action_ref() = thrift::MplsActionCode::SWAP;
+    mplsAction.action() = thrift::MplsActionCode::SWAP;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
 
-    mplsAction.swapLabel_ref() = 1;
+    mplsAction.swapLabel() = 1;
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
 
-    mplsAction.pushLabels_ref() = std::vector<int32_t>();
+    mplsAction.pushLabels() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.pushLabels_ref().reset();
+    mplsAction.pushLabels().reset();
   }
 
   //
@@ -655,17 +655,17 @@ TEST(UtilTest, MplsActionValidate) {
   //
   {
     thrift::MplsAction mplsAction;
-    mplsAction.action_ref() = thrift::MplsActionCode::PUSH;
+    mplsAction.action() = thrift::MplsActionCode::PUSH;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
 
-    mplsAction.swapLabel_ref() = 1;
+    mplsAction.swapLabel() = 1;
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
-    mplsAction.swapLabel_ref().reset();
+    mplsAction.swapLabel().reset();
 
-    mplsAction.pushLabels_ref() = std::vector<int32_t>();
+    mplsAction.pushLabels() = std::vector<int32_t>();
     EXPECT_DEATH(checkMplsAction(mplsAction), ".*");
 
-    mplsAction.pushLabels_ref()->push_back(1);
+    mplsAction.pushLabels()->push_back(1);
     EXPECT_NO_FATAL_FAILURE(checkMplsAction(mplsAction));
   }
 }
@@ -694,7 +694,7 @@ TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
       std::nullopt,
       getPrefixForwardingTypeAndAlgorithm("area2", prefixes, bestNodeAreas));
 
-  prefixes[{"node3", "area1"}]->forwardingType_ref() = FwdType::SR_MPLS;
+  prefixes[{"node3", "area1"}]->forwardingType() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
@@ -704,18 +704,17 @@ TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
       getPrefixForwardingTypeAndAlgorithm(
           "area1", prefixes, {{"node3", "area1"}}));
 
-  prefixes[{"node2", "area1"}]->forwardingType_ref() = FwdType::SR_MPLS;
+  prefixes[{"node2", "area1"}]->forwardingType() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
 
-  prefixes[{"node1", "area1"}]->forwardingType_ref() = FwdType::SR_MPLS;
+  prefixes[{"node1", "area1"}]->forwardingType() = FwdType::SR_MPLS;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
 
-  prefixes[{"node3", "area1"}]->forwardingAlgorithm_ref() =
-      FwdAlgo::KSP2_ED_ECMP;
+  prefixes[{"node3", "area1"}]->forwardingAlgorithm() = FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
@@ -726,14 +725,12 @@ TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
       getPrefixForwardingTypeAndAlgorithm(
           "area1", prefixes, {{"node3", "area1"}}));
 
-  prefixes[{"node2", "area1"}]->forwardingAlgorithm_ref() =
-      FwdAlgo::KSP2_ED_ECMP;
+  prefixes[{"node2", "area1"}]->forwardingAlgorithm() = FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
       getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
 
-  prefixes[{"node1", "area1"}]->forwardingAlgorithm_ref() =
-      FwdAlgo::KSP2_ED_ECMP;
+  prefixes[{"node1", "area1"}]->forwardingAlgorithm() = FwdAlgo::KSP2_ED_ECMP;
   EXPECT_EQ(
       (std::make_pair<FwdType, FwdAlgo>(
           FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
@@ -780,11 +777,11 @@ TEST(MetricVectorUtilsTest, sortMetricVector) {
   int64_t const numMetrics = 5;
 
   // default construct some MetricEntities
-  mv.metrics_ref()->resize(numMetrics);
+  mv.metrics()->resize(numMetrics);
 
   for (int64_t i = 0; i < numMetrics; i++) {
-    mv.metrics_ref()[i].type_ref() = i;
-    mv.metrics_ref()[i].priority_ref() = i;
+    mv.metrics()[i].type() = i;
+    mv.metrics()[i].priority() = i;
   }
 
   EXPECT_FALSE(isSorted(mv));
@@ -806,22 +803,22 @@ TEST(MetricVectorUtilsTest, compareMetrics) {
 
 TEST(MetricVectorUtilsTest, resultForLoner) {
   thrift::MetricEntity entity;
-  entity.op_ref() = thrift::CompareType::WIN_IF_PRESENT;
-  entity.isBestPathTieBreaker_ref() = false;
+  entity.op() = thrift::CompareType::WIN_IF_PRESENT;
+  entity.isBestPathTieBreaker() = false;
   EXPECT_EQ(resultForLoner(entity), CompareResult::WINNER);
-  entity.isBestPathTieBreaker_ref() = true;
+  entity.isBestPathTieBreaker() = true;
   EXPECT_EQ(resultForLoner(entity), CompareResult::TIE_WINNER);
 
-  entity.op_ref() = thrift::CompareType::WIN_IF_NOT_PRESENT;
-  entity.isBestPathTieBreaker_ref() = false;
+  entity.op() = thrift::CompareType::WIN_IF_NOT_PRESENT;
+  entity.isBestPathTieBreaker() = false;
   EXPECT_EQ(resultForLoner(entity), CompareResult::LOOSER);
-  entity.isBestPathTieBreaker_ref() = true;
+  entity.isBestPathTieBreaker() = true;
   EXPECT_EQ(resultForLoner(entity), CompareResult::TIE_LOOSER);
 
-  entity.op_ref() = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
-  entity.isBestPathTieBreaker_ref() = false;
+  entity.op() = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
+  entity.isBestPathTieBreaker() = false;
   EXPECT_EQ(resultForLoner(entity), CompareResult::TIE);
-  entity.isBestPathTieBreaker_ref() = true;
+  entity.isBestPathTieBreaker() = true;
   EXPECT_EQ(resultForLoner(entity), CompareResult::TIE);
 }
 
@@ -847,58 +844,56 @@ TEST(MetricVectorUtilsTest, compareMetricVectors) {
   thrift::MetricVector l, r;
   EXPECT_EQ(CompareResult::TIE, compareMetricVectors(l, r));
 
-  l.version_ref() = 1;
-  r.version_ref() = 2;
+  l.version() = 1;
+  r.version() = 2;
   EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
-  r.version_ref() = 1;
+  r.version() = 1;
 
   int64_t numMetrics = 5;
-  l.metrics_ref()->resize(numMetrics);
-  r.metrics_ref()->resize(numMetrics);
+  l.metrics()->resize(numMetrics);
+  r.metrics()->resize(numMetrics);
   for (int64_t i = 0; i < numMetrics; ++i) {
-    l.metrics_ref()[i].type_ref() = i;
-    l.metrics_ref()[i].priority_ref() = i;
-    l.metrics_ref()[i].op_ref() = thrift::CompareType::WIN_IF_PRESENT;
-    l.metrics_ref()[i].isBestPathTieBreaker_ref() = false;
-    *l.metrics_ref()[i].metric_ref() = {i};
+    l.metrics()[i].type() = i;
+    l.metrics()[i].priority() = i;
+    l.metrics()[i].op() = thrift::CompareType::WIN_IF_PRESENT;
+    l.metrics()[i].isBestPathTieBreaker() = false;
+    *l.metrics()[i].metric() = {i};
 
-    r.metrics_ref()[i].type_ref() = i;
-    r.metrics_ref()[i].priority_ref() = i;
-    r.metrics_ref()[i].op_ref() = thrift::CompareType::WIN_IF_PRESENT;
-    r.metrics_ref()[i].isBestPathTieBreaker_ref() = false;
-    *r.metrics_ref()[i].metric_ref() = {i};
+    r.metrics()[i].type() = i;
+    r.metrics()[i].priority() = i;
+    r.metrics()[i].op() = thrift::CompareType::WIN_IF_PRESENT;
+    r.metrics()[i].isBestPathTieBreaker() = false;
+    *r.metrics()[i].metric() = {i};
   }
 
   EXPECT_EQ(CompareResult::TIE, compareMetricVectors(l, r));
 
-  r.metrics_ref()[numMetrics - 2].metric_ref()->front()--;
+  r.metrics()[numMetrics - 2].metric()->front()--;
   EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(l, r));
   EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(r, l));
 
-  r.metrics_ref()[numMetrics - 2].isBestPathTieBreaker_ref() = true;
+  r.metrics()[numMetrics - 2].isBestPathTieBreaker() = true;
   EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
-  l.metrics_ref()[numMetrics - 2].isBestPathTieBreaker_ref() = true;
+  l.metrics()[numMetrics - 2].isBestPathTieBreaker() = true;
   EXPECT_EQ(CompareResult::TIE_WINNER, compareMetricVectors(l, r));
   EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
 
-  r.metrics_ref()->resize(numMetrics - 1);
+  r.metrics()->resize(numMetrics - 1);
   EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(l, r));
   EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(r, l));
 
   // make type different but keep priority the same
-  (*l.metrics_ref()[0].type_ref())--;
+  (*l.metrics()[0].type())--;
   EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(l, r));
   EXPECT_EQ(CompareResult::ERROR, compareMetricVectors(r, l));
-  (*l.metrics_ref()[0].type_ref())++;
+  (*l.metrics()[0].type())++;
 
   // change op for l loner;
-  l.metrics_ref()[numMetrics - 1].op_ref() =
-      thrift::CompareType::WIN_IF_NOT_PRESENT;
+  l.metrics()[numMetrics - 1].op() = thrift::CompareType::WIN_IF_NOT_PRESENT;
   EXPECT_EQ(CompareResult::LOOSER, compareMetricVectors(l, r));
   EXPECT_EQ(CompareResult::WINNER, compareMetricVectors(r, l));
 
-  l.metrics_ref()[numMetrics - 1].op_ref() =
-      thrift::CompareType::IGNORE_IF_NOT_PRESENT;
+  l.metrics()[numMetrics - 1].op() = thrift::CompareType::IGNORE_IF_NOT_PRESENT;
   EXPECT_EQ(CompareResult::TIE_WINNER, compareMetricVectors(l, r));
   EXPECT_EQ(CompareResult::TIE_LOOSER, compareMetricVectors(r, l));
 }
@@ -1180,36 +1175,33 @@ TEST(UtilTest, SelectRoutesPerAreaShortestDistance) {
 
 TEST(UtilTest, BuildInfoConstruction) {
   thrift::BuildInfo info = getBuildInfoThrift();
-  EXPECT_EQ(info.buildUser_ref().value(), BuildInfo::getBuildUser());
-  EXPECT_EQ(info.buildTime_ref().value(), BuildInfo::getBuildTime());
+  EXPECT_EQ(info.buildUser().value(), BuildInfo::getBuildUser());
+  EXPECT_EQ(info.buildTime().value(), BuildInfo::getBuildTime());
   EXPECT_EQ(
-      info.buildTimeUnix_ref().value(),
+      info.buildTimeUnix().value(),
       static_cast<int64_t>(BuildInfo::getBuildTimeUnix()));
-  EXPECT_EQ(info.buildHost_ref().value(), BuildInfo::getBuildHost());
-  EXPECT_EQ(info.buildPath_ref().value(), BuildInfo::getBuildPath());
-  EXPECT_EQ(info.buildRevision_ref().value(), BuildInfo::getBuildRevision());
+  EXPECT_EQ(info.buildHost().value(), BuildInfo::getBuildHost());
+  EXPECT_EQ(info.buildPath().value(), BuildInfo::getBuildPath());
+  EXPECT_EQ(info.buildRevision().value(), BuildInfo::getBuildRevision());
   EXPECT_EQ(
-      info.buildRevisionCommitTimeUnix_ref().value(),
+      info.buildRevisionCommitTimeUnix().value(),
       static_cast<int64_t>(BuildInfo::getBuildRevisionCommitTimeUnix()));
   EXPECT_EQ(
-      info.buildUpstreamRevision_ref().value(),
+      info.buildUpstreamRevision().value(),
       BuildInfo::getBuildUpstreamRevision());
   EXPECT_EQ(
-      info.buildUpstreamRevisionCommitTimeUnix_ref().value(),
+      info.buildUpstreamRevisionCommitTimeUnix().value(),
       BuildInfo::getBuildUpstreamRevisionCommitTimeUnix());
+  EXPECT_EQ(info.buildPackageName().value(), BuildInfo::getBuildPackageName());
   EXPECT_EQ(
-      info.buildPackageName_ref().value(), BuildInfo::getBuildPackageName());
+      info.buildPackageVersion().value(), BuildInfo::getBuildPackageVersion());
   EXPECT_EQ(
-      info.buildPackageVersion_ref().value(),
-      BuildInfo::getBuildPackageVersion());
-  EXPECT_EQ(
-      info.buildPackageRelease_ref().value(),
-      BuildInfo::getBuildPackageRelease());
-  EXPECT_EQ(info.buildPlatform_ref().value(), BuildInfo::getBuildPlatform());
-  EXPECT_EQ(info.buildRule_ref().value(), BuildInfo::getBuildRule());
-  EXPECT_EQ(info.buildType_ref().value(), BuildInfo::getBuildType());
-  EXPECT_EQ(info.buildTool_ref().value(), BuildInfo::getBuildTool());
-  EXPECT_EQ(info.buildMode_ref().value(), BuildInfo::getBuildMode());
+      info.buildPackageRelease().value(), BuildInfo::getBuildPackageRelease());
+  EXPECT_EQ(info.buildPlatform().value(), BuildInfo::getBuildPlatform());
+  EXPECT_EQ(info.buildRule().value(), BuildInfo::getBuildRule());
+  EXPECT_EQ(info.buildType().value(), BuildInfo::getBuildType());
+  EXPECT_EQ(info.buildTool().value(), BuildInfo::getBuildTool());
+  EXPECT_EQ(info.buildMode().value(), BuildInfo::getBuildMode());
 }
 
 TEST(UtilTest, AllocPrefixConstruction) {
@@ -1218,17 +1210,17 @@ TEST(UtilTest, AllocPrefixConstruction) {
   const int64_t prefixIndex = 4;
   thrift::AllocPrefix allocPrefix =
       createAllocPrefix(ipPrefix, prefixLen, prefixIndex);
-  EXPECT_EQ(allocPrefix.seedPrefix_ref().value(), ipPrefix);
-  EXPECT_EQ(allocPrefix.allocPrefixLen_ref().value(), prefixLen);
-  EXPECT_EQ(allocPrefix.allocPrefixIndex_ref().value(), prefixIndex);
+  EXPECT_EQ(allocPrefix.seedPrefix().value(), ipPrefix);
+  EXPECT_EQ(allocPrefix.allocPrefixLen().value(), prefixLen);
+  EXPECT_EQ(allocPrefix.allocPrefixIndex().value(), prefixIndex);
 }
 
 TEST(UtilTest, PerfEventConstruction) {
   thrift::PerfEvent perfEvent =
       createPerfEvent("Test Node", "Test Perf Event Construction", 100);
-  EXPECT_EQ(perfEvent.nodeName_ref().value(), "Test Node");
-  EXPECT_EQ(perfEvent.eventDescr_ref().value(), "Test Perf Event Construction");
-  EXPECT_EQ(perfEvent.unixTs_ref().value(), 100);
+  EXPECT_EQ(perfEvent.nodeName().value(), "Test Node");
+  EXPECT_EQ(perfEvent.eventDescr().value(), "Test Perf Event Construction");
+  EXPECT_EQ(perfEvent.unixTs().value(), 100);
 }
 
 TEST(UtilTest, KvStoreFloodRateConstruction) {
@@ -1236,8 +1228,8 @@ TEST(UtilTest, KvStoreFloodRateConstruction) {
   const int32_t flood_msg_burst_size = 4;
   thrift::KvStoreFloodRate floodRate =
       createKvStoreFloodRate(flood_msg_per_sec, flood_msg_burst_size);
-  EXPECT_EQ(floodRate.flood_msg_per_sec_ref().value(), flood_msg_per_sec);
-  EXPECT_EQ(floodRate.flood_msg_burst_size_ref().value(), flood_msg_burst_size);
+  EXPECT_EQ(floodRate.flood_msg_per_sec().value(), flood_msg_per_sec);
+  EXPECT_EQ(floodRate.flood_msg_burst_size().value(), flood_msg_burst_size);
 }
 
 TEST(UtilTest, OpenrVersionsConstruction) {
@@ -1245,8 +1237,8 @@ TEST(UtilTest, OpenrVersionsConstruction) {
   const int32_t lowestVersion = 30;
   thrift::OpenrVersions openrVersions =
       createOpenrVersions(version, lowestVersion);
-  EXPECT_EQ(openrVersions.version_ref().value(), version);
-  EXPECT_EQ(openrVersions.lowestSupportedVersion_ref().value(), lowestVersion);
+  EXPECT_EQ(openrVersions.version().value(), version);
+  EXPECT_EQ(openrVersions.lowestSupportedVersion().value(), lowestVersion);
 }
 
 TEST(UtilTest, ThriftValueConstruction) {
@@ -1257,12 +1249,12 @@ TEST(UtilTest, ThriftValueConstruction) {
 
   thrift::Value thriftVal = createThriftValue(
       version, "test originator", "test data", ttl, ttlVersion, hash);
-  EXPECT_EQ(thriftVal.version_ref().value(), version);
-  EXPECT_EQ(thriftVal.originatorId_ref().value(), "test originator");
-  EXPECT_EQ(thriftVal.value_ref().value(), "test data");
-  EXPECT_EQ(thriftVal.ttl_ref().value(), ttl);
-  EXPECT_EQ(thriftVal.ttlVersion_ref().value(), ttlVersion);
-  EXPECT_EQ(thriftVal.hash_ref().value(), hash);
+  EXPECT_EQ(thriftVal.version().value(), version);
+  EXPECT_EQ(thriftVal.originatorId().value(), "test originator");
+  EXPECT_EQ(thriftVal.value().value(), "test data");
+  EXPECT_EQ(thriftVal.ttl().value(), ttl);
+  EXPECT_EQ(thriftVal.ttlVersion().value(), ttlVersion);
+  EXPECT_EQ(thriftVal.hash().value(), hash);
 }
 
 TEST(UtilTest, logInitializationEvent) {

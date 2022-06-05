@@ -199,10 +199,10 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
 
   // check if any of KeyVal has 'adj' update
   bool isAdjChanged = false;
-  for (auto& [key, val] : *pub.keyVals_ref()) {
+  for (auto& [key, val] : *pub.keyVals()) {
     // check if we have any value update.
     // Ttl refreshing won't update any value.
-    if (!val.value_ref().has_value()) {
+    if (!val.value().has_value()) {
       continue;
     }
 
@@ -352,9 +352,8 @@ OpenrCtrlHandler::getMyNodeName(std::string& _return) {
 
 void
 OpenrCtrlHandler::getOpenrVersion(thrift::OpenrVersions& _openrVersion) {
-  _openrVersion.version_ref() = Constants::kOpenrVersion;
-  _openrVersion.lowestSupportedVersion_ref() =
-      Constants::kOpenrSupportedVersion;
+  _openrVersion.version() = Constants::kOpenrVersion;
+  _openrVersion.lowestSupportedVersion() = Constants::kOpenrSupportedVersion;
 }
 
 void
@@ -636,14 +635,13 @@ OpenrCtrlHandler::semifuture_getRouteDbComputed(
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
 OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
   auto filter = std::make_unique<thrift::AdjacenciesFilter>();
-  filter->selectAreas_ref() = {
-      *getSingleAreaOrThrow("getDecisionAdjacencyDbs")};
+  filter->selectAreas() = {*getSingleAreaOrThrow("getDecisionAdjacencyDbs")};
   return semifuture_getDecisionAdjacenciesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
                          adjDbs) mutable {
         auto res = std::make_unique<thrift::AdjDbs>();
         for (auto& db : *adjDbs) {
-          auto name = *db.thisNodeName_ref();
+          auto name = *db.thisNodeName();
           res->emplace(std::move(name), std::move(db));
         }
         return res;
@@ -668,19 +666,19 @@ OpenrCtrlHandler::semifuture_getDecisionAreaAdjacenciesFiltered(
 folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
 OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
   auto filter = std::make_unique<thrift::ReceivedRouteFilter>();
-  filter->areaName_ref() = *getSingleAreaOrThrow("getDecisionPrefixDbs");
+  filter->areaName() = *getSingleAreaOrThrow("getDecisionPrefixDbs");
   return semifuture_getReceivedRoutesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>&&
                          routes) mutable {
         auto res = std::make_unique<thrift::PrefixDbs>();
         for (auto const& routeDetail : *routes) {
-          for (auto const& route : *routeDetail.routes_ref()) {
-            (*res)[*route.key_ref()->node_ref()].prefixEntries_ref()->push_back(
-                *route.route_ref());
+          for (auto const& route : *routeDetail.routes()) {
+            (*res)[*route.key()->node()].prefixEntries()->push_back(
+                *route.route());
           }
         }
         for (auto& [name, db] : *res) {
-          db.thisNodeName_ref() = name;
+          db.thisNodeName() = name;
         }
         return res;
       });
@@ -701,7 +699,7 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
   thrift::KeyGetParams params;
-  *params.keys_ref() = std::move(*filterKeys);
+  *params.keys() = std::move(*filterKeys);
 
   CHECK(kvStore_);
   return kvStore_->semifuture_getKvStoreKeyVals(
@@ -783,10 +781,10 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
   }
 
   // Only care about "adj:" key
-  *params.prefix_ref() = Constants::kAdjDbMarker;
-  params.keys_ref() = {Constants::kAdjDbMarker.toString()};
+  *params.prefix() = Constants::kAdjDbMarker;
+  params.keys() = {Constants::kAdjDbMarker.toString()};
   // Only dump difference between KvStore and client snapshot
-  params.keyValHashes_ref() = std::move(adjKeyVals);
+  params.keyValHashes() = std::move(adjKeyVals);
 
   // Explicitly do SYNC call to KvStore
   std::unique_ptr<thrift::Publication> thriftPub{nullptr};
@@ -800,12 +798,12 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
     return sf;
   }
 
-  if (thriftPub->keyVals_ref()->size() > 0) {
+  if (thriftPub->keyVals()->size() > 0) {
     XLOG(DBG3) << "AdjKey has been added/modified. Notify immediately";
     p.setValue(true);
   } else if (
-      thriftPub->tobeUpdatedKeys_ref().has_value() &&
-      thriftPub->tobeUpdatedKeys_ref().value().size() > 0) {
+      thriftPub->tobeUpdatedKeys().has_value() &&
+      thriftPub->tobeUpdatedKeys().value().size() > 0) {
     XLOG(DBG3) << "AdjKey has been deleted/expired. Notify immediately";
     p.setValue(true);
   } else {
@@ -856,19 +854,19 @@ OpenrCtrlHandler::semifuture_getSubscriberInfo(int64_t type) {
       kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
         for (auto& [id, publisher] : kvStorePublishers_) {
           thrift::StreamSubscriberInfo subscriber;
-          subscriber.subscriber_id_ref() = id;
+          subscriber.subscriber_id() = id;
 
           auto currentTime = std::chrono::steady_clock::now();
           auto duration_time =
               std::chrono::duration_cast<std::chrono::milliseconds>(
                   currentTime - publisher->subscription_time_);
-          subscriber.uptime_ref() = duration_time.count();
-          subscriber.last_msg_sent_time_ref() =
+          subscriber.uptime() = duration_time.count();
+          subscriber.last_msg_sent_time() =
               std::chrono::time_point_cast<std::chrono::milliseconds>(
                   publisher->last_message_time_)
                   .time_since_epoch()
                   .count();
-          subscriber.total_streamed_msgs_ref() = publisher->total_messages_;
+          subscriber.total_streamed_msgs() = publisher->total_messages_;
 
           subscribers.emplace_back(subscriber);
         }
@@ -877,19 +875,19 @@ OpenrCtrlHandler::semifuture_getSubscriberInfo(int64_t type) {
       fibDetailSubscribers_.withWLock([&](auto& fibDetailSubscribers_) {
         for (auto& [id, publisher] : fibDetailSubscribers_) {
           thrift::StreamSubscriberInfo subscriber;
-          subscriber.subscriber_id_ref() = id;
+          subscriber.subscriber_id() = id;
 
           auto currentTime = std::chrono::steady_clock::now();
           auto duration_time =
               std::chrono::duration_cast<std::chrono::milliseconds>(
                   currentTime - publisher.upSince);
-          subscriber.uptime_ref() = duration_time.count();
-          subscriber.last_msg_sent_time_ref() =
+          subscriber.uptime() = duration_time.count();
+          subscriber.last_msg_sent_time() =
               std::chrono::time_point_cast<std::chrono::milliseconds>(
                   publisher.last_message_time)
                   .time_since_epoch()
                   .count();
-          subscriber.total_streamed_msgs_ref() = publisher.total_messages;
+          subscriber.total_streamed_msgs() = publisher.total_messages;
 
           subscribers.emplace_back(subscriber);
         }
@@ -991,7 +989,7 @@ OpenrCtrlHandler::semifuture_subscribeAndGetAreaKvStores(
         pubs.throwUnlessValue();
         for (auto& pub : *pubs.value()) {
           // Set the publication timestamp
-          pub.timestamp_ms_ref() = getUnixTimeStampMs();
+          pub.timestamp_ms() = getUnixTimeStampMs();
         }
         return apache::thrift::ResponseAndServerStream<
             std::vector<thrift::Publication>,
@@ -1205,8 +1203,7 @@ folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
   CHECK(linkMonitor_);
   auto filter = std::make_unique<thrift::AdjacenciesFilter>();
-  filter->selectAreas_ref() = {
-      *getSingleAreaOrThrow("getLinkMonitorAdjacencies")};
+  filter->selectAreas() = {*getSingleAreaOrThrow("getLinkMonitorAdjacencies")};
   return semifuture_getLinkMonitorAdjacenciesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
                          dbs) mutable {

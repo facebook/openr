@@ -16,7 +16,7 @@ PersistentStoreWrapper::PersistentStoreWrapper(const unsigned long tid)
     : filePath(fmt::format("/tmp/openr_persistent_store_test_{}", tid)) {
   XLOG(DBG1) << "PersistentStoreWrapper: Creating PersistentStore.";
   auto tConfig = getBasicOpenrConfig();
-  tConfig.persistent_config_store_path_ref() = filePath;
+  tConfig.persistent_config_store_path() = filePath;
   auto config = std::make_shared<Config>(tConfig);
   store_ = std::make_unique<PersistentStore>(config);
 }

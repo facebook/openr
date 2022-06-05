@@ -64,8 +64,8 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
   const auto tid = std::hash<std::thread::id>()(std::this_thread::get_id());
 
   thrift::PrefixMetrics metrics;
-  metrics.path_preference_ref() = 100;
-  metrics.source_preference_ref() = 200;
+  metrics.path_preference() = 100;
+  metrics.source_preference() = 200;
 
   // Data types to store/load
   const std::pair<std::string, std::string> keyVal2{"key2", "8375"};

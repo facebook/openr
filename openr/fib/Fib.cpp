@@ -51,12 +51,12 @@ Fib::Fib(
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
-    : myNodeName_(*config->getConfig().node_name_ref()),
-      thriftPort_(*config->getConfig().fib_port_ref()),
-      dryrun_(config->getConfig().dryrun_ref().value_or(false)),
+    : myNodeName_(*config->getConfig().node_name()),
+      thriftPort_(*config->getConfig().fib_port()),
+      dryrun_(config->getConfig().dryrun().value_or(false)),
       enableSegmentRouting_(
-          config->getConfig().enable_segment_routing_ref().value_or(false)),
-      routeDeleteDelay_(*config->getConfig().route_delete_delay_ms_ref()),
+          config->getConfig().enable_segment_routing().value_or(false)),
+      routeDeleteDelay_(*config->getConfig().route_delete_delay_ms()),
       retryRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
       fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
@@ -152,12 +152,12 @@ Fib::getRouteDb() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), this]() mutable {
     thrift::RouteDatabase routeDb;
-    routeDb.thisNodeName_ref() = myNodeName_;
+    routeDb.thisNodeName() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
-      routeDb.unicastRoutes_ref()->emplace_back(route.second.toThrift());
+      routeDb.unicastRoutes()->emplace_back(route.second.toThrift());
     }
     for (const auto& route : routeState_.mplsRoutes) {
-      routeDb.mplsRoutes_ref()->emplace_back(route.second.toThrift());
+      routeDb.mplsRoutes()->emplace_back(route.second.toThrift());
     }
     p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
   });
@@ -170,14 +170,13 @@ Fib::getRouteDetailDb() {
   auto sf = p.getSemiFuture();
   runInEventBaseThread([p = std::move(p), this]() mutable {
     thrift::RouteDatabaseDetail routeDetailDb;
-    routeDetailDb.thisNodeName_ref() = myNodeName_;
+    routeDetailDb.thisNodeName() = myNodeName_;
     for (const auto& route : routeState_.unicastRoutes) {
-      routeDetailDb.unicastRoutes_ref()->emplace_back(
+      routeDetailDb.unicastRoutes()->emplace_back(
           route.second.toThriftDetail());
     }
     for (const auto& route : routeState_.mplsRoutes) {
-      routeDetailDb.mplsRoutes_ref()->emplace_back(
-          route.second.toThriftDetail());
+      routeDetailDb.mplsRoutes()->emplace_back(route.second.toThriftDetail());
     }
     p.setValue(std::make_unique<thrift::RouteDatabaseDetail>(
         std::move(routeDetailDb)));
@@ -477,9 +476,9 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
 thrift::PerfDatabase
 Fib::dumpPerfDb() const {
   thrift::PerfDatabase perfDb;
-  *perfDb.thisNodeName_ref() = myNodeName_;
+  *perfDb.thisNodeName() = myNodeName_;
   for (auto const& perf : perfDb_) {
-    perfDb.eventInfo_ref()->emplace_back(perf);
+    perfDb.eventInfo()->emplace_back(perf);
   }
   return perfDb;
 }
@@ -492,9 +491,9 @@ Fib::printUnicastRoutesAddUpdate(
   }
 
   for (auto const& route : unicastRoutesToUpdate) {
-    XLOG(DBG1) << "> " << toString(*route.dest_ref())
-               << ", NextHopsCount = " << route.nextHops_ref()->size();
-    for (auto const& nh : *route.nextHops_ref()) {
+    XLOG(DBG1) << "> " << toString(*route.dest())
+               << ", NextHopsCount = " << route.nextHops()->size();
+    for (auto const& nh : *route.nextHops()) {
       XLOG(DBG1) << " " << toString(nh);
     }
   }
@@ -508,9 +507,9 @@ Fib::printMplsRoutesAddUpdate(
   }
 
   for (auto const& route : mplsRoutesToUpdate) {
-    XLOG(DBG1) << "> " << std::to_string(*route.topLabel_ref()) << ", "
-               << " NextHopsCount = " << route.nextHops_ref()->size();
-    for (auto const& nh : *route.nextHops_ref()) {
+    XLOG(DBG1) << "> " << std::to_string(*route.topLabel()) << ", "
+               << " NextHopsCount = " << route.nextHops()->size();
+    for (auto const& nh : *route.nextHops()) {
       XLOG(DBG1) << " " << toString(nh);
     }
   }
@@ -527,7 +526,7 @@ Fib::updateUnicastRoutes(
   //
   // Delete Unicast routes
   //
-  auto& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete_ref();
+  auto& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete();
   if (delayedDeletionEnabled() and useDeleteDelay) {
     // Clear the routes to delete
     unicastRoutesToDelete.clear();
@@ -577,7 +576,7 @@ Fib::updateUnicastRoutes(
   //
   // Update Unicast routes
   //
-  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate_ref();
+  auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate();
   if (unicastRoutesToUpdate.size()) {
     XLOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
                << " unicast routes in FIB";
@@ -631,7 +630,7 @@ Fib::updateMplsRoutes(
   //
   // Delete Mpls routes
   //
-  auto& mplsRoutesToDelete = *routeDbDelta.mplsRoutesToDelete_ref();
+  auto& mplsRoutesToDelete = *routeDbDelta.mplsRoutesToDelete();
   if (useDeleteDelay and delayedDeletionEnabled()) {
     // Clear the routes to delete
     mplsRoutesToDelete.clear();
@@ -680,7 +679,7 @@ Fib::updateMplsRoutes(
   //
   // Update Mpls routes
   //
-  auto const& mplsRoutesToUpdate = *routeDbDelta.mplsRoutesToUpdate_ref();
+  auto const& mplsRoutesToUpdate = *routeDbDelta.mplsRoutesToUpdate();
   if (mplsRoutesToUpdate.size()) {
     XLOG(INFO) << "Adding/Updating " << mplsRoutesToUpdate.size()
                << " mpls routes in FIB";
@@ -1050,20 +1049,19 @@ Fib::updateGlobalCounters() {
 
 void
 Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
-  if (not perfEvents.has_value() or not perfEvents->events_ref()->size()) {
+  if (not perfEvents.has_value() or not perfEvents->events()->size()) {
     return;
   }
 
   // Ignore bad perf event sample if creation time of first event is
   // less than creation time of our recently logged perf events.
-  if (recentPerfEventCreateTs_ >=
-      *perfEvents->events_ref()->at(0).unixTs_ref()) {
+  if (recentPerfEventCreateTs_ >= *perfEvents->events()->at(0).unixTs()) {
     XLOG(WARNING) << "Ignoring perf event with old create timestamp "
-                  << *perfEvents->events_ref()[0].unixTs_ref()
-                  << ", expected > " << recentPerfEventCreateTs_;
+                  << *perfEvents->events()[0].unixTs() << ", expected > "
+                  << recentPerfEventCreateTs_;
     return;
   } else {
-    recentPerfEventCreateTs_ = *perfEvents->events_ref()->at(0).unixTs_ref();
+    recentPerfEventCreateTs_ = *perfEvents->events()->at(0).unixTs();
   }
 
   // Add latest event information (this function is meant to be called after
