@@ -1,9 +1,9 @@
 # Configuration Guide
 
 Good work on building and installing Open/R. Here are some ways you can run
-Open/R. You should have the `openr` C++ binary, `run_openr.sh` script, and
-python tool `breeze` all installed under the appropriate bin directory on your
-system.
+Open/R. You should have the `openr` C++ binary, a JSON configuration and a
+python CLI tool `breeze` all installed under the appropriate bin directory on
+your system.
 
 - `FibService` => route programming interface FibService is main external
   service required to make Open/R functional, which comes pre-compiled with the
@@ -33,46 +33,13 @@ eth0         Up                                         2          169.254.0.13
                                                                    fe80::20a:f7ff:fe9a:3616
 ```
 
-## run_openr.sh and Configuration File
-
----
-
-> Open/R is currently _(202011)_ moving to a thrift based JSON config file
-> format so some of this documentation is out of date. This will be updated as
-> soon as possible.
-
-The preferred way of running OpenR is via the
-[run_openr.sh](https://github.com/facebook/openr/blob/master/openr/scripts/run_openr.sh)
-script. The benefit of it instead of directly passing parameters is that, it
-provides configuration options which are easier to work with and are less
-fragile than command line options.
-
-To configure Open/R, you can simply drop files consisting of configuration
-options at `/etc/sysconfig/openr` and trigger an OpenR restart. An example
-configuration file looks like following
-
-```
-DRYRUN=false
-REDISTRIBUTE_IFACES=lo
-IFACE_REGEX_INCLUDE=eth.*
-IFACE_REGEX_EXCLUDE=
-VERBOSITY=1
-```
-
 Run OpenR
 
 ```console
-$ run_openr.sh
+/path/to/openr -v 2 --config /path/to/openr.confg
 ```
 
 You can also pass in a custom configuration file and override/add openr flags:
-
-```console
-$ run_openr.sh --help
-USAGE: run_openr.sh [config_file_path] [openr_flags]
-If config_file_path is not provided, we will source the one at /etc/sysconfig/openr
-If openr_flags are provided, they will be passed along to openr and override any passed by this script
-```
 
 ### Running as a Daemon
 
@@ -81,8 +48,7 @@ If openr_flags are provided, they will be passed along to openr and override any
 `openr` should be run as a daemon so that if it crashes or node gets restarted,
 the service comes up automatically. For newer Linux versions like CentOS we run
 it as a `systemd` service. The following describes `openr.service` for systems
-supporting systemd. You can write one based on your platform very easily (as all
-it does is execute `run_openr.sh`).
+supporting systemd.
 
 ```ini
 Description=Facebook Open Routing Platform
@@ -90,7 +56,7 @@ After=network.target
 
 [Service]
 Type=simple
-ExecStart=/usr/sbin/run_openr.sh
+ExecStart=/usr/local/bin/openr -v 2 --config /etc/openr.conf
 Restart=always
 RestartSec=3
 TimeoutSec=10
@@ -98,21 +64,9 @@ TimeoutStartSec=10
 TimeoutStopSec=10
 LimitNOFILE=10000000
 LimitCORE=32G
-SyslogIdentifier=openr
 
 [Install]
 WantedBy=multi-user.target
-```
-
-## OPENR Binary
-
----
-
-Path of `openr` binary on system. If binary is installed under searchable bin
-paths then you don't need any change here.
-
-```shell
-OPENR=/usr/local/bin/openr
 ```
 
 ## Thrift-based JSON Configuration File
@@ -144,9 +98,7 @@ MIN_LOG_LEVEL=0
 Show all verbose `VLOG(m)` messages for m less or equal the value of this flag.
 Use higher value for more verbose logging. Defaults to 1
 
-```shell
-VERBOSITY=1
-```
+- Control using the `-v` CLI argument to openr
 
 ### DECISION_DEBOUNCE_MIN_MS / DECISION_DEBOUNCE_MAX_MS
 
