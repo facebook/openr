@@ -386,7 +386,6 @@ OpenrWrapper<Serializer>::getIpPrefix() {
     const std::string keyPrefix = fmt::format("prefix:{}", nodeId_);
     try {
       thrift::KeyDumpParams params;
-      params.prefix() = keyPrefix;
       if (not keyPrefix.empty()) {
         params.keys() = {keyPrefix};
       }

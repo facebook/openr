@@ -515,7 +515,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::KeyDumpParams params;
-    params.prefix() = "key3";
     params.originatorIds()->insert("node3");
     params.keys() = {"key3"};
 
@@ -535,7 +534,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // with areas
   {
     thrift::KeyDumpParams params;
-    params.prefix() = "keyP";
     params.originatorIds()->insert("node1");
     params.keys() = {"keyP"};
 
@@ -553,7 +551,6 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     thrift::KeyDumpParams params;
-    params.prefix() = "key3";
     params.originatorIds()->insert("node3");
     params.keys() = {"key3"};
 

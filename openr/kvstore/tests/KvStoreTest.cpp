@@ -200,7 +200,6 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   std::optional<std::unordered_map<std::string, thrift::Value>> maybeKeyMap;
   try {
     thrift::KeyDumpParams params;
-    params.prefix() = prefixRegex;
     params.keys() = {prefixRegex};
     auto pub = *kvStore_->getKvStore()
                     ->semifuture_dumpKvStoreKeys(
@@ -232,7 +231,6 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
       maybeKeysAfterInsert;
   try {
     thrift::KeyDumpParams params;
-    params.prefix() = prefixRegex;
     params.keys() = {prefixRegex};
     auto pub = *kvStore_->getKvStore()
                     ->semifuture_dumpKvStoreKeys(
