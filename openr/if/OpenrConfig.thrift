@@ -837,14 +837,6 @@ struct OpenrConfig {
   53: i32 mpls_route_delete_delay_s = 10;
 
   /**
-   * Feature gate for new graceful restart behavior.
-   * New workflow is to promote adj up after kvstore reaches initial sync state
-   * This is a series of new changes in turn to address traffic loss during
-   * agent cold boot.
-   */
-  54: bool enable_new_gr_behavior = 0;
-
-  /**
    * Maximum hold time for synchronizing the adjacencies in KvStore after
    * service starts up. We expect all the adjacencies to be fully established
    * within hold time after Open/R starts LinkMonitor. LinkMonitor
@@ -857,15 +849,6 @@ struct OpenrConfig {
    * Config for segment routing.
    */
   56: optional SegmentRoutingConfig segment_routing_config;
-
-  /**
-   * [TO BE DEPRECATED]
-   * Bool to enable route program ordering, aka, to-add routes should
-   * be programmed at originator ahead of being advertised to peers; Reverse
-   * order applies to to-withdraw routes. Name the flag as enable_fib_ack since
-   * FIB-ACK is required to signal the completion of local programming.
-  */
-  58: bool enable_fib_ack = true;
 
   /**
    * Delay in milliseconds for route deletion. Route withdrawal would not get

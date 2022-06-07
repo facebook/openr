@@ -99,7 +99,6 @@ getBasicOpenrConfig(
   config.enable_rib_policy() = true;
   config.assume_drained() = false;
   config.prefix_hold_time_s() = 0;
-  config.enable_new_gr_behavior() = true;
 
   /*
    * [OVERRIDE] thrift::LinkMonitorConfig

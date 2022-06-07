@@ -2424,7 +2424,6 @@ class InitializationTestFixture : public LinkMonitorTestFixture {
     auto tConfig = LinkMonitorTestFixture::createConfig();
 
     // override LM config
-    tConfig.enable_new_gr_behavior() = true;
     tConfig.enable_ordered_adj_publication() = true;
 
     return tConfig;

@@ -54,7 +54,6 @@ OPENR_CONFIG_STR = r"""
   "enable_best_route_selection": true,
   "enable_bgp_peering": true,
   "enable_fib_service_waiting": true,
-  "enable_new_gr_behavior": true,
   "enable_rib_policy": false,
   "enable_v4": true,
   "enable_watchdog": true,

@@ -160,11 +160,6 @@ class Config {
   }
 
   bool
-  isNewGRBehaviorEnabled() const {
-    return *config_.enable_new_gr_behavior();
-  }
-
-  bool
   isNetlinkFibHandlerEnabled() const {
     return config_.enable_netlink_fib_handler().value_or(false);
   }
