@@ -168,6 +168,10 @@ LinkMonitor::LinkMonitor(
   // Create timer. Timer is used for immediate or delayed executions.
   advertiseIfaceAddrTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
+  // ATTN: LINK_DISCOVERY stage can't stuck forever if there is NO interface
+  // being discovered.
+  advertiseIfaceAddrTimer_->scheduleTimeout(
+      Constants::kMaxDurationLinkDiscovery);
 
   // Create config-store client
   XLOG(INFO) << "Loading link-monitor state";
@@ -683,8 +687,8 @@ LinkMonitor::advertiseIfaceAddr() {
   // once their backoff is clear.
   if (retryTime.count() != 0) {
     advertiseIfaceAddrTimer_->scheduleTimeout(retryTime);
-    XLOG(DBG2) << "advertiseIfaceAddr timer scheduled in " << retryTime.count()
-               << " ms";
+    XLOG(DBG2) << fmt::format(
+        "advertiseIfaceAddr timer scheduled in {}ms", retryTime.count());
   }
 }
 
@@ -709,8 +713,16 @@ LinkMonitor::advertiseInterfaces() {
     ifDb.emplace_back(std::move(interfaceInfo));
   }
 
-  // publish via replicate queue
+  // Publish via replicate queue
   interfaceUpdatesQueue_.push(std::move(ifDb));
+
+  // Mark `initialLinkDiscovered_` for the first call upon initialization
+  if (not initialLinksDiscovered_) {
+    initialLinksDiscovered_ = true;
+
+    logInitializationEvent(
+        "LinkMonitor", thrift::InitializationEvent::LINK_DISCOVERED);
+  }
 }
 
 void
@@ -1189,8 +1201,6 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
     peerUpdatesQueue_.push(std::move(event));
 
     initialNeighborsReceived_ = true;
-    logInitializationEvent(
-        "LinkMonitor", thrift::InitializationEvent::LINK_DISCOVERED);
   }
 }
 

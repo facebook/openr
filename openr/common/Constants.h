@@ -19,6 +19,15 @@ using namespace std::chrono_literals;
 
 class Constants {
  public:
+  /*
+   * [Initialization] Constants used for Open/R Initialization procedure
+   */
+
+  // Upper-limit time duration of LINK_DISCOVER stage
+  static constexpr std::chrono::seconds kMaxDurationLinkDiscovery{10};
+
+  // TODO: we may consider define upper-limit for each stage of initialization
+
   //
   // Common
   //

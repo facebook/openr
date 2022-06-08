@@ -415,6 +415,10 @@ class LinkMonitor final : public OpenrEventBase {
   // initialization procedure.
   bool initialNeighborsReceived_{false};
 
+  // Boolean flag indicating whether initial links are discovered during Open/R
+  // initialization procedure
+  bool initialLinksDiscovered_{false};
+
   // Stop signal for fiber to periodically dump interface info from platform
   folly::fibers::Baton syncInterfaceStopSignal_;
 }; // LinkMonitor

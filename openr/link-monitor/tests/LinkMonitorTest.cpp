@@ -182,6 +182,9 @@ class LinkMonitorTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
+    // cleanup any fb303 data
+    facebook::fb303::fbData->resetAllData();
+
     // cleanup any existing config file on disk
     auto cmd = "rm -rf {}"_shellify(kConfigStorePath.c_str());
     folly::Subprocess proc(std::move(cmd));
@@ -2429,6 +2432,56 @@ class InitializationTestFixture : public LinkMonitorTestFixture {
     return tConfig;
   }
 };
+
+TEST_F(InitializationTestFixture, InitialLinkDiscoveredTest) {
+  OpenrEventBase evb;
+  int64_t scheduleAt = 0;
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
+        // create an interface
+        nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
+        recvAndReplyIfUpdate();
+      });
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += 2 * openr::Constants::kLinkThrottleTimeout.count()),
+      [&]() noexcept {
+        auto linkDiscoveredKey = fmt::format(
+            Constants::kInitEventCounterFormat,
+            apache::thrift::util::enumNameSafe(
+                thrift::InitializationEvent::LINK_DISCOVERED));
+        EXPECT_TRUE(facebook::fb303::fbData->hasCounter(linkDiscoveredKey));
+        EXPECT_GE(facebook::fb303::fbData->getCounter(linkDiscoveredKey), 0);
+
+        evb.stop();
+      });
+
+  // Start the eventbase and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
+
+TEST_F(InitializationTestFixture, InitialLinkDiscoveredNegativeTest) {
+  OpenrEventBase evb;
+  evb.scheduleTimeout(
+      std::chrono::seconds(Constants::kMaxDurationLinkDiscovery),
+      [&]() noexcept {
+        auto linkDiscoveredKey = fmt::format(
+            Constants::kInitEventCounterFormat,
+            apache::thrift::util::enumNameSafe(
+                thrift::InitializationEvent::LINK_DISCOVERED));
+        EXPECT_TRUE(facebook::fb303::fbData->hasCounter(linkDiscoveredKey));
+        EXPECT_GE(facebook::fb303::fbData->getCounter(linkDiscoveredKey), 0);
+
+        evb.stop();
+      });
+
+  // Start the eventbase and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
 
 TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
   // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
