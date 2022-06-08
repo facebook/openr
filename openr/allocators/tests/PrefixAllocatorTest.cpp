@@ -849,7 +849,6 @@ TEST_F(PrefixAllocatorFixture, StaticPrefixUpdate) {
     while (true) {
       try {
         thrift::KeyDumpParams params;
-        params.prefix() = expPrefixKey;
         params.keys() = {expPrefixKey};
         auto pub = *kvStoreWrapper_->getKvStore()
                         ->semifuture_dumpKvStoreKeys(
