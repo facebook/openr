@@ -10,17 +10,7 @@ import subprocess
 import sys
 from builtins import object
 
-from openr.cli.commands import (
-    config,
-    decision,
-    fib,
-    kvstore,
-    lm,
-    monitor,
-    openr,
-    perf,
-    prefix_mgr,
-)
+from openr.cli.commands import config, decision, fib, kvstore, lm, monitor, openr, perf
 from openr.cli.utils.utils import parse_nodes
 from openr.utils.consts import Consts
 
@@ -129,7 +119,7 @@ class TechSupportCmd(object):
     def print_fib_unicast_routes(self):
         if not self.print_routes:
             return
-        fib.FibUnicastRoutesCmd(self.cli_opts).run([], False)
+        fib.FibUnicastRoutesCmd(self.cli_opts).run([], False, False)
 
     def print_fib_mpls_routes(self):
         if not self.print_routes:
