@@ -94,12 +94,25 @@ class FibRoutesInstalledCli(object):
 class FibUnicastRoutesCli(object):
     @click.command()
     @click.argument("prefix_or_ip", nargs=-1)
-    @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.option(
+        "--json/--no-json", default=False, help="Dump in JSON format", show_default=True
+    )
+    @click.option(
+        "--hostnames/--no-hostnames",
+        default=False,
+        show_default=True,
+        help="Show Hostnames rather than IP addresses",
+    )
     @click.pass_obj
-    def routes(cli_opts, prefix_or_ip, json):  # noqa: B902
+    def routes(
+        cli_opts: Bunch,  # noqa: B902
+        prefix_or_ip: List[str],
+        json: bool,
+        hostnames: bool,
+    ) -> None:
         """Request unicast routing table of the current host"""
 
-        fib.FibUnicastRoutesCmd(cli_opts).run(prefix_or_ip, json)
+        fib.FibUnicastRoutesCmd(cli_opts).run(prefix_or_ip, json, hostnames)
 
 
 class FibMplsRoutesCli(object):

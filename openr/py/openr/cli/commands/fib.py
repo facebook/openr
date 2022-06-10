@@ -54,10 +54,14 @@ class FibUnicastRoutesCmd(OpenrCtrlCmd):
         client: OpenrCtrl.Client,
         prefix_or_ip: List[str],
         json: bool,
+        hostnames: bool,
         *args,
         **kwargs,
     ) -> None:
         unicast_route_list = client.getUnicastRoutesFiltered(prefix_or_ip)
+        nexthops_to_neighbor_names = {}
+        if hostnames:
+            nexthops_to_neighbor_names = utils.adjs_nexthop_to_neighbor_name(client)
         host_name = client.getMyNodeName()
 
         if json:
@@ -70,7 +74,9 @@ class FibUnicastRoutesCmd(OpenrCtrlCmd):
             utils.print_routes_json(route_dict)
         else:
             utils.print_unicast_routes(
-                "Unicast Routes for {}".format(host_name), unicast_route_list
+                f"Unicast Routes for {host_name}",
+                unicast_route_list,
+                nexthops_to_neighbor_names=nexthops_to_neighbor_names,
             )
 
 

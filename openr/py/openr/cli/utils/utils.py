@@ -1623,6 +1623,7 @@ def print_unicast_routes(
     element_suffix: str = "",
     filter_exact_match: bool = False,
     timestamp: bool = False,
+    nexthops_to_neighbor_names: Optional[Dict[bytes, str]] = None,
 ) -> None:
     """
     Print unicast routes. Subset specified by prefixes will be printed if specified
@@ -1633,6 +1634,8 @@ def print_unicast_routes(
         :param element_suffix: Ending/terminator for each item. (string)
         :param filter_exact_match: Indicate exact match or subnet match.
         :param timestamp: Prints time for each item. (bool)
+        :param nexthops_to_neighbor_names:
+            Use to print out friendly other node name rather than IP addresses
     """
 
     networks = None
@@ -1641,7 +1644,11 @@ def print_unicast_routes(
 
     route_strs = []
     for route in unicast_routes:
-        entry = build_unicast_route(route, filter_for_networks=networks)
+        entry = build_unicast_route(
+            route,
+            filter_for_networks=networks,
+            nexthops_to_neighbor_names=nexthops_to_neighbor_names,
+        )
         if entry:
             dest, nexthops = entry
             paths_str = "\n".join(["  via {}".format(nh) for nh in nexthops])
@@ -1664,6 +1671,7 @@ def build_unicast_route(
         List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
     ] = None,
     filter_exact_match: bool = False,
+    nexthops_to_neighbor_names: Optional[Dict[bytes, str]] = None,
 ) -> Tuple[str, List[str]]:
     """
     Build unicast route.
@@ -1679,7 +1687,16 @@ def build_unicast_route(
         else:
             if not ipnetwork.contain_any_prefix(dest, filter_for_networks):
                 return ("", [])
-    nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
+    if nexthops_to_neighbor_names:
+        nexthops = [
+            (
+                f"{nexthops_to_neighbor_names[nh.address.addr]}%{nh.address.ifName} "
+                + f"weight {nh.weight if nh.weight != 0 else 1}"
+            )
+            for nh in route.nextHops
+        ]
+    else:
+        nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
     return dest, nexthops
 
 
@@ -2029,3 +2046,17 @@ def get_tag_to_name_map(config) -> Dict[str, str]:
     """
     tag_def = config["area_policies"]["definitions"]["openrTag"]["objects"]
     return {v["tagSet"][0]: k for k, v in tag_def.items()}
+
+
+def adjs_nexthop_to_neighbor_name(client: OpenrCtrl.Client) -> Dict[bytes, str]:
+    adj_dbs = client.getDecisionAdjacenciesFiltered(
+        ctrl_types.AdjacenciesFilter(selectAreas=None)
+    )
+    ips_to_node_names: Dict[bytes, str] = {}
+    for adj_db in adj_dbs:
+        for adj in adj_db.adjacencies:
+            ips_to_node_names[adj.nextHopV6.addr] = adj.otherNodeName
+            if adj.nextHopV4 != b"\x00\x00\x00\x00":
+                ips_to_node_names[adj.nextHopV4.addr] = adj.otherNodeName
+
+    return ips_to_node_names
