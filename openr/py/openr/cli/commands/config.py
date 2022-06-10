@@ -184,7 +184,7 @@ class ConfigStoreCmd(ConfigStoreCmdBase):
         key: str,
         value: Union[bytes, str],
         *args,
-        **kwargs
+        **kwargs,
     ) -> None:
         if isinstance(value, str):
             value = value.encode()
