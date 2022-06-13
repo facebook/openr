@@ -247,6 +247,8 @@ struct PolicyDefinitions {
   11: optional OpenrPrefixForwardingAlgorithms openrPrefixForwardingAlgorithm;
   12: optional OpenrPrefixForwardingTypes openrPrefixForwardingType;
   13: optional OpenrIgpCostRanges openrIgpCostRange;
+
+  14: optional UserVariables bgpCommunityNameToClassId;
 }
 
 // I wish this could be union of
