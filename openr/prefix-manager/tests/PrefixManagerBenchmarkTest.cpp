@@ -69,7 +69,7 @@ class PrefixManagerBenchmarkTestFixture {
         kvRequestQueue_,
         prefixMgrRouteUpdatesQueue_,
         initializationEventQueue_,
-        kvStoreUpdatesQueue_.getReader(),
+        kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
         config_);
@@ -77,6 +77,10 @@ class PrefixManagerBenchmarkTestFixture {
     prefixManagerThread_ =
         std::make_unique<std::thread>([this]() { prefixManager_->run(); });
     prefixManager_->waitUntilRunning();
+
+    // trigger initialization sequence before writing to KvStore
+    triggerInitializationEventForPrefixManager(
+        fibRouteUpdatesQueue_, kvStoreWrapper_->getKvStoreUpdatesQueueWriter());
   }
 
   ~PrefixManagerBenchmarkTestFixture() {
@@ -86,7 +90,6 @@ class PrefixManagerBenchmarkTestFixture {
 
     fibRouteUpdatesQueue_.close();
     kvRequestQueue_.close();
-    kvStoreUpdatesQueue_.close();
     initializationEventQueue_.close();
     kvStoreWrapper_->closeQueue();
 
@@ -117,7 +120,6 @@ class PrefixManagerBenchmarkTestFixture {
   checkKeyValRequest(
       uint32_t num, messaging::RQueue<KeyValueRequest> kvRequestReaderQ) {
     auto suspender = folly::BenchmarkSuspender();
-    // auto kvRequestQ = kvRequestQueue_.getReader();
 
     // Start measuring time
     suspender.dismiss();
@@ -144,7 +146,6 @@ class PrefixManagerBenchmarkTestFixture {
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
-  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InitializationEvent>
       initializationEventQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;

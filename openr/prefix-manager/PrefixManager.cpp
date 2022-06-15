@@ -43,20 +43,21 @@ PrefixManager::PrefixManager(
       kvRequestQueue_(kvRequestQueue),
       prefixMgrRouteUpdatesQueue_(prefixMgrRouteUpdatesQueue),
       initializationEventQueue_(initializationEventQueue),
-      v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       preferOpenrOriginatedRoutes_(
           *config->getConfig().prefer_openr_originated_routes()) {
   CHECK(config);
 
   // Always add RIB type prefixes, since Fib routes updates are always expected
   // in OpenR initialization procedure.
-  uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
   XLOG(INFO) << "[Initialization] PrefixManager should wait for RIB updates.";
+  uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
+
   if (config->isBgpPeeringEnabled()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for BGP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
   }
+
   if (config->isVipServiceEnabled()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for VIP prefixes.";
@@ -76,46 +77,18 @@ PrefixManager::PrefixManager(
     areaToPolicy_.emplace(areaId, areaConf.getImportPolicyName());
   }
 
-  //
-  // Hold time for synchronizing prefixes in KvStore. We expect all the
-  // prefixes to be recovered (Redistribute, Plugin etc.) within this time
-  // window.
-  // NOTE: Based on signals from sources that advertises the routes we can
-  // synchronize prefixes earlier. This time provides worst case bound.
-  //
-  const std::chrono::seconds initialPrefixHoldTime{
-      *config->getConfig().prefix_hold_time_s()};
-
-  // Create initial timer to update all prefixes after HoldTime (2 * KA)
-  // TODO: deprecate this after prefix_hold_time_s after OpenR initialization
-  // procedure is stable.
-  if (not config_->isInitializationProcessEnabled()) {
-    initialSyncKvStoreTimer_ =
-        folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-          XLOG(INFO) << "syncKvStore() from initialSyncKvStoreTimer_.";
-          syncKvStore();
-        });
-    initialSyncKvStoreTimer_->scheduleTimeout(initialPrefixHoldTime);
-  }
-
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kKvStoreSyncThrottleTimeout, [this]() noexcept {
-        // No write to KvStore before initial KvStore sync
-        if (config_->isInitializationProcessEnabled()) {
-          // Signal based initialization process.
-          if ((not uninitializedPrefixTypes_.empty()) or
-              (not initialKvStoreSynced_)) {
-            return;
-          }
-        } else {
-          // Timer based initialization process.
-          if (initialSyncKvStoreTimer_->isScheduled()) {
-            return;
-          }
+        // With signal-based initialization sequence, the following conditions
+        // must be fulfilled before alternating states inside KvStore:
+        //  1) received KVSTORE_SYNCED event;
+        //  2) all prefixTypes have been processed/received;
+        //
+        // Otherwise, it will bail out.
+        if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
+          syncKvStore();
         }
-
-        syncKvStore();
       });
 
   // Load openrConfig for local-originated routes
@@ -125,7 +98,7 @@ PrefixManager::PrefixManager(
       buildOriginatedPrefixes(*prefixes);
 
       // Trigger initial prefix sync in KvStore.
-      XLOG(INFO) << "[Initialization] Processed config originated prefixes.";
+      XLOG(INFO) << "[Initialization] Processed CONFIG type prefixes.";
       uninitializedPrefixTypes_.erase(thrift::PrefixType::CONFIG);
       triggerInitialPrefixDbSync();
     }
@@ -217,7 +190,7 @@ PrefixManager::PrefixManager(
       }
 
       try {
-        XLOG(DBG2) << "Received RIB updates from Decision";
+        XLOG(DBG3) << "Received RIB updates from Fib";
         processFibRouteUpdates(std::move(maybeThriftObj).value());
       } catch (const std::exception&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
@@ -321,10 +294,8 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
 PrefixManager::~PrefixManager() {
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
-  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
-    initialSyncKvStoreTimer_.reset();
-    syncKvStoreThrottled_.reset();
-  });
+  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this]() { syncKvStoreThrottled_.reset(); });
 }
 
 thrift::PrefixEntry
@@ -644,9 +615,6 @@ PrefixManager::deleteKvStoreKeyHelper(
 
 void
 PrefixManager::triggerInitialPrefixDbSync() {
-  if (not config_->isInitializationProcessEnabled()) {
-    return;
-  }
   if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
     // Trigger initial syncKvStore(), after receiving prefixes of all expected
     // types and all inital prefix keys from KvStore.
@@ -1586,18 +1554,13 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   // NOTE: fib update does not include routes that do not need fib
   // programming, which are send to bgprib in syncKvStore().
   //
-  // If initialization process is enabled, full sync signal will be sent
-  // explicitly in triggerInitialPrefixDbSync(). We send fib update as
-  // INCREMENTAL, this has to be done before triggerInitialPrefixDbSync().
-  //
-  // If initialization process is disabled, to match existing
-  // behavior, send full sync as it is to unblock bgp eor.
+  // FULL_SYNC signal will be sent explicitly in triggerInitialPrefixDbSync().
+  // We send fib update as INCREMENTAL, this has to be done before
+  // triggerInitialPrefixDbSync().
   //
   // TODO: treat bgprib as another area, move this logic into syncKvStore()
   auto fibRouteUpdateCp = fibRouteUpdate;
-  if (config_->isInitializationProcessEnabled()) {
-    fibRouteUpdateCp.type = DecisionRouteUpdate::INCREMENTAL;
-  }
+  fibRouteUpdateCp.type = DecisionRouteUpdate::INCREMENTAL;
   prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
 
   // Store programmed label/unicast routes info.
@@ -1608,7 +1571,7 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
 
   if (fibRouteUpdate.type == DecisionRouteUpdate::FULL_SYNC and
       uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
-    XLOG(INFO) << "[Initialization] Received initial RIB routes.";
+    XLOG(INFO) << "[Initialization] Received initial RIB type routes.";
     triggerInitialPrefixDbSync();
   }
 }

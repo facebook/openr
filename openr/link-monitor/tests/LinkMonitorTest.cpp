@@ -211,26 +211,13 @@ class LinkMonitorTestFixture : public testing::Test {
     configStore->waitUntilRunning();
 
     // spin up a kvstore
-    createKvStore(config);
+    createKvStore();
 
-    // create prefix manager
-    prefixManager = std::make_unique<PrefixManager>(
-        staticRouteUpdatesQueue,
-        kvRequestQueue,
-        prefixMgrRouteUpdatesQueue,
-        initializationEventQueue,
-        kvStoreWrapper->getReader(),
-        prefixUpdatesQueue.getReader(),
-        fibRouteUpdatesQueue.getReader(),
-        config);
-    prefixManagerThread = std::make_unique<std::thread>([this] {
-      LOG(INFO) << "prefix manager starting";
-      prefixManager->run();
-      LOG(INFO) << "prefix manager stopped";
-    });
+    // start a prefixManager
+    createPrefixManager();
 
     // start a link monitor
-    createLinkMonitor(config);
+    createLinkMonitor();
   }
 
   void
@@ -377,7 +364,7 @@ class LinkMonitorTestFixture : public testing::Test {
   }
 
   void
-  createKvStore(std::shared_ptr<Config> config) {
+  createKvStore() {
     kvStoreWrapper =
         std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
             config->getAreaIds(), /* areaId collection */
@@ -388,8 +375,7 @@ class LinkMonitorTestFixture : public testing::Test {
   }
 
   void
-  createLinkMonitor(
-      std::shared_ptr<Config> config, bool overrideDrainState = false) {
+  createLinkMonitor(bool overrideDrainState = false) {
     linkMonitor = std::make_unique<LinkMonitor>(
         config,
         nlSock.get(),
@@ -410,6 +396,28 @@ class LinkMonitorTestFixture : public testing::Test {
       LOG(INFO) << "LinkMonitor thread finishing";
     });
     linkMonitor->waitUntilRunning();
+  }
+
+  void
+  createPrefixManager() {
+    prefixManager = std::make_unique<PrefixManager>(
+        staticRouteUpdatesQueue,
+        kvRequestQueue,
+        prefixMgrRouteUpdatesQueue,
+        initializationEventQueue,
+        kvStoreWrapper->getReader(),
+        prefixUpdatesQueue.getReader(),
+        fibRouteUpdatesQueue.getReader(),
+        config);
+    prefixManagerThread = std::make_unique<std::thread>([this] {
+      LOG(INFO) << "prefix manager starting";
+      prefixManager->run();
+      LOG(INFO) << "prefix manager stopped";
+    });
+
+    // Trigger PrefixManager initialization event
+    triggerInitializationEventForPrefixManager(
+        fibRouteUpdatesQueue, kvStoreWrapper->getKvStoreUpdatesQueueWriter());
   }
 
   // Receive and process interface updates from the update queue
@@ -718,7 +726,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   initializationEventQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
-  createLinkMonitor(config, false /*overrideDrainState*/);
+  createLinkMonitor(false /*overrideDrainState*/);
   // checkNextAdjPub("adj:node-1");
 
   res = linkMonitor->semifuture_getInterfaces().get();
@@ -736,7 +744,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   initializationEventQueue.open();
   nlSock->openQueue();
   kvStoreWrapper->openQueue();
-  createLinkMonitor(config, true /*overrideDrainState*/);
+  createLinkMonitor(true /*overrideDrainState*/);
 
   res = linkMonitor->semifuture_getInterfaces().get();
   ASSERT_NE(nullptr, res);
@@ -1155,10 +1163,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   nlSock->openQueue();
 
   // Recreate KvStore as previous kvStoreUpdatesQueue is closed
-  createKvStore(config);
+  createKvStore();
 
   // mock "restarting" link monitor with existing config store
-  createLinkMonitor(config);
+  createLinkMonitor();
 
   // 14. neighbor up
   {

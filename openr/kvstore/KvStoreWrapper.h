@@ -63,6 +63,14 @@ class KvStoreWrapper {
     return kvStoreUpdatesQueue_.getReader();
   }
 
+  /**
+   * Get writer reference for KvStoreSyncQueue
+   */
+  messaging::ReplicateQueue<KvStorePublication>&
+  getKvStoreUpdatesQueueWriter() {
+    return kvStoreUpdatesQueue_;
+  }
+
   void
   openQueue() {
     kvStoreUpdatesQueue_.open();

@@ -86,26 +86,15 @@ class PrefixManagerTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
-    // Register the read in the beginning of the test
-    earlyStaticRoutesReaderPtr =
-        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
-            staticRouteUpdatesQueue.getReader());
+    // create KvStore + PrefixManager instances for testing
+    initKvStoreWithPrefixManager();
 
-    // create config
-    config = std::make_shared<Config>(createConfig());
+    // trigger initialization sequence before writing to KvStore
+    triggerInitializationEventForPrefixManager(
+        fibRouteUpdatesQueue, kvStoreWrapper->getKvStoreUpdatesQueueWriter());
 
-    // spin up a kvstore
-    kvStoreWrapper =
-        std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
-            config->getAreaIds(), /* areaId collection */
-            config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
-            std::nullopt, /* peerUpdatesQueue */
-            kvRequestQueue.getReader() /* kvRequestQueue */);
-    kvStoreWrapper->run();
-    LOG(INFO) << "The test KV store is running";
-
-    // spin up a prefix-mgr
-    createPrefixManager(config);
+    // wait for PREFIX_DB_SYNCED event being published
+    waitForPrefixDbSyncedEvent();
   }
 
   void
@@ -157,6 +146,29 @@ class PrefixManagerTestFixture : public testing::Test {
   }
 
   void
+  initKvStoreWithPrefixManager() {
+    // Register the read in the beginning of the test
+    earlyStaticRoutesReaderPtr =
+        std::make_shared<messaging::RQueue<DecisionRouteUpdate>>(
+            staticRouteUpdatesQueue.getReader());
+
+    // create config
+    config = std::make_shared<Config>(createConfig());
+
+    // spin up a kvstore
+    kvStoreWrapper =
+        std::make_shared<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            config->getAreaIds(), /* areaId collection */
+            config->toThriftKvStoreConfig(), /* thrift::KvStoreConfig */
+            std::nullopt, /* peerUpdatesQueue */
+            kvRequestQueue.getReader() /* kvRequestQueue */);
+    kvStoreWrapper->run();
+
+    // spin up a prefix-mgr
+    createPrefixManager(config);
+  }
+
+  void
   createPrefixManager(std::shared_ptr<Config> cfg) {
     // start a prefix manager
     prefixManager = std::make_unique<PrefixManager>(
@@ -175,6 +187,14 @@ class PrefixManagerTestFixture : public testing::Test {
       LOG(INFO) << "PrefixManager thread finishing";
     });
     prefixManager->waitUntilRunning();
+  }
+
+  void
+  waitForPrefixDbSyncedEvent() {
+    // ATTN: make sure PREFIX_DB_SYNC event received.
+    initializationEventsQueueReader.get(); // perform read
+
+    XLOG(INFO) << "Successfully published PREFIX_DB_SYNC event";
   }
 
   virtual thrift::OpenrConfig
@@ -244,6 +264,9 @@ class PrefixManagerTestFixture : public testing::Test {
   messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   messaging::ReplicateQueue<thrift::InitializationEvent>
       prefixMgrInitializationEventsQueue;
+  messaging::RQueue<thrift::InitializationEvent>
+      initializationEventsQueueReader{
+          prefixMgrInitializationEventsQueue.getReader()};
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
 
@@ -426,9 +449,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
  * 5. Withdraw prefix1 with client-default - Verify KvStore
  */
 TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
-  //
   // Order of prefix-entries -> loopback > bgp > default
-  //
   const auto loopback_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
   const auto default_prefix = createPrefixEntryWithMetrics(
@@ -1875,11 +1896,6 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
 
 class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
  public:
-  void
-  SetUp() override {
-    PrefixManagerMultiAreaTestFixture::SetUp();
-  }
-
   openr::thrift::OpenrConfig
   createConfig() override {
     thrift::OriginatedPrefix originatedPrefixV4, originatedPrefixV6;
@@ -2169,6 +2185,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   const auto entryV4 = createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
   auto unicastEntryV4 = RibUnicastEntry(
       toIPNetwork(addressV4), {}, entryV4, Constants::kDefaultArea.toString());
+
   //
   // Step1: this tests:
   //  - originated prefix whose supporting routes passed across threshold
@@ -2182,23 +2199,6 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - v4Prefix_ will be advertised as `min_supporting_route=1`;
   //  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
   //
-
-  {
-    // 0. Decision receives the v4 published in initialization process.
-    auto update = waitForRouteUpdate(staticRoutesReader);
-    EXPECT_TRUE(update.has_value());
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-    const auto& route = updatedRoutes.back();
-    EXPECT_EQ(*route.dest(), toIpPrefix(v4Prefix_));
-    const auto& nhs = *route.nextHops();
-    EXPECT_THAT(nhs, testing::SizeIs(0));
-    // no v6 route update received
-    EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
-  }
-
   VLOG(1) << "Starting test step 1...";
   {
     DecisionRouteUpdate routeUpdate;
@@ -2221,9 +2221,18 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
       std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
 
       // wait for condition to be met for KvStore publication
-      LOG(INFO) << "before waitForKvStorePublication";
       waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
-      LOG(INFO) << "after waitForKvStorePublication";
+
+      auto update = waitForRouteUpdate(staticRoutesReader);
+      EXPECT_TRUE(update.has_value());
+      auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+      auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+      EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+      EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+      const auto& route = updatedRoutes.back();
+      EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+      const auto& nhs = *route.nextHops_ref();
+      EXPECT_THAT(nhs, testing::SizeIs(0));
     }
 
     // Verify 3): PrefixManager's public API
@@ -2532,6 +2541,20 @@ TEST_F(RouteOriginationV4OverV6ZeroSupportFixture, StateRouteAnnounce) {
 class RouteOriginationV4OverV6NonZeroSupportFixture
     : public RouteOriginationFixture {
  public:
+  void
+  SetUp() override {
+    // create KvStore + PrefixManager instances for testing
+    initKvStoreWithPrefixManager();
+
+    // trigger initialization sequence before writing to KvStore
+    triggerInitializationEventForPrefixManager(
+        fibRouteUpdatesQueue, kvStoreWrapper->getKvStoreUpdatesQueueWriter());
+
+    // ATTN: do NOT wait for PREFIX_DB_SYNC event publication since
+    // the test will validate queue events happening before initializaiton
+    // event being published.
+  }
+
   openr::thrift::OpenrConfig
   createConfig() override {
     thrift::OriginatedPrefix originatedPrefixV4;
@@ -3003,20 +3026,6 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //    b. Both prefixes will be withdrawn from KvStore
   //    c. Supporting routes count for both prefixes will decrement by 1
 
-  {
-    // 0. Decision receives the v4 published in initialization process.
-    auto update = waitForRouteUpdate(staticRoutesReader);
-    EXPECT_TRUE(update.has_value());
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-    const auto& route = updatedRoutes.back();
-    EXPECT_EQ(*route.dest(), toIpPrefix(v4Prefix_));
-    const auto& nhs = *route.nextHops();
-    EXPECT_THAT(nhs, testing::SizeIs(0));
-  }
-
   // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
   DecisionRouteUpdate routeUpdate;
   routeUpdate.addRouteToUpdate(unicastEntryV4);
@@ -3049,6 +3058,18 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
 
   // Verify 1c and 1d: PrefixManager -> Decision staticRouteupdate
   {
+    // 1c. v4 route update received
+    auto update = waitForRouteUpdate(staticRoutesReader);
+    EXPECT_TRUE(update.has_value());
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
+    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
+    const auto& route = updatedRoutes.back();
+    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops_ref();
+    EXPECT_THAT(nhs, testing::SizeIs(0));
+
     // 1d. no v6 route update received
     EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
   }
@@ -3424,11 +3445,13 @@ TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
 class PrefixManagerInitialKvStoreSyncTestFixture
     : public PrefixManagerTestFixture {
  protected:
-  thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = getBasicOpenrConfig(nodeId_);
-    tConfig.enable_initialization_process() = true;
-    return tConfig;
+  void
+  SetUp() override {
+    // create KvStore + PrefixManager instances for testing
+    initKvStoreWithPrefixManager();
+
+    // ATTN: do NOT trigger initialization event in SetUp() since the test
+    // itself will validate that part of logic
   }
 };
 

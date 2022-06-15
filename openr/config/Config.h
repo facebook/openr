@@ -194,11 +194,6 @@ class Config {
     return *config_.enable_ucmp();
   }
 
-  bool
-  isInitializationProcessEnabled() const {
-    return *config_.enable_initialization_process();
-  }
-
   //
   // area
   //

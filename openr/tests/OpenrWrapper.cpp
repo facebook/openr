@@ -318,6 +318,10 @@ OpenrWrapper<Serializer>::run() {
     eventBase_.run();
     VLOG(1) << nodeId_ << " Stopping eventBase_";
   });
+
+  // trigger openr initialization event for PrefixManager module
+  triggerInitializationEventForPrefixManager(
+      fibRouteUpdatesQueue_, kvStoreUpdatesQueue_);
 }
 
 template <class Serializer>

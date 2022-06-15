@@ -17,6 +17,8 @@
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/mocks/PrefixGenerator.h>
 
 namespace openr {
@@ -66,4 +68,12 @@ std::pair<std::string, thrift::Value> genRandomKvStoreKeyVal(
     int64_t ttl = Constants::kTtlInfinity,
     int64_t ttlVersion = 0,
     std::optional<int64_t> hash = std::nullopt);
+
+/*
+ * Util function to trigger initialization event for PrefixManager
+ */
+void triggerInitializationEventForPrefixManager(
+    messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQ,
+    messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQ);
+
 } // namespace openr

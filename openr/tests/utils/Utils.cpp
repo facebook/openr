@@ -239,4 +239,21 @@ genRandomKvStoreKeyVal(
 
   return std::make_pair(key, thriftVal);
 }
+
+/*
+ * Util function to trigger initialization event for PrefixManager
+ */
+void
+triggerInitializationEventForPrefixManager(
+    messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQ,
+    messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQ) {
+  // condition 1: publish update for thrift::PrefixType::RIB
+  DecisionRouteUpdate fullSyncUpdates;
+  fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
+  fibRouteUpdatesQ.push(std::move(fullSyncUpdates));
+
+  // condition 2: publish KVSTORE_SYNCED signal
+  kvStoreUpdatesQ.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+}
+
 } // namespace openr

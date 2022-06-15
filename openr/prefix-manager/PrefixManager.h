@@ -400,13 +400,9 @@ class PrefixManager final : public OpenrEventBase {
   messaging::ReplicateQueue<thrift::InitializationEvent>&
       initializationEventQueue_;
 
-  // V4 prefix over V6 nexthop enabled
-  const bool v4OverV6Nexthop_{false};
-
   // Throttled version of syncKvStore. It batches up multiple calls and
   // send them in one go!
   std::unique_ptr<AsyncThrottle> syncKvStoreThrottled_;
-  std::unique_ptr<folly::AsyncTimeout> initialSyncKvStoreTimer_;
 
   // TODO: Merge this with advertiseStatus_.
   // The current prefix db this node is advertising. In-case if multiple entries

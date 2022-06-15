@@ -92,6 +92,10 @@ class PrefixAllocatorFixture : public ::testing::Test {
 
     // Create PrefixAllocator
     createPrefixAllocator();
+
+    // trigger initialization sequence before writing to KvStore
+    triggerInitializationEventForPrefixManager(
+        fibRouteUpdatesQueue_, kvStoreWrapper_->getKvStoreUpdatesQueueWriter());
   }
 
   void
@@ -454,7 +458,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
       auto currTConfig = getBasicOpenrConfig(myNodeName);
       currTConfig.enable_prefix_allocation() = true;
       thrift::PrefixAllocationConfig pfxAllocationConf;
-      *pfxAllocationConf.loopback_interface() = "";
+      pfxAllocationConf.loopback_interface() = "";
       pfxAllocationConf.prefix_allocation_mode() =
           thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
       if (not emptySeedPrefix) {
@@ -481,6 +485,13 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
           [&prefixManager]() noexcept { prefixManager->run(); });
       prefixManager->waitUntilRunning();
       prefixManagers.emplace_back(std::move(prefixManager));
+
+      /*
+       * ATTN: trigger initilization event explicitly to unblock KvStore sync
+       */
+      triggerInitializationEventForPrefixManager(
+          fibRouteUpdatesQueues.at(i),
+          kvStoreWrapper->getKvStoreUpdatesQueueWriter());
 
       auto allocator = std::make_unique<PrefixAllocator>(
           kTestingAreaName,
@@ -755,7 +766,6 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
           scheduleAt += Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
         // wait long enough for key to expire
-
         hasAllocPrefix.store(true, std::memory_order_relaxed);
         createPrefixManager();
         createPrefixAllocator();
@@ -766,9 +776,11 @@ TEST_F(PrefixAllocatorFixture, UpdateAllocation) {
         auto dumpedKeyVals = kvStoreWrapper_->dumpAll(kTestingAreaName);
         kvStoreWrapper_->pushToKvStoreUpdatesQueue(
             kTestingAreaName, dumpedKeyVals);
-        // Push kvStoreSynced signal to trigger initial
-        // PrefixManager::syncKvStore().
-        kvStoreWrapper_->publishKvStoreSynced();
+
+        // trigger initialization sequence before writing to KvStore
+        triggerInitializationEventForPrefixManager(
+            fibRouteUpdatesQueue_,
+            kvStoreWrapper_->getKvStoreUpdatesQueueWriter());
       });
 
   eventBase.scheduleTimeout(
@@ -1152,9 +1164,11 @@ TEST_F(PrefixAllocatorFixture, StaticAllocation) {
         auto dumpedKeyVals = kvStoreWrapper_->dumpAll(kTestingAreaName);
         kvStoreWrapper_->pushToKvStoreUpdatesQueue(
             kTestingAreaName, dumpedKeyVals);
-        // Push kvStoreSynced signal to trigger initial
-        // PrefixManager::syncKvStore().
-        kvStoreWrapper_->publishKvStoreSynced();
+
+        // trigger initialization sequence before writing to KvStore
+        triggerInitializationEventForPrefixManager(
+            fibRouteUpdatesQueue_,
+            kvStoreWrapper_->getKvStoreUpdatesQueueWriter());
       });
 
   eventBase.scheduleTimeout(

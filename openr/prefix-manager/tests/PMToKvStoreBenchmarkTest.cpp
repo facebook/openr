@@ -66,6 +66,10 @@ class PMToKvStoreBMTestFixture {
     prefixManagerThread_ =
         std::make_unique<std::thread>([this]() { prefixManager_->run(); });
     prefixManager_->waitUntilRunning();
+
+    // trigger initialization sequence before writing to KvStore
+    triggerInitializationEventForPrefixManager(
+        fibRouteUpdatesQueue_, kvStoreWrapper_->getKvStoreUpdatesQueueWriter());
   }
 
   ~PMToKvStoreBMTestFixture() {
