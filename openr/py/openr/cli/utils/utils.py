@@ -1201,16 +1201,6 @@ def dump_node_kvs(
     return pub
 
 
-def print_allocations_table(alloc_str) -> None:
-    """print static allocations"""
-
-    rows = []
-    allocations = deserialize_thrift_object(alloc_str, openr_types.StaticAllocation)
-    for node, prefix in allocations.nodePrefixes.items():
-        rows.append([node, ipnetwork.sprint_prefix(prefix)])
-    print(printing.render_horizontal_table(rows, ["Node", "Prefix"]))
-
-
 def build_nexthops(nexthops: List[str]) -> List[network_types.BinaryAddress]:
     """
     Convert nexthops in list of string to list of binaryAddress

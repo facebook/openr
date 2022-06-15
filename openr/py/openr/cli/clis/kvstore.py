@@ -27,9 +27,6 @@ class KvStoreCli(object):
         self.kvstore.add_command(SetKeyCli().set_key, name="set-key")
         self.kvstore.add_command(KvSignatureCli().kv_signature, name="kv-signature")
         self.kvstore.add_command(SnoopCli().snoop)
-        self.kvstore.add_command(AllocationsCli().list, name="alloc-list")
-        self.kvstore.add_command(AllocationsCli().set, name="alloc-set")
-        self.kvstore.add_command(AllocationsCli().unset, name="alloc-unset")
         self.kvstore.add_command(AreasCli().areas, name="areas")
         self.kvstore.add_command(SummaryCli().summary)
         self.kvstore.add_command(
@@ -253,32 +250,6 @@ class SnoopCli(object):
             area,
             print_initial,
         )
-
-
-class AllocationsCli(object):
-    @click.command()
-    @click.pass_obj
-    def list(cli_opts):  # noqa: B902
-        """View static allocations set in KvStore"""
-
-        kvstore.AllocationsListCmd(cli_opts).run()
-
-    @click.command()
-    @click.argument("node", nargs=1, required=True)
-    @click.argument("prefix", nargs=1, required=True)
-    @click.pass_obj
-    def set(cli_opts, node, prefix):  # noqa: B902
-        """Set/Update prefix allocation for a certain node"""
-
-        kvstore.AllocationsSetCmd(cli_opts).run(node, prefix)
-
-    @click.command()
-    @click.argument("node", nargs=1, required=True)
-    @click.pass_obj
-    def unset(cli_opts, node):  # noqa: B902
-        """Unset prefix allocation for a certain node"""
-
-        kvstore.AllocationsUnsetCmd(cli_opts).run(node)
 
 
 class SummaryCli(object):
