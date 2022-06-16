@@ -97,3 +97,65 @@ SPARK_NEIGHBORS_OUTPUT_JSON = """\
   }
 ]
 """
+
+MOCKED_SPARK_NEIGHBORS_NO_ESTAB = [
+    SparkNeighbor(
+        nodeName="node2",
+        state="NEGOTIATE",
+        event="HELLO_INFO_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=Consts.DEFAULT_AREA_ID,
+        remoteIfName="if_2_1_1",
+        localIfName="if_1_2_1",
+        rttUs=1000,
+    ),
+    SparkNeighbor(
+        nodeName="node5",
+        state="WARM",
+        event="NEGOTIATION_FAILURE",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=Consts.DEFAULT_AREA_ID,
+        remoteIfName="if_5_1_1",
+        localIfName="if_1_5_1",
+        rttUs=1000,
+    ),
+]
+
+MOCKED_SPARK_NEIGHBORS_ALL_ESTAB = [
+    SparkNeighbor(
+        nodeName="node2",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=Consts.DEFAULT_AREA_ID,
+        remoteIfName="if_2_1_1",
+        localIfName="if_1_2_1",
+        rttUs=1000,
+    ),
+    SparkNeighbor(
+        nodeName="node5",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=Consts.DEFAULT_AREA_ID,
+        remoteIfName="if_5_1_1",
+        localIfName="if_1_5_1",
+        rttUs=1000,
+    ),
+]

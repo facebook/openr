@@ -7,6 +7,8 @@
 import datetime
 from typing import List
 
+import click
+
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.OpenrCtrl import OpenrCtrl
@@ -43,11 +45,11 @@ class NeighborCmd(OpenrCtrlCmd):
         """
 
         if detailed:
-            self._print_spark_neighbors_detailed(neighbors)
+            self.print_spark_neighbors_detailed(neighbors)
         else:
-            self._print_spark_neighbors(neighbors)
+            self.print_spark_neighbors(neighbors)
 
-    def _print_spark_neighbors_detailed(
+    def print_spark_neighbors_detailed(
         self, neighbors: List[openr_types.SparkNeighbor]
     ) -> None:
         """
@@ -98,9 +100,7 @@ class NeighborCmd(OpenrCtrlCmd):
 
         print("\n".join(rows))
 
-    def _print_spark_neighbors(
-        self, neighbors: List[openr_types.SparkNeighbor]
-    ) -> None:
+    def print_spark_neighbors(self, neighbors: List[openr_types.SparkNeighbor]) -> None:
         """
         Render neighbors without details
         """
@@ -129,6 +129,70 @@ class NeighborCmd(OpenrCtrlCmd):
                 ]
             )
         print("\n", printing.render_horizontal_table(rows, column_labels))
+
+
+class ValidateCmd(OpenrCtrlCmd):
+    def _run(
+        self, client: OpenrCtrl.Client, json: bool, detail: bool, *args, **kwards
+    ) -> None:
+
+        # Get data
+        neighbors = NeighborCmd().fetch(client)
+
+        # Render
+        if json:
+            non_estab_neighbors = [
+                neighbor for neighbor in neighbors if neighbor.state != "ESTABLISHED"
+            ]
+            print(serializer.serialize_json(non_estab_neighbors))
+        else:
+            self._print_neighbor_info(neighbors, detail)
+
+    def _pass_fail_str(self, is_pass: bool) -> str:
+        """
+        Returns a formatted pass or fail message
+        """
+
+        if is_pass:
+            return click.style("PASS", bg="green", fg="black")
+        else:
+            return click.style("FAIL", bg="red", fg="black")
+
+    def _print_neighbor_info(
+        self, neighbors: List[openr_types.SparkNeighbor], detail: bool
+    ) -> None:
+        """
+        Print how many neighbors have ESTABLISHED state vs non ESTABLISHED state.
+        Print information about non ESTABLISHED neighbors
+        """
+
+        # Getting numeric neighbor info
+        non_estab_neighbors = [
+            neighbor for neighbor in neighbors if neighbor.state != "ESTABLISHED"
+        ]
+        tot = len(neighbors)
+        num_non_estab = len(non_estab_neighbors)
+        num_estab = tot - num_non_estab
+
+        click.secho(
+            f"[Spark] Neighbor State Check: {self._pass_fail_str(num_non_estab == 0)}",
+            bold=True,
+        )
+
+        # Print Neigbor stats
+        estab_str = click.style(f"{num_estab}", fg="green")
+        non_estab_str = click.style(f"{num_non_estab}", fg="red")
+        click.echo(
+            f"Total Neighbors: {tot}, ESTABLISHED Neigbors: {estab_str}, Neighbors in Other States: {non_estab_str}"
+        )
+
+        # Print Neigbor info in horizontal table
+        if num_non_estab > 0:
+            click.echo("[Spark] Information about Neighbors in Other States")
+            if detail:
+                NeighborCmd().print_spark_neighbors_detailed(non_estab_neighbors)
+            else:
+                NeighborCmd().print_spark_neighbors(non_estab_neighbors)
 
 
 class GracefulRestartCmd(OpenrCtrlCmd):
