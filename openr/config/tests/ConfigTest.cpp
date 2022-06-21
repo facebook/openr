@@ -855,26 +855,4 @@ TEST(ConfigTest, SegmentRoutingConfig) {
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
 }
 
-TEST(ConfigTest, EorTime) {
-  auto tConfig = getBasicOpenrConfig();
-  tConfig.spark_config()->keepalive_time_s() = 2;
-
-  // Create config without any explicit EOR and ensure that it is implicitly set
-  {
-    EXPECT_FALSE(tConfig.eor_time_s());
-    auto config = Config(tConfig);
-    ASSERT_TRUE(config.getConfig().eor_time_s());
-    EXPECT_EQ(6, *config.getConfig().eor_time_s());
-  }
-
-  // Explicitly set eor time and make sure it is not altered
-  {
-    EXPECT_FALSE(tConfig.eor_time_s());
-    tConfig.eor_time_s() = 2;
-    auto config = Config(tConfig);
-    ASSERT_TRUE(config.getConfig().eor_time_s());
-    EXPECT_EQ(2, *config.getConfig().eor_time_s());
-  }
-}
-
 } // namespace openr

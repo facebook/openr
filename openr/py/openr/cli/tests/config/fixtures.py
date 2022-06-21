@@ -57,7 +57,6 @@ OPENR_CONFIG_STR = r"""
   "enable_rib_policy": false,
   "enable_v4": true,
   "enable_watchdog": true,
-  "eor_time_s": 90,
   "fib_port": 5909,
   "ip_tos": 192,
   "kvstore_config": {

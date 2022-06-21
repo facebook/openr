@@ -185,8 +185,8 @@ step would benefit us and bring us closer to the final solution.
 
 1. Introduce events - `NEIGHBOR_DISCOVERED`, `KVSTORE_SYNCED`
 2. Decision to await for `KVSTORE_SYNCED` event to begin it's route computation.
-   This removes the `decision_eor_time_s` config parameter and makes route
-   computation signal based. This step marks RIB_COMOUTED event.
+   This makes route computation a signal-based approach. This step marks
+   RIB_COMOUTED event.
 3. Fib begins it's first route programming on receipt of update from Decision.
    This removes dependency on `fib_hold_time_s` config parameter and makes route
    programming signal based. First successful sync would publish a fib update

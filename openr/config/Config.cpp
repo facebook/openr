@@ -648,16 +648,6 @@ Config::populateInternalDb() {
   if (isSecureThriftServerEnabled()) {
     checkThriftServerConfig();
   }
-
-  //
-  // Set an implicit value for eor_time_s (Decision Hold time) if not specified
-  // explicitly.
-  // NOTE: `eor_time_s` variable would go away once new initialization process
-  // is completely implemented & rolled out.
-  //
-  if (not config_.eor_time_s()) {
-    config_.eor_time_s() = 3 * (*getSparkConfig().keepalive_time_s());
-  }
 }
 
 /**

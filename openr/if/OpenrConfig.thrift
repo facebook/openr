@@ -693,19 +693,11 @@ struct OpenrConfig {
    */
   9: bool enable_fib_service_waiting = true;
 
-  /**
-   * Set time interval to wait for convergence before Decision starts to
-   * compute routes. If not set, first neighbor update will trigger route
-   * computation.
-   */
-  10: optional i32 eor_time_s;
-
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP;
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP;
+
   /**
    * Enables segment routing feature. Currently, it only elects node/adjacency labels.
-   * TODO
-   * We can deprecate this field once SegmentRoutingConfig becomes functional.
    */
   13: optional bool enable_segment_routing;
   14: optional i32 prefix_min_nexthop;
@@ -730,8 +722,6 @@ struct OpenrConfig {
   20: optional bool enable_prefix_allocation;
   21: optional PrefixAllocationConfig prefix_allocation_config;
 
-  /** Deprecated. The feature is deprecated. */
-  22: optional bool enable_ordered_fib_programming (deprecated);
   /** TCP port on which FibService will be listening. */
   23: i32 fib_port;
 
@@ -820,6 +810,7 @@ struct OpenrConfig {
   51: bool enable_best_route_selection = 0;
 
   /**
+   * [TO BE DEPRECATED]
    * Maximum hold time for synchronizing the prefixes in KvStore after service
    * starts up. It is expected that all the sources inform PrefixManager about
    * the routes to be advertised within the hold time window. PrefixManager
@@ -837,6 +828,7 @@ struct OpenrConfig {
   53: i32 mpls_route_delete_delay_s = 10;
 
   /**
+   * [TO BE DEPRECATED]
    * Maximum hold time for synchronizing the adjacencies in KvStore after
    * service starts up. We expect all the adjacencies to be fully established
    * within hold time after Open/R starts LinkMonitor. LinkMonitor
