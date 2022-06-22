@@ -167,7 +167,19 @@ DispatcherQueue::filterKeys(KvStorePublication& publication, re2::RE2& filter) {
             ++it;
           }
         }
-        return not keyVals.empty();
+
+        auto& expiredKeys = *pub.expiredKeys();
+
+        for (auto it = expiredKeys.begin(); it != expiredKeys.end();) {
+          // remove keys that don't match the regex
+          if (not re2::RE2::FullMatch(*it, filter)) {
+            it = expiredKeys.erase(it);
+          } else {
+            ++it;
+          }
+        }
+
+        return not keyVals.empty() or not expiredKeys.empty();
       },
       [](thrift::InitializationEvent&) {
         // no need to filter keys in InitializationEvent

@@ -222,7 +222,8 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
 
   auto reader1 = q.getReader("adj:.*");
   auto reader2 = q.getReader("key1.*");
-  auto reader3 = q.getReader("adj:5");
+  auto reader3 = q.getReader("key2.*");
+  auto reader4 = q.getReader("adj:5");
 
   // Serializes/deserializes thrift objects
   apache::thrift::CompactSerializer serializer_{};
@@ -242,7 +243,7 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
        {"adj:4", createAdjValue(serializer_, "4", 1, {}, false, 4)},
        createPrefixKeyValue("3", 1, addr3),
        {"key1", createThriftValue(1, "node1", std::string("value1"))}},
-      {},
+      {"adj:10", "key21"}, // expiredKeys
       {},
       {});
 
@@ -253,10 +254,11 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
 
     // no empty keyVals should be in the publication
     // no keys that don't match the regex should be in publication
+    // keyVals and expiredKeys should be non-empty
     auto expectedPublication = createThriftPublication(
         {{"adj:3", createAdjValue(serializer_, "3", 1, {adj32}, false, 3)},
          {"adj:4", createAdjValue(serializer_, "4", 1, {}, false, 4)}},
-        {},
+        {"adj:10"},
         {},
         {});
 
@@ -269,7 +271,7 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
   });
   manager.addTask([&reader2]() mutable {
     auto maybePub = reader2.get();
-
+    // keyVals should be non-empty
     auto expectedPublication = createThriftPublication(
         {{"key1", createThriftValue(1, "node1", std::string("value1"))}},
         {},
@@ -284,9 +286,22 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
         [](thrift::InitializationEvent) {});
   });
 
+  manager.addTask([&reader3]() mutable {
+    auto maybePub = reader3.get();
+    // expiredKeys should be non-empty
+    auto expectedPublication = createThriftPublication({}, {"key21"}, {}, {});
+
+    folly::variant_match(
+        std::move(maybePub).value(),
+        [expectedPublication](thrift::Publication&& pub) {
+          EXPECT_TRUE(pub == expectedPublication);
+        },
+        [](thrift::InitializationEvent) {});
+  });
+
   // nothing should be pushed to this reader since no non-empty publications
   // match the filter
-  manager.addTask([&reader3]() mutable { EXPECT_EQ(reader3.size(), 0); });
+  manager.addTask([&reader4]() mutable { EXPECT_EQ(reader4.size(), 0); });
 
   evb.loop();
 }
