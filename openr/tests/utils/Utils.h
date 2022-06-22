@@ -76,4 +76,14 @@ void triggerInitializationEventForPrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQ,
     messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQ);
 
+/*
+ * Util function to generate Adjacency Value
+ */
+thrift::Value createAdjValue(
+    apache::thrift::CompactSerializer serializer,
+    const std::string& node,
+    int64_t version,
+    const std::vector<thrift::Adjacency>& adjs,
+    bool overloaded = false,
+    int32_t nodeId = 0);
 } // namespace openr

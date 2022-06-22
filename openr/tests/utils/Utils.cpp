@@ -256,4 +256,26 @@ triggerInitializationEventForPrefixManager(
   kvStoreUpdatesQ.push(thrift::InitializationEvent::KVSTORE_SYNCED);
 }
 
+/*
+ * Util function to generate Adjacency Value
+ */
+thrift::Value
+createAdjValue(
+    apache::thrift::CompactSerializer serializer,
+    const std::string& node,
+    int64_t version,
+    const std::vector<thrift::Adjacency>& adjs,
+    bool overloaded,
+    int32_t nodeId) {
+  auto adjDB = createAdjDb(node, adjs, nodeId);
+  adjDB.isOverloaded() = overloaded;
+  return createThriftValue(
+      version,
+      "originator-1",
+      writeThriftObjStr(adjDB, serializer),
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+}
+
 } // namespace openr
