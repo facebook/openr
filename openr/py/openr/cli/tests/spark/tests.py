@@ -15,6 +15,10 @@ from openr.cli.clis import spark
 from openr.cli.tests import helpers
 
 from .fixtures import (
+    MOCKED_INIT_EVENTS,
+    MOCKED_INIT_EVEVENTS_NO_PUBLISH,
+    MOCKED_INIT_EVEVENTS_TIMEOUT,
+    MOCKED_INIT_EVEVENTS_WARNING,
     MOCKED_SPARK_NEIGHBORS,
     MOCKED_SPARK_NEIGHBORS_ALL_ESTAB,
     MOCKED_SPARK_NEIGHBORS_NO_ESTAB,
@@ -228,3 +232,83 @@ class CliSparkTests(TestCase):
             tokenized_neighbor_stat[3][0],
             "Incorrect number of non-ESTABLISHED neighbors",
         )
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    def test_spark_validate_init_event(self, mocked_openr_client: MagicMock) -> None:
+        # Checking when everything is good: NEIGHBOR_DISCOVERED is published and the duration is below warning
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        mocked_returned_connection.getInitializationEvents.return_value = (
+            MOCKED_INIT_EVENTS
+        )
+        mocked_returned_connection.getNeighbors.return_value = []
+
+        invoked_return = self.runner.invoke(
+            spark.SparkValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
+        tokenized_time_line = stdout_lines[3].split(": ")
+        init_event_pass_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("PASS", init_event_pass_state)
+        self.assertEqual("2400ms", tokenized_time_line[1])
+
+        # Checking when the duration is within warning level
+        mocked_returned_connection.getInitializationEvents.return_value = (
+            MOCKED_INIT_EVEVENTS_WARNING
+        )
+        invoked_return = self.runner.invoke(
+            spark.SparkValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
+        tokenized_time_line = stdout_lines[3].split(": ")
+        init_event_pass_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("PASS", init_event_pass_state)
+        self.assertEqual("38910ms", tokenized_time_line[1])
+
+        # Checking when the duration is above the time limit
+        mocked_returned_connection.getInitializationEvents.return_value = (
+            MOCKED_INIT_EVEVENTS_TIMEOUT
+        )
+        invoked_return = self.runner.invoke(
+            spark.SparkValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
+        tokenized_time_line = stdout_lines[4].split(": ")
+        error_msg_line = stdout_lines[3]
+        init_event_pass_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("FAIL", init_event_pass_state)
+        self.assertEqual("61040ms", tokenized_time_line[1])
+        self.assertTrue(
+            "NEIGHBOR_DISCOVERED event duration exceeds acceptable time limit"
+            in error_msg_line
+        )
+
+        # Checking when the NEIGHBORS_DISCOVEREd event isn't published
+        mocked_returned_connection.getInitializationEvents.return_value = (
+            MOCKED_INIT_EVEVENTS_NO_PUBLISH
+        )
+        invoked_return = self.runner.invoke(
+            spark.SparkValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
+        error_msg_line = stdout_lines[3]
+        init_event_pass_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("FAIL", init_event_pass_state)
+        self.assertEqual("NEIGHBOR_DISCOVERED event is not published", error_msg_line)

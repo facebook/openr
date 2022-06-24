@@ -28,13 +28,12 @@ class SparkValidateCli:
         default=False,
         help="Verbose mode outputs information about all neighbors regardless of their state.",
     )
-    @click.option("--json/--no-json", default=False, help="Output in JSON format")
     @click.pass_obj
-    def validate(cli_opts, detail, json):
+    def validate(cli_opts, detail):
         """Outputs number of neighbors in ESTABLISHED state and information about
         neighbors which are not"""
 
-        spark.ValidateCmd(cli_opts).run(json, detail)
+        spark.ValidateCmd(cli_opts).run(detail)
 
 
 class SparkNeighborCli:

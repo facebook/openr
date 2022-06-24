@@ -6,10 +6,10 @@
 
 # pyre-ignore-all-errors
 
+from openr.KvStore import ttypes as openr_kvstore_types
 from openr.Network.ttypes import BinaryAddress
 from openr.Types.ttypes import SparkNeighbor
 from openr.utils.consts import Consts
-
 
 MOCKED_SPARK_NEIGHBORS = [
     SparkNeighbor(
@@ -159,3 +159,34 @@ MOCKED_SPARK_NEIGHBORS_ALL_ESTAB = [
         rttUs=1000,
     ),
 ]
+
+MOCKED_INIT_EVENTS = {
+    openr_kvstore_types.InitializationEvent.INITIALIZING: 1,
+    openr_kvstore_types.InitializationEvent.AGENT_CONFIGURED: 4,
+    openr_kvstore_types.InitializationEvent.LINK_DISCOVERED: 2401,
+    openr_kvstore_types.InitializationEvent.NEIGHBOR_DISCOVERED: 2400,
+    openr_kvstore_types.InitializationEvent.KVSTORE_SYNCED: 2403,
+    openr_kvstore_types.InitializationEvent.RIB_COMPUTED: 9204,
+    openr_kvstore_types.InitializationEvent.FIB_SYNCED: 9205,
+    openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED: 9206,
+}
+
+MOCKED_INIT_EVEVENTS_TIMEOUT = {
+    openr_kvstore_types.InitializationEvent.INITIALIZING: 1,
+    openr_kvstore_types.InitializationEvent.AGENT_CONFIGURED: 4,
+    openr_kvstore_types.InitializationEvent.LINK_DISCOVERED: 2401,
+    openr_kvstore_types.InitializationEvent.NEIGHBOR_DISCOVERED: 61040,
+}
+
+MOCKED_INIT_EVEVENTS_WARNING = {
+    openr_kvstore_types.InitializationEvent.INITIALIZING: 1,
+    openr_kvstore_types.InitializationEvent.AGENT_CONFIGURED: 4,
+    openr_kvstore_types.InitializationEvent.LINK_DISCOVERED: 2401,
+    openr_kvstore_types.InitializationEvent.NEIGHBOR_DISCOVERED: 38910,
+}
+
+MOCKED_INIT_EVEVENTS_NO_PUBLISH = {
+    openr_kvstore_types.InitializationEvent.INITIALIZING: 1,
+    openr_kvstore_types.InitializationEvent.AGENT_CONFIGURED: 4,
+    openr_kvstore_types.InitializationEvent.LINK_DISCOVERED: 2401,
+}

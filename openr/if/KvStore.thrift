@@ -480,3 +480,31 @@ service KvStoreService extends fb303_core.BaseService {
     1: set<string> selectAreas,
   ) throws (1: KvStoreError error);
 }
+
+/**
+ * Labels for initialization event time frames. If the duration of an event
+ * is longer than expected, but not long enough to fail a check, it warrants a "warning".
+ * If the duration is too long, it warrants a "timeout"
+ *
+ * Ex: If the duration of the LINK_DISCOVERED event is within [10000ms, 20000ms), it warrants a warning
+ *     If the duration is >= 20000ms, it warrants a timeout
+ */
+enum InitializationEventTimeLabels {
+  LINK_DISCOVERED_WARNING_MS = 1,
+  LINK_DISCOVERED_TIMEOUT_MS = 2,
+  NEIGHBOR_DISCOVERED_WARNING_MS = 3,
+  NEIGHBOR_DISCOVERED_TIMEOUT_MS = 4,
+}
+
+/**
+ * Maps the labels to specific set times in ms
+ */
+const map<
+  InitializationEventTimeLabels,
+  i64
+> InitializationEventTimeDuration = {
+  LINK_DISCOVERED_WARNING_MS: 10000,
+  LINK_DISCOVERED_TIMEOUT_MS: 20000,
+  NEIGHBOR_DISCOVERED_WARNING_MS: 20000,
+  NEIGHBOR_DISCOVERED_TIMEOUT_MS: 40000,
+};

@@ -6,11 +6,14 @@
 
 
 import json
-from typing import Any, Callable, Dict, Optional, Set
+from typing import Any, Callable, Dict, Optional, Set, Tuple
 
 import bunch
+
+import click
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
+from openr.thrift.KvStore import types as kv_store_types_py3
 from openr.utils import printing
 from openr.utils.consts import Consts
 
@@ -141,3 +144,68 @@ class OpenrCtrlCmd:
             params.keys = [prefix]
 
         return params
+
+    def fetch_initialization_events(
+        self, client: Any
+    ) -> Dict[kv_store_types.InitializationEvent, int]:
+        """
+        Fetch Initialization events as a dictionary via thrift call
+        """
+
+        return client.getInitializationEvents()
+
+    def validate_init_event(
+        self,
+        init_event_dict: Dict[kv_store_types.InitializationEvent, int],
+        init_event: kv_store_types.InitializationEvent,
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Returns True if the init_event specified is published within it's defined time limit
+        If init_event is published, returns the duration as a stylized string. If the checks fail,
+        returns False along with an error message.
+        """
+
+        # Keeps track of whether or not the checks pass
+        is_pass = True
+
+        # If the check fails, this will hold the error msg string
+        err_msg_str = None
+
+        # If the init_event is published, stores the duration as a stylized string
+        dur_str = None
+
+        # TODO: (klu02) Update the client to thrift.py3 so we can use thrift.py3 types instead of legacy
+        init_event_name = kv_store_types.InitializationEvent._VALUES_TO_NAMES[
+            init_event
+        ]
+
+        if init_event not in init_event_dict:
+            is_pass = False
+            err_msg_str = f"{init_event_name} event is not published"
+        else:
+            warning_label = kv_store_types_py3.InitializationEventTimeLabels[
+                f"{init_event_name}_WARNING_MS"
+            ]
+            timeout_label = kv_store_types_py3.InitializationEventTimeLabels[
+                f"{init_event_name}_TIMEOUT_MS"
+            ]
+
+            warning_time = kv_store_types_py3.InitializationEventTimeDuration[
+                warning_label
+            ]
+            timeout_time = kv_store_types_py3.InitializationEventTimeDuration[
+                timeout_label
+            ]
+
+            init_event_dur = init_event_dict[init_event]
+
+            if init_event_dur < warning_time:
+                dur_str = click.style(str(init_event_dur), fg="green")
+            elif init_event_dur < timeout_time:
+                dur_str = click.style(str(init_event_dur), fg="yellow")
+            else:
+                dur_str = click.style(str(init_event_dur), fg="red")
+                err_msg_str = f"{init_event_name} event duration exceeds acceptable time limit (>{timeout_time}ms)"
+                is_pass = False
+
+        return is_pass, err_msg_str, dur_str
