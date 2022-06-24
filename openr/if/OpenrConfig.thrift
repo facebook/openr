@@ -889,4 +889,9 @@ struct OpenrConfig {
    * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
    */
   201: bool enable_ordered_adj_publication = false;
+
+  /**
+   * Flag to enable Dispatcher module in the architecture.
+   */
+  202: bool enable_kvstore_dispatcher = false;
 } (cpp.minimize_padding)
