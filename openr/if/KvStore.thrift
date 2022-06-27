@@ -78,6 +78,9 @@ exception KvStoreError {
 /**
  * `V` of `KV` Store. It encompasses the data that needs to be synchronized
  * along with few attributes that helps ensure eventual consistency.
+ *
+ * NOTE: Version 0 is undefined - Treat the struct as uninitialized.
+ * Please set version > 0 for valid input.
  */
 struct Value {
   /**

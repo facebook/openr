@@ -7,9 +7,125 @@
 
 #include <folly/logging/xlog.h>
 
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 
 namespace openr {
+namespace util {
+
+bool
+isValidTtlAndLog(
+    const std::string& key,
+    const thrift::Value& value,
+    KvStoreMergeStats& stats) {
+  bool result = isValidTtl(*value.ttl());
+  if (not result) {
+    stats.noMergeStats.noMergeReasons.emplace(
+        key, KvStoreNoMergeReason::INVALID_TTL);
+    stats.noMergeStats.listInvalidTtls.emplace_back(*value.ttl());
+  }
+  return result;
+}
+
+bool
+isValidVersionAndLog(
+    const int64_t myVersion,
+    const std::string& key,
+    const thrift::Value& value,
+    KvStoreMergeStats& stats) {
+  bool result = isValidVersion(myVersion, value);
+  if (not result) {
+    stats.noMergeStats.noMergeReasons.emplace(
+        key, KvStoreNoMergeReason::OLD_VERSION);
+    stats.noMergeStats.listOldVersions.emplace_back(*value.version());
+  }
+  return result;
+}
+
+bool
+isKeyMatchAndLog(
+    std::optional<KvStoreFilters> const& filters,
+    const std::string& key,
+    const thrift::Value& value,
+    KvStoreMergeStats& stats) {
+  if (filters.has_value() && not filters->keyMatch(key, value)) {
+    XLOG(DBG4) << "key: " << key << " not adding from "
+               << *value.originatorId();
+    stats.noMergeStats.noMergeReasons.emplace(
+        key, KvStoreNoMergeReason::NO_MATCHED_KEY);
+    ++stats.noMergeStats.numberOfNoMatchedKeys;
+    return false;
+  }
+  return true;
+}
+
+// Incoming value is only updating ttl.
+bool
+isTtlUpdate(const thrift::Value& value) {
+  return !value.value().has_value();
+}
+
+bool
+isInconsistent(const thrift::Value& value, const int64_t myVersion) {
+  return (isTtlUpdate(value) and value.version() != myVersion);
+}
+
+/*
+ * Inconsistency is detected when:
+ * There is a TTL update but version is not the same.
+ *
+ * We would trigger resync only if:
+ * 1. There is inconsistency
+ * AND
+ * 2. Sender is the originator.
+ *
+ * How we trigger:
+ * Setting `inconsistencyDetetectedWithOriginator` to true
+ *
+ * What would happen:
+ * 1. would trigger peer to transition to IDLE state.
+ * 2. Trigger originator to bump its key version if needed.
+ *
+ * Example:
+ * A-B-C. if A is the originator of the key,
+ * and C receives an inconsistent update from B.
+ * C will not ask to resync with B.
+ */
+bool
+isResyncNeeded(
+    const int64_t myVersion,
+    const std::string& key,
+    const thrift::Value& value,
+    std::optional<std::string> const& sender,
+    KvStoreMergeStats& stats) {
+  if (isInconsistent(value, myVersion)) {
+    const std::string& originator = *value.originatorId();
+    auto senderName = sender.value_or("");
+    XLOG(ERR) << fmt::format(
+        "(mergeKeyValues) Received ttl update from {}. key: {}, received version: {}, Local version: {}, originator: {}",
+        senderName,
+        key,
+        myVersion,
+        *value.version(),
+        originator);
+    if (senderName == originator) {
+      stats.noMergeStats.inconsistencyDetetectedWithOriginator = true;
+      return true;
+    }
+  }
+  return false;
+}
+} // namespace util
+
+bool
+isValidTtl(int64_t val) {
+  return val == Constants::kTtlInfinity || val > 0;
+}
+
+bool
+isValidVersion(const int64_t myVersion, const thrift::Value& incomingVal) {
+  return incomingVal.version() >= myVersion;
+}
 
 std::optional<openr::KvStoreFilters>
 getKvStoreFilters(const thrift::KvStoreConfig& kvStoreConfig) {
@@ -36,89 +152,48 @@ getKvStoreFilters(const thrift::KvStoreConfig& kvStoreConfig) {
   return kvFilters;
 }
 
-std::pair<
-    std::unordered_map<std::string, thrift::Value>,
-    KvStoreNoMergeReasonStats>
+std::pair<thrift::KeyVals, KvStoreNoMergeReasonStats>
 mergeKeyValues(
-    std::unordered_map<std::string, thrift::Value>& kvStore,
-    std::unordered_map<std::string, thrift::Value> const& keyVals,
+    thrift::KeyVals& kvStore,
+    thrift::KeyVals const& keyVals,
     std::optional<KvStoreFilters> const& filters,
     std::optional<std::string> const& sender) {
   // the publication to build if we update our KV store
-  std::unordered_map<std::string, thrift::Value> kvUpdates;
-  KvStoreNoMergeReasonStats stats;
-
-  // Counters for logging
-  uint32_t ttlUpdateCnt{0}, valUpdateCnt{0};
+  thrift::KeyVals kvUpdates;
+  KvStoreMergeStats stats;
 
   for (const auto& [key, value] : keyVals) {
-    if (filters.has_value() && not filters->keyMatch(key, value)) {
-      XLOG(DBG4) << "key: " << key << " not adding from "
-                 << *value.originatorId();
-      stats.noMergeReasons.emplace(key, KvStoreNoMergeReason::NO_MATCHED_KEY);
-      ++stats.numberOfNoMatchedKeys;
+    if (not util::isKeyMatchAndLog(filters, key, value, stats)) {
       continue;
     }
 
-    // versions must start at 1; setting this to zero here means
-    // we would be beaten by any version supplied by the setter
-    int64_t myVersion{0};
+    if (not util::isValidTtlAndLog(key, value, stats)) {
+      continue;
+    }
+
+    int64_t myVersion{openr::Constants::kUndefinedVersion};
     int64_t newVersion = *value.version();
 
-    // Check if TTL is valid. It must be infinite or positive number
-    // Skip if invalid!
-    if (*value.ttl() != Constants::kTtlInfinity && *value.ttl() <= 0) {
-      stats.noMergeReasons.emplace(key, KvStoreNoMergeReason::INVALID_TTL);
-      stats.listInvalidTtls.push_back(*value.ttl());
-      continue;
-    }
-
-    // if key exist, compare values first
-    // if they are the same, no need to propagate changes
     auto kvStoreIt = kvStore.find(key);
     if (kvStoreIt != kvStore.end()) {
       myVersion = *kvStoreIt->second.version();
     } else {
-      XLOG(DBG4) << "(mergeKeyValues) key: '" << key << "' not found, adding";
+      XLOG(DBG4)
+          << fmt::format("(mergeKeyValues) key: '{}' not found, adding", key);
     }
 
-    // TTL update but version is not the same
-    // One version update is missed and there is inconsistency. Resync
-    if (newVersion != myVersion and not value.value().has_value()) {
-      auto originator = *value.originatorId();
-      auto senderName = sender.value_or("");
-      XLOG(ERR) << fmt::format(
-          "(mergeKeyValues) Received ttl update from {}. key: {}, received version: {}, Local version: {}, originator: {}",
-          senderName,
-          key,
-          myVersion,
-          newVersion,
-          originator);
-      // if sender is the key originator, then stop and report (and trigger
-      // resync) Triggering resync with originator will help originator to bump
-      // its key version if needed. However, if the sender is not the originator
-      // of the inconsistent key, resync will not help. E.g A-B-C. if A is the
-      // originator of the key, and C receives an inconsistent update from B C
-      // will not ask to resync with B.
-      if (senderName == originator) {
-        stats.inconsistencyDetetectedWithOriginator = true;
-        return std::make_pair(std::move(kvUpdates), std::move(stats));
-      }
+    if (util::isResyncNeeded(myVersion, key, value, sender, stats)) {
+      return std::make_pair(
+          std::move(kvUpdates), std::move(stats.noMergeStats));
     }
 
-    // If we get an old value just skip it
-    if (newVersion < myVersion) {
-      stats.noMergeReasons.emplace(key, KvStoreNoMergeReason::OLD_VERSION);
-      stats.listOldVersions.push_back(newVersion);
+    if (not util::isValidVersionAndLog(myVersion, key, value, stats)) {
       continue;
     }
 
     bool updateAllNeeded{false};
     bool updateTtlNeeded{false};
 
-    //
-    // Check updateAll and updateTtl
-    //
     if (value.value().has_value()) {
       if (newVersion > myVersion) {
         // Version is newer or
@@ -136,7 +211,8 @@ mergeKeyValues(
         int rc = (*value.value()).compare(*kvStoreIt->second.value());
         if (rc > 0) {
           // versions and orginatorIds are same but value is higher
-          XLOG(DBG3) << "Previous incarnation reflected back for key " << key;
+          XLOG(DBG3) << fmt::format(
+              "Previous incarnation reflected back for key {}", key);
           updateAllNeeded = true;
         } else if (rc == 0) {
           // versions, orginatorIds, value are all same
@@ -148,9 +224,6 @@ mergeKeyValues(
       }
     }
 
-    //
-    // Check updateTtl
-    //
     if (not value.value().has_value() and kvStoreIt != kvStore.end() and
         *value.version() == *kvStoreIt->second.version() and
         *value.originatorId() == *kvStoreIt->second.originatorId() and
@@ -159,39 +232,40 @@ mergeKeyValues(
     }
 
     if (!updateAllNeeded and !updateTtlNeeded) {
-      XLOG(DBG3) << "(mergeKeyValues) no need to update anything for key: '"
-                 << key << "'";
-      stats.noMergeReasons.emplace(
+      XLOG(DBG3) << fmt::format(
+          "(mergeKeyValues) no need to update anything for key: '{}'", key);
+      stats.noMergeStats.noMergeReasons.emplace(
           key, KvStoreNoMergeReason::NO_NEED_TO_UPDATE);
-      ++stats.numberOfNoNeedToUpdates;
+      ++stats.noMergeStats.numberOfNoNeedToUpdates;
       continue;
     }
 
-    XLOG(DBG3)
-        << "Updating key: " << key << "\n  Version: " << myVersion << " -> "
-        << newVersion << "\n  Originator: "
-        << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId()
-                                       : "null")
-        << " -> " << *value.originatorId() << "\n  TtlVersion: "
-        << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttlVersion() : 0)
-        << " -> " << *value.ttlVersion() << "\n  Ttl: "
-        << (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttl() : 0) << " -> "
-        << *value.ttl();
-
-    // grab the new value (this will copy, intended)
-    thrift::Value newValue = value;
+    XLOG(DBG3) << fmt::format(
+        "Updating key: {}\n  Version: {} -> {}\n  Originator: {} -> {}\n  TtlVersion: {} -> {}\n  Ttl: {} -> {}",
+        key,
+        myVersion,
+        newVersion,
+        (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId()
+                                    : "null"),
+        *value.originatorId(),
+        (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttlVersion() : 0),
+        *value.ttlVersion(),
+        (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttl() : 0),
+        *value.ttl());
 
     if (updateAllNeeded) {
-      ++valUpdateCnt;
-      FB_LOG_EVERY_MS(INFO, 500) << "Updating key: " << key
-                                 << ", Originator: " << *value.originatorId()
-                                 << ", Version: " << newVersion
-                                 << ", TtlVersion: " << *value.ttlVersion()
-                                 << ", Ttl: " << *value.ttl();
-      //
-      // update everything for such key
-      //
+      ++stats.updateStats.valUpdateCnt;
+      FB_LOG_EVERY_MS(INFO, 500) << fmt::format(
+          "Updating key: {}, Originator: {}, Version: {}, TtlVersion: {}, Ttl: {}",
+          key,
+          *value.originatorId(),
+          newVersion,
+          *value.ttlVersion(),
+          *value.ttl());
+
       CHECK(value.value().has_value());
+      // grab the new value (this will copy, intended)
+      thrift::Value newValue = value;
       if (kvStoreIt == kvStore.end()) {
         // create new entry
         std::tie(kvStoreIt, std::ignore) = kvStore.emplace(
@@ -208,10 +282,8 @@ mergeKeyValues(
             *value.version(), *value.originatorId(), value.value());
       }
     } else if (updateTtlNeeded) {
-      ++ttlUpdateCnt;
-      //
-      // update ttl,ttlVersion only
-      //
+      ++stats.updateStats.ttlUpdateCnt;
+
       CHECK(kvStoreIt != kvStore.end());
 
       // update TTL only, nothing else
@@ -223,10 +295,13 @@ mergeKeyValues(
     kvUpdates.emplace(key, value);
   }
 
-  XLOG(DBG4) << "(mergeKeyValues) updating " << kvUpdates.size()
-             << " keyvals. ValueUpdates: " << valUpdateCnt
-             << ", TtlUpdates: " << ttlUpdateCnt;
-  return std::make_pair(std::move(kvUpdates), std::move(stats));
+  XLOG(DBG4) << fmt::format(
+      "(mergeKeyValues) updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
+      kvUpdates.size(),
+      stats.updateStats.valUpdateCnt,
+      stats.updateStats.ttlUpdateCnt);
+
+  return std::make_pair(std::move(kvUpdates), std::move(stats.noMergeStats));
 }
 
 /**

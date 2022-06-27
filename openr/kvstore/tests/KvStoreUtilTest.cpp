@@ -462,6 +462,34 @@ TEST(KvStoreUtil, KvStoreFiltersTest) {
   ASSERT_FALSE(andFilter.keyMatch(node3_key1, node3_val1)); // No match
 }
 
+TEST(KvStoreUtil, IsValidTtlTest) {
+  EXPECT_TRUE(isValidTtl(1));
+  EXPECT_TRUE(isValidTtl(Constants::kTtlInfinity));
+  EXPECT_TRUE(isValidTtl(100));
+  EXPECT_FALSE(isValidTtl(0));
+  EXPECT_FALSE(isValidTtl(-100));
+}
+
+TEST(KvStoreUtil, IsValidVersionTest) {
+  thrift::Value incomingVal;
+  int64_t existingVersion;
+  {
+    incomingVal.version() = 0;
+    existingVersion = 0;
+    EXPECT_TRUE(isValidVersion(existingVersion, incomingVal));
+  }
+  {
+    incomingVal.version() = 4;
+    existingVersion = 1;
+    EXPECT_TRUE(isValidVersion(existingVersion, incomingVal));
+  }
+  {
+    incomingVal.version() = 1;
+    existingVersion = 4;
+    EXPECT_FALSE(isValidVersion(existingVersion, incomingVal));
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

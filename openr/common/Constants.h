@@ -74,6 +74,11 @@ class Constants {
   // kMaxBackoff to send the next sync request
   static constexpr size_t kMaxFullSyncPendingCountThreshold{32};
 
+  // Invalid version for thrift::Value
+  // If version is undefined, then thrift::Value
+  // is not valid
+  static constexpr int64_t kUndefinedVersion{0};
+
   //
   // PrefixAllocator specific
   //

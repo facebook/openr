@@ -206,6 +206,16 @@ struct KvStoreNoMergeReasonStats {
   bool inconsistencyDetetectedWithOriginator{false};
 };
 
+struct KvStoreUpdateStats {
+  uint32_t ttlUpdateCnt{0};
+  uint32_t valUpdateCnt{0};
+};
+
+struct KvStoreMergeStats {
+  KvStoreUpdateStats updateStats;
+  KvStoreNoMergeReasonStats noMergeStats;
+};
+
 /*
  * Static method to precess the key-values publication, attempt to merge it
  in
@@ -214,17 +224,14 @@ struct KvStoreNoMergeReasonStats {
  * @param kvStore - key-value map with current key-values in KVStore
  * @param keyVals - key-value map with key-values to merge in
  * @param filters - optional filters, matching keys in keyVals will be
-                    merged in
+ *                  merged in
  *
  * @return: a tuple of
  *  - key-value map obtained by merging data; publication made out of
  *    the updated values
  *  - the statistics
  */
-std::pair<
-    std::unordered_map<std::string, thrift::Value>,
-    KvStoreNoMergeReasonStats>
-mergeKeyValues(
+std::pair<thrift::KeyVals, KvStoreNoMergeReasonStats> mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
     std::unordered_map<std::string, thrift::Value> const& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt,
@@ -277,6 +284,28 @@ void updatePublicationTtl(
     const std::chrono::milliseconds ttlDecr,
     thrift::Publication& thriftPub,
     const bool removeAboutToExpire = true);
+
+/*
+ * Check if TTL is valid.
+ * Criteria: It must be infinite or positive number
+ *
+ * @param val - ttl value to check
+ *
+ * @return: true if satisfies the criteria, else false
+ */
+bool isValidTtl(int64_t val);
+
+/*
+ * Check if incoming value has valid version
+ * Criteria: version must be equal or greater than existing version
+ *
+ * @param existingVersion - existing thrift::Value's version
+ * @param incomingVal - incoming thrift::Value
+ *
+ * @return: true if satisfies the criteria, else false
+ */
+bool isValidVersion(
+    const int64_t existingVersion, const thrift::Value& incomingVal);
 
 } // namespace openr
 
