@@ -203,6 +203,16 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     EXPECT_EQ(keyVals.size(), 0);
     EXPECT_EQ(emptyStore.size(), 0);
   }
+
+  // update with version=0 (see it should get ignored)
+  {
+    std::unordered_map<std::string, thrift::Value> emptyStore;
+    newKvIt->second = thriftValue;
+    newKvIt->second.version() = 0;
+    auto keyVals = mergeKeyValues(emptyStore, newStore).first;
+    EXPECT_EQ(keyVals.size(), 0);
+    EXPECT_EQ(emptyStore.size(), 0);
+  }
 }
 
 //
@@ -474,9 +484,14 @@ TEST(KvStoreUtil, IsValidVersionTest) {
   thrift::Value incomingVal;
   int64_t existingVersion;
   {
+    incomingVal.version() = 5;
+    existingVersion = 5;
+    EXPECT_TRUE(isValidVersion(existingVersion, incomingVal));
+  }
+  {
     incomingVal.version() = 0;
     existingVersion = 0;
-    EXPECT_TRUE(isValidVersion(existingVersion, incomingVal));
+    EXPECT_FALSE(isValidVersion(existingVersion, incomingVal));
   }
   {
     incomingVal.version() = 4;

@@ -124,7 +124,7 @@ isValidTtl(int64_t val) {
 
 bool
 isValidVersion(const int64_t myVersion, const thrift::Value& incomingVal) {
-  return incomingVal.version() >= myVersion;
+  return (incomingVal.version() > 0) and (incomingVal.version() >= myVersion);
 }
 
 std::optional<openr::KvStoreFilters>
