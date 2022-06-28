@@ -1213,12 +1213,12 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
     // store1 should have key update(full-sync with peer_spec change)
     auto maybeVal1 = store1->getKey(kTestingAreaName, key);
     CHECK(maybeVal1.has_value());
-    EXPECT_EQ(3, *maybeVal1.value().version_ref());
+    EXPECT_EQ(3, *maybeVal1.value().version());
 
     // store2 still NOT updated since there is no full-sync
     auto maybeVal = store2->getKey(kTestingAreaName, key);
     CHECK(maybeVal.has_value());
-    EXPECT_NE(3, *maybeVal.value().version_ref());
+    EXPECT_NE(3, *maybeVal.value().version());
       */
   }
 

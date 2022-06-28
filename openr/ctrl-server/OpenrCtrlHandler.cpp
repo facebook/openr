@@ -218,7 +218,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
     // thrift::Publication contains "adj:*" key change.
     // Clean ALL pending promises
     longPollReqs_.withWLock([&](auto& longPollReqs) {
-      for (auto& [_, req] : longPollReqs[*pub.area_ref()]) {
+      for (auto& [_, req] : longPollReqs[*pub.area()]) {
         auto& p = req.first; // get the promise
         p.setValue(true);
       }
@@ -228,7 +228,8 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
     longPollReqs_.withWLock([&](auto& longPollReqs) {
       auto now = getUnixTimeStampMs();
       std::vector<int64_t> reqsToClean;
-      for (auto& [clientId, req] : longPollReqs[*pub.area_ref()]) {
+      reqsToClean.reserve((longPollReqs[*pub.area()]).size());
+      for (auto& [clientId, req] : longPollReqs[*pub.area()]) {
         auto& p = req.first;
         auto& timeStamp = req.second;
         if (now - timeStamp >= Constants::kLongPollReqHoldTime.count()) {
@@ -242,7 +243,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
 
       // cleanup expired requests since no ADJ change observed
       for (auto& clientId : reqsToClean) {
-        longPollReqs[*pub.area_ref()].erase(clientId);
+        longPollReqs[*pub.area()].erase(clientId);
       }
     });
   }

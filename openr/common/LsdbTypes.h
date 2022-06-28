@@ -244,7 +244,7 @@ struct PrefixEntry {
         nexthops(std::move(nexthops)) {}
 
   apache::thrift::field_ref<const thrift::PrefixMetrics&>
-  metrics_ref() const& {
+  metrics() const& {
     return tPrefixEntry->metrics();
   }
 

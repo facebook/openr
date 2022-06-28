@@ -122,7 +122,7 @@ template <typename RouteType>
 void
 sortNextHops(std::vector<RouteType>& routes) {
   for (auto& route : routes) {
-    sortNextHops(*route.nextHops_ref());
+    sortNextHops(*route.nextHops());
   }
 }
 

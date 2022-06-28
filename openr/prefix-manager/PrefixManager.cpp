@@ -367,7 +367,7 @@ std::pair<thrift::PrefixType, const PrefixEntry>
 PrefixManager::getBestPrefixEntry(
     const std::unordered_map<thrift::PrefixType, PrefixEntry>&
         prefixTypeToEntry) {
-  // select the best entry/entries by comparing metric_ref() field
+  // select the best entry/entries by comparing metric() field
   const auto bestTypes = selectBestPrefixMetrics(prefixTypeToEntry);
   auto bestType = *bestTypes.begin();
   // if best route is BGP, and an equivalent CONFIG route exists,

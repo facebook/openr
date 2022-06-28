@@ -179,8 +179,7 @@ RangeAllocator<T>::isRangeConsumed() const {
 
   T count = 0;
   for (const auto& [_, thriftVal] : maybeKeyVals.value()) {
-    const auto val =
-        details::binaryToPrimitive<T>(thriftVal.value_ref().value());
+    const auto val = details::binaryToPrimitive<T>(thriftVal.value().value());
     if (val >= allocRange_.first && val <= allocRange_.second) {
       ++count;
     }
@@ -196,9 +195,8 @@ RangeAllocator<T>::getValueFromKvStore() const {
   CHECK(maybeKeyVals.has_value()); // Crash if key dump failed
 
   for (const auto& [key, thriftVal] : maybeKeyVals.value()) {
-    if (*thriftVal.originatorId_ref() == nodeName_) {
-      const auto val =
-          details::binaryToPrimitive<T>(thriftVal.value_ref().value());
+    if (*thriftVal.originatorId() == nodeName_) {
+      const auto val = details::binaryToPrimitive<T>(thriftVal.value().value());
       CHECK_EQ(key, createKey(val));
       return val;
     }

@@ -162,7 +162,7 @@ checkEqualUnicastRoutesDetail(
     uLhs.emplace_back(*route.unicastRoute());
 
     // Check bestRoute has been filled out properly with correct prefix
-    if (*route.dest_ref() != *route.bestRoute()->prefix()) {
+    if (*route.dest() != *route.bestRoute()->prefix()) {
       return false;
     }
   }
@@ -171,7 +171,7 @@ checkEqualUnicastRoutesDetail(
     uRhs.emplace_back(*route.unicastRoute());
 
     // Check bestRoute has been filled out properly with correct prefix
-    if (*route.dest_ref() != *route.bestRoute()->prefix()) {
+    if (*route.dest() != *route.bestRoute()->prefix()) {
       return false;
     }
   }

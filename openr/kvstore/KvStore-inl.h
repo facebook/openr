@@ -330,9 +330,7 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
             *keyDumpParams.doNotPublishValue());
         if (keyDumpParams.keyValHashes().has_value()) {
           thriftPub = dumpDifference(
-              area,
-              *thriftPub.keyVals_ref(),
-              keyDumpParams.keyValHashes().value());
+              area, *thriftPub.keyVals(), keyDumpParams.keyValHashes().value());
         }
         updatePublicationTtl(
             kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
@@ -343,13 +341,13 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
              (*keyDumpParams.keys()).empty())) {
           // This usually comes from neighbor nodes
           size_t numMissingKeys = 0;
-          if (thriftPub.tobeUpdatedKeys_ref().has_value()) {
-            numMissingKeys = thriftPub.tobeUpdatedKeys_ref()->size();
+          if (thriftPub.tobeUpdatedKeys().has_value()) {
+            numMissingKeys = thriftPub.tobeUpdatedKeys()->size();
           }
           XLOG(INFO) << "[Thrift Sync] Processed full-sync request with "
                      << keyDumpParams.keyValHashes().value().size()
                      << " keyValHashes item(s). Sending "
-                     << thriftPub.keyVals_ref()->size() << " key-vals and "
+                     << thriftPub.keyVals()->size() << " key-vals and "
                      << numMissingKeys << " missing keys";
         }
         result->push_back(std::move(thriftPub));
@@ -693,7 +691,7 @@ std::vector<std::string>
 KvStoreDb<ClientType>::getPeersByState(thrift::KvStorePeerState state) {
   std::vector<std::string> res;
   for (auto const& [_, peer] : thriftPeers_) {
-    if (*peer.peerSpec.state_ref() == state) {
+    if (*peer.peerSpec.state() == state) {
       res.emplace_back(peer.nodeName);
     }
   }
@@ -724,7 +722,7 @@ std::optional<thrift::KvStorePeerState>
 KvStoreDb<ClientType>::getCurrentState(std::string const& peerName) {
   auto thriftPeerIt = thriftPeers_.find(peerName);
   if (thriftPeerIt != thriftPeers_.end()) {
-    return *thriftPeerIt->second.peerSpec.state_ref();
+    return *thriftPeerIt->second.peerSpec.state();
   }
   return std::nullopt;
 }
@@ -805,7 +803,7 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
   peerSpec.state() = thrift::KvStorePeerState::IDLE;
   CHECK(not this->nodeName.empty());
   CHECK(not this->areaTag.empty());
-  CHECK(not this->peerSpec.peerAddr_ref()->empty());
+  CHECK(not this->peerSpec.peerAddr()->empty());
   CHECK(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
 }
@@ -1588,7 +1586,7 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     const auto& expBackoff = thriftPeer.expBackoff;
 
     // ignore peers in state other than IDLE
-    if (*peerSpec.state_ref() != thrift::KvStorePeerState::IDLE) {
+    if (*peerSpec.state() != thrift::KvStorePeerState::IDLE) {
       continue;
     }
 
@@ -1605,9 +1603,9 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     }
 
     // state transition
-    auto oldState = *peerSpec.state_ref();
-    peerSpec.state_ref() = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
-    logStateTransition(peerName, oldState, *peerSpec.state_ref());
+    auto oldState = *peerSpec.state();
+    peerSpec.state() = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
+    logStateTransition(peerName, oldState, *peerSpec.state());
 
     // mark peer from IDLE -> SYNCING
     numThriftPeersInSync += 1;
@@ -1729,7 +1727,7 @@ KvStoreDb<ClientType>::processThriftSuccess(
   //       response and will rely on the new full-sync response to
   //       promote the state.
   auto& peer = thriftPeers_.at(peerName);
-  if (*peer.peerSpec.state_ref() == thrift::KvStorePeerState::IDLE) {
+  if (*peer.peerSpec.state() == thrift::KvStorePeerState::IDLE) {
     XLOG(WARNING)
         << AreaTag()
         << fmt::format(
@@ -1770,10 +1768,10 @@ KvStoreDb<ClientType>::processThriftSuccess(
              timeDelta.count());
 
   // State transition
-  auto oldState = *peer.peerSpec.state_ref();
-  peer.peerSpec.state_ref() =
+  auto oldState = *peer.peerSpec.state();
+  peer.peerSpec.state() =
       getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
-  logStateTransition(peerName, oldState, *peer.peerSpec.state_ref());
+  logStateTransition(peerName, oldState, *peer.peerSpec.state());
 
   // Log full-sync event via replicate queue
   logSyncEvent(peerName, timeDelta);
@@ -1808,8 +1806,7 @@ KvStoreDb<ClientType>::processInitializationEvent() {
   int initialSyncSuccessCnt = 0;
   int initialSyncFailureCnt = 0;
   for (const auto& [peerName, peerStore] : thriftPeers_) {
-    if (*peerStore.peerSpec.state_ref() ==
-        thrift::KvStorePeerState::INITIALIZED) {
+    if (*peerStore.peerSpec.state() == thrift::KvStorePeerState::INITIALIZED) {
       // Achieved INITIALIZED state.
       ++initialSyncSuccessCnt;
     } else if (peerStore.numThriftApiErrors > 0) {
@@ -1873,9 +1870,9 @@ KvStoreDb<ClientType>::disconnectPeer(
   peer.client.reset();
 
   // state transition
-  auto oldState = *peer.peerSpec.state_ref();
-  peer.peerSpec.state_ref() = getNextState(oldState, event);
-  logStateTransition(peer.nodeName, oldState, *peer.peerSpec.state_ref());
+  auto oldState = *peer.peerSpec.state();
+  peer.peerSpec.state() = getNextState(oldState, event);
+  logStateTransition(peer.nodeName, oldState, *peer.peerSpec.state());
 
   // Thrift error is treated as a completion signal of syncing with peer. Check
   // whether initial sync is completed.
@@ -1908,13 +1905,13 @@ KvStoreDb<ClientType>::addThriftPeers(
                         peerAddr);
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
-      if (*oldPeerSpec.peerAddr_ref() != *newPeerSpec.peerAddr()) {
+      if (*oldPeerSpec.peerAddr() != *newPeerSpec.peerAddr()) {
         // case1: peerSpec updated(i.e. parallel adjacencies can
         //        potentially have peerSpec updated by LM)
         XLOG(INFO) << AreaTag()
                    << fmt::format(
                           "[Peer Update] peerAddr is updated from: {} to: {}",
-                          *oldPeerSpec.peerAddr_ref(),
+                          *oldPeerSpec.peerAddr(),
                           peerAddr);
       } else {
         // case2. new peer came up (previsously shut down ungracefully)
@@ -1926,11 +1923,11 @@ KvStoreDb<ClientType>::addThriftPeers(
       }
       logStateTransition(
           peerName,
-          *peerIter->second.peerSpec.state_ref(),
+          *peerIter->second.peerSpec.state(),
           thrift::KvStorePeerState::IDLE);
 
       peerIter->second.peerSpec = newPeerSpec; // update peerSpec
-      peerIter->second.peerSpec.state_ref() =
+      peerIter->second.peerSpec.state() =
           thrift::KvStorePeerState::IDLE; // set IDLE initially
       peerIter->second.keepAliveTimer->cancelTimeout(); // cancel timer
       peerIter->second.client.reset(); // destruct thriftClient
@@ -2025,7 +2022,7 @@ KvStoreDb<ClientType>::delThriftPeers(std::vector<std::string> const& peers) {
                << fmt::format(
                       "[Peer Delete] {} is detached from peerAddr: {}",
                       peerName,
-                      *peerSpec.peerAddr_ref());
+                      *peerSpec.peerAddr());
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
@@ -2191,7 +2188,7 @@ KvStoreDb<ClientType>::finalizeFullSync(
   }
 
   auto& thriftPeer = peerIt->second;
-  if (*thriftPeer.peerSpec.state_ref() == thrift::KvStorePeerState::IDLE or
+  if (*thriftPeer.peerSpec.state() == thrift::KvStorePeerState::IDLE or
       (not thriftPeer.client)) {
     // TODO: evaluate the condition later to add to pending collection
     // peer in thriftPeers collection can still be in IDLE state.
@@ -2338,8 +2335,7 @@ KvStoreDb<ClientType>::floodPublication(
       continue;
     }
 
-    if (*thriftPeer.peerSpec.state_ref() !=
-        thrift::KvStorePeerState::INITIALIZED) {
+    if (*thriftPeer.peerSpec.state() != thrift::KvStorePeerState::INITIALIZED) {
       // Skip flooding to those peers if peer has NOT finished
       // initial sync(i.e. promoted to `INITIALIZED`)
       // store key for flooding after intialized

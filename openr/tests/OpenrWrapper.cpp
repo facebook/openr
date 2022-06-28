@@ -129,10 +129,10 @@ OpenrWrapper<Serializer>::OpenrWrapper(
             value.value().value().value(), serializer_);
         ipPrefix_.withWLock([&](auto& ipPrefix) {
           bool received = false;
-          for (auto& prefix : *prefixDb.prefixEntries_ref()) {
-            if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          for (auto& prefix : *prefixDb.prefixEntries()) {
+            if (*prefix.type() == thrift::PrefixType::PREFIX_ALLOCATOR) {
               received = true;
-              ipPrefix = *prefix.prefix_ref();
+              ipPrefix = *prefix.prefix();
               break;
             }
           }
@@ -430,14 +430,14 @@ OpenrWrapper<Serializer>::getIpPrefix() {
     for (const auto& key : keys.value()) {
       auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
           key.second.value().value(), serializer_);
-      if (*prefixDb.deletePrefix_ref()) {
+      if (*prefixDb.deletePrefix()) {
         // Skip prefixes which are about to be deleted
         continue;
       }
 
-      for (auto& prefix : *prefixDb.prefixEntries_ref()) {
-        if (*prefix.type_ref() == thrift::PrefixType::PREFIX_ALLOCATOR) {
-          ipPrefix = *prefix.prefix_ref();
+      for (auto& prefx : *prefixDb.prefixEntries()) {
+        if (*prefx.type() == thrift::PrefixType::PREFIX_ALLOCATOR) {
+          ipPrefix = *prefx.prefix();
           break;
         }
       }

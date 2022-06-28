@@ -283,7 +283,7 @@ std::string getNodeNameFromKey(const std::string& key);
  * representative, will be deterministic and easier for implementation.
  *
  * NOTE: MetricsWrapper is expected to provide following API
- *   apache::thrift::field_ref<const thrift::PrefixMetrics&> metrics_ref();
+ *   apache::thrift::field_ref<const thrift::PrefixMetrics&> metrics();
  */
 template <typename Key, typename MetricsWrapper>
 std::set<Key>
@@ -296,11 +296,11 @@ selectBestPrefixMetrics(
       std::numeric_limits<int32_t>::min()};
   std::set<Key> bestKeys;
   for (auto& [key, metricsWrapper] : prefixes) {
-    auto& metrics = metricsWrapper.metrics_ref().value();
+    auto& metrics = metricsWrapper.metrics().value();
     std::tuple<int32_t, int32_t, int32_t> metricsTuple{
-        metrics.path_preference_ref().value(), /* prefer-higher */
-        metrics.source_preference_ref().value(), /* prefer-higher */
-        metrics.distance_ref().value() * -1 /* prefer-lower */};
+        metrics.path_preference().value(), /* prefer-higher */
+        metrics.source_preference().value(), /* prefer-higher */
+        metrics.distance().value() * -1 /* prefer-lower */};
 
     // Skip if this is less than best metrics we've seen so far
     if (metricsTuple < bestMetricsTuple) {

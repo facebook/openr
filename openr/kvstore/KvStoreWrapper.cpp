@@ -191,7 +191,7 @@ KvStoreWrapper<ClientType>::dumpAll(
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()
                   ->begin();
-  return *pub.keyVals_ref();
+  return *pub.keyVals();
 }
 
 template <class ClientType>
@@ -206,7 +206,7 @@ KvStoreWrapper<ClientType>::dumpHashes(
 
   auto pub =
       *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
-  return *pub.keyVals_ref();
+  return *pub.keyVals();
 }
 
 template <class ClientType>
@@ -229,7 +229,7 @@ KvStoreWrapper<ClientType>::syncKeyVals(
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()
                   ->begin();
-  return *pub.keyVals_ref();
+  return *pub.keyVals();
 }
 
 template <class ClientType>

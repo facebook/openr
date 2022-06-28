@@ -348,7 +348,7 @@ TEST_P(PrefixAllocTest, UniquePrefixes) {
 
       // Add to our entry and check for termination condition
       nodeToPrefix_.withWLock([&](auto& nodeToPrefix) {
-        auto nodeName = *prefixDb.thisNodeName_ref();
+        auto nodeName = *prefixDb.thisNodeName();
         nodeToPrefix[nodeName] = prefix;
 
         LOG(INFO) << "Prefix: " << prefix.first

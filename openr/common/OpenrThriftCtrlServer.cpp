@@ -76,10 +76,10 @@ OpenrThriftCtrlServer::setUpThriftServer() {
   // Enable TOS reflection on the server socket
   server->setTosReflect(true);
   // Set the port and interface for OpenrCtrl thrift server
-  server->setPort(*config_->getThriftServerConfig().openr_ctrl_port_ref());
+  server->setPort(*config_->getThriftServerConfig().openr_ctrl_port());
   // Set workers join timeout.
   server->setWorkersJoinTimeout(std::chrono::seconds{
-      *config_->getThriftServerConfig().workers_join_timeout_ref()});
+      *config_->getThriftServerConfig().workers_join_timeout()});
 
   // Setup TLS
   if (config_->isSecureThriftServerEnabled()) {

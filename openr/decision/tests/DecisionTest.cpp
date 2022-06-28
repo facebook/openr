@@ -1067,7 +1067,7 @@ TEST(BGPRedistribution, BasicOperation) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly([&bgpPrefix1](auto i) { return i.dest_ref() == bgpPrefix1; }),
+          Truly([&bgpPrefix1](auto i) { return i.dest() == bgpPrefix1; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1186,8 +1186,7 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1206,8 +1205,7 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1227,8 +1225,7 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1247,8 +1244,7 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1266,8 +1262,7 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1400,8 +1395,7 @@ TEST(Decision, BestRouteSelection) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -1436,8 +1430,7 @@ TEST(Decision, BestRouteSelection) {
   EXPECT_THAT(
       *routeDb.unicastRoutes(),
       testing::Contains(AllOf(
-          Truly(
-              [&expectedAddr](auto i) { return i.dest_ref() == expectedAddr; }),
+          Truly([&expectedAddr](auto i) { return i.dest() == expectedAddr; }),
           ResultOf(
               getUnicastNextHops,
               testing::UnorderedElementsAre(
@@ -5339,8 +5332,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       mplsRoutes,
       testing::Contains(AllOf(
           Truly([&](auto route) {
-            return route.topLabel_ref() == 32011 or
-                route.topLabel_ref() == 32012;
+            return route.topLabel() == 32011 or route.topLabel() == 32012;
           }),
           ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh)))));
 
@@ -5366,7 +5358,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_THAT(
       mplsRoutes,
       testing::Contains(AllOf(
-          Truly([&](auto route) { return route.topLabel_ref() == 32012; }),
+          Truly([&](auto route) { return route.topLabel() == 32012; }),
           ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh)))));
 
   // test our consolidating logic, we first delete 32012 then update 32012
@@ -5394,7 +5386,7 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_THAT(
       mplsRoutes,
       testing::Contains(AllOf(
-          Truly([&](auto route) { return route.topLabel_ref() == 32012; }),
+          Truly([&](auto route) { return route.topLabel() == 32012; }),
           ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh, nh1)))));
 
   routeDb = dumpRouteDb({"1"})["1"];

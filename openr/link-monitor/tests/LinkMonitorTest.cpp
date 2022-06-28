@@ -2598,7 +2598,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     expectedAdjDbs.push(std::move(adjDb));
     {
       auto cp = nb3;
-      cp.area_ref() = planeArea_;
+      cp.area() = planeArea_;
       auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
       neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
@@ -2614,7 +2614,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", kTestingAreaName);
-    checkPeerDump(*adj_2_1.otherNodeName_ref(), peerSpec_2_1);
+    checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
   }
   // neighbor up on "plane" area
   {
@@ -2623,13 +2623,13 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     expectedAdjDbs.push(std::move(adjDb));
 
     auto cp = nb3;
-    cp.area_ref() = planeArea_;
+    cp.area() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
     neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", planeArea_);
     checkPeerDump(
-        *adj_3_1.otherNodeName_ref(), peerSpec_3_1, AreaId{planeArea_});
+        *adj_3_1.otherNodeName(), peerSpec_3_1, AreaId{planeArea_});
   }
   // verify neighbor down in "plane" area
   {
@@ -2637,7 +2637,7 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     expectedAdjDbs.push(std::move(adjDb));
 
     auto cp = nb3;
-    cp.area_ref() = planeArea_;
+    cp.area() = planeArea_;
     auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, cp);
     neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor down event!";
