@@ -156,14 +156,26 @@ createThriftPublication(
     const std::vector<std::string>& expiredKeys,
     const std::optional<std::vector<std::string>>& nodeIds,
     const std::optional<std::vector<std::string>>& keysToUpdate,
-    const std::string& area) {
+    const std::string& area,
+    const std::optional<int64_t> timestamp_ms) {
   thrift::Publication pub;
   pub.keyVals() = kv;
   pub.expiredKeys() = expiredKeys;
   pub.nodeIds().from_optional(nodeIds);
   pub.tobeUpdatedKeys().from_optional(keysToUpdate);
   pub.area() = area;
+  pub.timestamp_ms().from_optional(timestamp_ms);
   return pub;
+}
+
+bool
+matchPrefix(const std::string& key, const std::vector<std::string>& filters) {
+  for (auto prefix = filters.begin(); prefix != filters.end(); prefix++) {
+    if (key.find(*prefix) == 0) {
+      return true;
+    }
+  }
+  return false;
 }
 
 namespace memory {

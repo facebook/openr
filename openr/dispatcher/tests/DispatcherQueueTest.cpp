@@ -44,7 +44,7 @@ TEST(DispatcherQueueTest, EventReadWriteTest) {
   std::atomic<size_t> totalReads{0};
   std::atomic<size_t> replicatedReads{0};
   for (size_t i = 0; i < kNumReaders; ++i) {
-    manager.addTask([reader = q.getReader("prefix:"),
+    manager.addTask([reader = q.getReader({"prefix:"}),
                      &q,
                      &totalReads,
                      &replicatedReads,
@@ -220,10 +220,10 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
 
   auto& manager = folly::fibers::getFiberManager(evb);
 
-  auto reader1 = q.getReader("adj:.*");
-  auto reader2 = q.getReader("key1.*");
-  auto reader3 = q.getReader("key2.*");
-  auto reader4 = q.getReader("adj:5");
+  auto reader1 = q.getReader({"adj:3", "adj:2", "adj:4", "adj:10"});
+  auto reader2 = q.getReader({"key1"});
+  auto reader3 = q.getReader({"key2"});
+  auto reader4 = q.getReader({"adj:5"});
 
   // Serializes/deserializes thrift objects
   apache::thrift::CompactSerializer serializer_{};
@@ -253,7 +253,7 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
     auto maybePub = reader1.get();
 
     // no empty keyVals should be in the publication
-    // no keys that don't match the regex should be in publication
+    // no keys that don't match the prefix should be in publication
     // keyVals and expiredKeys should be non-empty
     auto expectedPublication = createThriftPublication(
         {{"adj:3", createAdjValue(serializer_, "3", 1, {adj32}, false, 3)},
@@ -313,7 +313,7 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
  */
 TEST(DispatcherQueueTest, OpenQueueTest) {
   dispatcher::DispatcherQueue q;
-  auto r1 = q.getReader(".*");
+  auto r1 = q.getReader();
   EXPECT_EQ(1, q.getNumReaders());
 
   q.close();
@@ -329,7 +329,7 @@ TEST(DispatcherQueueTest, OpenQueueTest) {
   // reopen queue and make sure reader can be added
   q.closed_ = false;
   {
-    auto r2 = q.getReader(".*");
+    auto r2 = q.getReader();
     EXPECT_EQ(1, q.getNumReaders());
   }
   q.close();

@@ -20,7 +20,7 @@ namespace dispatcher {
 /**
  * Dispatcher handles filtering keys coming from KvStore
  * and sends them to the other modules for processing.
- * The keys are filtered by a regex that is provided
+ * The keys are filtered by a prefix that is provided
  * by the reader.
  *
  * Dispatcher will now subscribe to KvStore and other modules will now become
@@ -48,10 +48,10 @@ class Dispatcher : public OpenrEventBase {
   /**
    * Get new reader stream of the Dispatcher object. Stream will get closed
    * automatically when reader is destructed. Initialize filter for each reader
-   * with the default filter regex
+   * with the default prefix
    */
   messaging::RQueue<KvStorePublication> getReader(
-      const std::string& filter = ".*");
+      const std::vector<std::string>& prefixes = {});
 
   /**
    * Number of replicated streams/readers

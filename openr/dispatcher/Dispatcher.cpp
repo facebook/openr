@@ -54,8 +54,8 @@ Dispatcher::stop() {
 }
 
 messaging::RQueue<KvStorePublication>
-Dispatcher::getReader(const std::string& filter) {
-  return kvStorePublicationsQueue_.getReader(filter);
+Dispatcher::getReader(const std::vector<std::string>& prefixes) {
+  return kvStorePublicationsQueue_.getReader(prefixes);
 }
 
 size_t

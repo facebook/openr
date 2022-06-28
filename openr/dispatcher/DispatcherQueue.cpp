@@ -10,6 +10,7 @@
 #include <folly/Overload.h>
 
 #include <openr/common/Types.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
@@ -25,7 +26,7 @@ bool
 DispatcherQueue::push(KvStorePublication&& value) {
   std::vector<std::shared_ptr<std::pair<
       std::shared_ptr<messaging::RWQueue<KvStorePublication>>,
-      std::unique_ptr<re2::RE2>>>>
+      std::unique_ptr<std::vector<std::string>>>>>
       readers;
   readers.reserve(0);
 
@@ -53,16 +54,12 @@ DispatcherQueue::push(KvStorePublication&& value) {
 
   // Replicate messages
   if (readers.size()) {
-    for (size_t i = 0; i < readers.size() - 1; i++) {
-      auto publication = KvStorePublication(value); // Intended copy
+    for (size_t i = 0; i < readers.size(); i++) {
+      auto publication = filterKeys(value, *(readers.at(i)->second));
 
-      if (filterKeys(publication, *(readers.at(i)->second))) {
-        readers.at(i)->first->push(std::move(publication));
+      if (publication) {
+        readers.at(i)->first->push(std::move(*publication));
       }
-    }
-    // Perfect forwarding for last reader
-    if (filterKeys(value, *(readers.back()->second))) {
-      readers.back()->first->push(std::forward<KvStorePublication>(value));
     }
   }
   ++writes_;
@@ -92,7 +89,7 @@ DispatcherQueue::getNumReaders() {
  * when reader is destructed.
  */
 messaging::RQueue<KvStorePublication>
-DispatcherQueue::getReader(const std::string& filter) {
+DispatcherQueue::getReader(const std::vector<std::string>& filters) {
   auto lockedReaders = readers_.wlock();
   if (closed_) {
     throw std::runtime_error("queue is closed");
@@ -101,10 +98,10 @@ DispatcherQueue::getReader(const std::string& filter) {
   lockedReaders->emplace_back(
       std::make_shared<std::pair<
           std::shared_ptr<messaging::RWQueue<KvStorePublication>>,
-          std::unique_ptr<re2::RE2>>>(
+          std::unique_ptr<std::vector<std::string>>>>(
           std::make_pair(
               std::make_shared<messaging::RWQueue<KvStorePublication>>(),
-              std::make_unique<re2::RE2>(filter))));
+              std::make_unique<std::vector<std::string>>(filters))));
 
   return messaging::RQueue<KvStorePublication>(lockedReaders->back()->first);
 }
@@ -146,44 +143,61 @@ DispatcherQueue::getReplicationStats() {
   return stats;
 }
 
-bool
-DispatcherQueue::filterKeys(KvStorePublication& publication, re2::RE2& filter) {
-  // avoid filtering for cases where regex is .*
-  if (filter.pattern() == ".*") {
-    return true;
+std::optional<KvStorePublication>
+DispatcherQueue::filterKeys(
+    KvStorePublication& publication, std::vector<std::string>& filters) {
+  // avoid filtering for cases where there are no prefixes
+  // an empty vector of prefixes means provide all keys to the reader
+  if (filters.empty()) {
+    return KvStorePublication(publication);
   }
 
   auto result = folly::variant_match(
       publication,
-      [&filter](thrift::Publication& pub) {
+      [&filters](
+          thrift::Publication& pub) -> std::optional<KvStorePublication> {
+        // create a empty thrift publication
+        auto filteredPublication = thrift::Publication();
+
+        auto& filteredKeyVals = *filteredPublication.keyVals();
+        auto& filteredExpiredKeys = *filteredPublication.expiredKeys();
+
         auto& keyVals = *pub.keyVals();
-        for (auto it = keyVals.begin(); it != keyVals.end();) {
-          if (not re2::RE2::FullMatch(it->first, filter) or
-              (not it->second.value())) {
-            // remove keys that don't match the regex
-            // or keys that don't have values
-            it = keyVals.erase(it);
-          } else {
-            ++it;
+        for (auto it = keyVals.begin(); it != keyVals.end(); ++it) {
+          if (matchPrefix(it->first, filters) and it->second.value()) {
+            // add keys that start with the any of the prefixes
+            // and keys that have values
+            filteredKeyVals.emplace(it->first, it->second);
           }
         }
 
         auto& expiredKeys = *pub.expiredKeys();
-
-        for (auto it = expiredKeys.begin(); it != expiredKeys.end();) {
-          // remove keys that don't match the regex
-          if (not re2::RE2::FullMatch(*it, filter)) {
-            it = expiredKeys.erase(it);
-          } else {
-            ++it;
+        for (auto it = expiredKeys.begin(); it != expiredKeys.end(); ++it) {
+          // remove keys that don't start with the any of the prefixes
+          if (matchPrefix(*it, filters)) {
+            filteredExpiredKeys.emplace_back(*it);
           }
         }
 
-        return not keyVals.empty() or not expiredKeys.empty();
+        // only return the KvStorePublication if filteredExpiredKeys or
+        // filteredKeyVals are non-empty
+        if (not filteredExpiredKeys.empty() or not filteredKeyVals.empty()) {
+          // set the all of the fields if publication should be replicated to
+          // reader
+          filteredPublication.nodeIds().copy_from(pub.nodeIds());
+          filteredPublication.tobeUpdatedKeys().copy_from(
+              pub.tobeUpdatedKeys());
+          filteredPublication.area().copy_from(pub.area());
+          filteredPublication.timestamp_ms().copy_from(pub.timestamp_ms());
+
+          return filteredPublication;
+        }
+        return std::nullopt;
       },
-      [](thrift::InitializationEvent&) {
+      [](thrift::InitializationEvent& event)
+          -> std::optional<KvStorePublication> {
         // no need to filter keys in InitializationEvent
-        return true;
+        return KvStorePublication(event);
       });
 
   return result;

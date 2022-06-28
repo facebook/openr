@@ -9,8 +9,6 @@
 
 #include <list>
 
-#include <re2/re2.h>
-
 #include <openr/common/Types.h>
 #include <openr/messaging/Queue.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -44,13 +42,15 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
 
   /**
    * Get new reader stream of this queue. Stream will get closed automatically
-   * when reader is destructed.
+   * when reader is destructed. If the vector of prefixes is empty that means
+   * there will be no filtering by prefix, and the reader will get every key
+   * from Dispatcher. A prefix will be the start of any key coming from KvStore.
    */
   messaging::RQueue<KvStorePublication> getReader(
-      const std::string& filter = ".*");
+      const std::vector<std::string>& prefixes = {});
 
   /**
-   * Number of replicated streams/readers with a given regex
+   * Number of replicated streams/readers
    */
   size_t getNumReaders() override;
 
@@ -71,13 +71,18 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
 
  private:
   /**
-   * Filter all keys for the publicaton that don't match the provided filter
+   * Filter all keys for the publicaton that don't start with any of the
+   * provided prefixes. Only return the publication if the keyVals is not empty
+   * or the expiredKeys field is not empty. Ex: prefixes = {adj}, keys =
+   * {adj:10, prefix:1, adj:3, prefix:adj:5, adjacent} -> returned keys to
+   * reader would be {adj:10, adj:3, adjacent}
    */
-  bool filterKeys(KvStorePublication& publication, re2::RE2& filter);
+  std::optional<KvStorePublication> filterKeys(
+      KvStorePublication& publication, std::vector<std::string>& prefixes);
 
   folly::Synchronized<std::list<std::shared_ptr<std::pair<
       std::shared_ptr<messaging::RWQueue<KvStorePublication>>,
-      std::unique_ptr<re2::RE2>>>>>
+      std::unique_ptr<std::vector<std::string>>>>>>
       readers_;
   bool closed_{false}; // Protected by above Synchronized lock
   size_t writes_{0};

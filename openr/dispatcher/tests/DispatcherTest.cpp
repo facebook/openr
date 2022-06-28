@@ -77,10 +77,10 @@ TEST_F(DispatcherTestFixture, ReadWriteTest) {
   EXPECT_EQ(kvStoreUpdatesQueue_.getNumReaders(), 1);
 
   // add readers to dispatcher
-  auto dispatcherReader1 = dispatcher_->getReader(".*");
-  auto dispatcherReader2 = dispatcher_->getReader("prefix:.*");
-  auto dispatcherReader3 = dispatcher_->getReader("adj:.*");
-  auto dispatcherReader4 = dispatcher_->getReader("key:");
+  auto dispatcherReader1 = dispatcher_->getReader();
+  auto dispatcherReader2 = dispatcher_->getReader({"prefix:"});
+  auto dispatcherReader3 = dispatcher_->getReader({"adj:"});
+  auto dispatcherReader4 = dispatcher_->getReader({"key:"});
 
   EXPECT_EQ(dispatcher_->getNumReaders(), 4);
 
@@ -214,7 +214,7 @@ TEST_F(DispatcherTestFixture, ReadWriteTest) {
  * queue has a size of zero after the attempted push to Dispatcher.
  */
 TEST_F(DispatcherTestFixture, EmptyPublicationTest) {
-  auto dispatcherReader = dispatcher_->getReader("adj:.*");
+  auto dispatcherReader = dispatcher_->getReader({"adj:"});
 
   const auto adj42 =
       createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 10, 100002);

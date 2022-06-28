@@ -98,7 +98,15 @@ thrift::Publication createThriftPublication(
     const std::vector<std::string>& expiredKeys,
     const std::optional<std::vector<std::string>>& nodeIds = std::nullopt,
     const std::optional<std::vector<std::string>>& keysToUpdate = std::nullopt,
-    const std::string& area = kTestingAreaName);
+    const std::string& area = kTestingAreaName,
+    const std::optional<int64_t> timestamp_ms = std::nullopt);
+
+/**
+ * Utility function to check if key from a thrift object matches one of the
+ * provided filter
+ */
+bool matchPrefix(
+    const std::string& key, const std::vector<std::string>& filters);
 
 /**
  * Return unix timestamp - Number of milliseconds elapsed since the epoch
