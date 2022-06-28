@@ -6,10 +6,10 @@
 
 
 import json
-from typing import Any, Callable, Dict, Optional, Set, Tuple
+import re
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import bunch
-
 import click
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
@@ -154,6 +154,13 @@ class OpenrCtrlCmd:
 
         return client.getInitializationEvents()
 
+    def fetch_running_config_thrift(self, client: Any) -> Any:
+        """
+        Fetch the current running config via thrift call
+        """
+
+        return client.getRunningConfigThrift()
+
     def validate_init_event(
         self,
         init_event_dict: Dict[kv_store_types.InitializationEvent, int],
@@ -209,3 +216,28 @@ class OpenrCtrlCmd:
                 is_pass = False
 
         return is_pass, err_msg_str, dur_str
+
+    def validate_regexes(
+        self, regexes: List[str], strings_to_check: List[str], expect_match: bool
+    ) -> bool:
+        """
+        If expect_match is true, checks if all the strings in strings_to_check match atleast one of the regexes.
+        Otherwise, checks if each string matches none of the regexes.
+        """
+
+        for string in strings_to_check:
+            matches_regex = False
+
+            for regex in regexes:
+                if re.search(regex, string):
+                    matches_regex = True
+
+            if (expect_match and (not matches_regex)) or (
+                (not expect_match) and matches_regex
+            ):
+                # None of the regexes match and the string must include one of them -> Fail
+                # The string matches atleast one regex, but is supposed to match none of them -> Fail
+
+                return False
+
+        return True

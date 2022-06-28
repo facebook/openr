@@ -6,8 +6,11 @@
 
 # pyre-ignore-all-errors
 
+from enum import Enum
+
 from openr.KvStore import ttypes as openr_kvstore_types
 from openr.Network.ttypes import BinaryAddress
+from openr.thrift.OpenrConfig.types import AreaConfig, OpenrConfig
 from openr.Types.ttypes import SparkNeighbor
 from openr.utils.consts import Consts
 
@@ -190,3 +193,164 @@ MOCKED_INIT_EVEVENTS_NO_PUBLISH = {
     openr_kvstore_types.InitializationEvent.AGENT_CONFIGURED: 4,
     openr_kvstore_types.InitializationEvent.LINK_DISCOVERED: 2401,
 }
+
+
+class AreaId(Enum):
+    ACCEPT_ALL = "accept-all-areaId"
+    ACCEPT_ALIENS = "accept-aliens-areaId"
+    ACCEPT_NODES = "accept-nodes-areaId"
+    ACCEPT_NONE = "accept-none-area-id"
+
+
+MOCKED_AREA_ACCEPT_ALL = AreaConfig(
+    area_id=AreaId.ACCEPT_ALL.value, neighbor_regexes=[".*"]
+)
+
+MOCKED_AREA_ACCEPT_NONE = AreaConfig(
+    area_id=AreaId.ACCEPT_NONE.value, neighbor_regexes=[]
+)
+
+MOCKED_AREA_ACCEPT_ALIENS = AreaConfig(
+    area_id=AreaId.ACCEPT_ALIENS.value, neighbor_regexes=["alien.*"]
+)
+
+MOCKED_AREA_ACCEPT_NODES = AreaConfig(
+    area_id=AreaId.ACCEPT_NODES.value, neighbor_regexes=["node.*"]
+)
+
+MOCKED_CONFIG_ACCEPT_NONE = OpenrConfig(areas=[MOCKED_AREA_ACCEPT_NONE])
+
+MOCKED_CONFIG_ACCEPT_ALL = OpenrConfig(areas=[MOCKED_AREA_ACCEPT_ALL])
+
+MOCKED_CONFIG_ACCEPT_ALIENS_NODES = OpenrConfig(
+    areas=[MOCKED_AREA_ACCEPT_ALIENS, MOCKED_AREA_ACCEPT_NODES]
+)
+
+MOCKED_CONFIG_DEFAULT = OpenrConfig(
+    areas=[AreaConfig(area_id=Consts.DEFAULT_AREA_ID, neighbor_regexes=[".*"])]
+)
+
+
+MOCKED_SPARK_NEIGHBORS_ALIENS = [
+    SparkNeighbor(
+        nodeName="alien2",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_NODES.value,
+        remoteIfName="if_2_1_1",
+        localIfName="if_1_2_1",
+        rttUs=1000,
+    ),
+    SparkNeighbor(
+        nodeName="alien5",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_ALIENS.value,
+        remoteIfName="if_5_1_1",
+        localIfName="if_1_5_1",
+        rttUs=1000,
+    ),
+]
+
+MOCKED_SPARK_NEIGHBORS_DIFF_IDS_ACCEPT_ALL = [
+    SparkNeighbor(
+        nodeName="alien2",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_ALL.value,
+        remoteIfName="if_2_1_1",
+        localIfName="if_1_2_1",
+        rttUs=1000,
+    ),
+    SparkNeighbor(
+        nodeName="node5",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_ALL.value,
+        remoteIfName="if_5_1_1",
+        localIfName="if_1_5_1",
+        rttUs=1000,
+    ),
+]
+
+MOCKED_SPARK_NEIGHBORS_DIFF_IDS = [
+    SparkNeighbor(
+        nodeName="node2",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_NODES.value,
+        remoteIfName="if_2_1_1",
+        localIfName="if_1_2_1",
+        rttUs=1000,
+    ),
+    SparkNeighbor(
+        nodeName="alien5",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_ALIENS.value,
+        remoteIfName="if_5_1_1",
+        localIfName="if_1_5_1",
+        rttUs=1000,
+    ),
+]
+
+MOCKED_SPARK_NEIGHBORS_NO_ACCEPT = [
+    SparkNeighbor(
+        nodeName="node2",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_NONE.value,
+        remoteIfName="if_2_1_1",
+        localIfName="if_1_2_1",
+        rttUs=1000,
+    ),
+    SparkNeighbor(
+        nodeName="alien5",
+        state="ESTABLISHED",
+        event="HANDSHAKE_RCVD",
+        transportAddressV6=BinaryAddress(
+            addr=b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00"
+        ),
+        transportAddressV4=BinaryAddress(addr=b"\x00\x00\x00\x00"),
+        openrCtrlThriftPort=Consts.CTRL_PORT,
+        area=AreaId.ACCEPT_NONE.value,
+        remoteIfName="if_5_1_1",
+        localIfName="if_1_5_1",
+        rttUs=1000,
+    ),
+]

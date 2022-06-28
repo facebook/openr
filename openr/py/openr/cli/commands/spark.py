@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import datetime
-from typing import List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import click
 
@@ -141,24 +141,27 @@ class ValidateCmd(SparkBaseCmd):
         # Get data
         neighbors = self.fetch_spark_neighbors(client)
         initialization_events = self.fetch_initialization_events(client)
+        openr_config = self.fetch_running_config_thrift(client)
 
-        # Validate spark neighbor details
-        state_is_pass, state_non_estab_neighbors = self._validate_neighbor_state(
-            neighbors
-        )
+        # Validate spark details
+        state_non_estab_neighbors = self._validate_neighbor_state(neighbors)
 
         init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
             kv_store_types.InitializationEvent.NEIGHBOR_DISCOVERED,
         )
 
+        (
+            regex_invalid_neighbors,
+            regex_dict,
+        ) = self._validate_neigbor_regex(neighbors, openr_config.areas)
+
         # Render
-        self._print_neighbor_info(
-            state_is_pass, state_non_estab_neighbors, len(neighbors), detail
-        )
+        self._print_neighbor_info(state_non_estab_neighbors, len(neighbors), detail)
         self._print_initialization_event_info(
             init_is_pass, init_err_msg_str, init_dur_str
         )
+        self._print_neighbor_regex_info(regex_invalid_neighbors, regex_dict, detail)
 
     def _pass_fail_str(self, is_pass: bool) -> str:
         """
@@ -172,10 +175,9 @@ class ValidateCmd(SparkBaseCmd):
 
     def _validate_neighbor_state(
         self, neighbors: List[openr_types.SparkNeighbor]
-    ) -> Tuple[bool, List[openr_types.SparkNeighbor]]:
+    ) -> List[openr_types.SparkNeighbor]:
         """
-        Returns True if all neighbors are in ESTABLISHED state. Returns False otherwise.
-        Also returns a list of neighbors not in ESTABLISHED state.
+        Returns a list of neighbors not in ESTABLISHED state.
         If there are none, the list returned is empty
         """
 
@@ -183,14 +185,40 @@ class ValidateCmd(SparkBaseCmd):
         non_estab_neighbors = [
             neighbor for neighbor in neighbors if neighbor.state != "ESTABLISHED"
         ]
-        num_non_estab = len(non_estab_neighbors)
-        is_pass = num_non_estab == 0
 
-        return is_pass, non_estab_neighbors
+        return non_estab_neighbors
+
+    def _validate_neigbor_regex(
+        self, neighbors: List[openr_types.SparkNeighbor], areas: List[Any]
+    ) -> Tuple[List[openr_types.SparkNeighbor], Dict[str, List[str]]]:
+        """
+        Returns a list of all neighbors which don't pass the check
+        and a dictionary of area_id : neighbor_regexes
+        """
+
+        invalid_neighbors = set()
+
+        area_neighbor_regex_dict = {}
+        for area in areas:
+            area_neighbor_regex_dict[area.area_id] = area.neighbor_regexes
+
+        for neighbor in neighbors:
+            is_valid_neighbor = self.validate_regexes(
+                area_neighbor_regex_dict[neighbor.area],
+                [neighbor.nodeName],
+                True,  # Expect atleat one regex match
+            )
+
+            if not is_valid_neighbor:
+                invalid_neighbors.add(neighbor)
+
+        return (
+            list(invalid_neighbors),
+            area_neighbor_regex_dict,
+        )
 
     def _print_neighbor_info(
         self,
-        is_pass: bool,
         non_estab_neighbors: List[openr_types.SparkNeighbor],
         total_neighbors: int,
         detail: bool,
@@ -204,7 +232,7 @@ class ValidateCmd(SparkBaseCmd):
         num_estab = total_neighbors - num_non_estab
 
         click.secho(
-            f"[Spark] Neighbor State Check: {self._pass_fail_str(is_pass)}",
+            f"[Spark] Neighbor State Check: {self._pass_fail_str(num_non_estab == 0)}",
             bold=True,
         )
 
@@ -216,7 +244,7 @@ class ValidateCmd(SparkBaseCmd):
         )
 
         # Print Neigbor info in horizontal table
-        if not (is_pass):
+        if not (num_non_estab == 0):
             click.echo("[Spark] Information about Neighbors in Other States")
             if detail:
                 self.print_spark_neighbors_detailed(non_estab_neighbors)
@@ -244,6 +272,28 @@ class ValidateCmd(SparkBaseCmd):
             click.echo(
                 f"Time elapsed for NEIGHBOR_DISCOVERED event since Open/R start: {dur_str}ms"
             )
+
+    def _print_neighbor_regex_info(
+        self,
+        invalid_neighbors: List[openr_types.SparkNeighbor],
+        regexes: Dict[str, List[str]],
+        detail: bool,
+    ) -> None:
+
+        click.secho(
+            f"[Spark] Neighbor Regex Matching Check: {self._pass_fail_str(len(invalid_neighbors) == 0)}",
+            bold=True,
+        )
+        click.echo(f"Neighbor Regexes: {regexes}")
+
+        if not (len(invalid_neighbors) == 0):
+            click.echo(
+                "[Spark] Information about neighbors not matching any neighbor regexes"
+            )
+            if detail:
+                self.print_spark_neighbors_detailed(invalid_neighbors)
+            else:
+                self.print_spark_neighbors(invalid_neighbors)
 
 
 class GracefulRestartCmd(OpenrCtrlCmd):
