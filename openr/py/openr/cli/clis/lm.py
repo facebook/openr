@@ -13,7 +13,7 @@ from openr.cli.utils import utils
 from openr.cli.utils.utils import parse_nodes
 
 
-class LMCli(object):
+class LMCli:
     def __init__(self):
 
         # [Show Cmd]
@@ -71,7 +71,7 @@ class LMCli(object):
         pass
 
 
-class LMLinksCli(object):
+class LMLinksCli:
     @click.command()
     @click.option(
         "--only-suppressed",
@@ -87,7 +87,7 @@ class LMLinksCli(object):
         lm.LMLinksCmd(cli_opts).run(only_suppressed, json)
 
 
-class LMAdjCli(object):
+class LMAdjCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.argument("areas", nargs=-1)
@@ -106,7 +106,7 @@ class LMAdjCli(object):
 """
 
 
-class SetNodeOverloadCli(object):
+class SetNodeOverloadCli:
     @click.command()
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
@@ -116,7 +116,7 @@ class SetNodeOverloadCli(object):
         lm.SetNodeOverloadCmd(cli_opts).run(yes)
 
 
-class UnsetNodeOverloadCli(object):
+class UnsetNodeOverloadCli:
     @click.command()
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
@@ -126,7 +126,7 @@ class UnsetNodeOverloadCli(object):
         lm.UnsetNodeOverloadCmd(cli_opts).run(yes)
 
 
-class SetLinkOverloadCli(object):
+class SetLinkOverloadCli:
     @click.command()
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
@@ -137,7 +137,7 @@ class SetLinkOverloadCli(object):
         lm.SetLinkOverloadCmd(cli_opts).run(interface, yes)
 
 
-class UnsetLinkOverloadCli(object):
+class UnsetLinkOverloadCli:
     @click.command()
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
@@ -155,7 +155,7 @@ class UnsetLinkOverloadCli(object):
 """
 
 
-class IncreaseNodeMetricCli(object):
+class IncreaseNodeMetricCli:
     @click.command()
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
@@ -173,7 +173,7 @@ class IncreaseNodeMetricCli(object):
         lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
-class ClearNodeMetricCli(object):
+class ClearNodeMetricCli:
     @click.command()
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
@@ -190,7 +190,7 @@ class ClearNodeMetricCli(object):
         lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
-class IncreaseLinkMetricCli(object):
+class IncreaseLinkMetricCli:
     @click.command()
     @click.argument("interface")
     @click.argument("metric")
@@ -209,7 +209,7 @@ class IncreaseLinkMetricCli(object):
         lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
-class ClearLinkMetricCli(object):
+class ClearLinkMetricCli:
     @click.command()
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
@@ -228,7 +228,7 @@ class ClearLinkMetricCli(object):
 
 
 # [TO BE DEPRECATED]
-class SetLinkMetricCli(object):
+class SetLinkMetricCli:
     @click.command()
     @click.argument("interface")
     @click.argument("metric")
@@ -247,7 +247,7 @@ class SetLinkMetricCli(object):
         ctx.exit(1)
 
 
-class UnsetLinkMetricCli(object):
+class UnsetLinkMetricCli:
     @click.command()
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
@@ -265,7 +265,7 @@ class UnsetLinkMetricCli(object):
         ctx.exit(1)
 
 
-class OverrideAdjMetricCli(object):
+class OverrideAdjMetricCli:
     @click.command()
     @click.argument("node")
     @click.argument("interface")
@@ -287,7 +287,7 @@ class OverrideAdjMetricCli(object):
         kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 
-class ClearAdjMetricOverrideCli(object):
+class ClearAdjMetricOverrideCli:
     @click.command()
     @click.argument("node")
     @click.argument("interface")
