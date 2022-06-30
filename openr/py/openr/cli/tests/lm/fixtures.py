@@ -83,5 +83,4 @@ lo           Up
 right0       Up
                                           fd00::2
                                           fe80::50ef:deff:fe4c:d4f6
-
 """

@@ -19,6 +19,7 @@ class LMCli:
         # [Show Cmd]
         self.lm.add_command(LMLinksCli().links, name="links")
         self.lm.add_command(LMAdjCli().adj, name="adj")
+        self.lm.add_command(LMValidateCli().validate, name="validate")
 
         # [Hard-Drain] set node overload
         self.lm.add_command(
@@ -69,6 +70,15 @@ class LMCli:
     def lm(ctx):  # noqa: B902
         """CLI tool to peek into Link Monitor module."""
         pass
+
+
+class LMValidateCli:
+    @click.command()
+    @click.pass_obj
+    def validate(cli_opts):
+        """Run checks on discovered interfaces"""
+
+        lm.LMValidateCmd(cli_opts).run()
 
 
 class LMLinksCli:

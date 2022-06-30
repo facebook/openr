@@ -12,7 +12,9 @@ from typing import Any, Dict, List, Optional, Sequence
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.thrift.KvStore import types as kv_store_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 
@@ -28,7 +30,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Hard-Drain] Node level overload"""
 
-        links = client.getInterfaces()
+        links = self.fetch_lm_links(client)
         host = links.thisNodeName
         print()
 
@@ -63,7 +65,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Hard-Drain] Link level overload"""
 
-        links = client.getInterfaces()
+        links = self.fetch_lm_links(client)
         print()
 
         if interface not in links.interfaceDetails:
@@ -96,7 +98,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Soft-Drain] Node level metric increment"""
 
-        links = client.getInterfaces()
+        links = self.fetch_lm_links(client)
         host = links.thisNodeName
 
         # ATTN:
@@ -135,7 +137,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Soft-Drain] Link level metric increment"""
 
-        links = client.getInterfaces()
+        links = self.fetch_lm_links(client)
         host = links.thisNodeName
 
         # ATTN:
@@ -196,7 +198,7 @@ class LMCmdBase(OpenrCtrlCmd):
         metric: int,
         yes: bool,
     ) -> None:
-        links = client.getInterfaces()
+        links = self.fetch_lm_links(client)
         print()
 
         if interface not in links.interfaceDetails:
@@ -228,6 +230,106 @@ class LMCmdBase(OpenrCtrlCmd):
             client.unsetInterfaceMetric(interface)
 
         print("Successfully {} for the interface.\n".format(action))
+
+    def interface_info_to_dict(self, interface_info):
+        def _update(interface_info_dict, interface_info):
+            interface_info_dict.update(
+                {
+                    "networks": [
+                        ipnetwork.sprint_prefix(prefix)
+                        for prefix in interface_info.networks
+                    ]
+                }
+            )
+
+        return utils.thrift_to_dict(interface_info, _update)
+
+    def interface_details_to_dict(self, interface_details):
+        def _update(interface_details_dict, interface_details):
+            interface_details_dict.update(
+                {"info": self.interface_info_to_dict(interface_details.info)}
+            )
+
+        return utils.thrift_to_dict(interface_details, _update)
+
+    def links_to_dict(self, links):
+        def _update(links_dict, links):
+            links_dict.update(
+                {
+                    "interfaceDetails": {
+                        k: self.interface_details_to_dict(v)
+                        for k, v in links.interfaceDetails.items()
+                    }
+                }
+            )
+            del links_dict["thisNodeName"]
+
+        return utils.thrift_to_dict(links, _update)
+
+    def print_links_json(self, links):
+        links_dict = {links.thisNodeName: self.links_to_dict(links)}
+        print(utils.json_dumps(links_dict))
+
+    @classmethod
+    def build_table_rows(cls, interfaces: Dict[str, object]) -> List[List[str]]:
+        rows = []
+        for (k, v) in sorted(interfaces.items()):
+            raw_row = cls.build_table_row(k, v)
+            addrs = raw_row[3]
+            raw_row[3] = ""
+            rows.append(raw_row)
+            for addrStr in addrs:
+                rows.append(["", "", "", addrStr])
+        return rows
+
+    @staticmethod
+    def build_table_row(k: str, v: object) -> List[Any]:
+        # pyre-fixme[16]: `object` has no attribute `metricOverride`.
+        metric_override = v.metricOverride if v.metricOverride else ""
+        # pyre-fixme[16]: `object` has no attribute `info`.
+        if v.info.isUp:
+            backoff_sec = int(
+                # pyre-fixme[16]: `object` has no attribute `linkFlapBackOffMs`.
+                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0)
+                / 1000
+            )
+            if backoff_sec == 0:
+                state = "Up"
+            elif not utils.is_color_output_supported():
+                state = backoff_sec
+            else:
+                state = click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
+        else:
+            state = (
+                click.style("Down", fg="red")
+                if utils.is_color_output_supported()
+                else "Down"
+            )
+        # pyre-fixme[16]: `object` has no attribute `isOverloaded`.
+        if v.isOverloaded:
+            metric_override = (
+                click.style("Overloaded", fg="red")
+                if utils.is_color_output_supported()
+                else "Overloaded"
+            )
+        addrs = []
+        for prefix in v.info.networks:
+            addrStr = ipnetwork.sprint_addr(prefix.prefixAddress.addr)
+            addrs.append(addrStr)
+        row = [k, state, metric_override, addrs]
+        return row
+
+    @classmethod
+    def print_links_table(cls, interfaces, caption=None):
+        """
+        @param interfaces: dict<interface-name, InterfaceDetail>
+        @param caption: Caption to show on table name
+        """
+
+        columns = ["Interface", "Status", "Metric Override", "Addresses"]
+        rows = cls.build_table_rows(interfaces)
+
+        print(printing.render_horizontal_table(rows, columns, caption))
 
 
 class SetNodeOverloadCmd(LMCmdBase):
@@ -412,7 +514,7 @@ class LMLinksCmd(LMCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        links = client.getInterfaces()
+        links = self.fetch_lm_links(client)
         if only_suppressed:
             links.interfaceDetails = {
                 k: v for k, v in links.interfaceDetails.items() if v.linkFlapBackOffMs
@@ -434,104 +536,97 @@ class LMLinksCmd(LMCmdBase):
                 )
                 self.print_links_table(links.interfaceDetails, caption)
 
-    def interface_info_to_dict(self, interface_info):
-        def _update(interface_info_dict, interface_info):
-            interface_info_dict.update(
-                {
-                    "networks": [
-                        ipnetwork.sprint_prefix(prefix)
-                        for prefix in interface_info.networks
-                    ]
-                }
-            )
 
-        return utils.thrift_to_dict(interface_info, _update)
+class LMValidateCmd(LMCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
 
-    def interface_details_to_dict(self, interface_details):
-        def _update(interface_details_dict, interface_details):
-            interface_details_dict.update(
-                {"info": self.interface_info_to_dict(interface_details.info)}
-            )
+        # Get Data
+        links = self.fetch_lm_links(client)
+        initialization_events = self.fetch_initialization_events(client)
+        openr_config = self.fetch_running_config_thrift(client)
 
-        return utils.thrift_to_dict(interface_details, _update)
+        # Run the validation checks
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+            initialization_events,
+            kv_store_types.InitializationEvent.LINK_DISCOVERED,
+        )
 
-    def links_to_dict(self, links):
-        def _update(links_dict, links):
-            links_dict.update(
-                {
-                    "interfaceDetails": {
-                        k: self.interface_details_to_dict(v)
-                        for k, v in links.interfaceDetails.items()
-                    }
-                }
-            )
-            del links_dict["thisNodeName"]
+        regex_invalid_interfaces = self._validate_interface_regex(
+            links, openr_config.areas
+        )
 
-        return utils.thrift_to_dict(links, _update)
+        # Render Validation Results
+        self.print_initialization_event_check(
+            init_is_pass,
+            init_err_msg_str,
+            init_dur_str,
+            kv_store_types_py3.InitializationEvent.LINK_DISCOVERED,
+            "link monitor",
+        )
+        self._print_interface_validation_info(regex_invalid_interfaces)
 
-    def print_links_json(self, links):
-
-        links_dict = {links.thisNodeName: self.links_to_dict(links)}
-        print(utils.json_dumps(links_dict))
-
-    @classmethod
-    def build_table_rows(cls, interfaces: Dict[str, object]) -> List[List[str]]:
-        rows = []
-        for (k, v) in sorted(interfaces.items()):
-            raw_row = cls.build_table_row(k, v)
-            addrs = raw_row[3]
-            raw_row[3] = ""
-            rows.append(raw_row)
-            for addrStr in addrs:
-                rows.append(["", "", "", addrStr])
-        return rows
-
-    @staticmethod
-    def build_table_row(k: str, v: object) -> List[Any]:
-        # pyre-fixme[16]: `object` has no attribute `metricOverride`.
-        metric_override = v.metricOverride if v.metricOverride else ""
-        # pyre-fixme[16]: `object` has no attribute `info`.
-        if v.info.isUp:
-            backoff_sec = int(
-                # pyre-fixme[16]: `object` has no attribute `linkFlapBackOffMs`.
-                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0)
-                / 1000
-            )
-            if backoff_sec == 0:
-                state = "Up"
-            elif not utils.is_color_output_supported():
-                state = backoff_sec
-            else:
-                state = click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
-        else:
-            state = (
-                click.style("Down", fg="red")
-                if utils.is_color_output_supported()
-                else "Down"
-            )
-        # pyre-fixme[16]: `object` has no attribute `isOverloaded`.
-        if v.isOverloaded:
-            metric_override = (
-                click.style("Overloaded", fg="red")
-                if utils.is_color_output_supported()
-                else "Overloaded"
-            )
-        addrs = []
-        for prefix in v.info.networks:
-            addrStr = ipnetwork.sprint_addr(prefix.prefixAddress.addr)
-            addrs.append(addrStr)
-        row = [k, state, metric_override, addrs]
-        return row
-
-    @classmethod
-    def print_links_table(cls, interfaces, caption=None):
+    def _validate_interface_regex(
+        self, links: openr_types.DumpLinksReply, areas: List[Any]
+    ) -> Dict[str, Any]:
         """
-        @param interfaces: dict<interface-name, InterfaceDetail>
-        @param caption: Caption to show on table name
+        Checks if each interface passes the regexes of atleast one area
+        Returns a dictionary interface : interfaceDetails of the invalid interfaces
         """
 
-        columns = ["Interface", "Status", "Metric Override", "Addresses"]
-        rows = cls.build_table_rows(interfaces)
+        interfaces = list(links.interfaceDetails.keys())
+        invalid_interfaces = set()
 
-        print(printing.render_horizontal_table(rows, columns, caption))
-        print()
+        for interface in interfaces:
+            # The interface must match the regexes of atleast one area to pass
+            passes_regex_check = False
+
+            for area in areas:
+                incl_regexes = area.include_interface_regexes
+                excl_regexes = area.exclude_interface_regexes
+                redistr_regexes = area.redistribute_interface_regexes
+
+                passes_incl_regexes = self.validate_regexes(
+                    incl_regexes, [interface], True  # expect at least one regex match
+                )
+                passes_excl_regexes = self.validate_regexes(
+                    excl_regexes, [interface], False  # expect no regex match
+                )
+                passes_redistr_regexes = self.validate_regexes(
+                    redistr_regexes, [interface], True
+                )
+
+                if (
+                    passes_incl_regexes or passes_redistr_regexes
+                ) and passes_excl_regexes:
+                    passes_regex_check = True
+                    break
+
+            if not passes_regex_check:
+                invalid_interfaces.add(interface)
+
+        invalid_interface_dict = {
+            interface: links.interfaceDetails[interface]
+            for interface in invalid_interfaces
+        }
+
+        return invalid_interface_dict
+
+    def _print_interface_validation_info(
+        self,
+        invalid_interfaces: Dict[str, Any],
+    ) -> None:
+
+        click.echo(
+            self.validation_result_str(
+                "link monitor", "Interface Regex Check", (len(invalid_interfaces) == 0)
+            )
+        )
+
+        if len(invalid_interfaces) > 0:
+            click.echo("Information about interfaces failing the regex check")
+            self.print_links_table(invalid_interfaces)

@@ -5,7 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import datetime
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Tuple
 
 import click
 
@@ -13,6 +13,7 @@ from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
+from openr.thrift.KvStore import types as kv_store_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
 
@@ -158,20 +159,14 @@ class ValidateCmd(SparkBaseCmd):
 
         # Render
         self._print_neighbor_info(state_non_estab_neighbors, len(neighbors), detail)
-        self._print_initialization_event_info(
-            init_is_pass, init_err_msg_str, init_dur_str
+        self.print_initialization_event_check(
+            init_is_pass,
+            init_err_msg_str,
+            init_dur_str,
+            kv_store_types_py3.InitializationEvent.NEIGHBOR_DISCOVERED,
+            "spark",
         )
         self._print_neighbor_regex_info(regex_invalid_neighbors, regex_dict, detail)
-
-    def _pass_fail_str(self, is_pass: bool) -> str:
-        """
-        Returns a formatted pass or fail message
-        """
-
-        if is_pass:
-            return click.style("PASS", bg="green", fg="black")
-        else:
-            return click.style("FAIL", bg="red", fg="black")
 
     def _validate_neighbor_state(
         self, neighbors: List[openr_types.SparkNeighbor]
@@ -231,9 +226,10 @@ class ValidateCmd(SparkBaseCmd):
         num_non_estab = len(non_estab_neighbors)
         num_estab = total_neighbors - num_non_estab
 
-        click.secho(
-            f"[Spark] Neighbor State Check: {self._pass_fail_str(num_non_estab == 0)}",
-            bold=True,
+        click.echo(
+            self.validation_result_str(
+                "spark", "neighbor state check", (num_non_estab == 0)
+            )
         )
 
         # Print Neigbor stats
@@ -251,28 +247,6 @@ class ValidateCmd(SparkBaseCmd):
             else:
                 self.print_spark_neighbors(non_estab_neighbors)
 
-    def _print_initialization_event_info(
-        self, is_pass: bool, err_msg_str: Optional[str], dur_str: Optional[str]
-    ) -> None:
-        """
-        Prints whether or not the initialization event passes or fails
-        If it fails, outputs an error message
-        If NEIGHBOR_DISCOVERED is populated, outputs the time elapsed
-        """
-
-        click.secho(
-            f"[Spark] Initialization Event Check: {self._pass_fail_str(is_pass)}",
-            bold=True,
-        )
-
-        if err_msg_str:
-            click.echo(err_msg_str)
-
-        if dur_str:
-            click.echo(
-                f"Time elapsed for NEIGHBOR_DISCOVERED event since Open/R start: {dur_str}ms"
-            )
-
     def _print_neighbor_regex_info(
         self,
         invalid_neighbors: List[openr_types.SparkNeighbor],
@@ -280,9 +254,10 @@ class ValidateCmd(SparkBaseCmd):
         detail: bool,
     ) -> None:
 
-        click.secho(
-            f"[Spark] Neighbor Regex Matching Check: {self._pass_fail_str(len(invalid_neighbors) == 0)}",
-            bold=True,
+        click.echo(
+            self.validation_result_str(
+                "spark", "neighbor regex matching check", (len(invalid_neighbors) == 0)
+            )
         )
         click.echo(f"Neighbor Regexes: {regexes}")
 

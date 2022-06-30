@@ -161,6 +161,12 @@ class OpenrCtrlCmd:
 
         return client.getRunningConfigThrift()
 
+    def fetch_lm_links(self, client: Any) -> Any:
+        """
+        Fetch a list of known interfaces via thrift call
+        """
+        return client.getInterfaces()
+
     def validate_init_event(
         self,
         init_event_dict: Dict[kv_store_types.InitializationEvent, int],
@@ -216,6 +222,56 @@ class OpenrCtrlCmd:
                 is_pass = False
 
         return is_pass, err_msg_str, dur_str
+
+    def pass_fail_str(self, is_pass: bool) -> str:
+        """
+        Returns a formatted pass or fail message
+        """
+
+        if is_pass:
+            return click.style("PASS", bg="green", fg="black")
+        else:
+            return click.style("FAIL", bg="red", fg="black")
+
+    def validation_result_str(
+        self, module: str, check_title: str, is_pass: bool
+    ) -> str:
+        """
+        Returns the label for a check as a stylized string
+        Ex: [Spark] Regex Validation: PASS
+        """
+
+        result_str = click.style(
+            f"[{module.title()}] {check_title.title()}: {self.pass_fail_str(is_pass)}",
+            bold=True,
+        )
+        return result_str
+
+    def print_initialization_event_check(
+        self,
+        is_pass: bool,
+        err_msg_str: Optional[str],
+        dur_str: Optional[str],
+        init_event: kv_store_types_py3.InitializationEvent,
+        module: str,
+    ) -> None:
+        """
+        Prints whether or not the initialization event passes or fails
+        If it fails, outputs an error message
+        If init_event is populated, outputs the time elapsed
+        """
+
+        click.echo(
+            self.validation_result_str(module, "initialization event check", is_pass)
+        )
+
+        if err_msg_str:
+            click.echo(err_msg_str)
+
+        if dur_str:
+            click.echo(
+                f"Time elapsed for event, {init_event.name}, since Open/R started: {dur_str}ms"
+            )
 
     def validate_regexes(
         self, regexes: List[str], strings_to_check: List[str], expect_match: bool
