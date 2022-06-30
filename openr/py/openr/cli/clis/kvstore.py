@@ -32,6 +32,7 @@ class KvStoreCli(object):
         self.kvstore.add_command(
             StreamSummaryCli().stream_summary, name="stream-summary"
         )
+        self.kvstore.add_command(ValidateCli().validate)
 
     @click.group()
     @breeze_option("--area", type=str, help="area identifier")
@@ -39,6 +40,15 @@ class KvStoreCli(object):
     def kvstore(ctx, area):  # noqa: B902
         """CLI tool to peek into KvStore module."""
         pass
+
+
+class ValidateCli(object):
+    @click.command()
+    @click.pass_obj
+    def validate(cli_opts):
+        """Run validation checks"""
+
+        kvstore.ValidateCmd(cli_opts).run()
 
 
 class PrefixesCli(object):

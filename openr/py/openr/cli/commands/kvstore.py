@@ -17,9 +17,20 @@ import time
 from builtins import str
 from collections.abc import Iterable
 from itertools import combinations
-from typing import AbstractSet, Any, Callable, Dict, List, Optional, Set
+from typing import (
+    AbstractSet,
+    Any,
+    Callable,
+    Dict,
+    Iterable as iterable,
+    List,
+    Optional,
+    Set,
+    Tuple,
+)
 
 import bunch
+import click
 import hexdump
 import prettytable
 import pytz
@@ -1333,3 +1344,75 @@ class StreamSummaryCmd(KvStoreCmdBase):
 
         # Print the table body
         print(table)
+
+
+class ValidateCmd(KvStoreCmdBase):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
+
+        # Get data
+        openr_config = self.fetch_running_config_thrift(client)
+        keyDumpParams = self.buildKvStoreKeyDumpParams(
+            originator_ids={openr_config.node_name}
+        )
+        publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+
+        # Run validation checks
+        (
+            is_adj_advertised,
+            is_prefix_advertised,
+        ) = self._validate_local_key_advertisement(publication.keyVals.keys())
+
+        # Render validation results
+        self._print_local_node_advertising_check(
+            is_adj_advertised, is_prefix_advertised
+        )
+
+    def _validate_local_key_advertisement(
+        self, keys: iterable[str]
+    ) -> Tuple[bool, bool]:
+        """
+        Checks if the local node is advertising atleast one adjacency key and one prefix key
+        to the kvstore. Returns a boolean for each
+        """
+
+        is_adj_advertised = False
+        is_prefix_advertised = False
+        for key in keys:
+            if is_prefix_advertised and is_adj_advertised:
+                break
+            if re.match(Consts.PREFIX_DB_MARKER, key):
+                is_prefix_advertised = True
+            if re.match(Consts.ADJ_DB_MARKER, key):
+                is_adj_advertised = True
+
+        return is_adj_advertised, is_prefix_advertised
+
+    def _print_local_node_advertising_check(
+        self, is_advertising_adj: bool, is_advertising_prefix: bool
+    ) -> None:
+        """
+        Prints the result of the validation check and the which keys are not being advertised
+        if the validation check fails
+        """
+
+        is_pass = is_advertising_adj and is_advertising_prefix
+        click.echo(
+            self.validation_result_str(
+                "kvStore",
+                "local node advertising atleast one adjaceny and one prefix key check",
+                is_pass,
+            )
+        )
+
+        if not is_pass:
+            click.echo(
+                f"Adjacency key originaton: {self.pass_fail_str(is_advertising_adj)}"
+            )
+            click.echo(
+                f"Prefix key origination: {self.pass_fail_str(is_advertising_prefix)}"
+            )
