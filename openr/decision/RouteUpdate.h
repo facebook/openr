@@ -145,7 +145,7 @@ struct DecisionRouteUpdate {
   void
   processFibUpdateError(thrift::PlatformFibUpdateError const& fibError) {
     // Delete unicast routes that failed to program. Also mark them as deleted
-    for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes_ref()) {
+    for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes()) {
       for (auto& prefix : prefixes) {
         auto network = toIPNetwork(prefix);
         unicastRoutesToUpdate.erase(network);
@@ -154,7 +154,7 @@ struct DecisionRouteUpdate {
     }
 
     // Delete mpls routes that failed to program. Also mark them as deleted
-    for (auto& label : *fibError.failedAddUpdateMplsLabels_ref()) {
+    for (auto& label : *fibError.failedAddUpdateMplsLabels()) {
       mplsRoutesToUpdate.erase(label);
       mplsRoutesToDelete.emplace_back(label);
     }
