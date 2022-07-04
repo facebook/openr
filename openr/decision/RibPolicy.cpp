@@ -24,15 +24,14 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
   // Verify that at-least one action must be specified
   if (not stmt.action()->set_weight()) {
     thrift::OpenrError error;
-    *error.message_ref() =
-        "Missing policy_statement.action.set_weight attribute";
+    *error.message() = "Missing policy_statement.action.set_weight attribute";
     throw error;
   }
 
   // Verify that at-least one match criteria must be specified
   if (not stmt.matcher()->prefixes() && not stmt.matcher()->tags()) {
     thrift::OpenrError error;
-    *error.message_ref() =
+    *error.message() =
         "Missing policy_statement.matcher.prefixes or policy_statement.matcher.tags attribute";
     throw error;
   }
@@ -171,7 +170,7 @@ RibPolicy::RibPolicy(thrift::RibPolicy const& policy)
           std::chrono::seconds(*policy.ttl_secs())) {
   if (policy.statements()->empty()) {
     thrift::OpenrError error;
-    *error.message_ref() = "Missing policy.statements attribute";
+    *error.message() = "Missing policy.statements attribute";
     throw error;
   }
 

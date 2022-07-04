@@ -388,7 +388,7 @@ Decision::clearRibPolicy() {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
   if (not config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
-    error.message_ref() = "RibPolicy feature is not enabled";
+    error.message() = "RibPolicy feature is not enabled";
     p.setException(error);
     return std::move(sf);
   }
@@ -396,7 +396,7 @@ Decision::clearRibPolicy() {
   runInEventBaseThread([this, p = std::move(p)]() mutable {
     if (not ribPolicy_) {
       thrift::OpenrError error;
-      error.message_ref() = "No RIB policy configured";
+      error.message() = "No RIB policy configured";
       p.setException(error);
     } else {
       ribPolicy_ = nullptr;
@@ -415,7 +415,7 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
   if (not config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
-    error.message_ref() = "RibPolicy feature is not enabled";
+    error.message() = "RibPolicy feature is not enabled";
     p.setException(error);
     return std::move(sf);
   }
@@ -463,7 +463,7 @@ Decision::getRibPolicy() {
   auto [p, sf] = folly::makePromiseContract<thrift::RibPolicy>();
   if (not config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
-    error.message_ref() = "RibPolicy feature is not enabled";
+    error.message() = "RibPolicy feature is not enabled";
     p.setException(error);
     return std::move(sf);
   }
@@ -473,7 +473,7 @@ Decision::getRibPolicy() {
       p.setValue(ribPolicy_->toThrift());
     } else {
       thrift::OpenrError e;
-      e.message_ref() = "RibPolicy is not configured";
+      e.message() = "RibPolicy is not configured";
       p.setException(e);
     }
   });
