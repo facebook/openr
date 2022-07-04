@@ -73,8 +73,7 @@ MockNetlinkFibHandler::addUnicastRoutes(
   // Throw FibUpdateError if applicable
   if (failedPrefixes.size()) {
     thrift::PlatformFibUpdateError error;
-    error.vrf2failedAddUpdatePrefixes_ref()->emplace(
-        0, std::move(failedPrefixes));
+    error.vrf2failedAddUpdatePrefixes()->emplace(0, std::move(failedPrefixes));
     throw error;
   }
 }
@@ -148,9 +147,9 @@ MockNetlinkFibHandler::syncFib(
   // Throw FibUpdateError if applicable
   if (failedPrefixesToAdd.size() or failedPrefixesToDelete.size()) {
     thrift::PlatformFibUpdateError error;
-    error.vrf2failedAddUpdatePrefixes_ref()->emplace(
+    error.vrf2failedAddUpdatePrefixes()->emplace(
         0, std::move(failedPrefixesToAdd));
-    error.vrf2failedDeletePrefixes_ref()->emplace(
+    error.vrf2failedDeletePrefixes()->emplace(
         0, std::move(failedPrefixesToDelete));
     throw error;
   }
@@ -183,7 +182,7 @@ MockNetlinkFibHandler::addMplsRoutes(
   // Throw FibUpdateError if applicable
   if (failedLabels.size()) {
     thrift::PlatformFibUpdateError error;
-    error.failedAddUpdateMplsLabels_ref() = std::move(failedLabels);
+    error.failedAddUpdateMplsLabels() = std::move(failedLabels);
     throw error;
   }
 }
@@ -241,8 +240,8 @@ MockNetlinkFibHandler::syncMplsFib(
   // Throw FibUpdateError if applicable
   if (failedLabelsToAdd.size() or failedLabelsToDelete.size()) {
     thrift::PlatformFibUpdateError error;
-    error.failedAddUpdateMplsLabels_ref() = std::move(failedLabelsToAdd);
-    error.failedDeleteMplsLabels_ref() = std::move(failedLabelsToDelete);
+    error.failedAddUpdateMplsLabels() = std::move(failedLabelsToAdd);
+    error.failedDeleteMplsLabels() = std::move(failedLabelsToDelete);
     throw error;
   }
 }
