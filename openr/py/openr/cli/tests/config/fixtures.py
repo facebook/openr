@@ -81,7 +81,6 @@ OPENR_CONFIG_STR = r"""
   "prefer_openr_originated_routes": false,
   "prefix_forwarding_algorithm": 0,
   "prefix_forwarding_type": 0,
-  "prefix_hold_time_s": 20,
   "route_delete_delay_ms": 1000,
   "spark_config": {
     "fastinit_hello_time_ms": 500,

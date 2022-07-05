@@ -810,16 +810,6 @@ struct OpenrConfig {
   51: bool enable_best_route_selection = 0;
 
   /**
-   * [TO BE DEPRECATED]
-   * Maximum hold time for synchronizing the prefixes in KvStore after service
-   * starts up. It is expected that all the sources inform PrefixManager about
-   * the routes to be advertised within the hold time window. PrefixManager
-   * can choose to synchronize routes as soon as it receives END marker from
-   * all the expected sources.
-   */
-  52: i32 prefix_hold_time_s = 15;
-
-  /**
    * Delay in seconds for MPLS route deletes. The delay would allow the remote
    * nodes to converge to new prepend-label associated with route advertisement.
    * This will avoid packet drops because of label route lookup.
@@ -877,12 +867,6 @@ struct OpenrConfig {
    * ATTN: All of the temp config knobs serving for gradual rollout purpose use
    * id range of 200 - 300
    */
-
-  /**
-   * Flag to indicate if signal based OpenR initialization process is enabled.
-   * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
-   */
-  200: bool enable_initialization_process = false;
 
   /**
    * Flag to indicate if adjacencyDb publication after prefixDb sync is enabled.
