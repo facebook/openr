@@ -7,9 +7,6 @@
 
 #include <openr/dispatcher/Dispatcher.h>
 
-#include <openr/dispatcher/DispatcherQueue.h>
-#include <vector>
-
 #include <folly/fibers/FiberManager.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/init/Init.h>
@@ -22,7 +19,10 @@
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
+#include <openr/dispatcher/DispatcherQueue.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
+#include <openr/kvstore/KvStoreUtil.h>
 #include <openr/messaging/Queue.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/tests/utils/Utils.h>
@@ -233,6 +233,218 @@ TEST_F(DispatcherTestFixture, EmptyPublicationTest) {
   // nothing should be pushed to the reader
   manager.addTask(
       [&dispatcherReader]() mutable { EXPECT_EQ(dispatcherReader.size(), 0); });
+
+  evb.loop();
+}
+
+class DispatcherKnobTestFixture : public ::testing::Test {
+ public:
+  void
+  SetUp() override {
+    config_ = std::make_shared<Config>(createConfig());
+    createKvStore();
+
+    if (config_->isKvStoreDispatcherEnabled()) {
+      createDispatcher(kvStoreWrapper_->getReader());
+    }
+  }
+
+  void
+  TearDown() override {
+    kvStoreWrapper_->closeQueue();
+    // ensure that Dispatcher can shutdown
+    stopDispatcher();
+  }
+
+  virtual thrift::OpenrConfig
+  createConfig() {
+    // create basic openr config
+    auto tConfig = getBasicOpenrConfig();
+
+    // override KvStore Dispatcher knob
+    tConfig.enable_kvstore_dispatcher() = true;
+
+    return tConfig;
+  }
+
+  void
+  createKvStore() {
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            config_->getAreaIds(), /* areaId collection */
+            config_->toThriftKvStoreConfig() /* thrift::KvStoreConfig */);
+    kvStoreWrapper_->run();
+  }
+
+  void
+  createDispatcher(messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue) {
+    dispatcher_ = std::make_shared<dispatcher::Dispatcher>(kvStoreUpdatesQueue);
+
+    dispatcherThread_ = std::make_unique<std::thread>([this]() {
+      LOG(INFO) << "Dispatcher thread starting";
+      dispatcher_->run();
+      LOG(INFO) << "Dispatcher thread finished";
+    });
+
+    dispatcher_->waitUntilRunning();
+  }
+
+  void
+  stopDispatcher() {
+    dispatcher_->stop();
+    LOG(INFO) << "Stopping the Dispatcher thread";
+    dispatcherThread_->join();
+    LOG(INFO) << "Dispatcher thread got stopped";
+  }
+
+  std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
+      kvStoreWrapper_;
+
+  std::shared_ptr<Config> config_;
+  // Serializes/deserializes thrift objects
+  apache::thrift::CompactSerializer serializer_{};
+
+  // Dispatcher owned by this wrapper
+  std::shared_ptr<dispatcher::Dispatcher> dispatcher_{nullptr};
+  // Thread in which Dispatcher will be running
+  std::unique_ptr<std::thread> dispatcherThread_{nullptr};
+};
+
+/*
+ * helper function to check if two publications are equal without checking
+ * equality of hash and nodeIds
+ */
+bool
+equalPublication(thrift::Publication&& pub1, thrift::Publication&& pub2) {
+  if ((*pub1.keyVals()).size() != (*pub2.keyVals()).size()) {
+    return false;
+  }
+
+  // make ordered copies of KeyVals
+  std::map<std::string, thrift::Value> pub1KeyVals(
+      (*pub1.keyVals()).begin(), (*pub1.keyVals()).end());
+  std::map<std::string, thrift::Value> pub2KeyVals(
+      (*pub2.keyVals()).begin(), (*pub2.keyVals()).end());
+
+  for (auto it1 = pub1KeyVals.begin(), it2 = pub2KeyVals.begin();
+       it1 != pub1KeyVals.end() and it2 != pub2KeyVals.end();
+       ++it1, ++it2) {
+    // check the key matches
+    if (it1->first != it2->first) {
+      return false;
+    }
+
+    if (compareValues(it1->second, it2->second) != ComparisonResult::TIED) {
+      return false;
+    }
+  }
+
+  if (pub1.area() != pub2.area()) {
+    return false;
+  }
+
+  if (pub1.timestamp_ms() != pub2.timestamp_ms()) {
+    return false;
+  }
+
+  std::sort((*pub1.expiredKeys()).begin(), (*pub1.expiredKeys()).end());
+  std::sort((*pub2.expiredKeys()).begin(), (*pub2.expiredKeys()).end());
+
+  if (pub1.expiredKeys() != pub2.expiredKeys()) {
+    return false;
+  }
+
+  if (pub1.tobeUpdatedKeys().has_value() and
+      pub2.tobeUpdatedKeys().has_value()) {
+    std::sort(
+        (*pub1.tobeUpdatedKeys()).begin(), (*pub1.tobeUpdatedKeys()).end());
+    std::sort(
+        (*pub2.tobeUpdatedKeys()).begin(), (*pub2.tobeUpdatedKeys()).end());
+  }
+
+  if (pub1.tobeUpdatedKeys() != pub2.tobeUpdatedKeys()) {
+    return false;
+  }
+
+  return true;
+}
+
+/*
+ * Test will check that Dispatcher knob can successfully be switched on and will
+ * ensure that Dispatcher is running. A update to KvStore will be made and the
+ * test will verify that subscribers of Dispatcher can receive the update.
+ */
+TEST_F(DispatcherKnobTestFixture, DataPathTest) {
+  EXPECT_TRUE(dispatcher_->isRunning());
+
+  auto subscriber1 = dispatcher_->getReader({"adj:"});
+  auto subscriber2 = dispatcher_->getReader({});
+
+  const auto addr1 = toIpPrefix("::ffff:10.1.1.1/128");
+  const auto addr2 = toIpPrefix("::ffff:10.2.2.2/128");
+
+  const auto adj12 =
+      createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
+  const auto adj21 =
+      createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 100001);
+
+  std::vector<std::pair<std::string, thrift::Value>> keyVals = {
+      createPrefixKeyValue("1", 1, addr1),
+      createPrefixKeyValue("2", 1, addr2),
+      {"adj:1", createAdjValue(serializer_, "1", 1, {adj12}, false, 1)},
+      {"adj:2", createAdjValue(serializer_, "2", 1, {adj21}, false, 2)}
+
+  };
+
+  // check to ensure keys were set properly
+  EXPECT_TRUE(kvStoreWrapper_->setKeys(kTestingAreaName, keyVals));
+
+  folly::EventBase evb;
+  auto& manager = folly::fibers::getFiberManager(evb);
+
+  // Expected publication received by subscriber 1
+  auto expectedPublication1 = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer_, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer_, "2", 1, {adj21}, false, 2)}},
+      {},
+      {},
+      {});
+
+  // Expected publication received by subscriber 2
+  auto expectedPublication2 = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer_, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer_, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {},
+      {},
+      {});
+
+  manager.addTask([&subscriber1, expectedPublication1]() mutable {
+    auto maybePub = subscriber1.get();
+    EXPECT_TRUE(maybePub.hasValue());
+
+    folly::variant_match(
+        std::move(maybePub).value(),
+        [&expectedPublication1](thrift::Publication&& pub) {
+          EXPECT_TRUE(equalPublication(
+              std::move(pub), std::move(expectedPublication1)));
+        },
+        [](thrift::InitializationEvent&&) {});
+  });
+
+  manager.addTask([&subscriber2, expectedPublication2]() mutable {
+    auto maybePub = subscriber2.get();
+    EXPECT_TRUE(maybePub.hasValue());
+
+    folly::variant_match(
+        std::move(maybePub).value(),
+        [&expectedPublication2](thrift::Publication&& pub) {
+          EXPECT_TRUE(equalPublication(
+              std::move(pub), std::move(expectedPublication2)));
+        },
+        [](thrift::InitializationEvent&&) {});
+  });
 
   evb.loop();
 }

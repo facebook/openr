@@ -296,6 +296,14 @@ class Config {
     return *config_.prefix_allocation_config();
   }
 
+  //
+  // dispatcher
+  //
+  bool
+  isKvStoreDispatcherEnabled() const {
+    return config_.enable_kvstore_dispatcher().value();
+  }
+
   PrefixAllocationParams
   getPrefixAllocationParams() const {
     CHECK(isPrefixAllocationEnabled());
