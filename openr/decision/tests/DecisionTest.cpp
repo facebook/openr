@@ -5005,25 +5005,6 @@ class DecisionTestFixture : public ::testing::Test {
     staticRouteUpdatesQueue.push(routeUpdate);
   }
 
-  // helper function
-  thrift::Value
-  createAdjValue(
-      const string& node,
-      int64_t version,
-      const vector<thrift::Adjacency>& adjs,
-      bool overloaded = false,
-      int32_t nodeId = 0) {
-    auto adjDB = createAdjDb(node, adjs, nodeId);
-    adjDB.isOverloaded() = overloaded;
-    return createThriftValue(
-        version,
-        "originator-1",
-        writeThriftObjStr(adjDB, serializer),
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-  }
-
   thrift::Value
   createPrefixValue(
       const string& node,
@@ -5129,8 +5110,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   //
 
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -5167,9 +5148,10 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   // it can override existing; for router 3 we publish new key-value
 
   publication = createThriftPublication(
-      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
-       {"adj:2", createAdjValue("2", 3, {adj21, adj23}, false, 2)},
-       {"adj:4", createAdjValue("4", 1, {}, false, 4)}, // No adjacencies
+      {{"adj:3", createAdjValue(serializer, "3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue(serializer, "2", 3, {adj21, adj23}, false, 2)},
+       {"adj:4",
+        createAdjValue(serializer, "4", 1, {}, false, 4)}, // No adjacencies
        createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
@@ -5265,8 +5247,8 @@ TEST_F(DecisionTestFixture, BasicOperations) {
       NextHops({createNextHopFromAdj(adj12, false, 10)}));
 
   publication = createThriftPublication(
-      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
-       {"adj:2", createAdjValue("2", 4, {adj21, adj23}, false, 2)},
+      {{"adj:3", createAdjValue(serializer, "3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue(serializer, "2", 4, {adj21, adj23}, false, 2)},
        createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
@@ -5417,8 +5399,8 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   // Send adj publication
   sendKvPublication(
       createThriftPublication(
-          {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-           {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+          {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+           {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)}},
           {},
           {},
           {}),
@@ -5509,8 +5491,8 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
   auto scheduleAt = std::chrono::milliseconds{0};
   evb.scheduleTimeout(scheduleAt, [&]() noexcept {
     sendKvPublication(createThriftPublication(
-        {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-         {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)}},
+        {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+         {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)}},
         {},
         {},
         {}));
@@ -5763,9 +5745,9 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   // "2" originate addr2 into A
   //
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21, adj24}, false, 2)},
-       {"adj:4", createAdjValue("4", 1, {adj42}, false, 4)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21, adj24}, false, 2)},
+       {"adj:4", createAdjValue(serializer, "4", 1, {adj42}, false, 4)},
        createPrefixKeyValue("1", 1, addr1, kTestingAreaName),
        createPrefixKeyValue("2", 1, addr2, kTestingAreaName)},
       {}, /* expiredKeys */
@@ -5782,9 +5764,9 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   // "4" originate addr4 into B
   //
   publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj13}, false, 1)},
-       {"adj:3", createAdjValue("3", 1, {adj31, adj34}, false, 3)},
-       {"adj:4", createAdjValue("4", 1, {adj43}, false, 4)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj13}, false, 1)},
+       {"adj:3", createAdjValue(serializer, "3", 1, {adj31, adj34}, false, 3)},
+       {"adj:4", createAdjValue(serializer, "4", 1, {adj43}, false, 4)},
        createPrefixKeyValue("3", 1, addr3, "B"),
        createPrefixKeyValue("4", 1, addr4, "B")},
       {}, /* expiredKeys */
@@ -5912,8 +5894,8 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
       createPrefixValue("2", 1, createPrefixDb("2", {originPfx}));
 
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
        {originKeyStr, originPfxVal}},
       {}, /* expiredKeys */
       {}, /* nodeIds */
@@ -5927,8 +5909,8 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
   // publish area B adj and prefix
   //
   publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj13}, false, 1)},
-       {"adj:3", createAdjValue("3", 1, {adj31}, false, 3)}},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj13}, false, 1)},
+       {"adj:3", createAdjValue(serializer, "3", 1, {adj31}, false, 3)}},
       {}, /* expiredKeys */
       {}, /* nodeIds */
       {}, /* keysToUpdate */
@@ -5981,8 +5963,8 @@ TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
 TEST_F(DecisionTestFixture, RibPolicy) {
   // Setup topology and prefixes. 1 unicast route will be computed
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -6108,8 +6090,8 @@ TEST_F(DecisionTestFixture, RibPolicyError) {
 TEST_F(DecisionTestFixture, RibPolicyClear) {
   // Setup topology and prefixes. 1 unicast route will be computed
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
        {"prefix:1", createPrefixValue("1", 1, {addr1})},
        {"prefix:2", createPrefixValue("2", 1, {addr2})}},
       {},
@@ -6306,8 +6288,8 @@ TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
 
         // Setup topology and prefixes. 1 unicast route will be computed
         auto publication = createThriftPublication(
-            {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-             {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+            {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+             {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
              {"prefix:1", createPrefixValue("1", 1, {addr1})},
              {"prefix:2", createPrefixValue("2", 1, {addr2})}},
             {},
@@ -6420,8 +6402,8 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
 
         // Setup topology and prefixes. 1 unicast route will be computed
         auto publication = createThriftPublication(
-            {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-             {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+            {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+             {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
              {"prefix:1", createPrefixValue("1", 1, {addr1})},
              {"prefix:2", createPrefixValue("2", 1, {addr2})}},
             {},
@@ -6482,8 +6464,8 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       createAdjacency("1", "2/1-2", "1/2-2", "fe80::1", "192.168.0.1", 800, 0);
 
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12_1, adj12_2})},
-       {"adj:2", createAdjValue("2", 1, {adj21_1, adj21_2})},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12_1, adj12_2})},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21_1, adj21_2})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -6504,7 +6486,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       NextHops({createNextHopFromAdj(adj12_1, false, 100)}));
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 2, {adj21_2})}}, {}, {}, {});
+      {{"adj:2", createAdjValue(serializer, "2", 2, {adj21_2})}}, {}, {}, {});
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
@@ -6522,7 +6504,10 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
 
   // restore the original state
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 2, {adj21_1, adj21_2})}}, {}, {}, {});
+      {{"adj:2", createAdjValue(serializer, "2", 2, {adj21_1, adj21_2})}},
+      {},
+      {},
+      {});
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
   // receive my local Decision routeDb publication
@@ -6542,7 +6527,8 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   adj21_1_overloaded.isOverloaded() = true;
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 2, {adj21_1_overloaded, adj21_2})}},
+      {{"adj:2",
+        createAdjValue(serializer, "2", 2, {adj21_1_overloaded, adj21_2})}},
       {},
       {},
       {});
@@ -6574,8 +6560,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   //
 
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12})},
-       {"adj:2", createAdjValue("2", 1, {adj21})},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12})},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -6602,8 +6588,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // Some tricks here; we need to bump the time-stamp on router 2's data, so
   // it can override existing; for router 3 we publish new key-value
   publication = createThriftPublication(
-      {{"adj:3", createAdjValue("3", 1, {adj32})},
-       {"adj:2", createAdjValue("2", 3, {adj21, adj23})},
+      {{"adj:3", createAdjValue(serializer, "3", 1, {adj32})},
+       {"adj:2", createAdjValue(serializer, "2", 3, {adj21, adj23})},
        createPrefixKeyValue("3", 1, addr3)},
       {},
       {},
@@ -6616,8 +6602,8 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   // it can override existing;
 
   publication = createThriftPublication(
-      {{"adj:4", createAdjValue("4", 1, {adj43})},
-       {"adj:3", createAdjValue("3", 5, {adj32, adj34})}},
+      {{"adj:4", createAdjValue(serializer, "4", 1, {adj43})},
+       {"adj:3", createAdjValue(serializer, "3", 5, {adj32, adj34})}},
       {},
       {},
       {});
@@ -6662,7 +6648,7 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   sendKvPublication(publication);
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 5, {adj21})}}, {}, {}, {});
+      {{"adj:2", createAdjValue(serializer, "2", 5, {adj21})}}, {}, {}, {});
   sendKvPublication(publication);
   recvRouteUpdates();
 
@@ -6719,8 +6705,8 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   // those must be ignored by the decision module
   //
   auto publication = createThriftPublication(
-      {{"adj2:1", createAdjValue("1", 1, {adj12})},
-       {"adji2:2", createAdjValue("2", 1, {adj21})},
+      {{"adj2:1", createAdjValue(serializer, "1", 1, {adj12})},
+       {"adji2:2", createAdjValue(serializer, "2", 1, {adj21})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -6751,8 +6737,8 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
   // SPF run.
   //
   auto const publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12})},
-       {"adj:2", createAdjValue("2", 1, {adj21})},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12})},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -6815,10 +6801,10 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   // SPF run.
   //
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj14, adj12, adj13})},
-       {"adj:2", createAdjValue("2", 1, {adj21})},
-       {"adj:3", createAdjValue("3", 1, {adj31})},
-       {"adj:4", createAdjValue("4", 1, {adj41})},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj14, adj12, adj13})},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21})},
+       {"adj:3", createAdjValue(serializer, "3", 1, {adj31})},
+       {"adj:4", createAdjValue(serializer, "4", 1, {adj41})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2),
        // node3 has same address w/ node2
@@ -6894,8 +6880,10 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
    */
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue("2", 1, {adj21}, true /* overloaded */)},
-       {"adj:4", createAdjValue("4", 1, {adj41}, true /* overloaded */)}},
+      {{"adj:2",
+        createAdjValue(serializer, "2", 1, {adj21}, true /* overloaded */)},
+       {"adj:4",
+        createAdjValue(serializer, "4", 1, {adj41}, true /* overloaded */)}},
       {},
       {},
       {});
@@ -6935,8 +6923,8 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   adj21.metric() = 100;
 
   publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 2, {adj12, adj13, adj14})},
-       {"adj:2", createAdjValue("2", 2, {adj21, adj23})}},
+      {{"adj:1", createAdjValue(serializer, "1", 2, {adj12, adj13, adj14})},
+       {"adj:2", createAdjValue(serializer, "2", 2, {adj21, adj23})}},
       {},
       {},
       {});
@@ -7026,7 +7014,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
       adjs.emplace_back(std::move(adj));
     }
     initialPub.keyVals()->emplace(
-        fmt::format("adj:{}", src), createAdjValue(src, 1, adjs));
+        fmt::format("adj:{}", src), createAdjValue(serializer, src, 1, adjs));
   }
 
   //
@@ -7129,12 +7117,15 @@ TEST_F(DecisionTestFixture, Counters) {
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       thrift::MetricVector{} /* empty metric vector */);
   std::unordered_map<std::string, thrift::Value> pubKvs = {
-      {"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
-      {"adj:2", createAdjValue("2", 1, {adj21, adj23}, false, 2)},
-      {"adj:3", createAdjValue("3", 1, {adj31}, false, 3 << 20)}, // invalid
-                                                                  // mpls
-                                                                  // label
-      {"adj:4", createAdjValue("4", 1, {}, false, 4)} // Disconnected node
+      {"adj:1", createAdjValue(serializer, "1", 1, {adj12, adj13}, false, 1)},
+      {"adj:2", createAdjValue(serializer, "2", 1, {adj21, adj23}, false, 2)},
+      {"adj:3",
+       createAdjValue(serializer, "3", 1, {adj31}, false, 3 << 20)}, // invalid
+                                                                     // mpls
+                                                                     // label
+      {"adj:4",
+       createAdjValue(serializer, "4", 1, {}, false, 4)} // Disconnected
+                                                         // node
   };
   pubKvs.emplace(createPrefixKeyValue("1", 1, addr1));
   pubKvs.emplace(createPrefixKeyValue("1", 1, addr1V4));
@@ -7175,7 +7166,10 @@ TEST_F(DecisionTestFixture, Counters) {
 
   // fully disconnect node 2
   auto publication1 = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 2, {adj13}, false, 1)}}, {}, {}, {});
+      {{"adj:1", createAdjValue(serializer, "1", 2, {adj13}, false, 1)}},
+      {},
+      {},
+      {});
   sendKvPublication(publication1);
   // wait for update
   recvRouteUpdates();
@@ -7247,9 +7241,10 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
 
     // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
     auto publication = createThriftPublication(
-        {{"adj:1", createAdjValue("1", 1, {adj12, adj13}, false, 1)},
-         {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
-         {"adj:3", createAdjValue("3", 1, {adj31}, false, 3)},
+        {{"adj:1",
+          createAdjValue(serializer, "1", 1, {adj12, adj13}, false, 1)},
+         {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+         {"adj:3", createAdjValue(serializer, "3", 1, {adj31}, false, 3)},
          createPrefixKeyValue("2", 1, addr2),
          createPrefixKeyValue("2", 1, addr2V4),
          createPrefixKeyValue("3", 1, addr3),
@@ -7349,8 +7344,10 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
   // However, the two adjacencies will unblock
   sendKvPublication(
       createThriftPublication(
-          {{"adj:1", createAdjValue("1", 1, {adj12OnlyUsedBy2}, false, 1)},
-           {"adj:2", createAdjValue("2", 1, {adj21OnlyUsedBy1}, false, 2)}},
+          {{"adj:1",
+            createAdjValue(serializer, "1", 1, {adj12OnlyUsedBy2}, false, 1)},
+           {"adj:2",
+            createAdjValue(serializer, "2", 1, {adj21OnlyUsedBy1}, false, 2)}},
           {},
           {},
           {}),
@@ -7464,7 +7461,7 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
         // Updated adjacency for peer "2" is received,
         // * adjacency "1->2" can be used by all nodes.
         sendKvPublication(createThriftPublication(
-            {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)}},
+            {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)}},
             {},
             {},
             {}));
@@ -7525,8 +7522,8 @@ TEST_F(DecisionV4OverV6NexthopTestFixture, BasicOperationsV4OverV6Nexthop) {
 
   // public the link state info to KvStore
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
        createPrefixKeyValue("1", 1, addr1V4),
        createPrefixKeyValue("2", 1, addr2V4)},
       {},
@@ -7553,8 +7550,8 @@ TEST_F(DecisionV4OverV6NexthopTestFixture, BasicOperationsV4OverV6Nexthop) {
 
   // for router 3 we publish new key-value
   publication = createThriftPublication(
-      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
-       {"adj:2", createAdjValue("2", 2, {adj21, adj23}, false, 2)},
+      {{"adj:3", createAdjValue(serializer, "3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue(serializer, "2", 2, {adj21, adj23}, false, 2)},
        createPrefixKeyValue("3", 1, addr3V4)},
       {},
       {},
@@ -7643,8 +7640,8 @@ TEST_F(
 
   // public the link state info to KvStore
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue("1", 1, {adj12}, false, 1)},
-       {"adj:2", createAdjValue("2", 1, {adj21}, false, 2)},
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
        createPrefixKeyValue("1", 1, addr1V4),
        createPrefixKeyValue("2", 1, addr2V4)},
       {},
@@ -7671,8 +7668,8 @@ TEST_F(
 
   // for router 3 we publish new key-value
   publication = createThriftPublication(
-      {{"adj:3", createAdjValue("3", 1, {adj32}, false, 3)},
-       {"adj:2", createAdjValue("2", 2, {adj21, adj23}, false, 2)},
+      {{"adj:3", createAdjValue(serializer, "3", 1, {adj32}, false, 3)},
+       {"adj:2", createAdjValue(serializer, "2", 2, {adj21, adj23}, false, 2)},
        createPrefixKeyValue("3", 1, addr3V4)},
       {},
       {},
