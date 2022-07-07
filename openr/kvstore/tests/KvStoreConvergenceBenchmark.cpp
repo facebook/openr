@@ -68,10 +68,11 @@ generateTopo(
 
 void
 runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
-#pragma region Setup
+#pragma region ClusterSetup
   std::vector<
       std::shared_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
       kvStoreWrappers_;
+  size_t eventCount_ = 0;
   BENCHMARK_SUSPEND {
     kvStoreWrappers_.reserve(nNodes);
     for (size_t i = 0; i < nNodes; i++) {
@@ -84,8 +85,27 @@ runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
     }
 
     generateTopo(kvStoreWrappers_, topo);
+#pragma endregion ClusterSetup
+
+#pragma region EventSetup
+    // TODO: make this mult-thread
+    for (size_t i = 0; i < n; i++) {
+      std::string key = folly::to<std::string>("key", i);
+      auto val = createThriftValue(
+          1,
+          kvStoreWrappers_.front()->getNodeId(),
+          folly::to<std::string>("value", i));
+      kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
+      eventCount_++;
+    }
+#pragma endregion EventSetup
   }
-#pragma endregion Setup
+
+  while (eventCount_ !=
+         kvStoreWrappers_.back()->dumpAll(kTestingAreaName).size()) {
+    // yield to avoid hogging the process
+    std::this_thread::yield();
+  }
 
 #pragma region TearDown
   BENCHMARK_SUSPEND {
@@ -101,6 +121,8 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment, TEN_LINEAR, 10, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment, HUNDRED_LINEAR, 100, ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, THOUSAND_LINEAR, 1000, ClusterTopology::LINEAR);
 
 int
 main(int argc, char** argv) {
