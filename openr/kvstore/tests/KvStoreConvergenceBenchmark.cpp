@@ -34,13 +34,43 @@ genNodeName(size_t i) {
   return folly::to<std::string>("node-", i);
 }
 
+enum class ClusterTopology {
+  LINEAR = 0,
+  // TODO: add more topo
+};
+
+void
+generateTopo(
+    std::vector<std::shared_ptr<
+        KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>& stores,
+    ClusterTopology topo) {
+  switch (topo) {
+  case ClusterTopology::LINEAR: {
+    if (stores.empty()) {
+      // no peers to connect
+      return;
+    }
+    auto& prev = stores.front();
+    for (size_t i = 1; i < stores.size(); i++) {
+      auto cur = stores.at(i);
+      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
+      prev = cur;
+    }
+    break;
+  }
+  default: {
+    throw std::runtime_error("invalid topology type");
+  }
+  }
+}
 } // namespace
 
 void
-runExperiment(uint32_t n, size_t nNodes) {
+runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
 #pragma region Setup
   std::vector<
-      std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+      std::shared_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
       kvStoreWrappers_;
   BENCHMARK_SUSPEND {
     kvStoreWrappers_.reserve(nNodes);
@@ -52,6 +82,8 @@ runExperiment(uint32_t n, size_t nNodes) {
               areaIds, kvStoreConfig));
       kvStoreWrappers_.at(i)->run();
     }
+
+    generateTopo(kvStoreWrappers_, topo);
   }
 #pragma endregion Setup
 
@@ -62,10 +94,13 @@ runExperiment(uint32_t n, size_t nNodes) {
 #pragma endregion TearDown
 }
 
-BENCHMARK_PARAM(runExperiment, 1)
-BENCHMARK_RELATIVE_PARAM(runExperiment, 2)
-BENCHMARK_RELATIVE_PARAM(runExperiment, 10)
-BENCHMARK_RELATIVE_PARAM(runExperiment, 100)
+BENCHMARK_NAMED_PARAM(runExperiment, ONE_LINEAR, 1, ClusterTopology::LINEAR)
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, TWO_LINEAR, 2, ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, TEN_LINEAR, 10, ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, HUNDRED_LINEAR, 100, ClusterTopology::LINEAR);
 
 int
 main(int argc, char** argv) {
