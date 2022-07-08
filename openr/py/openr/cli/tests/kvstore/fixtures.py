@@ -47,3 +47,29 @@ MOCKED_KVSTORE_PEERS_ONE_PEER = {
         state=kvstore_types.KvStorePeerState.INITIALIZED,
     )
 }
+
+MOCKED_KVSTORE_PEERS_DIFF_STATES = {
+    "node6": kvstore_types.PeerSpec(
+        peerAddr="fe80::d81a:feff:fc4b:d213%if_1_6_1",
+        ctrlPort=1000,
+        state=kvstore_types.KvStorePeerState.INITIALIZED,
+    ),
+    "node12": kvstore_types.PeerSpec(
+        peerAddr="fe80::d81a:feff:fc4b:d213%if_1_12_1",
+        ctrlPort=1000,
+        state=kvstore_types.KvStorePeerState.SYNCING,
+    ),
+    "node18": kvstore_types.PeerSpec(
+        peerAddr="fe80::d81a:feff:fc4b:d213%if_1_18_1",
+        ctrlPort=1000,
+        state=kvstore_types.KvStorePeerState.IDLE,
+    ),
+}
+
+MOCKED_KVSTORE_PEERS_ONE_FAIL = {
+    "node20": kvstore_types.PeerSpec(
+        peerAddr="fe80::d81a:feff:fc4b:d213%if_1_20_1",
+        ctrlPort=1000,
+        state=kvstore_types.KvStorePeerState.IDLE,
+    ),
+}

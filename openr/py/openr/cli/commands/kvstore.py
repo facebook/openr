@@ -15,6 +15,7 @@ import string
 import sys
 import time
 from builtins import str
+from collections import defaultdict
 from collections.abc import Iterable
 from itertools import combinations
 from typing import (
@@ -1359,16 +1360,23 @@ class ValidateCmd(KvStoreCmdBase):
         )
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
 
+        area_to_peers_dict = {}
+        for area in self.areas:
+            area_to_peers_dict[area] = self.fetch_kvstore_peers(client, area=area)
+
         # Run validation checks
         (
             is_adj_advertised,
             is_prefix_advertised,
         ) = self._validate_local_key_advertisement(publication.keyVals.keys())
 
+        invalid_peers = self._validate_peer_state(area_to_peers_dict)
+
         # Render validation results
         self._print_local_node_advertising_check(
             is_adj_advertised, is_prefix_advertised
         )
+        self._print_peer_state_check(invalid_peers, openr_config.node_name)
 
     def _validate_local_key_advertisement(
         self, keys: iterable[str]
@@ -1389,6 +1397,43 @@ class ValidateCmd(KvStoreCmdBase):
                 is_adj_advertised = True
 
         return is_adj_advertised, is_prefix_advertised
+
+    def _validate_peer_state(
+        self, area_to_peers: Dict[str, Dict[str, kvstore_types_py3.PeerSpec]]
+    ) -> Dict[str, Dict[str, kvstore_types_py3.PeerSpec]]:
+        """
+        Checks if all peers are in INITIALIZED state,
+        returns a dictionary of {area : peersmap of peers} which are not in INITIALIZED state
+        """
+
+        invalid_peers = defaultdict(dict)
+        for (area, peers) in area_to_peers.items():
+            for (peer_name, peer_spec) in peers.items():
+                if peer_spec.state != kvstore_types.KvStorePeerState.INITIALIZED:
+                    invalid_peers[area][peer_name] = peer_spec
+
+        return dict(invalid_peers)
+
+    def _print_peer_state_check(
+        self,
+        invalid_peers: Dict[str, Dict[str, kvstore_types_py3.PeerSpec]],
+        host_id: str,
+    ) -> None:
+        """
+        Prints the result of the peer state check and a list of
+        peers not in INITIALIZED state if there are any
+        """
+
+        click.echo(
+            self.validation_result_str(
+                "kvStore", "peer state check", len(invalid_peers) == 0
+            )
+        )
+
+        if len(invalid_peers) > 0:
+            click.echo("Information about Peers in other states:")
+
+            self.print_peers(host_id, invalid_peers)
 
     def _print_local_node_advertising_check(
         self, is_advertising_adj: bool, is_advertising_prefix: bool
