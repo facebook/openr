@@ -106,12 +106,13 @@ generateTopo(
 } // namespace
 
 void
-runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
+runExperiment(
+    uint32_t n, size_t nNodes, ClusterTopology topo, size_t nExistingKey = 0) {
 #pragma region ClusterSetup
   std::vector<
       std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
       kvStoreWrappers_;
-  size_t eventCount_ = 0;
+  std::unordered_map<std::string, thrift::Value> events_;
   BENCHMARK_SUSPEND {
     kvStoreWrappers_.reserve(nNodes);
     for (size_t i = 0; i < nNodes; i++) {
@@ -126,6 +127,23 @@ runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
     generateTopo(kvStoreWrappers_, topo);
 #pragma endregion ClusterSetup
 
+#pragma region ExistingKeySetup
+    for (size_t i = 0; i < nExistingKey; i++) {
+      std::string key = folly::to<std::string>("existingKey", i);
+      auto val = createThriftValue(
+          1,
+          kvStoreWrappers_.front()->getNodeId(),
+          folly::to<std::string>("existingValue", i));
+      kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
+    }
+    // Wait for existing key val to converge
+    while (nExistingKey !=
+           kvStoreWrappers_.back()->dumpAll(kTestingAreaName).size()) {
+      // yield to avoid hogging the process
+      std::this_thread::yield();
+    }
+#pragma endregion ExistingKeySetup
+
 #pragma region EventSetup
     // TODO: make this mult-thread
     for (size_t i = 0; i < n; i++) {
@@ -134,13 +152,16 @@ runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
           1,
           kvStoreWrappers_.front()->getNodeId(),
           folly::to<std::string>("value", i));
+      events_.emplace(key, val);
+    }
+    for (const auto& [key, val] : events_) {
       kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
-      eventCount_++;
     }
 #pragma endregion EventSetup
   }
+  // end of BENCHMARK_SUSPEND
 
-  while (eventCount_ !=
+  while (events_.size() + nExistingKey !=
          kvStoreWrappers_.back()->dumpAll(kTestingAreaName).size()) {
     // yield to avoid hogging the process
     std::this_thread::yield();
@@ -165,6 +186,23 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 
 BENCHMARK_DRAW_LINE();
 
+#pragma region LINEAR_WITH_EXISTINGKEY
+BENCHMARK_NAMED_PARAM(
+    runExperiment, 100_LINEAR_0Existing, 100, ClusterTopology::LINEAR, 0);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_LINEAR_10Existing, 100, ClusterTopology::LINEAR, 10);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_LINEAR_100Existing, 100, ClusterTopology::LINEAR, 100);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_LINEAR_1000Existing,
+    1000,
+    ClusterTopology::LINEAR,
+    1000);
+#pragma endregion LINEAR_WITH_EXISTINGKEY
+
+BENCHMARK_DRAW_LINE();
+
 #pragma region RING
 BENCHMARK_NAMED_PARAM(runExperiment, 2_RING, 2, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
@@ -174,6 +212,19 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment, 1000_RING, 1000, ClusterTopology::RING);
 #pragma endregion RING
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region RING_WITH_EXISTINGKEY
+BENCHMARK_NAMED_PARAM(
+    runExperiment, 100_RING_0Existing, 100, ClusterTopology::RING, 0);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_RING_10Existing, 100, ClusterTopology::RING, 10);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_RING_100Existing, 100, ClusterTopology::RING, 100);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_RING_1000Existing, 1000, ClusterTopology::RING, 1000);
+#pragma endregion RING_WITH_EXISTINGKEY
 
 BENCHMARK_DRAW_LINE();
 
