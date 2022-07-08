@@ -13,14 +13,14 @@
 
 #include "common/init/Init.h"
 
-#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
-#include <openr/kvstore/KvStoreWrapper.h>
+#include <openr/kvstore/tests/utils/TestUtil.h>
 
 #include <stdexcept>
 
 using namespace openr;
+using namespace openr::util;
 
 FOLLY_INIT_LOGGING_CONFIG(
     ".=WARNING"
@@ -28,81 +28,6 @@ FOLLY_INIT_LOGGING_CONFIG(
 
 namespace {
 const std::unordered_set<std::string> areaIds{kTestingAreaName};
-
-std::string
-genNodeName(size_t i) {
-  return folly::to<std::string>("node-", i);
-}
-
-enum class ClusterTopology {
-  LINEAR = 0,
-  RING = 1,
-  // TODO: add more topo
-};
-
-void
-generateTopo(
-    const std::vector<std::unique_ptr<
-        KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>& kvStoreWrappers_,
-    ClusterTopology topo) {
-  switch (topo) {
-    /*
-     * Linear Topology Illustration:
-     * 0 - 1 - 2 - 3 - 4 - 5 - 6 - 7
-     */
-  case ClusterTopology::LINEAR: {
-    if (kvStoreWrappers_.empty()) {
-      // no peers to connect
-      return;
-    }
-    KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* prev =
-        kvStoreWrappers_.front().get();
-    for (size_t i = 1; i < kvStoreWrappers_.size(); i++) {
-      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* cur =
-          kvStoreWrappers_.at(i).get();
-      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
-      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
-      prev = cur;
-    }
-    break;
-  }
-  /*
-   * Ring Topology Illustration:
-   *   1 - 3 - 5
-   *  /         \
-   * 0           7
-   *  \         /
-   *   2 - 4 - 6
-   * This is designed such that the last node is the furthest from first node
-   */
-  case ClusterTopology::RING: {
-    if (kvStoreWrappers_.size() <= 1) {
-      // no peers to connect
-      return;
-    }
-    for (size_t i = 1; i < kvStoreWrappers_.size(); i++) {
-      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* cur =
-          kvStoreWrappers_.at(i).get();
-      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* prev =
-          kvStoreWrappers_.at(i == 1 ? 0 : i - 2).get();
-      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
-      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
-    }
-    if (kvStoreWrappers_.size() > 2) {
-      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* cur =
-          kvStoreWrappers_.back().get();
-      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* prev =
-          kvStoreWrappers_.at(kvStoreWrappers_.size() - 2).get();
-      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
-      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
-    }
-    break;
-  }
-  default: {
-    throw std::runtime_error("invalid topology type");
-  }
-  }
-}
 } // namespace
 
 void
@@ -137,11 +62,7 @@ runExperiment(
       kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
     }
     // Wait for existing key val to converge
-    while (nExistingKey !=
-           kvStoreWrappers_.back()->dumpAll(kTestingAreaName).size()) {
-      // yield to avoid hogging the process
-      std::this_thread::yield();
-    }
+    validateLastNodeKey(nExistingKey, kvStoreWrappers_.back().get());
 #pragma endregion ExistingKeySetup
 
 #pragma region EventSetup
@@ -161,41 +82,72 @@ runExperiment(
   }
   // end of BENCHMARK_SUSPEND
 
-  while (events_.size() + nExistingKey !=
-         kvStoreWrappers_.back()->dumpAll(kTestingAreaName).size()) {
-    // yield to avoid hogging the process
-    std::this_thread::yield();
-  }
+  validateLastNodeKey(
+      events_.size() + nExistingKey, kvStoreWrappers_.back().get());
 
 #pragma region TearDown
   BENCHMARK_SUSPEND {
+    // Need to explicity call destructor in suspend mode,
+    // otherwise destruct time would be counted.
+    // which results in wrong benchmark result.
     kvStoreWrappers_.clear();
   }
 #pragma endregion TearDown
 }
 
 #pragma region LINEAR
-BENCHMARK_NAMED_PARAM(runExperiment, 2_LINEAR, 2, ClusterTopology::LINEAR);
+BENCHMARK_NAMED_PARAM(
+    runExperiment, 2_NODE_LINEAR_TOPO, 2, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 10_LINEAR, 10, ClusterTopology::LINEAR);
+    runExperiment, 10_NODE_LINEAR_TOPO, 10, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_LINEAR, 100, ClusterTopology::LINEAR);
+    runExperiment, 20_NODE_LINEAR_TOPO, 20, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 1000_LINEAR, 1000, ClusterTopology::LINEAR);
+    runExperiment, 50_NODE_LINEAR_TOPO, 50, ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 70_NODE_LINEAR_TOPO, 70, ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_NODE_LINEAR_TOPO, 100, ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 1000_NODE_LINEAR_TOPO, 1000, ClusterTopology::LINEAR);
 #pragma endregion LINEAR
 
 BENCHMARK_DRAW_LINE();
 
 #pragma region LINEAR_WITH_EXISTINGKEY
 BENCHMARK_NAMED_PARAM(
-    runExperiment, 100_LINEAR_0Existing, 100, ClusterTopology::LINEAR, 0);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_LINEAR_10Existing, 100, ClusterTopology::LINEAR, 10);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_LINEAR_100Existing, 100, ClusterTopology::LINEAR, 100);
+    runExperiment,
+    100_NODE_LINEAR_TOPO_0_Existing,
+    100,
+    ClusterTopology::LINEAR,
+    0);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    100_LINEAR_1000Existing,
+    100_NODE_LINEAR_TOPO_10_Existing,
+    100,
+    ClusterTopology::LINEAR,
+    10);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_LINEAR_TOPO_50_Existing,
+    100,
+    ClusterTopology::LINEAR,
+    50);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_LINEAR_TOPO_100_Existing,
+    100,
+    ClusterTopology::LINEAR,
+    100);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_LINEAR_TOPO_500_Existing,
+    100,
+    ClusterTopology::LINEAR,
+    500);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_LINEAR_TOPO_1000_Existing,
     1000,
     ClusterTopology::LINEAR,
     1000);
@@ -204,26 +156,61 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 BENCHMARK_DRAW_LINE();
 
 #pragma region RING
-BENCHMARK_NAMED_PARAM(runExperiment, 2_RING, 2, ClusterTopology::RING);
+BENCHMARK_NAMED_PARAM(
+    runExperiment, 2_NODE_RING_TOPO, 2, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 10_RING, 10, ClusterTopology::RING);
+    runExperiment, 10_NODE_RING_TOPO, 10, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_RING, 100, ClusterTopology::RING);
+    runExperiment, 20_NODE_RING_TOPO, 20, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 1000_RING, 1000, ClusterTopology::RING);
+    runExperiment, 50_NODE_RING_TOPO, 50, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 70_NODE_RING_TOPO, 70, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_NODE_RING_TOPO, 100, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 1000_NODE_RING_TOPO, 1000, ClusterTopology::RING);
 #pragma endregion RING
 
 BENCHMARK_DRAW_LINE();
 
 #pragma region RING_WITH_EXISTINGKEY
 BENCHMARK_NAMED_PARAM(
-    runExperiment, 100_RING_0Existing, 100, ClusterTopology::RING, 0);
+    runExperiment,
+    100_NODE_RING_TOPO_0_Existing,
+    100,
+    ClusterTopology::RING,
+    0);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_RING_10Existing, 100, ClusterTopology::RING, 10);
+    runExperiment,
+    100_NODE_RING_TOPO_10_Existing,
+    100,
+    ClusterTopology::RING,
+    10);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_RING_100Existing, 100, ClusterTopology::RING, 100);
+    runExperiment,
+    100_NODE_RING_TOPO_50_Existing,
+    100,
+    ClusterTopology::RING,
+    50);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_RING_1000Existing, 1000, ClusterTopology::RING, 1000);
+    runExperiment,
+    100_NODE_RING_TOPO_100_Existing,
+    100,
+    ClusterTopology::RING,
+    100);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_RING_TOPO_500_Existing,
+    100,
+    ClusterTopology::RING,
+    500);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_RING_TOPO_1000_Existing,
+    1000,
+    ClusterTopology::RING,
+    1000);
 #pragma endregion RING_WITH_EXISTINGKEY
 
 BENCHMARK_DRAW_LINE();
