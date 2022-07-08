@@ -36,26 +36,65 @@ genNodeName(size_t i) {
 
 enum class ClusterTopology {
   LINEAR = 0,
+  RING = 1,
   // TODO: add more topo
 };
 
 void
 generateTopo(
-    std::vector<std::shared_ptr<
-        KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>& stores,
+    const std::vector<std::unique_ptr<
+        KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>& kvStoreWrappers_,
     ClusterTopology topo) {
   switch (topo) {
+    /*
+     * Linear Topology Illustration:
+     * 0 - 1 - 2 - 3 - 4 - 5 - 6 - 7
+     */
   case ClusterTopology::LINEAR: {
-    if (stores.empty()) {
+    if (kvStoreWrappers_.empty()) {
       // no peers to connect
       return;
     }
-    auto& prev = stores.front();
-    for (size_t i = 1; i < stores.size(); i++) {
-      auto cur = stores.at(i);
+    KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* prev =
+        kvStoreWrappers_.front().get();
+    for (size_t i = 1; i < kvStoreWrappers_.size(); i++) {
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* cur =
+          kvStoreWrappers_.at(i).get();
       prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
       cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
       prev = cur;
+    }
+    break;
+  }
+  /*
+   * Ring Topology Illustration:
+   *   1 - 3 - 5
+   *  /         \
+   * 0           7
+   *  \         /
+   *   2 - 4 - 6
+   * This is designed such that the last node is the furthest from first node
+   */
+  case ClusterTopology::RING: {
+    if (kvStoreWrappers_.size() <= 1) {
+      // no peers to connect
+      return;
+    }
+    for (size_t i = 1; i < kvStoreWrappers_.size(); i++) {
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* cur =
+          kvStoreWrappers_.at(i).get();
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* prev =
+          kvStoreWrappers_.at(i == 1 ? 0 : i - 2).get();
+      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
+    }
+    if (kvStoreWrappers_.size() > 2) {
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* cur =
+          kvStoreWrappers_.back().get();
+      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* prev =
+          kvStoreWrappers_.at(kvStoreWrappers_.size() - 2).get();
+      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
     }
     break;
   }
@@ -70,7 +109,7 @@ void
 runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
 #pragma region ClusterSetup
   std::vector<
-      std::shared_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+      std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
       kvStoreWrappers_;
   size_t eventCount_ = 0;
   BENCHMARK_SUSPEND {
@@ -114,15 +153,29 @@ runExperiment(uint32_t n, size_t nNodes, ClusterTopology topo) {
 #pragma endregion TearDown
 }
 
-BENCHMARK_NAMED_PARAM(runExperiment, ONE_LINEAR, 1, ClusterTopology::LINEAR)
+#pragma region LINEAR
+BENCHMARK_NAMED_PARAM(runExperiment, 2_LINEAR, 2, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, TWO_LINEAR, 2, ClusterTopology::LINEAR);
+    runExperiment, 10_LINEAR, 10, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, TEN_LINEAR, 10, ClusterTopology::LINEAR);
+    runExperiment, 100_LINEAR, 100, ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, HUNDRED_LINEAR, 100, ClusterTopology::LINEAR);
+    runExperiment, 1000_LINEAR, 1000, ClusterTopology::LINEAR);
+#pragma endregion LINEAR
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region RING
+BENCHMARK_NAMED_PARAM(runExperiment, 2_RING, 2, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, THOUSAND_LINEAR, 1000, ClusterTopology::LINEAR);
+    runExperiment, 10_RING, 10, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_RING, 100, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 1000_RING, 1000, ClusterTopology::RING);
+#pragma endregion RING
+
+BENCHMARK_DRAW_LINE();
 
 int
 main(int argc, char** argv) {
