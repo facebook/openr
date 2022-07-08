@@ -32,20 +32,20 @@ enum class ClusterTopology {
 
 void generateTopo(
     const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
-        ::openr::thrift::KvStoreServiceAsyncClient>>>& stores,
+        apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores,
     ClusterTopology topo);
 
 // For the given node, validate if it has received all events
 folly::coro::Task<void> co_validateNodeKey(
     const std::unordered_map<std::string, ::openr::thrift::Value>& events,
-    ::openr::KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>* node);
+    ::openr::KvStoreWrapper<
+        apache::thrift::Client<::openr::thrift::KvStoreService>>* node);
 
 // Wait until ALL nodes in `stores` have received all events
 folly::coro::Task<void> co_waitForConvergence(
     const std::unordered_map<std::string, ::openr::thrift::Value>& events,
-    const std::vector<std::unique_ptr<
-        ::openr::KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>>>&
-        stores);
+    const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
+        apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores);
 
 } // namespace util
 } // namespace openr
