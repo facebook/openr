@@ -26,6 +26,7 @@ std::string genNodeName(size_t i);
 enum class ClusterTopology {
   LINEAR = 0,
   RING = 1,
+  STAR = 2,
   // TODO: add more topo
 };
 

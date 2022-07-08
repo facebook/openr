@@ -114,6 +114,44 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 
 BENCHMARK_DRAW_LINE();
 
+#pragma region RING
+BENCHMARK_NAMED_PARAM(
+    runExperiment, 2_NODE_RING_TOPO, 2, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 10_NODE_RING_TOPO, 10, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 20_NODE_RING_TOPO, 20, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 50_NODE_RING_TOPO, 50, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 70_NODE_RING_TOPO, 70, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_NODE_RING_TOPO, 100, ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 1000_NODE_RING_TOPO, 1000, ClusterTopology::RING);
+#pragma endregion RING
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region STAR
+BENCHMARK_NAMED_PARAM(
+    runExperiment, 2_NODE_STAR_TOPO, 2, ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 10_NODE_STAR_TOPO, 10, ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 20_NODE_STAR_TOPO, 20, ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 50_NODE_STAR_TOPO, 50, ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 70_NODE_STAR_TOPO, 70, ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 100_NODE_STAR_TOPO, 100, ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment, 1000_NODE_STAR_TOPO, 1000, ClusterTopology::STAR);
+#pragma endregion STAR
+
+BENCHMARK_DRAW_LINE();
+
 #pragma region LINEAR_WITH_EXISTINGKEY
 BENCHMARK_NAMED_PARAM(
     runExperiment,
@@ -155,25 +193,6 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 
 BENCHMARK_DRAW_LINE();
 
-#pragma region RING
-BENCHMARK_NAMED_PARAM(
-    runExperiment, 2_NODE_RING_TOPO, 2, ClusterTopology::RING);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 10_NODE_RING_TOPO, 10, ClusterTopology::RING);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 20_NODE_RING_TOPO, 20, ClusterTopology::RING);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 50_NODE_RING_TOPO, 50, ClusterTopology::RING);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 70_NODE_RING_TOPO, 70, ClusterTopology::RING);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_NODE_RING_TOPO, 100, ClusterTopology::RING);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 1000_NODE_RING_TOPO, 1000, ClusterTopology::RING);
-#pragma endregion RING
-
-BENCHMARK_DRAW_LINE();
-
 #pragma region RING_WITH_EXISTINGKEY
 BENCHMARK_NAMED_PARAM(
     runExperiment,
@@ -212,6 +231,47 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
     ClusterTopology::RING,
     1000);
 #pragma endregion RING_WITH_EXISTINGKEY
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region STAR_WITH_EXISTINGKEY
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    100_NODE_STAR_TOPO_0_Existing,
+    100,
+    ClusterTopology::STAR,
+    0);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_STAR_TOPO_10_Existing,
+    100,
+    ClusterTopology::STAR,
+    10);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_STAR_TOPO_50_Existing,
+    100,
+    ClusterTopology::STAR,
+    50);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_STAR_TOPO_100_Existing,
+    100,
+    ClusterTopology::STAR,
+    100);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_STAR_TOPO_500_Existing,
+    100,
+    ClusterTopology::STAR,
+    500);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    100_NODE_STAR_TOPO_1000_Existing,
+    1000,
+    ClusterTopology::STAR,
+    1000);
+#pragma endregion STAR_WITH_EXISTINGKEY
 
 BENCHMARK_DRAW_LINE();
 

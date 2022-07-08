@@ -52,10 +52,6 @@ generateTopo(
    * This is designed such that the last node is the furthest from first node
    */
   case ClusterTopology::RING: {
-    if (stores.size() <= 1) {
-      // no peers to connect
-      return;
-    }
     for (size_t i = 1; i < stores.size(); i++) {
       KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>* cur =
           stores.at(i).get();
@@ -71,6 +67,27 @@ generateTopo(
           stores.at(stores.size() - 2).get();
       prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
       cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
+    }
+    break;
+  }
+  /*
+   * Star Topology Illustration:
+   *    1   2
+   *     \ /
+   *  6 - 0 - 3
+   *     / \
+   *    5   4
+   * Every additional node is directly connected to center
+   */
+  case ClusterTopology::STAR: {
+    for (size_t i = 1; i < stores.size(); i++) {
+      KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>* center =
+          stores.front().get();
+      KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>* cur =
+          stores.at(i).get();
+      center->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(
+          kTestingAreaName, center->getNodeId(), center->getPeerSpec());
     }
     break;
   }
