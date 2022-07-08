@@ -167,6 +167,15 @@ class OpenrCtrlCmd:
         """
         return client.getInterfaces()
 
+    def fetch_kvstore_peers(self, client: Any, area=None) -> Any:
+        """
+        Fetch a dictionary of peer name : peer spec via thrift call
+        """
+        if area:
+            return client.getKvStorePeersArea(area)
+        else:
+            return client.getKvStorePeers()
+
     def validate_init_event(
         self,
         init_event_dict: Dict[kv_store_types.InitializationEvent, int],

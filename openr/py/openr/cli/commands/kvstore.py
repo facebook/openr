@@ -61,9 +61,8 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         self.area_feature = True
 
         # get list of areas if area feature is supported.
-        self.areas = set()
-        if self.area_feature:
-            self.areas = utils.get_areas_list(client)
+        self.areas = utils.get_areas_list(client)
+        if hasattr(self.cli_opts, "area"):
             if self.cli_opts.area != "":
                 if self.cli_opts.area in self.areas:
                     self.areas = {self.cli_opts.area}
@@ -175,6 +174,31 @@ class KvStoreCmdBase(OpenrCtrlCmd):
             sys.exit(1)
         (area,) = self.areas
         return area
+
+    def print_peers(self, host_id: str, peers_list: Dict[str, Any]) -> None:
+        """print the Kv Store peers"""
+
+        caption = "{}'s peers".format(host_id)
+
+        rows = []
+        column_labels = ["Peer", "State", "Address", "Port", "Area"]
+
+        for area, peers in peers_list.items():
+            for (peer, peerspec) in sorted(peers.items(), key=lambda x: x[0]):
+                # TODO: Update thrift client to py3 so we can remove _VALUES_TO_NAMES call
+                row = [
+                    peer,
+                    kvstore_types.KvStorePeerState._VALUES_TO_NAMES[peerspec.state],
+                    peerspec.peerAddr,
+                    peerspec.ctrlPort,
+                ]
+
+                if self.area_feature:
+                    row.append(area)
+
+                rows.append(row)
+
+        print(printing.render_horizontal_table(rows, column_labels, caption=caption))
 
 
 class KvPrefixesCmd(KvStoreCmdBase):
@@ -745,47 +769,21 @@ class KvCompareCmd(KvStoreCmdBase):
         return kv_dict
 
 
-class KvPeersCmd(KvStoreCmdBase):
+class PeersCmd(KvStoreCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
         *args,
         **kwargs,
     ) -> None:
-        peers = client.getKvStorePeers()
-        self.print_peers(client, {"": peers})
-
-    def print_peers(self, client: OpenrCtrl.Client, peers_list: Dict[str, Any]) -> None:
-        """print the Kv Store peers"""
-
         host_id = client.getMyNodeName()
-        caption = "{}'s peers".format(host_id)
 
-        rows = []
-        for area, peers in peers_list.items():
-            area = area if area is not None else "N/A"
-            for (key, value) in sorted(peers.items(), key=lambda x: x[0]):
-                row = [f"{key}, area:{area}"]
-                row.append("cmd via {}".format(value.cmdUrl))
-                rows.append(row)
+        area_to_peers_dict = {}
 
-        print(printing.render_vertical_table(rows, caption=caption))
-
-
-class PeersCmd(KvPeersCmd):
-    def _run(
-        self,
-        client: OpenrCtrl.Client,
-        *args,
-        **kwargs,
-    ) -> None:
-        if not self.area_feature:
-            super()._run(client)
-            return
-        peers_list = {}
         for area in self.areas:
-            peers_list[area] = client.getKvStorePeersArea(area)
-        self.print_peers(client, peers_list)
+            area_to_peers_dict[area] = self.fetch_kvstore_peers(client, area=area)
+
+        self.print_peers(host_id, area_to_peers_dict)
 
 
 class EraseKeyCmd(KvStoreCmdBase):
