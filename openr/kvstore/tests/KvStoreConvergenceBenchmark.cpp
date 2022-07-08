@@ -15,12 +15,11 @@
 #include "common/init/Init.h"
 
 #include <openr/kvstore/KvStoreUtil.h>
-#include <openr/kvstore/tests/utils/TestUtil.h>
+#include <openr/tests/utils/Utils.h>
 
 #include <stdexcept>
 
 using namespace openr;
-using namespace openr::util;
 
 FOLLY_INIT_LOGGING_CONFIG(
     ".=WARNING"

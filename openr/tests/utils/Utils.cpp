@@ -10,7 +10,7 @@
 namespace detail {
 // Prefix length of a subnet
 const uint8_t kBitMaskLen = 128;
-
+const size_t kMaxConcurrency = 10;
 } // namespace detail
 
 namespace openr {
@@ -275,6 +275,118 @@ createAdjValue(
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
+}
+
+std::string
+genNodeName(size_t i) {
+  return folly::to<std::string>("node-", i);
+}
+
+void
+generateTopo(
+    const std::vector<std::unique_ptr<KvStoreWrapper<
+        apache::thrift::Client<thrift::KvStoreService>>>>& stores,
+    ClusterTopology topo) {
+  switch (topo) {
+    /*
+     * Linear Topology Illustration:
+     * 0 - 1 - 2 - 3 - 4 - 5 - 6 - 7
+     */
+  case ClusterTopology::LINEAR: {
+    if (stores.empty()) {
+      // no peers to connect
+      return;
+    }
+    KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* prev =
+        stores.front().get();
+    for (size_t i = 1; i < stores.size(); i++) {
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* cur =
+          stores.at(i).get();
+      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
+      prev = cur;
+    }
+    break;
+  }
+  /*
+   * Ring Topology Illustration:
+   *   1 - 3 - 5
+   *  /         \
+   * 0           7
+   *  \         /
+   *   2 - 4 - 6
+   * This is designed such that the last node is the furthest from first node
+   */
+  case ClusterTopology::RING: {
+    for (size_t i = 1; i < stores.size(); i++) {
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* cur =
+          stores.at(i).get();
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* prev =
+          stores.at(i == 1 ? 0 : i - 2).get();
+      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
+    }
+    if (stores.size() > 2) {
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* cur =
+          stores.back().get();
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* prev =
+          stores.at(stores.size() - 2).get();
+      prev->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(kTestingAreaName, prev->getNodeId(), prev->getPeerSpec());
+    }
+    break;
+  }
+  /*
+   * Star Topology Illustration:
+   *    1   2
+   *     \ /
+   *  6 - 0 - 3
+   *     / \
+   *    5   4
+   * Every additional node is directly connected to center
+   */
+  case ClusterTopology::STAR: {
+    for (size_t i = 1; i < stores.size(); i++) {
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* center =
+          stores.front().get();
+      KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* cur =
+          stores.at(i).get();
+      center->addPeer(kTestingAreaName, cur->getNodeId(), cur->getPeerSpec());
+      cur->addPeer(
+          kTestingAreaName, center->getNodeId(), center->getPeerSpec());
+    }
+    break;
+  }
+  default: {
+    throw std::runtime_error("invalid topology type");
+  }
+  }
+}
+
+folly::coro::Task<void>
+co_validateNodeKey(
+    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    ::openr::KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>*
+        node) {
+  while (events.size() != node->dumpAll(kTestingAreaName).size()) {
+    // yield to avoid hogging the process
+    std::this_thread::yield();
+  }
+  co_return;
+}
+
+folly::coro::Task<void>
+co_waitForConvergence(
+    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
+        apache::thrift::Client<thrift::KvStoreService>>>>& stores) {
+  co_await folly::coro::collectAllWindowed(
+      [&]() -> folly::coro::Generator<folly::coro::Task<void>&&> {
+        for (size_t i = 0; i < stores.size(); i++) {
+          co_yield co_validateNodeKey(events, stores.at(i).get());
+        }
+      }(),
+      ::detail::kMaxConcurrency);
 }
 
 } // namespace openr

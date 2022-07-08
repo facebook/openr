@@ -7,8 +7,15 @@
 
 #pragma once
 
+#include <folly/Conv.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
+
+#include <folly/experimental/coro/BlockingWait.h>
+#include <folly/experimental/coro/Collect.h>
+#include <folly/experimental/coro/Generator.h>
+#include <folly/experimental/coro/Task.h>
+
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/common/Types.h>
@@ -16,6 +23,8 @@
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/if/gen-cpp2/BgpConfig_types.h>
+#include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -86,4 +95,40 @@ thrift::Value createAdjValue(
     const std::vector<thrift::Adjacency>& adjs,
     bool overloaded = false,
     int32_t nodeId = 0);
+
+/*
+ * Util function to generate unique node name based on index `i`
+ */
+std::string genNodeName(size_t i);
+
+enum class ClusterTopology {
+  LINEAR = 0,
+  RING = 1,
+  STAR = 2,
+  // TODO: add more topo
+};
+
+/*
+ * Util function to generate kvstore topology
+ */
+void generateTopo(
+    const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
+        apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores,
+    ClusterTopology topo);
+
+/*
+ * Util function to validate if the given node has received all events
+ */
+folly::coro::Task<void> co_validateNodeKey(
+    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    ::openr::KvStoreWrapper<
+        apache::thrift::Client<::openr::thrift::KvStoreService>>* node);
+
+/*
+ * Util function to validate if all nodes have received all events
+ */
+folly::coro::Task<void> co_waitForConvergence(
+    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
+        apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores);
 } // namespace openr
