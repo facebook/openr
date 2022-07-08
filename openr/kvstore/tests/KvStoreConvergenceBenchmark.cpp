@@ -7,13 +7,13 @@
 
 #include <folly/Benchmark.h>
 
+#include <folly/experimental/coro/BlockingWait.h>
 #include <folly/init/Init.h>
 #include <folly/logging/Init.h>
 #include <folly/logging/xlog.h>
 
 #include "common/init/Init.h"
 
-#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/tests/utils/TestUtil.h>
 
@@ -60,9 +60,10 @@ runExperiment(
           kvStoreWrappers_.front()->getNodeId(),
           folly::to<std::string>("existingValue", i));
       kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
+      events_.emplace(key, val);
     }
     // Wait for existing key val to converge
-    validateLastNodeKey(nExistingKey, kvStoreWrappers_.back().get());
+    folly::coro::blockingWait(co_waitForConvergence(events_, kvStoreWrappers_));
 #pragma endregion ExistingKeySetup
 
 #pragma region EventSetup
@@ -82,8 +83,7 @@ runExperiment(
   }
   // end of BENCHMARK_SUSPEND
 
-  validateLastNodeKey(
-      events_.size() + nExistingKey, kvStoreWrappers_.back().get());
+  folly::coro::blockingWait(co_waitForConvergence(events_, kvStoreWrappers_));
 
 #pragma region TearDown
   BENCHMARK_SUSPEND {

@@ -80,14 +80,30 @@ generateTopo(
   }
 }
 
-void
-validateLastNodeKey(
-    size_t numExpectedKey,
-    KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* node) {
-  while (numExpectedKey != node->dumpAll(kTestingAreaName).size()) {
+folly::coro::Task<void>
+co_validateNodeKey(
+    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    ::openr::KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>* node) {
+  while (events.size() != node->dumpAll(kTestingAreaName).size()) {
     // yield to avoid hogging the process
     std::this_thread::yield();
   }
+  co_return;
+}
+
+folly::coro::Task<void>
+co_waitForConvergence(
+    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const std::vector<std::unique_ptr<
+        ::openr::KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>>>&
+        stores) {
+  co_await folly::coro::collectAllWindowed(
+      [&]() -> folly::coro::Generator<folly::coro::Task<void>&&> {
+        for (size_t i = 0; i < stores.size(); i++) {
+          co_yield co_validateNodeKey(events, stores.at(i).get());
+        }
+      }(),
+      10);
 }
 
 } // namespace util
