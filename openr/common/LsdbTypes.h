@@ -117,7 +117,6 @@ struct NeighborEvent {
   /**
    * misc flags
    */
-  bool enableFloodOptimization{false};
   bool adjOnlyUsedByOtherNode{false};
 
   NeighborEvent(

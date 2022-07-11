@@ -967,11 +967,6 @@ struct SparkHandshakeMsg {
   7: i32 openrCtrlThriftPort;
 
   /**
-   * @deprecated - Neighbor's kvstore global CMD port, for ZMQ communication.
-   */
-  9: i32 kvStoreCmdPort;
-
-  /**
    * Area identifier for establishing adjacency with neighbor.
    */
   10: string area;
@@ -982,11 +977,6 @@ struct SparkHandshakeMsg {
    * be treated as a multicast and all nodes will process it.
    */
   11: optional string neighborNodeName;
-
-  /**
-   * [TO BE DEPRECATED]
-   */
-  12: optional bool enableFloodOptimization;
 } (cpp.minimize_padding)
 
 /**

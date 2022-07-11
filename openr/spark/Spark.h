@@ -300,12 +300,8 @@ class Spark final : public OpenrEventBase {
     std::chrono::milliseconds lastHandshakeMsgSentAt{0};
     std::chrono::milliseconds lastHeartbeatMsgSentAt{0};
 
-    // KvStore related port. Info passed to LinkMonitor for neighborEvent
-    int32_t kvStoreCmdPort{0};
+    // TCP port for KvStore communication
     int32_t openrCtrlThriftPort{0};
-
-    // flag to indicate if flood-optimization is supported or NOT
-    bool enableFloodOptimization{false};
 
     // hold time
     std::chrono::milliseconds heartbeatHoldTime{0};
@@ -444,9 +440,6 @@ class Spark final : public OpenrEventBase {
 
   // This flag indicates that we will enable v4 over v6 nexthop
   const bool v4OverV6Nexthop_{false};
-
-  // This flag indicates that if DUAL flood-optimization is supported or NOT
-  const bool enableFloodOptimization_{false};
 
   // the next sequence number to be used on any interface for outgoing hellos
   // NOTE: we increment this on hello sent out of any interfaces
