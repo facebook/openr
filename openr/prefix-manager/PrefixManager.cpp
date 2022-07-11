@@ -247,9 +247,11 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
   for (const auto& [keyStr, val] : *thriftPub.keyVals()) {
     // Only interested in prefix updates.
     // Ignore if val has no value field inside `thrift::Value`(e.g. ttl update)
-    if (not(keyStr.find(Constants::kPrefixDbMarker.toString()) == 0) or
-        (not val.value())) {
-      continue;
+    if (not config_->isKvStoreDispatcherEnabled()) {
+      if (not(keyStr.find(Constants::kPrefixDbMarker.toString()) == 0) or
+          (not val.value())) {
+        continue;
+      }
     }
 
     auto const& area = *thriftPub.area();

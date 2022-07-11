@@ -233,6 +233,8 @@ add_library(openrlib
   openr/decision/SpfSolver.cpp
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
+  openr/dispatcher/Dispatcher.cpp
+  openr/dispatcher/DispatcherQueue.cpp
   openr/kvstore/Dual.cpp
   openr/fib/Fib.cpp
   openr/kvstore/KvStoreClientInternal.cpp
@@ -558,6 +560,18 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/decision
   )
 
+  add_openr_test(DispatcherTest dispatcher_test
+    SOURCES
+      openr/dispatcher/tests/DispatcherTest.cpp
+    DESTINATION sbin/tests/openr/dispatcher
+  )
+
+  add_openr_test(DispatcherQueueTest dispatcher_queue_test
+    SOURCES
+      openr/dispatcher/tests/DispatcherQueueTest.cpp
+    DESTINATION sbin/tests/openr/dispatcher
+  )
+
   add_openr_test(DualTest dual_test
     SOURCES
       openr/kvstore/tests/DualTest.cpp
@@ -779,6 +793,27 @@ if(BUILD_TESTS)
   install(TARGETS
     decision_benchmark
     DESTINATION sbin/tests/openr/decision
+  )
+
+  add_executable(dispatcher_queue_benchmark
+    openr/dispatcher/tests/DispatcherQueueBenchmark.cpp
+  )
+
+  target_link_libraries(dispatcher_queue_benchmark
+    openrlib
+    ${FOLLY}
+    ${FOLLY_EXCEPTION_TRACER}
+    ${GMOCK}
+    ${GMOCK_MAIN}
+    ${GTEST_BOTH_LIBRARIES}
+    ${GTEST_MAIN}
+    ${THRIFTCPP2}
+    ${BENCHMARK}
+  )
+
+  install(TARGETS
+    dispatcher_queue_benchmark
+    DESTINATION sbin/tests/openr/dispatcher
   )
 
   add_executable(kvstore_benchmark

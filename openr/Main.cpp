@@ -33,6 +33,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/RouteUpdate.h>
+#include <openr/dispatcher/Dispatcher.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
@@ -53,6 +54,7 @@ namespace fs = std::experimental::filesystem;
 using namespace openr;
 
 using apache::thrift::concurrency::ThreadManager;
+using openr::dispatcher::Dispatcher;
 using openr::messaging::ReplicateQueue;
 
 namespace {
@@ -363,6 +365,25 @@ main(int argc, char** argv) {
           config->toThriftKvStoreConfig()));
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
   watchdog->addQueue(logSampleQueue, "logSampleQueue");
+
+  if (config->isKvStoreDispatcherEnabled()) {
+    // Start Dispatcher
+    auto dispatcher = startEventBase(
+        allThreads,
+        orderedEvbs,
+        watchdog,
+        "dispatcher",
+        std::make_unique<Dispatcher>(
+            kvStoreUpdatesQueue.getReader("dispatcher")));
+
+    // make Decision/Prefix Manager subscribers of Dispatcher
+    decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
+        {Constants::kAdjDbMarker.toString(),
+         Constants::kPrefixDbMarker.toString()});
+
+    prefixMgrKvStoreUpdatesReader =
+        dispatcher->getReader({Constants::kPrefixDbMarker.toString()});
+  }
 
   // PrefixManager will wait for Fib programming and publishing updates
   auto prefixManager = startEventBase(
