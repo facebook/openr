@@ -165,16 +165,41 @@ class OpenrCtrlCmd:
         """
         Fetch a list of known interfaces via thrift call
         """
+
         return client.getInterfaces()
 
     def fetch_kvstore_peers(self, client: Any, area=None) -> Any:
         """
-        Fetch a dictionary of peer name : peer spec via thrift call
+        Fetch a dictionary of {peer name : peer spec} via thrift call
         """
+
         if area:
             return client.getKvStorePeersArea(area)
-        else:
-            return client.getKvStorePeers()
+
+        return client.getKvStorePeers()
+
+    def fetch_keyvals(
+        self,
+        client: Any,
+        areas: Set[Any],
+        keyDumpParams: Optional[kv_store_types.KeyDumpParams] = None,
+    ) -> Dict[str, kv_store_types.Publication]:
+        """
+        Fetch the keyval publication for each area specified in areas via thrift call
+        Returned as a dict {area : publication}
+        If keyDumpParams is specified, returns keyvals filtered accordingly
+        """
+
+        area_to_publication_dict = {}
+        for area in areas:
+            if keyDumpParams:
+                area_to_publication_dict[area] = client.getKvStoreKeyValsFilteredArea(
+                    keyDumpParams, area
+                )
+            else:
+                area_to_publication_dict[area] = client.getKvStoreKeyValsArea(area)
+
+        return area_to_publication_dict
 
     def validate_init_event(
         self,

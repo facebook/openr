@@ -26,6 +26,9 @@ from .fixtures import (
     MOCKED_KVSTORE_PEERS_ONE_PEER,
     MOCKED_KVSTORE_PEERS_TWO_PEERS,
     MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS,
+    MOCKED_THRIFT_CONFIG_ONE_AREA,
+    MockedKeys,
+    MockedValidKeyVals,
 )
 
 
@@ -164,6 +167,152 @@ class CliKvStoreTests(TestCase):
                 return idx
 
     @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    def test_kvstore_check_key_advertising_pass(
+        self, mocked_openr_client: MagicMock
+    ) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        mocked_returned_connection.getRunningConfigThrift.return_value = (
+            MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS
+        )
+
+        area1_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL1.value,
+                MockedKeys.PREF1.value: MockedValidKeyVals.VAL2.value,
+                MockedKeys.PREF2.value: MockedValidKeyVals.VAL3.value,
+            }
+        )
+        area2_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL3.value,
+                MockedKeys.PREF3.value: MockedValidKeyVals.VAL5.value,
+            }
+        )
+        area3_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL4.value,
+                MockedKeys.PREF3.value: MockedValidKeyVals.VAL3.value,
+            }
+        )
+
+        expected_publications = {
+            AreaId.AREA1.value: area1_publication,
+            AreaId.AREA2.value: area2_publication,
+            AreaId.AREA3.value: area3_publication,
+        }
+
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.side_effect = (
+            lambda _, area: expected_publications[area]
+        )
+
+        invoked_return = self.runner.invoke(
+            kvstore.ValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = invoked_return.stdout.split("\n")
+        pass_line = stdout_lines[0]
+        self._check_validation_state(
+            True, pass_line
+        )  # True implies we expect this check to pass
+
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    def test_kvstore_check_key_advertising_fail(
+        self, mocked_openr_client: MagicMock
+    ) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        mocked_returned_connection.getRunningConfigThrift.return_value = (
+            MOCKED_THRIFT_CONFIG_ONE_AREA
+        )
+
+        # Check if the check fails if no prefix key is being advertised
+        area1_publication_no_pref = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL1.value,
+            }
+        )
+        expected_publications_no_pref = {AreaId.AREA1.value: area1_publication_no_pref}
+
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.side_effect = (
+            lambda _, area: expected_publications_no_pref[area]
+        )
+
+        invoked_return_no_pref = self.runner.invoke(
+            kvstore.ValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = invoked_return_no_pref.stdout.split("\n")
+        pass_line = stdout_lines[0]
+        self._check_validation_state(
+            False, pass_line
+        )  # False implies we expect this check to fail
+        adj_key_advertisement_state = stdout_lines[1].split(" ")[-1]
+        pref_key_advertisement_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("PASS", adj_key_advertisement_state)
+        self.assertEqual("FAIL", pref_key_advertisement_state)
+
+        # Check if the check fails if no adj key is being advertised
+        area1_publication_no_adj = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.PREF1.value: MockedValidKeyVals.VAL1.value,
+            }
+        )
+        expected_publications_no_adj = {AreaId.AREA1.value: area1_publication_no_adj}
+
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.side_effect = (
+            lambda _, area: expected_publications_no_adj[area]
+        )
+
+        invoked_return_no_adj = self.runner.invoke(
+            kvstore.ValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = invoked_return_no_adj.stdout.split("\n")
+        pass_line = stdout_lines[0]
+        self._check_validation_state(
+            False, pass_line
+        )  # False implies we expect this check to fail
+        adj_key_advertisement_state = stdout_lines[1].split(" ")[-1]
+        pref_key_advertisement_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("FAIL", adj_key_advertisement_state)
+        self.assertEqual("PASS", pref_key_advertisement_state)
+
+        # Check if the check fails if no key is being advertised
+        area1_publication_no_key = kvstore_types.Publication(keyVals={})
+        expected_publications_no_key = {AreaId.AREA1.value: area1_publication_no_key}
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.side_effect = (
+            lambda _, area: expected_publications_no_key[area]
+        )
+
+        invoked_return_no_key = self.runner.invoke(
+            kvstore.ValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = invoked_return_no_key.stdout.split("\n")
+        pass_line = stdout_lines[0]
+        self._check_validation_state(
+            False, pass_line
+        )  # False implies we expect this check to fail
+        adj_key_advertisement_state = stdout_lines[1].split(" ")[-1]
+        pref_key_advertisement_state = stdout_lines[2].split(" ")[-1]
+
+        self.assertEqual("FAIL", adj_key_advertisement_state)
+        self.assertEqual("FAIL", pref_key_advertisement_state)
+
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
     def test_kvstore_validate_peer_state_pass(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -192,9 +341,7 @@ class CliKvStoreTests(TestCase):
 
         stdout_lines = invoked_return.stdout.split("\n")
         pass_line = stdout_lines[3]
-        self._check_validation_state(
-            True, pass_line
-        )  # True implies we expect this check to pass
+        self._check_validation_state(True, pass_line)
 
     def _test_kvstore_validate_peer_state_helper(
         self, stdout: str, invalid_peers: Dict[str, Dict[str, kvstore_types.PeerSpec]]
@@ -207,10 +354,7 @@ class CliKvStoreTests(TestCase):
         stdout_lines = stdout.split("\n")
         pass_line_idx = 3
         pass_line = stdout_lines[pass_line_idx]
-        self._check_validation_state(
-            False, pass_line
-        )  # False implies we expect this check to fail
-
+        self._check_validation_state(False, pass_line)
         # Hard coding the ending line of the peers could prevent us from catching
         # duplicate peers or valid peers being printed out
         next_validation_string_idx = self._find_validation_string(

@@ -19,12 +19,39 @@ class AreaId(Enum):
     AREA3 = "area3"
 
 
+class NodeNames(Enum):
+    MOCKED_NODE1 = "mocked_node1"
+    MOCKED_NODE2 = "mocked_node2"
+
+
+class MockedKeys(Enum):
+    ADJ1 = f"adj:{NodeNames.MOCKED_NODE1.value}"
+    PREF1 = f"prefix:{NodeNames.MOCKED_NODE1.value}:[10.188.128.0/28]"
+    PREF2 = f"prefix:{NodeNames.MOCKED_NODE1.value}:[10.188.128.16/28]"
+    PREF3 = f"prefix:{NodeNames.MOCKED_NODE1.value}:[10.188.128.1/32]"
+    PREF4 = f"prefix:{NodeNames.MOCKED_NODE1.value}:[10.163.56.0/26]"
+
+
+class MockedValidKeyVals(Enum):
+    VAL1 = kvstore_types.Value(ttl=3600000, ttlVersion=1)
+    VAL2 = kvstore_types.Value(ttl=3599990, ttlVersion=1)
+    VAL3 = kvstore_types.Value(ttl=3599989, ttlVersion=1)
+    VAL4 = kvstore_types.Value(ttl=3599982, ttlVersion=1)
+    VAL5 = kvstore_types.Value(ttl=3599810, ttlVersion=1)
+
+
 MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS = OpenrConfig(
+    node_name=NodeNames.MOCKED_NODE1.value,
     areas=[
         AreaConfig(area_id=AreaId.AREA1.value),
         AreaConfig(area_id=AreaId.AREA2.value),
         AreaConfig(area_id=AreaId.AREA3.value),
-    ]
+    ],
+)
+
+MOCKED_THRIFT_CONFIG_ONE_AREA = OpenrConfig(
+    node_name=NodeNames.MOCKED_NODE2.value,
+    areas=[AreaConfig(area_id=AreaId.AREA1.value)],
 )
 
 MOCKED_KVSTORE_PEERS_TWO_PEERS = {

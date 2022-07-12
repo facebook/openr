@@ -18,17 +18,7 @@ from builtins import str
 from collections import defaultdict
 from collections.abc import Iterable
 from itertools import combinations
-from typing import (
-    AbstractSet,
-    Any,
-    Callable,
-    Dict,
-    Iterable as iterable,
-    List,
-    Optional,
-    Set,
-    Tuple,
-)
+from typing import AbstractSet, Any, Callable, Dict, List, Optional, Set, Tuple
 
 import bunch
 import click
@@ -1358,7 +1348,7 @@ class ValidateCmd(KvStoreCmdBase):
         keyDumpParams = self.buildKvStoreKeyDumpParams(
             originator_ids={openr_config.node_name}
         )
-        publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
+        area_to_publication_dict = self.fetch_keyvals(client, self.areas, keyDumpParams)
 
         area_to_peers_dict = {}
         for area in self.areas:
@@ -1368,7 +1358,7 @@ class ValidateCmd(KvStoreCmdBase):
         (
             is_adj_advertised,
             is_prefix_advertised,
-        ) = self._validate_local_key_advertisement(publication.keyVals.keys())
+        ) = self._validate_local_key_advertisement(area_to_publication_dict)
 
         invalid_peers = self._validate_peer_state(area_to_peers_dict)
 
@@ -1379,12 +1369,16 @@ class ValidateCmd(KvStoreCmdBase):
         self._print_peer_state_check(invalid_peers, openr_config.node_name)
 
     def _validate_local_key_advertisement(
-        self, keys: iterable[str]
+        self, area_to_publication_dict: Dict[str, kvstore_types.Publication]
     ) -> Tuple[bool, bool]:
         """
         Checks if the local node is advertising atleast one adjacency key and one prefix key
         to the kvstore. Returns a boolean for each
         """
+
+        keys = []
+        for _, publication in area_to_publication_dict.items():
+            keys.extend(list(publication.keyVals.keys()))
 
         is_adj_advertised = False
         is_prefix_advertised = False
