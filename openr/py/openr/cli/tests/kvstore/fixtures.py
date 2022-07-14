@@ -10,7 +10,7 @@
 from enum import Enum
 
 from openr.KvStore import ttypes as kvstore_types
-from openr.thrift.OpenrConfig.types import AreaConfig, OpenrConfig
+from openr.thrift.OpenrConfig.types import AreaConfig, KvstoreConfig, OpenrConfig
 
 
 class AreaId(Enum):
@@ -34,10 +34,38 @@ class MockedKeys(Enum):
 
 class MockedValidKeyVals(Enum):
     VAL1 = kvstore_types.Value(ttl=3600000, ttlVersion=1)
-    VAL2 = kvstore_types.Value(ttl=3599990, ttlVersion=1)
-    VAL3 = kvstore_types.Value(ttl=3599989, ttlVersion=1)
-    VAL4 = kvstore_types.Value(ttl=3599982, ttlVersion=1)
-    VAL5 = kvstore_types.Value(ttl=3599810, ttlVersion=1)
+    VAL2 = kvstore_types.Value(ttl=3599990, ttlVersion=2)
+    VAL3 = kvstore_types.Value(ttl=3599989, ttlVersion=3)
+    VAL4 = kvstore_types.Value(ttl=3599982, ttlVersion=4)
+    VAL5 = kvstore_types.Value(ttl=3599810, ttlVersion=5)
+    VAL6 = kvstore_types.Value(ttl=9999999, ttlVersion=6)
+
+
+class MockedInvalidKeyVals(Enum):
+    VAL1 = kvstore_types.Value(
+        version=1,
+        originatorId=NodeNames.MOCKED_NODE1.value,
+        value=None,
+        ttl=2000000,
+        ttlVersion=1,
+        hash=12345,
+    )
+    VAL2 = kvstore_types.Value(
+        version=2,
+        originatorId=NodeNames.MOCKED_NODE2.value,
+        value=None,
+        ttl=2599990,
+        ttlVersion=2,
+        hash=-23456,
+    )
+    VAL3 = kvstore_types.Value(
+        version=2,
+        originatorId=NodeNames.MOCKED_NODE1.value,
+        value=None,
+        ttl=7400000,
+        ttlVersion=6,
+        hash=34567,
+    )
 
 
 MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS = OpenrConfig(
@@ -47,11 +75,19 @@ MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS = OpenrConfig(
         AreaConfig(area_id=AreaId.AREA2.value),
         AreaConfig(area_id=AreaId.AREA3.value),
     ],
+    kvstore_config=KvstoreConfig(key_ttl_ms=3600000),
 )
 
 MOCKED_THRIFT_CONFIG_ONE_AREA = OpenrConfig(
     node_name=NodeNames.MOCKED_NODE2.value,
     areas=[AreaConfig(area_id=AreaId.AREA1.value)],
+    kvstore_config=KvstoreConfig(key_ttl_ms=3600000),
+)
+
+MOCKED_THRIFT_CONFIG_ONE_AREA_HIGH_TTL = OpenrConfig(
+    node_name=NodeNames.MOCKED_NODE2.value,
+    areas=[AreaConfig(area_id=AreaId.AREA1.value)],
+    kvstore_config=KvstoreConfig(key_ttl_ms=10000000),
 )
 
 MOCKED_KVSTORE_PEERS_TWO_PEERS = {

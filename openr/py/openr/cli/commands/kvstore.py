@@ -191,6 +191,69 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
         print(printing.render_horizontal_table(rows, column_labels, caption=caption))
 
+    def print_kvstore_keys(
+        self, resp: Dict[str, kvstore_types.Publication], ttl: bool, json: bool
+    ) -> None:
+        """print keys from raw publication from KvStore"""
+
+        # Export in json format if enabled
+        if json:
+            all_kv = {}
+            for _, kv in resp.items():
+                all_kv.update(kv.keyVals)
+
+            # Force set value to None
+            for value in all_kv.values():
+                value.value = None
+
+            data = {}
+            for k, v in all_kv.items():
+                data[k] = utils.thrift_to_dict(v)
+            print(utils.json_dumps(data))
+            return
+
+        rows = []
+        db_bytes = 0
+        num_keys = 0
+        for area in resp:
+            keyVals = resp[area].keyVals
+            num_keys += len(keyVals)
+            area_str = "N/A" if area is None else area
+            for key, value in sorted(keyVals.items(), key=lambda x: x[0]):
+                # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
+                bytes_value = value.value
+                bytes_len = len(bytes_value if bytes_value is not None else b"")
+                kv_size = 32 + len(key) + len(value.originatorId) + bytes_len
+                db_bytes += kv_size
+
+                hash_num = value.hash
+                hash_offset = "+" if hash_num is not None and hash_num > 0 else ""
+
+                row = [
+                    key,
+                    value.originatorId,
+                    value.version,
+                    f"{hash_offset}{value.hash:x}",
+                    printing.sprint_bytes(kv_size),
+                    area_str,
+                ]
+                if ttl:
+                    ttlStr = (
+                        "Inf"
+                        if value.ttl == Consts.CONST_TTL_INF
+                        else str(datetime.timedelta(milliseconds=value.ttl))
+                    )
+                    row.append(f"{ttlStr} - {value.ttlVersion}")
+                rows.append(row)
+
+        db_bytes_str = printing.sprint_bytes(db_bytes)
+        caption = f"KvStore Data - {num_keys} keys, {db_bytes_str}"
+        column_labels = ["Key", "Originator", "Ver", "Hash", "Size", "Area"]
+        if ttl:
+            column_labels = column_labels + ["TTL - Ver"]
+
+        print(printing.render_horizontal_table(rows, column_labels, caption))
+
 
 class KvPrefixesCmd(KvStoreCmdBase):
     def _run(
@@ -267,69 +330,6 @@ class KvKeysCmd(KvStoreCmdBase):
         )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         self.print_kvstore_keys({"": resp}, ttl, json)
-
-    def print_kvstore_keys(
-        self, resp: Dict[str, kvstore_types.Publication], ttl: bool, json: bool
-    ) -> None:
-        """print keys from raw publication from KvStore"""
-
-        # Export in json format if enabled
-        if json:
-            all_kv = {}
-            for _, kv in resp.items():
-                all_kv.update(kv.keyVals)
-
-            # Force set value to None
-            for value in all_kv.values():
-                value.value = None
-
-            data = {}
-            for k, v in all_kv.items():
-                data[k] = utils.thrift_to_dict(v)
-            print(utils.json_dumps(data))
-            return
-
-        rows = []
-        db_bytes = 0
-        num_keys = 0
-        for area in resp:
-            keyVals = resp[area].keyVals
-            num_keys += len(keyVals)
-            area_str = "N/A" if area is None else area
-            for key, value in sorted(keyVals.items(), key=lambda x: x[0]):
-                # 32 bytes comes from version, ttlVersion, ttl and hash which are i64
-                bytes_value = value.value
-                bytes_len = len(bytes_value if bytes_value is not None else b"")
-                kv_size = 32 + len(key) + len(value.originatorId) + bytes_len
-                db_bytes += kv_size
-
-                hash_num = value.hash
-                hash_offset = "+" if hash_num is not None and hash_num > 0 else ""
-
-                row = [
-                    key,
-                    value.originatorId,
-                    value.version,
-                    f"{hash_offset}{value.hash:x}",
-                    printing.sprint_bytes(kv_size),
-                    area_str,
-                ]
-                if ttl:
-                    ttlStr = (
-                        "Inf"
-                        if value.ttl == Consts.CONST_TTL_INF
-                        else str(datetime.timedelta(milliseconds=value.ttl))
-                    )
-                    row.append(f"{ttlStr} - {value.ttlVersion}")
-                rows.append(row)
-
-        db_bytes_str = printing.sprint_bytes(db_bytes)
-        caption = f"KvStore Data - {num_keys} keys, {db_bytes_str}"
-        column_labels = ["Key", "Originator", "Ver", "Hash", "Size", "Area"]
-        if ttl:
-            column_labels = column_labels + ["TTL - Ver"]
-
-        print(printing.render_horizontal_table(rows, column_labels, caption))
 
 
 class KeysCmd(KvKeysCmd):
@@ -1345,14 +1345,16 @@ class ValidateCmd(KvStoreCmdBase):
 
         # Get data
         openr_config = self.fetch_running_config_thrift(client)
-        keyDumpParams = self.buildKvStoreKeyDumpParams(
-            originator_ids={openr_config.node_name}
-        )
-        area_to_publication_dict = self.fetch_keyvals(client, self.areas, keyDumpParams)
 
         area_to_peers_dict = {}
         for area in self.areas:
             area_to_peers_dict[area] = self.fetch_kvstore_peers(client, area=area)
+
+        keyDumpParams = self.buildKvStoreKeyDumpParams(
+            originator_ids={openr_config.node_name}
+        )
+        area_to_publication_dict = self.fetch_keyvals(client, self.areas, keyDumpParams)
+        configured_ttl = openr_config.kvstore_config.key_ttl_ms
 
         # Run validation checks
         (
@@ -1362,11 +1364,19 @@ class ValidateCmd(KvStoreCmdBase):
 
         invalid_peers = self._validate_peer_state(area_to_peers_dict)
 
+        # Refetch the keys to get updated ttl
+        keyDumpParams = self.buildKvStoreKeyDumpParams()
+        area_to_invalid_keys = self._validate_key_ttl(
+            self.fetch_keyvals(client, self.areas, keyDumpParams), configured_ttl
+        )
+
         # Render validation results
         self._print_local_node_advertising_check(
             is_adj_advertised, is_prefix_advertised
         )
         self._print_peer_state_check(invalid_peers, openr_config.node_name)
+
+        self._print_key_ttl_check(area_to_invalid_keys, configured_ttl)
 
     def _validate_local_key_advertisement(
         self, area_to_publication_dict: Dict[str, kvstore_types.Publication]
@@ -1408,6 +1418,60 @@ class ValidateCmd(KvStoreCmdBase):
 
         return dict(invalid_peers)
 
+    def _validate_key_ttl(
+        self,
+        publications: Dict[str, kvstore_types.Publication],
+        ttl: int,
+        threshold: float = 0.75,
+    ) -> Dict[str, kvstore_types.Publication]:
+        """
+        Checks if the ttl of each key is above 3/4 of the max ttl
+        """
+
+        area_to_invalid_keyvals = {}
+        for area, publication in publications.items():
+            invalid_keyvals = {
+                k: v
+                for (k, v) in publication.keyVals.items()
+                if v.ttl < threshold * ttl  # Since we renew every ttl/4
+            }
+
+            # We map to a publication since _print_key_ttl_check() and print_kvstore_keys()
+            # take in dict {area : publication}
+            if len(invalid_keyvals) > 0:
+                area_to_invalid_keyvals[area] = kvstore_types.Publication(
+                    keyVals=invalid_keyvals
+                )
+        return area_to_invalid_keyvals
+
+    def _print_key_ttl_check(
+        self,
+        area_to_invalid_keys: Dict[str, kvstore_types.Publication],
+        ttl: int,
+        threshold: float = 0.75,
+    ) -> None:
+        """
+        Prints result of the ttl check along with information about keys with too low ttl
+        The ttl printed is the ttl of the key right before the check occured
+        """
+        click.echo(
+            self.validation_result_str(
+                "kvStore", "Key TTL Check", len(area_to_invalid_keys) == 0
+            )
+        )
+
+        click.echo(
+            f"Configured Time-To-Live(TTL): {ttl}ms, Threshold to alarm: {int(threshold * ttl)}ms"
+        )
+
+        if len(area_to_invalid_keys) > 0:
+            click.echo("Key-Value pairs with unexpected low TTL:")
+            self.print_kvstore_keys(
+                area_to_invalid_keys,
+                True,  # Print TTL option
+                False,  # Print with JSON format option
+            )
+
     def _print_peer_state_check(
         self,
         invalid_peers: Dict[str, Dict[str, kvstore_types_py3.PeerSpec]],
@@ -1441,7 +1505,7 @@ class ValidateCmd(KvStoreCmdBase):
         click.echo(
             self.validation_result_str(
                 "kvStore",
-                "local node advertising atleast one adjaceny and one prefix key check",
+                "prefix and adjacency key advertisement check",
                 is_pass,
             )
         )

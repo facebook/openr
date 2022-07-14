@@ -182,7 +182,7 @@ class OpenrCtrlCmd:
         self,
         client: Any,
         areas: Set[Any],
-        keyDumpParams: Optional[kv_store_types.KeyDumpParams] = None,
+        keyDumpParams: kv_store_types.KeyDumpParams,
     ) -> Dict[str, kv_store_types.Publication]:
         """
         Fetch the keyval publication for each area specified in areas via thrift call
@@ -192,13 +192,9 @@ class OpenrCtrlCmd:
 
         area_to_publication_dict = {}
         for area in areas:
-            if keyDumpParams:
-                area_to_publication_dict[area] = client.getKvStoreKeyValsFilteredArea(
-                    keyDumpParams, area
-                )
-            else:
-                area_to_publication_dict[area] = client.getKvStoreKeyValsArea(area)
-
+            area_to_publication_dict[area] = client.getKvStoreKeyValsFilteredArea(
+                keyDumpParams, area
+            )
         return area_to_publication_dict
 
     def validate_init_event(

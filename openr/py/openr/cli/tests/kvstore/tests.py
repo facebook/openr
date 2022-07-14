@@ -6,6 +6,7 @@
 
 # pyre-strict
 import copy
+import datetime
 import re
 from typing import Dict, List, Optional
 from unittest.mock import MagicMock, patch
@@ -15,6 +16,7 @@ from later.unittest import TestCase
 from openr.cli.clis import kvstore
 from openr.cli.tests import helpers
 from openr.KvStore import ttypes as kvstore_types
+from openr.utils.printing import sprint_bytes
 
 BASE_MODULE = "openr.cli.clis.kvstore"
 BASE_CMD_MODULE = "openr.cli.commands.kvstore"
@@ -27,6 +29,8 @@ from .fixtures import (
     MOCKED_KVSTORE_PEERS_TWO_PEERS,
     MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS,
     MOCKED_THRIFT_CONFIG_ONE_AREA,
+    MOCKED_THRIFT_CONFIG_ONE_AREA_HIGH_TTL,
+    MockedInvalidKeyVals,
     MockedKeys,
     MockedValidKeyVals,
 )
@@ -103,6 +107,142 @@ class CliKvStoreTests(TestCase):
                 f"Expected ctrlport: {expected_peer.ctrlPort}, got {actual_port}",
             )
 
+    def _test_keys_helper(
+        self,
+        keyvals: List[str],
+        expected_keys: Dict[str, Dict[str, kvstore_types.Value]],
+    ) -> None:
+        """
+        Checks if the information for each key in string form matches the expected values
+        in expected_keys
+        """
+
+        keyvals = [kv for kv in keyvals if kv != ""]
+        num_expected_keyvals = 0
+        for _, keyvals_of_area in expected_keys.items():
+            num_expected_keyvals += len(keyvals_of_area.keys())
+
+        self.assertEqual(
+            len(keyvals),
+            num_expected_keyvals,
+            f"Expected number of KeyVals: {num_expected_keyvals}, got {len(keyvals)}",
+        )
+
+        for keyval in keyvals:
+            keyval = [token for token in keyval.split(" ") if token != ""]
+
+            actual_key = keyval[0]
+            actual_originator = keyval[1]
+            actual_ver = keyval[2]
+            actual_hash = keyval[3]
+            # The size is formatted as [num of KB] KB"
+            # We have to account for the space when tokenizing
+            actual_size = f"{keyval[4]} {keyval[5]}"
+            actual_area = keyval[6]
+            actual_ttl = keyval[7]
+            actual_ttl_version = keyval[9]
+
+            self.assertTrue(
+                actual_area in expected_keys, f"Unexpected area, {actual_area}"
+            )
+            self.assertTrue(
+                actual_key in expected_keys[actual_area],
+                f"Unexpected key, {actual_key}",
+            )
+
+            expected_keyval = expected_keys[actual_area][actual_key]
+
+            self.assertEqual(
+                actual_ver,
+                str(expected_keyval.version),
+                f"Expected Version: {expected_keyval.version}, got: {actual_ver}",
+            )
+
+            self.assertEqual(
+                actual_originator,
+                expected_keyval.originatorId,
+                f"Expected Originator ID: {expected_keyval.originatorId}, got: {actual_originator}",
+            )
+
+            expected_ttl = str(datetime.timedelta(milliseconds=expected_keyval.ttl))
+            self.assertEqual(
+                actual_ttl,
+                expected_ttl,
+                f"Expected TTL: {expected_ttl}, got: {actual_ttl}",
+            )
+
+            self.assertEqual(
+                actual_ttl_version,
+                str(expected_keyval.ttlVersion),
+                f"Expected TTL Version: {expected_keyval.ttlVersion}, got: {actual_ttl_version}",
+            )
+
+            if expected_keyval.hash is not None:
+                hash_sign = "+" if expected_keyval.hash > 0 else ""
+                expected_hash = f"{hash_sign}{expected_keyval.hash:x}"
+
+                self.assertEqual(
+                    actual_hash,
+                    expected_hash,
+                    f"Expected Hash: {expected_hash} got: {actual_hash}",
+                )
+
+            value_size = len(
+                expected_keyval.value if expected_keyval.value is not None else b""
+            )
+            expected_size = sprint_bytes(
+                32 + len(actual_key) + len(expected_keyval.originatorId) + value_size
+            )
+            self.assertEqual(
+                actual_size,
+                expected_size,
+                f"Expected Size: {expected_size} got: {actual_size}",
+            )
+
+    def _find_validation_string(
+        self, stdout_lines: List[str], start_idx: int
+    ) -> Optional[int]:
+        """
+        A validation string is the title of each check in the format:
+        [Module Name] Name of Check: Pass state
+        Returns the index of the first validation string found. Ex with start_idx = 0:
+        Stdout:
+        [Kvstore] Local Node Advertising Atleast One Adjaceny And One Prefix Key Check: PASS
+        [Kvstore] Peer State Check: PASS
+        Would return 0.
+        If there is no next validation string, returns None
+        """
+
+        for (idx, line) in enumerate(stdout_lines[start_idx:], start_idx):
+            if re.match(r"\[Kvstore\]", line):
+                return idx
+
+    def _get_keyval_lines(
+        self, stdout_lines: List[str], validation_str_idx: int
+    ) -> List[str]:
+        """
+        Returns the list of lines with keyval info given the index of the
+        validation string of the current check
+        """
+
+        key_start_idx = None
+        for (idx, line) in enumerate(
+            stdout_lines[validation_str_idx:], validation_str_idx
+        ):
+            if re.match("Key", line):
+                key_start_idx = idx + 2
+
+        self.assertTrue(key_start_idx is not None, "No information about keys found")
+
+        next_validation_str_idx = self._find_validation_string(
+            stdout_lines, key_start_idx
+        )
+        if next_validation_str_idx is None:
+            next_validation_str_idx = len(stdout_lines)
+
+        # The last keyval is printed on the line before the next validation str
+        return stdout_lines[key_start_idx:next_validation_str_idx]
+
     @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
     def test_kvstore_peers(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
@@ -148,26 +288,8 @@ class CliKvStoreTests(TestCase):
             f"Expected the check to {pass_str}, instead the check {validation_state}ed",
         )
 
-    def _find_validation_string(
-        self, stdout_lines: List[str], start_idx: int
-    ) -> Optional[int]:
-        """
-        A validation string is the title of each check in the format:
-        [Module Name] Name of Check: Pass state
-        Returns the index of the first validation string found. Ex with start_idx = 0:
-        Stdout:
-        [Kvstore] Local Node Advertising Atleast One Adjaceny And One Prefix Key Check: PASS
-        [Kvstore] Peer State Check: PASS
-        Would return 0.
-        If there is no next validation string, returns None
-        """
-
-        for (idx, line) in enumerate(stdout_lines, start_idx):
-            if re.match("[Kvstore]", line):
-                return idx
-
     @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
-    def test_kvstore_check_key_advertising_pass(
+    def test_kvstore_check_key_advertising_and_ttl_pass(
         self, mocked_openr_client: MagicMock
     ) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
@@ -213,10 +335,21 @@ class CliKvStoreTests(TestCase):
             catch_exceptions=False,
         )
 
+        # Example of stdout for all checks passing:
+        # [Kvstore] Local Node Advertising Atleast One Adjaceny And One Prefix Key Check: PASS
+        # [Kvstore] Peer State Check: PASS
+        # [Kvstore] Key Ttl Check: PASS
+        # Current Configured Max TTL: 3600000 ms
+
         stdout_lines = invoked_return.stdout.split("\n")
-        pass_line = stdout_lines[0]
+        pass_line_advertising_check = stdout_lines[0]
         self._check_validation_state(
-            True, pass_line
+            True, pass_line_advertising_check
+        )  # True implies we expect this check to pass
+
+        pass_line_ttl_check = stdout_lines[2]
+        self._check_validation_state(
+            True, pass_line_ttl_check
         )  # True implies we expect this check to pass
 
     @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
@@ -362,7 +495,7 @@ class CliKvStoreTests(TestCase):
         )  # Offset by 1 so the next validation string idx is returned
 
         if next_validation_string_idx:
-            last_peer_idx = next_validation_string_idx - 1
+            last_peer_idx = next_validation_string_idx
         else:
             last_peer_idx = len(stdout_lines)
 
@@ -425,3 +558,109 @@ class CliKvStoreTests(TestCase):
         self._test_kvstore_validate_peer_state_helper(
             invoked_return_all_fail.stdout, expected_peers_all_fail
         )
+
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    def test_kvstore_check_key_ttl_fail(self, mocked_openr_client: MagicMock) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        mocked_returned_connection.getRunningConfigThrift.return_value = (
+            MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS
+        )
+
+        area1_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedInvalidKeyVals.VAL1.value,
+                MockedKeys.PREF1.value: MockedValidKeyVals.VAL2.value,
+                MockedKeys.PREF2.value: MockedInvalidKeyVals.VAL2.value,
+            }
+        )
+        area2_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL3.value,
+                MockedKeys.PREF3.value: MockedValidKeyVals.VAL5.value,
+            }
+        )
+        area3_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL4.value,
+                MockedKeys.PREF3.value: MockedInvalidKeyVals.VAL2.value,
+            }
+        )
+
+        expected_publications = {
+            AreaId.AREA1.value: area1_publication,
+            AreaId.AREA2.value: area2_publication,
+            AreaId.AREA3.value: area3_publication,
+        }
+
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.side_effect = (
+            lambda _, area: expected_publications[area]
+        )
+
+        invoked_return = self.runner.invoke(
+            kvstore.ValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = invoked_return.stdout.split("\n")
+        validation_str_idx = 2
+        validation_str = stdout_lines[2]
+        self._check_validation_state(False, validation_str)
+        print(invoked_return.stdout)
+        keyval_lines = self._get_keyval_lines(stdout_lines, validation_str_idx)
+        invalid_keys = {
+            AreaId.AREA1.value: {
+                MockedKeys.ADJ1.value: MockedInvalidKeyVals.VAL1.value,
+                MockedKeys.PREF2.value: MockedInvalidKeyVals.VAL2.value,
+            },
+            AreaId.AREA3.value: {
+                MockedKeys.PREF3.value: MockedInvalidKeyVals.VAL2.value,
+            },
+        }
+
+        self._test_keys_helper(keyval_lines, invalid_keys)
+
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    def test_kvstore_check_key_ttl_high_ttl(
+        self, mocked_openr_client: MagicMock
+    ) -> None:
+        # Check with a different configured ttl
+        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+            mocked_openr_client
+        )
+        mocked_returned_connection.getRunningConfigThrift.return_value = (
+            MOCKED_THRIFT_CONFIG_ONE_AREA_HIGH_TTL
+        )
+
+        area1_publication = kvstore_types.Publication(
+            keyVals={
+                MockedKeys.ADJ1.value: MockedValidKeyVals.VAL6.value,
+                MockedKeys.PREF1.value: MockedInvalidKeyVals.VAL3.value,
+            }
+        )
+
+        expected_publications = {AreaId.AREA1.value: area1_publication}
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.side_effect = (
+            lambda _, area: expected_publications[area]
+        )
+
+        invoked_return = self.runner.invoke(
+            kvstore.ValidateCli.validate,
+            [],
+            catch_exceptions=False,
+        )
+
+        stdout_lines = invoked_return.stdout.split("\n")
+        validation_str_idx = 2
+        validation_str = stdout_lines[2]
+        self._check_validation_state(False, validation_str)
+
+        keyval_lines = self._get_keyval_lines(stdout_lines, validation_str_idx)
+        invalid_key = {
+            AreaId.AREA1.value: {
+                MockedKeys.PREF1.value: MockedInvalidKeyVals.VAL3.value
+            }
+        }
+        self._test_keys_helper(keyval_lines, invalid_key)
