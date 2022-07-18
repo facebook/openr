@@ -44,6 +44,7 @@ const size_t kSizeOfValue = 1024;
 enum class OperationType {
   ADD_NEW_KEY = 0,
   UPDATE_VERSION = 1,
+  UPDATE_TTL = 2,
 };
 
 /*
