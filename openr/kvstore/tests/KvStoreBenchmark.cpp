@@ -27,15 +27,6 @@
     name(counters, iters, ##__VA_ARGS__);                              \
   }
 
-namespace {
-
-// The byte size of a key
-const int kSizeOfKey = 32;
-// The byte size of a value
-const int kSizeOfValue = 1024;
-
-} // namespace
-
 namespace openr {
 
 /**

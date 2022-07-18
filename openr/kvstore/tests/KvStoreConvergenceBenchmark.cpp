@@ -7,6 +7,7 @@
 
 #include <folly/Benchmark.h>
 
+#if FOLLY_HAS_COROUTINES
 #include <folly/experimental/coro/BlockingWait.h>
 #include <folly/init/Init.h>
 #include <folly/logging/Init.h>
@@ -31,7 +32,12 @@ const std::unordered_set<std::string> areaIds{kTestingAreaName};
 
 void
 runExperiment(
-    uint32_t n, size_t nNodes, ClusterTopology topo, size_t nExistingKey = 0) {
+    uint32_t n,
+    size_t nNodes,
+    ClusterTopology topo,
+    size_t nExistingKey = 0,
+    size_t sizeOfKey = kSizeOfKey,
+    size_t sizeOfVal = kSizeOfValue) {
 #pragma region ClusterSetup
   std::vector<std::unique_ptr<
       KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>>>
@@ -41,6 +47,7 @@ runExperiment(
 
   BENCHMARK_SUSPEND {
     kvStoreWrappers_.reserve(nNodes);
+
     for (size_t i = 0; i < nNodes; i++) {
       thrift::KvStoreConfig kvStoreConfig;
       kvStoreConfig.node_name() = genNodeName(i);
@@ -56,31 +63,31 @@ runExperiment(
 
 #pragma region ExistingKeySetup
     for (size_t i = 0; i < nExistingKey; i++) {
-      std::string key = folly::to<std::string>("existingKey", i);
-      auto val = createThriftValue(
+      std::string key = genRandomStrWithPrefix("existing", sizeOfKey);
+      thrift::Value val = createThriftValue(
           1,
           kvStoreWrappers_.front()->getNodeId(),
-          folly::to<std::string>("existingValue", i));
+          genRandomStrWithPrefix("existing", sizeOfVal));
       kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
-      events_.emplace(key, val);
+      events_.emplace(std::move(key), std::move(val));
     }
     // Wait for existing key val to converge
     folly::coro::blockingWait(co_waitForConvergence(events_, kvStoreWrappers_));
 #pragma endregion ExistingKeySetup
 
 #pragma region EventSetup
-    // TODO: make this mult-thread
+    std::string nodeId = kvStoreWrappers_.front()->getNodeId();
+    keyVals.reserve(n);
     for (size_t i = 0; i < n; i++) {
-      std::string key = folly::to<std::string>("key", i);
-      auto val = createThriftValue(
-          1,
-          kvStoreWrappers_.front()->getNodeId(),
-          folly::to<std::string>("value", i));
+      std::string key = genRandomStrWithPrefix("newadd", sizeOfKey);
+      thrift::Value val = createThriftValue(
+          1, nodeId, genRandomStrWithPrefix("newadd", sizeOfVal));
+      keyVals.emplace_back(std::move(key), std::move(val));
+    }
+
+    for (const auto& [key, val] : keyVals) {
       events_.emplace(key, val);
     }
-    keyVals.resize(events_.size());
-
-    std::copy(events_.begin(), events_.end(), keyVals.begin());
 
 #pragma endregion EventSetup
   } // end of BENCHMARK_SUSPEND
@@ -92,65 +99,100 @@ runExperiment(
   BENCHMARK_SUSPEND {
     // Need to explicity call destructor in suspend mode,
     // otherwise destruct time would be counted.
-    // which results in wrong benchmark result.
+    // which could result in wrong benchmark result.
     kvStoreWrappers_.clear();
+    events_.clear();
+    keyVals.clear();
   }
 #pragma endregion TearDown
 }
 
 #pragma region LINEAR
 BENCHMARK_NAMED_PARAM(
-    runExperiment, 2_NODE_LINEAR_TOPO, 2, ClusterTopology::LINEAR);
+    runExperiment,
+    2_NODE_LINEAR_TOPO,
+    /* nNodes = */ 2,
+    ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 10_NODE_LINEAR_TOPO, 10, ClusterTopology::LINEAR);
+    runExperiment,
+    10_NODE_LINEAR_TOPO,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 20_NODE_LINEAR_TOPO, 20, ClusterTopology::LINEAR);
+    runExperiment,
+    20_NODE_LINEAR_TOPO,
+    /* nNodes = */ 20,
+    ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 50_NODE_LINEAR_TOPO, 50, ClusterTopology::LINEAR);
+    runExperiment,
+    50_NODE_LINEAR_TOPO,
+    /* nNodes = */ 50,
+    ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 70_NODE_LINEAR_TOPO, 70, ClusterTopology::LINEAR);
+    runExperiment,
+    70_NODE_LINEAR_TOPO,
+    /* nNodes = */ 70,
+    ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_NODE_LINEAR_TOPO, 100, ClusterTopology::LINEAR);
+    runExperiment,
+    100_NODE_LINEAR_TOPO,
+    /* nNodes = */ 100,
+    ClusterTopology::LINEAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 1000_NODE_LINEAR_TOPO, 1000, ClusterTopology::LINEAR);
+    runExperiment,
+    1000_NODE_LINEAR_TOPO,
+    /* nNodes = */ 1000,
+    ClusterTopology::LINEAR);
 #pragma endregion LINEAR
 
 BENCHMARK_DRAW_LINE();
 
 #pragma region RING
 BENCHMARK_NAMED_PARAM(
-    runExperiment, 2_NODE_RING_TOPO, 2, ClusterTopology::RING);
+    runExperiment, 2_NODE_RING_TOPO, /* nNodes = */ 2, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 10_NODE_RING_TOPO, 10, ClusterTopology::RING);
+    runExperiment, 10_NODE_RING_TOPO, /* nNodes = */ 10, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 20_NODE_RING_TOPO, 20, ClusterTopology::RING);
+    runExperiment, 20_NODE_RING_TOPO, /* nNodes = */ 20, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 50_NODE_RING_TOPO, 50, ClusterTopology::RING);
+    runExperiment, 50_NODE_RING_TOPO, /* nNodes = */ 50, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 70_NODE_RING_TOPO, 70, ClusterTopology::RING);
+    runExperiment, 70_NODE_RING_TOPO, /* nNodes = */ 70, ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_NODE_RING_TOPO, 100, ClusterTopology::RING);
+    runExperiment,
+    100_NODE_RING_TOPO,
+    /* nNodes = */ 100,
+    ClusterTopology::RING);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 1000_NODE_RING_TOPO, 1000, ClusterTopology::RING);
+    runExperiment,
+    1000_NODE_RING_TOPO,
+    /* nNodes = */ 1000,
+    ClusterTopology::RING);
 #pragma endregion RING
 
 BENCHMARK_DRAW_LINE();
 
 #pragma region STAR
 BENCHMARK_NAMED_PARAM(
-    runExperiment, 2_NODE_STAR_TOPO, 2, ClusterTopology::STAR);
+    runExperiment, 2_NODE_STAR_TOPO, /* nNodes = */ 2, ClusterTopology::STAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 10_NODE_STAR_TOPO, 10, ClusterTopology::STAR);
+    runExperiment, 10_NODE_STAR_TOPO, /* nNodes = */ 10, ClusterTopology::STAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 20_NODE_STAR_TOPO, 20, ClusterTopology::STAR);
+    runExperiment, 20_NODE_STAR_TOPO, /* nNodes = */ 20, ClusterTopology::STAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 50_NODE_STAR_TOPO, 50, ClusterTopology::STAR);
+    runExperiment, 50_NODE_STAR_TOPO, /* nNodes = */ 50, ClusterTopology::STAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 70_NODE_STAR_TOPO, 70, ClusterTopology::STAR);
+    runExperiment, 70_NODE_STAR_TOPO, /* nNodes = */ 70, ClusterTopology::STAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 100_NODE_STAR_TOPO, 100, ClusterTopology::STAR);
+    runExperiment,
+    100_NODE_STAR_TOPO,
+    /* nNodes = */ 100,
+    ClusterTopology::STAR);
 BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment, 1000_NODE_STAR_TOPO, 1000, ClusterTopology::STAR);
+    runExperiment,
+    1000_NODE_STAR_TOPO,
+    /* nNodes = */ 1000,
+    ClusterTopology::STAR);
 #pragma endregion STAR
 
 BENCHMARK_DRAW_LINE();
@@ -159,39 +201,39 @@ BENCHMARK_DRAW_LINE();
 BENCHMARK_NAMED_PARAM(
     runExperiment,
     100_NODE_LINEAR_TOPO_0_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::LINEAR,
-    0);
+    /* existingKey = */ 0);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_LINEAR_TOPO_10_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::LINEAR,
-    10);
+    /* existingKey = */ 10);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_LINEAR_TOPO_50_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::LINEAR,
-    50);
+    /* existingKey = */ 50);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_LINEAR_TOPO_100_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::LINEAR,
-    100);
+    /* existingKey = */ 100);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_LINEAR_TOPO_500_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::LINEAR,
-    500);
+    /* existingKey = */ 500);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_LINEAR_TOPO_1000_EXISTING,
-    1000,
+    /* nNodes = */ 1000,
     ClusterTopology::LINEAR,
-    1000);
+    /* existingKey = */ 1000);
 #pragma endregion LINEAR_WITH_EXISTINGKEY
 
 BENCHMARK_DRAW_LINE();
@@ -200,39 +242,39 @@ BENCHMARK_DRAW_LINE();
 BENCHMARK_NAMED_PARAM(
     runExperiment,
     100_NODE_RING_TOPO_0_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::RING,
-    0);
+    /* existingKey = */ 0);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_RING_TOPO_10_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::RING,
-    10);
+    /* existingKey = */ 10);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_RING_TOPO_50_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::RING,
-    50);
+    /* existingKey = */ 50);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_RING_TOPO_100_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::RING,
-    100);
+    /* existingKey = */ 100);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_RING_TOPO_500_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::RING,
-    500);
+    /* existingKey = */ 500);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_RING_TOPO_1000_EXISTING,
-    1000,
+    /* nNodes = */ 1000,
     ClusterTopology::RING,
-    1000);
+    /* existingKey = */ 1000);
 #pragma endregion RING_WITH_EXISTINGKEY
 
 BENCHMARK_DRAW_LINE();
@@ -241,46 +283,159 @@ BENCHMARK_DRAW_LINE();
 BENCHMARK_NAMED_PARAM(
     runExperiment,
     100_NODE_STAR_TOPO_0_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::STAR,
-    0);
+    /* existingKey = */ 0);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_STAR_TOPO_10_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::STAR,
-    10);
+    /* existingKey = */ 10);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_STAR_TOPO_50_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::STAR,
-    50);
+    /* existingKey = */ 50);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_STAR_TOPO_100_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::STAR,
-    100);
+    /* existingKey = */ 100);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_STAR_TOPO_500_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::STAR,
-    500);
+    /* existingKey = */ 500);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
     100_NODE_STAR_TOPO_1000_EXISTING,
-    100,
+    /* nNodes = */ 100,
     ClusterTopology::STAR,
-    1000);
+    /* existingKey = */ 1000);
 #pragma endregion STAR_WITH_EXISTINGKEY
 
 BENCHMARK_DRAW_LINE();
 
+#pragma region LINEAR_WITH_KEY_SIZE
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_DEFAULT_KEYSIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_5X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 500,
+    /* valSize = */ 50);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_10X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 1000,
+    /* valSize = */ 100);
+
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_100X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 10000,
+    /* valSize = */ 1000);
+
+#pragma endregion LINEAR_WITH_KEY_SIZE
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region RING_WITH_KEY_SIZE
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_DEFAULT_KEYSIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::RING);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_5X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ 500,
+    /* valSize = */ 50);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_10X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ 1000,
+    /* valSize = */ 100);
+
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_100X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ 10000,
+    /* valSize = */ 1000);
+
+#pragma endregion RING_WITH_KEY_SIZE
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region STAR_WITH_KEY_SIZE
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_DEFAULT_KEYSIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_5X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 500,
+    /* valSize = */ 50);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_10X_KEY_VAL_SIZE,
+    10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 1000,
+    /* valSize = */ 100);
+
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_100X_KEY_VAL_SIZE,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 10000,
+    /* valSize = */ 1000);
+
+#pragma endregion STAR_WITH_KEY_SIZE
+
+BENCHMARK_DRAW_LINE();
+#endif
+
 int
 main(int argc, char** argv) {
   facebook::initFacebook(&argc, &argv);
+
+#if FOLLY_HAS_COROUTINES
   folly::runBenchmarks();
+#endif
+
   return 0;
 };

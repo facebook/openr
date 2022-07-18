@@ -7,14 +7,18 @@
 
 #pragma once
 
+#include <algorithm>
+
 #include <folly/Conv.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 
+#if FOLLY_HAS_COROUTINES
 #include <folly/experimental/coro/BlockingWait.h>
 #include <folly/experimental/coro/Collect.h>
 #include <folly/experimental/coro/Generator.h>
 #include <folly/experimental/coro/Task.h>
+#endif
 
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
@@ -32,10 +36,21 @@
 
 namespace openr {
 
+// The byte size of a key
+const size_t kSizeOfKey = 32;
+// The byte size of a value
+const size_t kSizeOfValue = 1024;
+
 /*
  * Util function to generate random string of given length
  */
 std::string genRandomStr(const int64_t len);
+
+/*
+ * Util function to generate random string of given length with specified prefix
+ */
+std::string genRandomStrWithPrefix(
+    const std::string& prefix, const unsigned long len);
 
 /*
  * Util function to construct thrift::AreaConfig
@@ -116,6 +131,7 @@ void generateTopo(
         apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores,
     ClusterTopology topo);
 
+#if FOLLY_HAS_COROUTINES
 /*
  * Util function to validate if the given node has received all events
  */
@@ -131,4 +147,5 @@ folly::coro::Task<void> co_waitForConvergence(
     const std::unordered_map<std::string, ::openr::thrift::Value>& events,
     const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
         apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores);
+#endif
 } // namespace openr

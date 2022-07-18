@@ -33,6 +33,27 @@ genRandomStr(const int64_t len) {
 }
 
 /*
+ * Util function to generate random string of given length with specified prefix
+ */
+std::string
+genRandomStrWithPrefix(const std::string& prefix, const unsigned long len) {
+  std::string s;
+  s.resize(std::max(len, prefix.size()));
+
+  static const std::string alphanum =
+      "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+
+  for (int64_t i = 0; i < prefix.size(); ++i) {
+    s[i] = prefix.at(i);
+  }
+
+  for (int64_t i = prefix.size(); i < len; ++i) {
+    s[i] = alphanum[folly::Random::rand32() % alphanum.size()];
+  }
+  return s;
+}
+
+/*
  * Util function to construct thrift::AreaConfig
  */
 openr::thrift::AreaConfig
@@ -363,6 +384,7 @@ generateTopo(
   }
 }
 
+#if FOLLY_HAS_COROUTINES
 folly::coro::Task<void>
 co_validateNodeKey(
     const std::unordered_map<std::string, ::openr::thrift::Value>& events,
@@ -388,5 +410,6 @@ co_waitForConvergence(
       }(),
       ::detail::kMaxConcurrency);
 }
+#endif
 
 } // namespace openr
