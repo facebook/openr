@@ -448,3 +448,15 @@ TEST_F(DispatcherKnobTestFixture, DataPathTest) {
 
   evb.loop();
 }
+
+int
+main(int argc, char* argv[]) {
+  // Parse command line flags
+  testing::InitGoogleTest(&argc, argv);
+  gflags::ParseCommandLineFlags(&argc, &argv, true);
+  folly::init(&argc, &argv);
+  FLAGS_logtostderr = true;
+
+  // Run the tests
+  return RUN_ALL_TESTS();
+}
