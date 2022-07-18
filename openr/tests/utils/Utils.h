@@ -41,6 +41,11 @@ const size_t kSizeOfKey = 32;
 // The byte size of a value
 const size_t kSizeOfValue = 1024;
 
+enum class OperationType {
+  ADD_NEW_KEY = 0,
+  UPDATE_VERSION = 1,
+};
+
 /*
  * Util function to generate random string of given length
  */
@@ -138,7 +143,8 @@ void generateTopo(
 folly::coro::Task<void> co_validateNodeKey(
     const std::unordered_map<std::string, ::openr::thrift::Value>& events,
     ::openr::KvStoreWrapper<
-        apache::thrift::Client<::openr::thrift::KvStoreService>>* node);
+        apache::thrift::Client<::openr::thrift::KvStoreService>>* node,
+    int timeoutSec = 30);
 
 /*
  * Util function to validate if all nodes have received all events

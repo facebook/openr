@@ -6,6 +6,8 @@
  */
 
 #include <openr/tests/utils/Utils.h>
+#include <chrono>
+#include <thread>
 
 namespace detail {
 // Prefix length of a subnet
@@ -389,8 +391,14 @@ folly::coro::Task<void>
 co_validateNodeKey(
     const std::unordered_map<std::string, ::openr::thrift::Value>& events,
     ::openr::KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>*
-        node) {
-  while (events.size() != node->dumpAll(kTestingAreaName).size()) {
+        node,
+    int timeoutSec) {
+  auto startTime = std::chrono::steady_clock::now();
+  while (events != node->dumpAll(kTestingAreaName)) {
+    auto curTime = std::chrono::steady_clock::now();
+    if (curTime - startTime > std::chrono::seconds(timeoutSec)) {
+      XLOG(FATAL) << fmt::format("exceed wait time {} seconds", timeoutSec);
+    }
     // yield to avoid hogging the process
     std::this_thread::yield();
   }

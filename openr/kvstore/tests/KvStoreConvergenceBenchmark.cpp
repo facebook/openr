@@ -37,7 +37,8 @@ runExperiment(
     ClusterTopology topo,
     size_t nExistingKey = 0,
     size_t sizeOfKey = kSizeOfKey,
-    size_t sizeOfVal = kSizeOfValue) {
+    size_t sizeOfVal = kSizeOfValue,
+    OperationType operationType = OperationType::ADD_NEW_KEY) {
 #pragma region ClusterSetup
   std::vector<std::unique_ptr<
       KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>>>
@@ -62,31 +63,52 @@ runExperiment(
 #pragma endregion ClusterSetup
 
 #pragma region ExistingKeySetup
-    for (size_t i = 0; i < nExistingKey; i++) {
-      std::string key = genRandomStrWithPrefix("existing", sizeOfKey);
-      thrift::Value val = createThriftValue(
-          1,
-          kvStoreWrappers_.front()->getNodeId(),
-          genRandomStrWithPrefix("existing", sizeOfVal));
-      kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
-      events_.emplace(std::move(key), std::move(val));
+    switch (operationType) {
+    case OperationType::ADD_NEW_KEY:
+    case OperationType::UPDATE_VERSION: {
+      size_t nExist =
+          operationType == OperationType::ADD_NEW_KEY ? nExistingKey : n;
+      for (size_t i = 0; i < nExist; i++) {
+        std::string key = genRandomStrWithPrefix("existingKey-", sizeOfKey);
+        thrift::Value val = createThriftValue(
+            1,
+            kvStoreWrappers_.front()->getNodeId(),
+            genRandomStrWithPrefix("existingVal-", sizeOfVal));
+        kvStoreWrappers_.front()->setKey(kTestingAreaName, key, val);
+        events_.emplace(std::move(key), std::move(val));
+      }
+      break;
     }
+    }
+
     // Wait for existing key val to converge
     folly::coro::blockingWait(co_waitForConvergence(events_, kvStoreWrappers_));
 #pragma endregion ExistingKeySetup
 
 #pragma region EventSetup
     std::string nodeId = kvStoreWrappers_.front()->getNodeId();
-    keyVals.reserve(n);
-    for (size_t i = 0; i < n; i++) {
-      std::string key = genRandomStrWithPrefix("newadd", sizeOfKey);
-      thrift::Value val = createThriftValue(
-          1, nodeId, genRandomStrWithPrefix("newadd", sizeOfVal));
-      keyVals.emplace_back(std::move(key), std::move(val));
+    switch (operationType) {
+    case OperationType::ADD_NEW_KEY: {
+      keyVals.reserve(n);
+      for (size_t i = 0; i < n; i++) {
+        std::string key = genRandomStrWithPrefix("newKey-", sizeOfKey);
+        thrift::Value val = createThriftValue(
+            1, nodeId, genRandomStrWithPrefix("newVal-", sizeOfVal));
+        events_.emplace(key, val);
+        keyVals.emplace_back(std::move(key), std::move(val));
+      }
+      break;
     }
-
-    for (const auto& [key, val] : keyVals) {
-      events_.emplace(key, val);
+    case OperationType::UPDATE_VERSION: {
+      for (auto& [key, val] : events_) {
+        auto newVal =
+            createThriftValue(*val.version_ref() + 1, nodeId, *val.value_ref());
+        events_[key] = newVal;
+        keyVals.emplace_back(key, newVal);
+      }
+      XCHECK_EQ(events_.size(), n);
+      break;
+    }
     }
 
 #pragma endregion EventSetup
@@ -427,6 +449,76 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 #pragma endregion STAR_WITH_KEY_SIZE
 
 BENCHMARK_DRAW_LINE();
+
+#pragma region LINEAR_WITH_UPDATE_OPERATION
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_DEFAULT_OPERATION,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_UPDATE_OPERATION,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue,
+    /* operationType = */ OperationType::UPDATE_VERSION);
+
+#pragma endregion LINEAR_WITH_UPDATE_OPERATION
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region RING_WITH_UPDATE_OPERATION
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_DEFAULT_OPERATION,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_UPDATE_OPERATION,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue,
+    /* operationType = */ OperationType::UPDATE_VERSION);
+
+#pragma endregion RING_WITH_UPDATE_OPERATION
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region STAR_WITH_UPDATE_OPERATION
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_DEFAULT_OPERATION,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_UPDATE_OPERATION,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue,
+    /* operationType = */ OperationType::UPDATE_VERSION);
+
+#pragma endregion STAR_WITH_UPDATE_OPERATION
+
+BENCHMARK_DRAW_LINE();
+
 #endif
 
 int
