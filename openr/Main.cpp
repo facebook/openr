@@ -234,6 +234,8 @@ main(int argc, char** argv) {
   ReplicateQueue<LogSample> logSampleQueue;
   std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr{
       nullptr};
+  std::unique_ptr<dispatcher::DispatcherQueue>
+      kvStorePublicationsDispatcherQueue{nullptr};
 
   // Create the readers in the first place to make sure they can receive every
   // messages from the writer(s)
@@ -258,6 +260,11 @@ main(int argc, char** argv) {
     pluginRouteReaderPtr =
         std::make_unique<messaging::RQueue<DecisionRouteUpdate>>(
             prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"));
+  }
+
+  if (config->isKvStoreDispatcherEnabled()) {
+    kvStorePublicationsDispatcherQueue =
+        std::make_unique<dispatcher::DispatcherQueue>();
   }
 
   // structures to organize our modules
@@ -374,7 +381,8 @@ main(int argc, char** argv) {
         watchdog,
         "dispatcher",
         std::make_unique<Dispatcher>(
-            kvStoreUpdatesQueue.getReader("dispatcher")));
+            kvStoreUpdatesQueue.getReader("dispatcher"),
+            *kvStorePublicationsDispatcherQueue));
 
     // make Decision/Prefix Manager subscribers of Dispatcher
     decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
@@ -383,6 +391,9 @@ main(int argc, char** argv) {
 
     prefixMgrKvStoreUpdatesReader =
         dispatcher->getReader({Constants::kPrefixDbMarker.toString()});
+
+    watchdog->addQueue(
+        *kvStorePublicationsDispatcherQueue, "kvStorePublicationsQueue");
   }
 
   // PrefixManager will wait for Fib programming and publishing updates
@@ -575,6 +586,9 @@ main(int argc, char** argv) {
   netlinkEventsQueue.close();
   prefixMgrRouteUpdatesQueue.close();
   logSampleQueue.close();
+  if (config->isKvStoreDispatcherEnabled()) {
+    kvStorePublicationsDispatcherQueue->close();
+  }
 
   // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
   thriftCtrlServer->stop();

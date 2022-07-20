@@ -34,7 +34,7 @@ class DispatcherTestFixture : public ::testing::Test {
   void
   SetUp() override {
     dispatcher_ = std::make_shared<dispatcher::Dispatcher>(
-        kvStoreUpdatesQueue_.getReader());
+        kvStoreUpdatesQueue_.getReader(), kvStorePublicationsQueue_);
 
     dispatcherThread_ = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Dispatcher thread starting";
@@ -49,6 +49,7 @@ class DispatcherTestFixture : public ::testing::Test {
   TearDown() override {
     // ensure that Dispatcher can shutdown
     kvStoreUpdatesQueue_.close();
+    kvStorePublicationsQueue_.close();
     dispatcher_->stop();
     LOG(INFO) << "Stopping the Dispatcher thread";
     dispatcherThread_->join();
@@ -57,7 +58,9 @@ class DispatcherTestFixture : public ::testing::Test {
 
   // Serializes/deserializes thrift objects
   apache::thrift::CompactSerializer serializer_{};
+
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
+  dispatcher::DispatcherQueue kvStorePublicationsQueue_;
   // Dispatcher owned by this wrapper
   std::shared_ptr<dispatcher::Dispatcher> dispatcher_{nullptr};
   // Thread in which Dispatcher will be running
@@ -237,7 +240,7 @@ TEST_F(DispatcherTestFixture, EmptyPublicationTest) {
   evb.loop();
 }
 
-class DispatcherKnobTestFixture : public ::testing::Test {
+class DispatcherKnobTestFixture : public DispatcherTestFixture {
  public:
   void
   SetUp() override {
@@ -253,7 +256,7 @@ class DispatcherKnobTestFixture : public ::testing::Test {
   TearDown() override {
     kvStoreWrapper_->closeQueue();
     // ensure that Dispatcher can shutdown
-    stopDispatcher();
+    DispatcherTestFixture::TearDown();
   }
 
   virtual thrift::OpenrConfig
@@ -278,7 +281,8 @@ class DispatcherKnobTestFixture : public ::testing::Test {
 
   void
   createDispatcher(messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue) {
-    dispatcher_ = std::make_shared<dispatcher::Dispatcher>(kvStoreUpdatesQueue);
+    dispatcher_ = std::make_shared<dispatcher::Dispatcher>(
+        kvStoreUpdatesQueue, kvStorePublicationsQueue_);
 
     dispatcherThread_ = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Dispatcher thread starting";
@@ -289,85 +293,11 @@ class DispatcherKnobTestFixture : public ::testing::Test {
     dispatcher_->waitUntilRunning();
   }
 
-  void
-  stopDispatcher() {
-    dispatcher_->stop();
-    LOG(INFO) << "Stopping the Dispatcher thread";
-    dispatcherThread_->join();
-    LOG(INFO) << "Dispatcher thread got stopped";
-  }
-
   std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>
       kvStoreWrapper_;
 
   std::shared_ptr<Config> config_;
-  // Serializes/deserializes thrift objects
-  apache::thrift::CompactSerializer serializer_{};
-
-  // Dispatcher owned by this wrapper
-  std::shared_ptr<dispatcher::Dispatcher> dispatcher_{nullptr};
-  // Thread in which Dispatcher will be running
-  std::unique_ptr<std::thread> dispatcherThread_{nullptr};
 };
-
-/*
- * helper function to check if two publications are equal without checking
- * equality of hash and nodeIds
- */
-bool
-equalPublication(thrift::Publication&& pub1, thrift::Publication&& pub2) {
-  if ((*pub1.keyVals()).size() != (*pub2.keyVals()).size()) {
-    return false;
-  }
-
-  // make ordered copies of KeyVals
-  std::map<std::string, thrift::Value> pub1KeyVals(
-      (*pub1.keyVals()).begin(), (*pub1.keyVals()).end());
-  std::map<std::string, thrift::Value> pub2KeyVals(
-      (*pub2.keyVals()).begin(), (*pub2.keyVals()).end());
-
-  for (auto it1 = pub1KeyVals.begin(), it2 = pub2KeyVals.begin();
-       it1 != pub1KeyVals.end() and it2 != pub2KeyVals.end();
-       ++it1, ++it2) {
-    // check the key matches
-    if (it1->first != it2->first) {
-      return false;
-    }
-
-    if (compareValues(it1->second, it2->second) != ComparisonResult::TIED) {
-      return false;
-    }
-  }
-
-  if (pub1.area() != pub2.area()) {
-    return false;
-  }
-
-  if (pub1.timestamp_ms() != pub2.timestamp_ms()) {
-    return false;
-  }
-
-  std::sort((*pub1.expiredKeys()).begin(), (*pub1.expiredKeys()).end());
-  std::sort((*pub2.expiredKeys()).begin(), (*pub2.expiredKeys()).end());
-
-  if (pub1.expiredKeys() != pub2.expiredKeys()) {
-    return false;
-  }
-
-  if (pub1.tobeUpdatedKeys().has_value() and
-      pub2.tobeUpdatedKeys().has_value()) {
-    std::sort(
-        (*pub1.tobeUpdatedKeys()).begin(), (*pub1.tobeUpdatedKeys()).end());
-    std::sort(
-        (*pub2.tobeUpdatedKeys()).begin(), (*pub2.tobeUpdatedKeys()).end());
-  }
-
-  if (pub1.tobeUpdatedKeys() != pub2.tobeUpdatedKeys()) {
-    return false;
-  }
-
-  return true;
-}
 
 /*
  * Test will check that Dispatcher knob can successfully be switched on and will

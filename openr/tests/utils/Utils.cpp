@@ -300,6 +300,65 @@ createAdjValue(
       0 /* hash */);
 }
 
+/*
+ * Util function to check if two publications are equal without checking
+ * equality of hash and nodeIds
+ */
+bool
+equalPublication(thrift::Publication&& pub1, thrift::Publication&& pub2) {
+  if ((*pub1.keyVals()).size() != (*pub2.keyVals()).size()) {
+    return false;
+  }
+
+  // make ordered copies of KeyVals
+  std::map<std::string, thrift::Value> pub1KeyVals(
+      (*pub1.keyVals()).begin(), (*pub1.keyVals()).end());
+  std::map<std::string, thrift::Value> pub2KeyVals(
+      (*pub2.keyVals()).begin(), (*pub2.keyVals()).end());
+
+  for (auto it1 = pub1KeyVals.begin(), it2 = pub2KeyVals.begin();
+       it1 != pub1KeyVals.end() and it2 != pub2KeyVals.end();
+       ++it1, ++it2) {
+    // check the key matches
+    if (it1->first != it2->first) {
+      return false;
+    }
+
+    if (compareValues(it1->second, it2->second) != ComparisonResult::TIED) {
+      return false;
+    }
+  }
+
+  if (pub1.area() != pub2.area()) {
+    return false;
+  }
+
+  if (pub1.timestamp_ms() != pub2.timestamp_ms()) {
+    return false;
+  }
+
+  std::sort((*pub1.expiredKeys()).begin(), (*pub1.expiredKeys()).end());
+  std::sort((*pub2.expiredKeys()).begin(), (*pub2.expiredKeys()).end());
+
+  if (pub1.expiredKeys() != pub2.expiredKeys()) {
+    return false;
+  }
+
+  if (pub1.tobeUpdatedKeys().has_value() and
+      pub2.tobeUpdatedKeys().has_value()) {
+    std::sort(
+        (*pub1.tobeUpdatedKeys()).begin(), (*pub1.tobeUpdatedKeys()).end());
+    std::sort(
+        (*pub2.tobeUpdatedKeys()).begin(), (*pub2.tobeUpdatedKeys()).end());
+  }
+
+  if (pub1.tobeUpdatedKeys() != pub2.tobeUpdatedKeys()) {
+    return false;
+  }
+
+  return true;
+}
+
 std::string
 genNodeName(size_t i) {
   return folly::to<std::string>("node-", i);

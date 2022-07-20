@@ -118,6 +118,12 @@ thrift::Value createAdjValue(
     int32_t nodeId = 0);
 
 /*
+ * Util function to check if two publications are equal without checking
+ * equality of hash and nodeIds
+ */
+bool equalPublication(thrift::Publication&& pub1, thrift::Publication&& pub2);
+
+/*
  * Util function to generate unique node name based on index `i`
  */
 std::string genNodeName(size_t i);

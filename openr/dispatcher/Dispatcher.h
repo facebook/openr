@@ -31,7 +31,8 @@ class Dispatcher : public OpenrEventBase {
  public:
   explicit Dispatcher(
       // Reader Queue for receiving KvStore publications
-      messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue);
+      messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
+      DispatcherQueue& kvStorePublicationsQueue);
   virtual ~Dispatcher() override = default;
 
   /**
@@ -70,7 +71,7 @@ class Dispatcher : public OpenrEventBase {
 
  private:
   // Queue to publish KvStore Updates
-  DispatcherQueue kvStorePublicationsQueue_;
+  DispatcherQueue& kvStorePublicationsQueue_;
 };
 
 } // namespace dispatcher

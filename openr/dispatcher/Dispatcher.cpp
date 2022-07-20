@@ -7,6 +7,7 @@
 
 #include <openr/dispatcher/Dispatcher.h>
 
+#include <openr/dispatcher/DispatcherQueue.h>
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
@@ -24,7 +25,9 @@ namespace fb303 = facebook::fb303;
 namespace openr {
 namespace dispatcher {
 Dispatcher::Dispatcher(
-    messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue) {
+    messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
+    DispatcherQueue& kvStorePublicationsQueue)
+    : kvStorePublicationsQueue_(kvStorePublicationsQueue) {
   // fiber to process publications from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
     XLOG(INFO) << "Starting KvStore updates processing fiber";
@@ -46,9 +49,6 @@ Dispatcher::Dispatcher(
 
 void
 Dispatcher::stop() {
-  // close the producer queue
-  kvStorePublicationsQueue_.close();
-
   // Invoke stop method of super class
   OpenrEventBase::stop();
 }
