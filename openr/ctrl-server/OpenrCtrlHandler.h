@@ -61,7 +61,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       PrefixManager* prefixManager,
       Spark* spark,
       std::shared_ptr<const Config> config,
-      dispatcher::Dispatcher* dispatcher = nullptr);
+      Dispatcher* dispatcher = nullptr);
 
   ~OpenrCtrlHandler() override;
 
@@ -524,7 +524,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   PrefixManager* prefixManager_{nullptr};
   Spark* spark_{nullptr};
   std::shared_ptr<const Config> config_;
-  dispatcher::Dispatcher* dispatcher_{nullptr};
+  Dispatcher* dispatcher_{nullptr};
 
   // Publisher token (monotonically increasing) for all publishers
   std::atomic<int64_t> publisherToken_{0};

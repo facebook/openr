@@ -14,7 +14,6 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
-namespace dispatcher {
 
 DispatcherQueue::DispatcherQueue() {}
 
@@ -202,7 +201,5 @@ DispatcherQueue::filterKeys(
 
   return result;
 }
-
-} // namespace dispatcher
 
 } // namespace openr

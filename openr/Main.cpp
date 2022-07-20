@@ -54,7 +54,6 @@ namespace fs = std::experimental::filesystem;
 using namespace openr;
 
 using apache::thrift::concurrency::ThreadManager;
-using openr::dispatcher::Dispatcher;
 using openr::messaging::ReplicateQueue;
 
 namespace {
@@ -234,8 +233,7 @@ main(int argc, char** argv) {
   ReplicateQueue<LogSample> logSampleQueue;
   std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr{
       nullptr};
-  std::unique_ptr<dispatcher::DispatcherQueue>
-      kvStorePublicationsDispatcherQueue{nullptr};
+  std::unique_ptr<DispatcherQueue> kvStorePublicationsDispatcherQueue{nullptr};
 
   // Create the readers in the first place to make sure they can receive every
   // messages from the writer(s)
@@ -263,8 +261,7 @@ main(int argc, char** argv) {
   }
 
   if (config->isKvStoreDispatcherEnabled()) {
-    kvStorePublicationsDispatcherQueue =
-        std::make_unique<dispatcher::DispatcherQueue>();
+    kvStorePublicationsDispatcherQueue = std::make_unique<DispatcherQueue>();
   }
 
   // structures to organize our modules

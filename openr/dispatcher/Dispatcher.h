@@ -16,7 +16,6 @@
 #include <openr/dispatcher/DispatcherQueue.h>
 
 namespace openr {
-namespace dispatcher {
 /**
  * Dispatcher handles filtering keys coming from KvStore
  * and sends them to the other modules for processing.
@@ -73,7 +72,5 @@ class Dispatcher : public OpenrEventBase {
   // Queue to publish KvStore Updates
   DispatcherQueue& kvStorePublicationsQueue_;
 };
-
-} // namespace dispatcher
 
 } // namespace openr

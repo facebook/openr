@@ -24,7 +24,7 @@
 #include <openr/tests/utils/Utils.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
-namespace openr::dispatcher {
+namespace openr {
 
 /*
  * Test will check that DispatcherQueue can successfully read and write. This
@@ -36,7 +36,7 @@ TEST(DispatcherQueueTest, EventReadWriteTest) {
   const size_t kNumReaders{4};
   const size_t kTotalWrites{64};
 
-  dispatcher::DispatcherQueue q;
+  DispatcherQueue q;
   folly::EventBase evb;
   auto& manager = folly::fibers::getFiberManager(evb);
 
@@ -118,7 +118,7 @@ TEST(DispatcherQueueTest, PublicationReadWriteTest) {
   const size_t kNumReaders{8};
   const size_t kTotalWrites{512};
 
-  dispatcher::DispatcherQueue q;
+  DispatcherQueue q;
   folly::EventBase evb;
   auto& manager = folly::fibers::getFiberManager(evb);
   // Serializes/deserializes thrift objects
@@ -215,7 +215,7 @@ TEST(DispatcherQueueTest, PublicationReadWriteTest) {
  * replicatedReads are made.
  */
 TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
-  dispatcher::DispatcherQueue q;
+  DispatcherQueue q;
   folly::EventBase evb;
 
   auto& manager = folly::fibers::getFiberManager(evb);
@@ -312,7 +312,7 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
  * it throws an error.
  */
 TEST(DispatcherQueueTest, OpenQueueTest) {
-  dispatcher::DispatcherQueue q;
+  DispatcherQueue q;
   auto r1 = q.getReader();
   EXPECT_EQ(1, q.getNumReaders());
 
@@ -335,4 +335,4 @@ TEST(DispatcherQueueTest, OpenQueueTest) {
   q.close();
 }
 
-} // namespace openr::dispatcher
+} // namespace openr

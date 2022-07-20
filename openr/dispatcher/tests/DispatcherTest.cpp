@@ -33,7 +33,7 @@ class DispatcherTestFixture : public ::testing::Test {
  protected:
   void
   SetUp() override {
-    dispatcher_ = std::make_shared<dispatcher::Dispatcher>(
+    dispatcher_ = std::make_shared<Dispatcher>(
         kvStoreUpdatesQueue_.getReader(), kvStorePublicationsQueue_);
 
     dispatcherThread_ = std::make_unique<std::thread>([this]() {
@@ -60,9 +60,9 @@ class DispatcherTestFixture : public ::testing::Test {
   apache::thrift::CompactSerializer serializer_{};
 
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
-  dispatcher::DispatcherQueue kvStorePublicationsQueue_;
+  DispatcherQueue kvStorePublicationsQueue_;
   // Dispatcher owned by this wrapper
-  std::shared_ptr<dispatcher::Dispatcher> dispatcher_{nullptr};
+  std::shared_ptr<Dispatcher> dispatcher_{nullptr};
   // Thread in which Dispatcher will be running
   std::unique_ptr<std::thread> dispatcherThread_{nullptr};
 };
@@ -281,7 +281,7 @@ class DispatcherKnobTestFixture : public DispatcherTestFixture {
 
   void
   createDispatcher(messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue) {
-    dispatcher_ = std::make_shared<dispatcher::Dispatcher>(
+    dispatcher_ = std::make_shared<Dispatcher>(
         kvStoreUpdatesQueue, kvStorePublicationsQueue_);
 
     dispatcherThread_ = std::make_unique<std::thread>([this]() {

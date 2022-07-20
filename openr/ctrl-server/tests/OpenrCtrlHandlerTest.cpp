@@ -2014,24 +2014,7 @@ class OpenrCtrlFixtureWithDispatcher : public OpenrCtrlFixture {
  public:
   void
   SetUp() override {
-    // create config
-    std::vector<openr::thrift::AreaConfig> areaConfig;
-    for (auto id : {kSpineAreaId, kPlaneAreaId, kPodAreaId}) {
-      thrift::AreaConfig area;
-      area.area_id() = id;
-      area.include_interface_regexes() = {"po.*"};
-      area.neighbor_regexes() = {".*"};
-      areaConfig.emplace_back(std::move(area));
-    }
-    auto tConfig = getBasicOpenrConfig(
-        nodeName_,
-        areaConfig,
-        true /* enableV4 */,
-        true /* enableSegmentRouting */);
-
-    // switch Dispatcher knob on
-    tConfig.enable_kvstore_dispatcher() = true;
-
+    auto tConfig = createConfig();
     config = std::make_shared<Config>(tConfig);
 
     // Create the PersistentStore and start fresh
@@ -2049,7 +2032,7 @@ class OpenrCtrlFixtureWithDispatcher : public OpenrCtrlFixture {
     kvStoreWrapper_->run();
 
     // Create Dispatcher module
-    dispatcher = std::make_shared<dispatcher::Dispatcher>(
+    dispatcher = std::make_shared<Dispatcher>(
         kvStoreWrapper_->getReader(), kvStorePublicationsQueue_);
     dispatcherThread_ = std::thread([&]() { dispatcher->run(); });
 
@@ -2170,10 +2153,34 @@ class OpenrCtrlFixtureWithDispatcher : public OpenrCtrlFixture {
     kvStoreWrapper_.reset();
   }
 
+  virtual thrift::OpenrConfig
+  createConfig() {
+    // create config
+    std::vector<openr::thrift::AreaConfig> areaConfig;
+    for (auto id : {kSpineAreaId, kPlaneAreaId, kPodAreaId}) {
+      thrift::AreaConfig area;
+      area.area_id() = id;
+      area.include_interface_regexes() = {"po.*"};
+      area.neighbor_regexes() = {".*"};
+      areaConfig.emplace_back(std::move(area));
+    }
+
+    auto tConfig = getBasicOpenrConfig(
+        nodeName_,
+        areaConfig,
+        true /* enableV4 */,
+        true /* enableSegmentRouting */);
+
+    // switch Dispatcher knob on
+    tConfig.enable_kvstore_dispatcher() = true;
+
+    return tConfig;
+  }
+
  protected:
-  dispatcher::DispatcherQueue kvStorePublicationsQueue_;
+  DispatcherQueue kvStorePublicationsQueue_;
   std::thread dispatcherThread_;
-  std::shared_ptr<dispatcher::Dispatcher> dispatcher;
+  std::shared_ptr<Dispatcher> dispatcher;
 };
 
 TEST_F(OpenrCtrlFixtureWithDispatcher, verifyDataPath) {

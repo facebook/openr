@@ -35,7 +35,7 @@ BM_NoFilterDispatcherQueue(
   //
   // Queue under testing. We will use KvStorePublication type.
   //
-  dispatcher::DispatcherQueue q;
+  DispatcherQueue q;
 
   //
   // Create publication object to push to DispatcherQueue.
@@ -130,7 +130,7 @@ BM_FilterDispatcherQueue(
   //
   // Queue under testing. We will use KvStorePublication type.
   //
-  dispatcher::DispatcherQueue q;
+  DispatcherQueue q;
 
   //
   // Create publication object to push to DispatcherQueue.

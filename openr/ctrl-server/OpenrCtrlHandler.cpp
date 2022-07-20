@@ -40,7 +40,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     PrefixManager* prefixManager,
     Spark* spark,
     std::shared_ptr<const Config> config,
-    dispatcher::Dispatcher* dispatcher)
+    Dispatcher* dispatcher)
     : fb303::BaseService("openr"),
       nodeName_(nodeName),
       acceptablePeerCommonNames_(acceptablePeerCommonNames),
@@ -60,11 +60,11 @@ OpenrCtrlHandler::OpenrCtrlHandler(
   CHECK_NOTNULL(ctrlEvb);
   CHECK(not ctrlEvb->isRunning());
 
-  // Add fiber task to receive publication from Dispatcher
-  // if Dispatcher knob is switched on
-  if (config_ and config_->isKvStoreDispatcherEnabled()) {
-    assert(dispatcher_);
-    if (kvStore_) {
+  if (kvStore_) {
+    // Add fiber task to receive publication from Dispatcher
+    // if Dispatcher knob is switched on
+    if (config_ and config_->isKvStoreDispatcherEnabled()) {
+      CHECK_NOTNULL(dispatcher_);
       auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
           [q = std::move(dispatcher_->getReader()), this]() mutable noexcept {
             XLOG(INFO) << "Starting Dispatcher updates processing fiber";
@@ -90,33 +90,35 @@ OpenrCtrlHandler::OpenrCtrlHandler(
           });
 
       workers_.push_back(std::move(taskFutureKvStore));
-    }
-  } else if (kvStore_) { // Add fiber task to receive publication from KvStore
-    auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
-        [q = std::move(kvStore_->getKvStoreUpdatesReader()),
-         this]() mutable noexcept {
-          XLOG(INFO) << "Starting KvStore updates processing fiber";
-          while (true) {
-            auto maybePub = q.get(); // perform read
-            XLOG(DBG2) << "Received publication from KvStore";
-            if (maybePub.hasError()) {
-              XLOG(INFO) << "Terminating KvStore publications processing fiber";
-              break;
+    } else {
+      // Add fiber task to receive publication from KvStore
+      auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
+          [q = std::move(kvStore_->getKvStoreUpdatesReader()),
+           this]() mutable noexcept {
+            XLOG(INFO) << "Starting KvStore updates processing fiber";
+            while (true) {
+              auto maybePub = q.get(); // perform read
+              XLOG(DBG2) << "Received publication from KvStore";
+              if (maybePub.hasError()) {
+                XLOG(INFO)
+                    << "Terminating KvStore publications processing fiber";
+                break;
+              }
+
+              folly::variant_match(
+                  std::move(maybePub).value(),
+                  [this](thrift::Publication&& pub) {
+                    processPublication(std::move(pub));
+                  },
+                  [](thrift::InitializationEvent&&) {
+                    // skip the processing of initialization event
+                  });
             }
+            XLOG(INFO) << "KvStore updates processing fiber stopped";
+          });
 
-            folly::variant_match(
-                std::move(maybePub).value(),
-                [this](thrift::Publication&& pub) {
-                  processPublication(std::move(pub));
-                },
-                [](thrift::InitializationEvent&&) {
-                  // skip the processing of initialization event
-                });
-          }
-          XLOG(INFO) << "KvStore updates processing fiber stopped";
-        });
-
-    workers_.push_back(std::move(taskFutureKvStore));
+      workers_.push_back(std::move(taskFutureKvStore));
+    }
   }
 
   // Add fiber task to receive fib streaming

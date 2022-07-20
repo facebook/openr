@@ -14,7 +14,6 @@
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
-namespace dispatcher {
 
 class DispatcherQueue : public messaging::ReplicateQueueBase {
  public:
@@ -92,5 +91,4 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
 #endif
 };
 
-} // namespace dispatcher
 } // namespace openr

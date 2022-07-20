@@ -23,7 +23,6 @@
 namespace fb303 = facebook::fb303;
 
 namespace openr {
-namespace dispatcher {
 Dispatcher::Dispatcher(
     messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     DispatcherQueue& kvStorePublicationsQueue)
@@ -73,5 +72,4 @@ Dispatcher::getReplicationStats() {
   return kvStorePublicationsQueue_.getReplicationStats();
 }
 
-} // namespace dispatcher
 } // namespace openr
