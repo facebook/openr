@@ -10,6 +10,7 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/Constants.h>
+#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
@@ -19,6 +20,7 @@
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/link-monitor/LinkMonitor.h>
+#include <openr/messaging/Queue.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
@@ -197,7 +199,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         .get();
   }
 
- private:
+ protected:
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
   messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue_;
@@ -2006,6 +2008,213 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
   {
     EXPECT_THROW(handler_->semifuture_getRibPolicy().get(), thrift::OpenrError);
   }
+}
+
+class OpenrCtrlFixtureWithDispatcher : public OpenrCtrlFixture {
+ public:
+  void
+  SetUp() override {
+    // create config
+    std::vector<openr::thrift::AreaConfig> areaConfig;
+    for (auto id : {kSpineAreaId, kPlaneAreaId, kPodAreaId}) {
+      thrift::AreaConfig area;
+      area.area_id() = id;
+      area.include_interface_regexes() = {"po.*"};
+      area.neighbor_regexes() = {".*"};
+      areaConfig.emplace_back(std::move(area));
+    }
+    auto tConfig = getBasicOpenrConfig(
+        nodeName_,
+        areaConfig,
+        true /* enableV4 */,
+        true /* enableSegmentRouting */);
+
+    // switch Dispatcher knob on
+    tConfig.enable_kvstore_dispatcher() = true;
+
+    config = std::make_shared<Config>(tConfig);
+
+    // Create the PersistentStore and start fresh
+    std::remove((*tConfig.persistent_config_store_path()).data());
+    persistentStore = std::make_unique<PersistentStore>(config);
+    persistentStoreThread_ = std::thread([&]() { persistentStore->run(); });
+
+    // Create KvStore module
+    kvStoreWrapper_ =
+        std::make_unique<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>(
+            config->getAreaIds(),
+            config->toThriftKvStoreConfig(),
+            std::nullopt,
+            kvRequestQueue_.getReader());
+    kvStoreWrapper_->run();
+
+    // Create Dispatcher module
+    dispatcher = std::make_shared<dispatcher::Dispatcher>(
+        kvStoreWrapper_->getReader(), kvStorePublicationsQueue_);
+    dispatcherThread_ = std::thread([&]() { dispatcher->run(); });
+
+    // Create Decision module
+    decision = std::make_shared<Decision>(
+        config,
+        peerUpdatesQueue_.getReader(),
+        dispatcher->getReader(
+            {Constants::kAdjDbMarker.toString(),
+             Constants::kPrefixDbMarker.toString()}),
+        staticRoutesUpdatesQueue_.getReader(),
+        routeUpdatesQueue_);
+    decisionThread_ = std::thread([&]() { decision->run(); });
+
+    // Create Fib moduleKeySyncMultipleArea
+    fib = std::make_shared<Fib>(
+        config,
+        routeUpdatesQueue_.getReader(),
+        fibRouteUpdatesQueue_,
+        logSampleQueue_);
+    fibThread_ = std::thread([&]() { fib->run(); });
+
+    // Create PrefixManager module
+    prefixManager = std::make_shared<PrefixManager>(
+        staticRoutesUpdatesQueue_,
+        kvRequestQueue_,
+        prefixMgrRoutesUpdatesQueue_,
+        prefixMgrInitializationEventsQueue_,
+        dispatcher->getReader({Constants::kPrefixDbMarker.toString()}),
+        prefixUpdatesQueue_.getReader(),
+        fibRouteUpdatesQueue_.getReader(),
+        config);
+    prefixManagerThread_ = std::thread([&]() { prefixManager->run(); });
+
+    // create fakeNetlinkProtocolSocket
+    nlSock_ = std::make_unique<fbnl::MockNetlinkProtocolSocket>(&evb_);
+
+    // Create LinkMonitor
+    linkMonitor = std::make_shared<LinkMonitor>(
+        config,
+        nlSock_.get(),
+        persistentStore.get(),
+        interfaceUpdatesQueue_,
+        prefixUpdatesQueue_,
+        peerUpdatesQueue_,
+        logSampleQueue_,
+        kvRequestQueue_,
+        neighborUpdatesQueue_.getReader(),
+        nlSock_->getReader(),
+        false /* overrideDrainState */);
+    linkMonitorThread_ = std::thread([&]() { linkMonitor->run(); });
+
+    // initialize OpenrCtrlHandler for testing usage
+    handler_ = std::make_shared<OpenrCtrlHandler>(
+        nodeName_,
+        std::unordered_set<std::string>{},
+        &ctrlEvb_,
+        decision.get(),
+        fib.get(),
+        kvStoreWrapper_->getKvStore(),
+        linkMonitor.get(),
+        monitor.get(),
+        persistentStore.get(),
+        prefixManager.get(),
+        nullptr,
+        config,
+        dispatcher.get());
+    ctrlEvbThread_ = std::thread([&]() { ctrlEvb_.run(); });
+    ctrlEvb_.waitUntilRunning();
+
+    LOG(INFO) << "setup address: " << handler_;
+  }
+
+  void
+  TearDown() override {
+    routeUpdatesQueue_.close();
+    staticRoutesUpdatesQueue_.close();
+    prefixMgrRoutesUpdatesQueue_.close();
+    prefixMgrInitializationEventsQueue_.close();
+    interfaceUpdatesQueue_.close();
+    peerUpdatesQueue_.close();
+    neighborUpdatesQueue_.close();
+    prefixUpdatesQueue_.close();
+    fibRouteUpdatesQueue_.close();
+    kvRequestQueue_.close();
+    logSampleQueue_.close();
+    nlSock_->closeQueue();
+    kvStoreWrapper_->closeQueue();
+    kvStorePublicationsQueue_.close();
+
+    // ATTN: stop handler first as it holds all ptrs
+    handler_.reset();
+    ctrlEvb_.stop();
+    ctrlEvb_.waitUntilStopped();
+    ctrlEvbThread_.join();
+
+    linkMonitor->stop();
+    linkMonitorThread_.join();
+
+    persistentStore->stop();
+    persistentStoreThread_.join();
+
+    prefixManager->stop();
+    prefixManagerThread_.join();
+
+    nlSock_.reset();
+
+    fib->stop();
+    fibThread_.join();
+
+    decision->stop();
+    decisionThread_.join();
+
+    dispatcher->stop();
+    dispatcherThread_.join();
+
+    kvStoreWrapper_->stop();
+    kvStoreWrapper_.reset();
+  }
+
+ protected:
+  dispatcher::DispatcherQueue kvStorePublicationsQueue_;
+  std::thread dispatcherThread_;
+  std::shared_ptr<dispatcher::Dispatcher> dispatcher;
+};
+
+TEST_F(OpenrCtrlFixtureWithDispatcher, verifyDataPath) {
+  thrift::KeyVals kvs(
+      {{"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
+       {"key11",
+        createThriftValue(1, "node1", std::string("value11"), 30000, 1)},
+       {"key111",
+        createThriftValue(1, "node1", std::string("value11"), 30000, 1)}});
+
+  // will get same thrift publications as OpenrCtrlHandler
+  // filters are the same as filters of OpenrCtrlHandlerReader
+  auto reader = dispatcher->getReader();
+
+  // set new keyVals in KvStore
+  setKvStoreKeyVals(kvs, kSpineAreaId);
+
+  folly::EventBase evb;
+  auto& manager = folly::fibers::getFiberManager(evb);
+
+  manager.addTask([&reader, &kvs]() mutable {
+    auto maybePub = reader.get();
+    EXPECT_TRUE(maybePub.hasValue());
+
+    auto expectedPublication = createThriftPublication(
+        kvs,
+        {}, /* expiredKeys */
+        {}, /* nodeIds */
+        {} /* keysToUpdate */,
+        kSpineAreaId);
+
+    folly::variant_match(
+        std::move(maybePub).value(),
+        [&expectedPublication](thrift::Publication&& pub) {
+          EXPECT_TRUE(
+              equalPublication(std::move(pub), std::move(expectedPublication)));
+        },
+        [](thrift::InitializationEvent&&) {});
+  });
+
+  evb.loop();
 }
 
 int
