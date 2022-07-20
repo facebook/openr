@@ -355,73 +355,191 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 
 BENCHMARK_DRAW_LINE();
 
-#pragma region LINEAR_WITH_KEY_SIZE
+#pragma region LINEAR_WITH_VAL_SIZE
 BENCHMARK_NAMED_PARAM(
     runExperiment,
-    10_NODE_LINEAR_TOPO_DEFAULT_KEYSIZE,
-    /* nNodes = */ 10,
-    ClusterTopology::LINEAR);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment,
-    10_NODE_LINEAR_TOPO_5X_KEY_VAL_SIZE,
+    10_NODE_LINEAR_TOPO_DEFAULT_VAL,
     /* nNodes = */ 10,
     ClusterTopology::LINEAR,
-    /* existingKey = */ 0,
-    /* keySize = */ 500,
-    /* valSize = */ 50);
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment,
-    10_NODE_LINEAR_TOPO_10X_KEY_VAL_SIZE,
-    /* nNodes = */ 10,
-    ClusterTopology::LINEAR,
-    /* existingKey = */ 0,
-    /* keySize = */ 1000,
-    /* valSize = */ 100);
-
-BENCHMARK_RELATIVE_NAMED_PARAM(
-    runExperiment,
-    10_NODE_LINEAR_TOPO_100X_KEY_VAL_SIZE,
-    /* nNodes = */ 10,
-    ClusterTopology::LINEAR,
-    /* existingKey = */ 0,
-    /* keySize = */ 10000,
+    /* keySize = */ kSizeOfKey,
     /* valSize = */ 1000);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_5X_VAL,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 5000);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_10X_VAL,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 10000);
 
-#pragma endregion LINEAR_WITH_KEY_SIZE
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_100X_VAL,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 100000);
+
+#pragma endregion LINEAR_WITH_VAL_SIZE
 
 BENCHMARK_DRAW_LINE();
 
-#pragma region RING_WITH_KEY_SIZE
+#pragma region RING_WITH_VAL_SIZE
 BENCHMARK_NAMED_PARAM(
     runExperiment,
-    10_NODE_RING_TOPO_DEFAULT_KEYSIZE,
+    10_NODE_RING_TOPO_DEFAULT_VAL,
     /* nNodes = */ 10,
-    ClusterTopology::RING);
+    ClusterTopology::RING,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 1000);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    10_NODE_RING_TOPO_5X_KEY_VAL_SIZE,
+    10_NODE_RING_TOPO_5X_VAL,
     /* nNodes = */ 10,
     ClusterTopology::RING,
     /* existingKey = */ 0,
-    /* keySize = */ 500,
-    /* valSize = */ 50);
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 5000);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    10_NODE_RING_TOPO_10X_KEY_VAL_SIZE,
+    10_NODE_RING_TOPO_10X_VAL,
     /* nNodes = */ 10,
     ClusterTopology::RING,
     /* existingKey = */ 0,
-    /* keySize = */ 1000,
-    /* valSize = */ 100);
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 10000);
 
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    10_NODE_RING_TOPO_100X_KEY_VAL_SIZE,
+    10_NODE_RING_TOPO_100X_VAL,
     /* nNodes = */ 10,
     ClusterTopology::RING,
     /* existingKey = */ 0,
-    /* keySize = */ 10000,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 100000);
+
+#pragma endregion RING_WITH_VAL_SIZE
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region STAR_WITH_VAL_SIZE
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_DEFAULT_VAL,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* keySize = */ kSizeOfKey,
     /* valSize = */ 1000);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_5X_VAL,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 5000);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_10X_VAL,
+    10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 10000);
+
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_STAR_TOPO_100X_VAL,
+    /* nNodes = */ 10,
+    ClusterTopology::STAR,
+    /* existingKey = */ 0,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ 100000);
+
+#pragma endregion STAR_WITH_VAL_SIZE
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region LINEAR_WITH_KEY_SIZE
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_DEFAULT_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* keySize = */ 30,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_5X_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 150,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_10X_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 300,
+    /* valSize = */ kSizeOfValue);
+
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_LINEAR_TOPO_100X_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::LINEAR,
+    /* existingKey = */ 0,
+    /* keySize = */ 3000,
+    /* valSize = */ kSizeOfValue);
+
+#pragma endregion LINEAR_WITH_VAL_SIZE
+
+BENCHMARK_DRAW_LINE();
+
+#pragma region RING_WITH_VAL_SIZE
+BENCHMARK_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_DEFAULT_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_5X_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ 150,
+    /* valSize = */ kSizeOfValue);
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_10X_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ 300,
+    /* valSize = */ kSizeOfValue);
+
+BENCHMARK_RELATIVE_NAMED_PARAM(
+    runExperiment,
+    10_NODE_RING_TOPO_100X_KEY,
+    /* nNodes = */ 10,
+    ClusterTopology::RING,
+    /* existingKey = */ 0,
+    /* keySize = */ 3000,
+    /* valSize = */ kSizeOfValue);
 
 #pragma endregion RING_WITH_KEY_SIZE
 
@@ -430,34 +548,36 @@ BENCHMARK_DRAW_LINE();
 #pragma region STAR_WITH_KEY_SIZE
 BENCHMARK_NAMED_PARAM(
     runExperiment,
-    10_NODE_STAR_TOPO_DEFAULT_KEYSIZE,
+    10_NODE_STAR_TOPO_DEFAULT_KEY,
     /* nNodes = */ 10,
-    ClusterTopology::STAR);
+    ClusterTopology::STAR,
+    /* keySize = */ kSizeOfKey,
+    /* valSize = */ kSizeOfValue);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    10_NODE_STAR_TOPO_5X_KEY_VAL_SIZE,
+    10_NODE_STAR_TOPO_5X_KEY,
     /* nNodes = */ 10,
     ClusterTopology::STAR,
     /* existingKey = */ 0,
-    /* keySize = */ 500,
-    /* valSize = */ 50);
+    /* keySize = */ 150,
+    /* valSize = */ kSizeOfValue);
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    10_NODE_STAR_TOPO_10X_KEY_VAL_SIZE,
+    10_NODE_STAR_TOPO_10X_KEY,
     10,
     ClusterTopology::STAR,
     /* existingKey = */ 0,
-    /* keySize = */ 1000,
-    /* valSize = */ 100);
+    /* keySize = */ 300,
+    /* valSize = */ kSizeOfValue);
 
 BENCHMARK_RELATIVE_NAMED_PARAM(
     runExperiment,
-    10_NODE_STAR_TOPO_100X_KEY_VAL_SIZE,
+    10_NODE_STAR_TOPO_100X_KEY,
     /* nNodes = */ 10,
     ClusterTopology::STAR,
     /* existingKey = */ 0,
-    /* keySize = */ 10000,
-    /* valSize = */ 1000);
+    /* keySize = */ 3000,
+    /* valSize = */ kSizeOfValue);
 
 #pragma endregion STAR_WITH_KEY_SIZE
 
