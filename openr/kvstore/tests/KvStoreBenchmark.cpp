@@ -33,9 +33,14 @@ FOLLY_INIT_LOGGING_CONFIG(
     ";default:async=true,sync_level=WARNING");
 
 namespace openr {
+namespace {
+const std::string kMemoryBeforeOperationMB = "memory_before_operation(MB)";
+const std::string kMemoryAfterOperationMB = "memory_after_operation(MB)";
+const std::string kNodeId = "kvStore";
+} // namespace
 
 /**
- * Fixture for abstracting out common functionality for unittests.
+ * Harness for abstracting out common functionality for unittests.
  */
 class KvStoreHarness {
  public:
@@ -71,11 +76,55 @@ class KvStoreHarness {
     return stores_.back().get();
   }
 
+  void
+  recordMemory(folly::UserCounters& counters, const std::string& counterKey) {
+    auto mem = sysMetrics_.getVirtualMemBytes();
+    if (mem.has_value()) {
+      counters[counterKey] = mem.value() / 1024 / 1024;
+    }
+  }
+
+  uint64_t
+  getVersion() {
+    return version_;
+  }
+
+  void
+  incrementVersion() {
+    version_++;
+  }
+
+  void
+  genKeyVals(
+      const std::vector<std::string>& keys,
+      std::vector<std::pair<std::string, thrift::Value>>& keyVals,
+      size_t n) {
+    keyVals.clear();
+    keyVals.reserve(n);
+    for (uint32_t i = 0; i < n; i++) {
+      auto key = keys[i];
+      auto value = genRandomStr(kSizeOfValue);
+      auto thriftVal = createThriftValue(
+          getVersion() /* version */,
+          kNodeId /* originatorId */,
+          value /* value */,
+          Constants::kTtlInfinity /* ttl */,
+          0 /* ttl version */,
+          0 /* hash */);
+      // Update hash
+      thriftVal.hash() = generateHash(
+          *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
+      keyVals.emplace_back(key, thriftVal);
+    }
+  }
+
  private:
   // Internal stores
   std::vector<
       std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
       stores_{};
+  SystemMetrics sysMetrics_{};
+  uint64_t version_{1}; // Version starts with 1
 };
 
 /**
@@ -91,9 +140,8 @@ BM_KvStoreMergeKeyValues(
     size_t numOfUpdateKeys) {
   CHECK_LE(numOfUpdateKeys, numOfKeysInStore);
   auto suspender = folly::BenchmarkSuspender();
-  SystemMetrics sysMetrics;
+  auto kvStoreHarness = std::make_unique<KvStoreHarness>();
 
-  uint64_t version = 1;
   for (uint32_t i = 0; i < iters; i++) {
     std::unordered_map<std::string, thrift::Value> kvStore;
     std::unordered_map<std::string, thrift::Value> update;
@@ -103,8 +151,8 @@ BM_KvStoreMergeKeyValues(
       auto key = genRandomStr(kSizeOfKey);
       auto value = genRandomStr(kSizeOfValue);
       auto thriftValue = createThriftValue(
-          version, /* version */
-          "kvStore", /* node id */
+          kvStoreHarness->getVersion(),
+          kNodeId,
           value,
           3600, /* ttl */
           0 /* ttl version */,
@@ -117,8 +165,8 @@ BM_KvStoreMergeKeyValues(
 
       if (idx < numOfUpdateKeys) {
         auto updateThriftValue = createThriftValue(
-            version + 1, /* version */
-            "kvStore", /* node id */
+            kvStoreHarness->getVersion() + 1,
+            kNodeId, /* node id */
             value,
             3600, /* ttl */
             0 /* ttl version */,
@@ -132,10 +180,7 @@ BM_KvStoreMergeKeyValues(
 
     if (i == 0) { // collect mem usage ONLY with the first iteration for
                   // profiling purpose
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
-      }
+      kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
     }
     suspender.dismiss(); // Start measuring benchmark time
     // Merge update with kvStore
@@ -143,10 +188,7 @@ BM_KvStoreMergeKeyValues(
     // Stop measuring benchmark time
     suspender.rehire();
     if (i == 0) {
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
-      }
+      kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
     }
   }
 }
@@ -161,9 +203,8 @@ static void
 BM_KvStoreDumpAll(
     folly::UserCounters& counters, uint32_t iters, size_t numOfKeysInStore) {
   auto suspender = folly::BenchmarkSuspender();
-  SystemMetrics sysMetrics;
   auto kvStoreHarness = std::make_unique<KvStoreHarness>();
-  auto kvStore = kvStoreHarness->createKvStore("kvStore");
+  auto kvStore = kvStoreHarness->createKvStore(kNodeId);
   kvStore->run();
 
   for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
@@ -171,7 +212,7 @@ BM_KvStoreDumpAll(
     auto value = genRandomStr(kSizeOfValue);
     auto thriftVal = createThriftValue(
         1 /* version */,
-        "kvStore" /* originatorId */,
+        kNodeId,
         value /* value */,
         Constants::kTtlInfinity /* ttl */,
         0 /* ttl version */,
@@ -186,20 +227,14 @@ BM_KvStoreDumpAll(
   for (uint32_t i = 0; i < iters; i++) {
     if (i == 0) { // collect mem usage ONLY with the first iteration for
                   // profiling purpose
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
-      }
+      kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
     }
     suspender.dismiss(); // Start measuring benchmark time
     kvStore->dumpAll(kTestingAreaName);
     // Stop measuring benchmark time
     suspender.rehire();
     if (i == 0) {
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
-      }
+      kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
     }
   }
 }
@@ -217,12 +252,9 @@ BM_KvStoreValueUpdate(
       nullptr;
   std::vector<std::string> keys;
   std::vector<std::pair<std::string, thrift::Value>> keyVals;
-  // Version starts with 1
-  uint64_t version = 1;
-  SystemMetrics sysMetrics;
 
   BENCHMARK_SUSPEND {
-    kvStore = kvStoreHarness->createKvStore("kvStore");
+    kvStore = kvStoreHarness->createKvStore(kNodeId);
     XCHECK_NE(kvStore, nullptr);
     kvStore->run();
     // Generate random fixed keys beforehand for updating
@@ -234,31 +266,11 @@ BM_KvStoreValueUpdate(
 
   for (size_t i = 0; i < iters; i++) {
     BENCHMARK_SUSPEND {
-      keyVals.clear();
-      keyVals.reserve(numOfUpdateKeys);
-      for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
-        auto key = keys[idx];
-        auto value = genRandomStr(kSizeOfValue);
-        auto thriftVal = createThriftValue(
-            version /* version */,
-            "kvStore" /* originatorId */,
-            value /* value */,
-            Constants::kTtlInfinity /* ttl */,
-            0 /* ttl version */,
-            0 /* hash */);
-        // Update hash
-        thriftVal.hash() = generateHash(
-            *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
-        keyVals.emplace_back(key, thriftVal);
+      kvStoreHarness->genKeyVals(keys, keyVals, numOfUpdateKeys);
+      if (i == 0) {
+        kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
       }
-      if (i == 0) { // collect mem usage ONLY with the first iteration for
-                    // profiling purpose
-        auto mem = sysMetrics.getVirtualMemBytes();
-        if (mem.has_value()) {
-          counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
-        }
-      }
-    } // end of BENCHMARK_SUSPEND
+    }
 
     kvStore->setKeys(kTestingAreaName, keyVals);
     // Receive publication from kvStore for new key-update
@@ -267,12 +279,9 @@ BM_KvStoreValueUpdate(
 
     BENCHMARK_SUSPEND {
       if (i == 0) {
-        auto mem = sysMetrics.getVirtualMemBytes();
-        if (mem.has_value()) {
-          counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
-        }
+        kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
       }
-      version++;
+      kvStoreHarness->incrementVersion();
     }
   }
 
@@ -319,6 +328,8 @@ BENCHMARK_COUNTERS_NAME_PARAM(
     BM_KvStoreMergeKeyValues, counters, 1000000_100000, 1000000, 100000);
 BENCHMARK_COUNTERS_NAME_PARAM(
     BM_KvStoreMergeKeyValues, counters, 1000000_1000000, 1000000, 1000000);
+
+BENCHMARK_DRAW_LINE();
 
 // The parameter is number of keyVals already in store
 BENCHMARK_COUNTERS_NAME_PARAM(BM_KvStoreDumpAll, counters, 10, 10);
