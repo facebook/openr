@@ -370,9 +370,10 @@ main(int argc, char** argv) {
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
   watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
+  Dispatcher* dispatcher{nullptr};
   if (config->isKvStoreDispatcherEnabled()) {
     // Start Dispatcher
-    auto dispatcher = startEventBase(
+    dispatcher = startEventBase(
         allThreads,
         orderedEvbs,
         watchdog,
@@ -557,7 +558,8 @@ main(int argc, char** argv) {
       configStore,
       prefixManager,
       spark,
-      config);
+      config,
+      dispatcher);
   startEventBase(
       allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
