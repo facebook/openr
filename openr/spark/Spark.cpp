@@ -1056,7 +1056,7 @@ void
 Spark::checkNeighborState(
     SparkNeighbor const& neighbor, thrift::SparkNeighState const& state) {
   CHECK(neighbor.state == state) << fmt::format(
-      "Neighbor: {}, exoected state: [{}], actual state: [{}]",
+      "Neighbor: {}, expected state: [{}], actual state: [{}]",
       neighbor.nodeName,
       apache::thrift::util::enumNameSafe(state),
       apache::thrift::util::enumNameSafe(neighbor.state));
