@@ -114,7 +114,7 @@ class TechSupportCmd(object):
         decision.DecisionRoutesComputedCmd(self.cli_opts).run(nodes, [], [], False)
 
     def print_fib_validate(self):
-        fib.FibValidateRoutesCmd(self.cli_opts).run(self.cli_opts)
+        fib.FibValidateRoutesCmd().run(self.cli_opts)
 
     def print_fib_unicast_routes(self):
         if not self.print_routes:

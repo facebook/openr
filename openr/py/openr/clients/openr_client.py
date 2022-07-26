@@ -12,6 +12,7 @@ import bunch
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Platform.clients import FibService as FibServiceClient
 from openr.utils import consts
 from thrift.protocol import THeaderProtocol
 from thrift.py3.client import ClientType, get_client
@@ -115,6 +116,45 @@ def get_openr_ctrl_client(
         return OpenrCtrlPlainTextClient(
             options.host, options.openr_ctrl_port, options.timeout
         )
+
+
+def get_fib_client(
+    cli_opts: bunch.Bunch,
+    client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+) -> FibServiceClient:
+    """
+    Get fib client. With correct SSL setup.
+    """
+
+    options = getDefaultOptions(cli_opts.host)
+    ssl_context = None
+    # Create ssl context if specified
+    if options.ssl:
+        # Translate ssl verification option
+        ssl_verify_opt = SSLVerifyOption.NO_VERIFY
+        if options.cert_reqs == ssl.CERT_OPTIONAL:
+            ssl_verify_opt = SSLVerifyOption.VERIFY_REQ_CLIENT_CERT
+        if options.cert_reqs == ssl.CERT_REQUIRED:
+            ssl_verify_opt = SSLVerifyOption.VERIFY
+
+        # Create ssl context
+        ssl_context = SSLContext()
+        ssl_context.set_verify_option(ssl_verify_opt)
+        ssl_context.load_cert_chain(
+            certfile=options.cert_file, keyfile=options.key_file
+        )
+        ssl_context.load_verify_locations(cafile=options.ca_file)
+
+    # Create and return client
+    return get_client(
+        FibServiceClient,
+        host=cli_opts.host,
+        port=cli_opts.fib_agent_port,
+        timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
+        client_type=client_type,
+        ssl_context=ssl_context,
+        ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
+    )
 
 
 def get_openr_ctrl_cpp_client(
