@@ -110,7 +110,7 @@ const std::vector<std::vector<std::optional<thrift::SparkNeighState>>>
          std::nullopt},
         /*
          * index 1 - WARM
-         * HELLO_RCVD_INFO => NEGOTIATE;
+         * HELLO_RCVD_INFO => NEGOTIATE; GR_TIMER_EXPIRE => IDLE
          */
         {thrift::SparkNeighState::NEGOTIATE,
          std::nullopt,
@@ -119,12 +119,12 @@ const std::vector<std::vector<std::optional<thrift::SparkNeighState>>>
          std::nullopt,
          std::nullopt,
          std::nullopt,
-         std::nullopt,
+         thrift::SparkNeighState::IDLE,
          std::nullopt},
         /*
          * index 2 - NEGOTIATE
          * HANDSHAKE_RCVD => ESTABLISHED; NEGOTIATE_TIMER_EXPIRE => WARM;
-         * NEGOTIATION_FAILURE => WARM;
+         * GR_TIMER_EXPIRE => IDLE; NEGOTIATION_FAILURE => WARM;
          */
         {std::nullopt,
          std::nullopt,
@@ -133,7 +133,7 @@ const std::vector<std::vector<std::optional<thrift::SparkNeighState>>>
          thrift::SparkNeighState::ESTABLISHED,
          std::nullopt,
          thrift::SparkNeighState::WARM,
-         std::nullopt,
+         thrift::SparkNeighState::IDLE,
          thrift::SparkNeighState::WARM},
         /*
          * index 3 - ESTABLISHED
@@ -1314,9 +1314,6 @@ Spark::processGRTimeout(
       "[SparkHelloMsg] Graceful restart timer expired for: {} over intf: {}",
       neighborName,
       ifName);
-
-  // neighbor must in "RESTART" state
-  checkNeighborState(neighbor, thrift::SparkNeighState::RESTART);
 
   // state transition
   thrift::SparkNeighState oldState = neighbor.state;
