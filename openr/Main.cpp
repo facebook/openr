@@ -65,17 +65,19 @@ using openr::messaging::ReplicateQueue;
 const char* malloc_conf =
     "background_thread:false,prof:true,prof_active:false,prof_prefix:/tmp/openr_heap";
 
-void
+bool
 waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
-  // TODO: handle case when openr received SIGTERM when waiting for fibService
   auto waitForFibStart = std::chrono::steady_clock::now();
   auto switchState = thrift::SwitchRunState::UNINITIALIZED;
   folly::EventBase evb;
-  folly::AsyncSocket* socket;
+  folly::AsyncSocket* socket{nullptr};
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
-  // Block until the Fib client is ready to accept route updates (aka, of
-  // CONFIGURED state).
+  /*
+   * Blocking wait with 2 conditions:
+   *  - signalHandlerEvb is still running, aka, NO SIGINT/SIGQUIT/SIGTERM
+   *  - switch is NOT ready to accept thrift request, aka, NOT CONFIGURED
+   */
   while (signalHandlerEvb.isRunning() and
          thrift::SwitchRunState::CONFIGURED != switchState) {
     openr::Fib::createFibClient(evb, socket, client, port);
@@ -83,16 +85,29 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
       switchState = client->sync_getSwitchRunState();
     } catch (const std::exception& e) {
     }
-    /* sleep override */
+    // sleep override
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    XLOG(INFO) << "Waiting for FibService to come up and be ready to accept "
-               << "route updates...";
+    XLOG(INFO)
+        << fmt::format("Waiting for FibService to come up via port: {}", port);
+  }
+
+  // signalHandlerEvb is terminated. Prepare for exit.
+  if (thrift::SwitchRunState::CONFIGURED != switchState) {
+    auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+                           std::chrono::steady_clock::now() - waitForFibStart)
+                           .count();
+    XLOG(INFO) << fmt::format(
+        "Termination signal received. Waited for {}ms", timeElapsed);
+    return false;
   }
 
   auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - waitForFibStart)
                     .count();
-  XLOG(INFO) << "FibService up. Waited for " << waitMs << " ms.";
+  XLOG(INFO) << fmt::format(
+      "FibService is up on port {}. Waited for {}ms", port, waitMs);
+
+  return true;
 }
 
 /**
@@ -187,7 +202,6 @@ main(int argc, char** argv) {
 #endif
     XLOG(FATAL) << "Failed to start OpenR. Invalid configuration.";
   }
-
   SYSLOG(INFO) << config->getRunningConfig();
 
   /*
@@ -212,7 +226,15 @@ main(int argc, char** argv) {
    * [Fib Service Waiting]
    */
   if (not config->isNetlinkFibHandlerEnabled()) {
-    waitForFibService(signalHandlerEvb, *config->getConfig().fib_port());
+    if (not waitForFibService(
+            signalHandlerEvb, *config->getConfig().fib_port())) {
+      signalHandlerEvbThread.join();
+
+      // Close syslog connection (this is optional)
+      SYSLOG(INFO) << "Stopping OpenR daemon: ppid = " << getpid();
+      closelog();
+      return 0;
+    }
   }
   logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
 
