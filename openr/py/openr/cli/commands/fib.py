@@ -15,11 +15,7 @@ import prettytable
 import pytz
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients.openr_client import (
-    get_fib_client,
-    get_openr_ctrl_client,
-    get_openr_ctrl_cpp_client,
-)
+from openr.clients.openr_client import get_fib_client, get_openr_ctrl_cpp_client
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import StreamSubscriberType
@@ -31,12 +27,34 @@ from openr.utils import ipnetwork, printing
 from thrift.py3.client import ClientType
 
 
-class FibAgentCmd(object):
+class FibCmdBase(OpenrCtrlCmd):
+    """define Fib specific methods here"""
+
+    def __init__(self, cli_opts):
+        super().__init__(cli_opts)
+
+    def ip_key(self, ip: object):
+        # pyre-fixme[6]: For 1st param expected `Union[bytes, int, IPv4Address,
+        #  IPv4Interface, IPv4Network, IPv6Address, IPv6Interface, IPv6Network, str]` but
+        #  got `object`.
+        net = ipaddress.ip_network(ip)
+        return (net.version, net.network_address, net.prefixlen)
+
+    def convertTime(self, intTime) -> str:
+        formatted_time = datetime.datetime.fromtimestamp(intTime / 1000)
+        timezone = pytz.timezone("US/Pacific")
+        formatted_time = timezone.localize(formatted_time)
+        formatted_time = formatted_time.strftime("%Y-%m-%d %H:%M:%S.%f %Z")
+        return formatted_time
+
+
+class FibAgentCmd(FibCmdBase):
     def __init__(self, cli_opts):
         """initialize the Fib agent client"""
-        self.cli_opts = cli_opts
+
+        super().__init__(cli_opts)
         try:
-            self.client = utils.get_fib_agent_client(
+            self.fib_agent_client = utils.get_fib_agent_client(
                 cli_opts.host,
                 cli_opts.fib_agent_port,
                 cli_opts.timeout,
@@ -52,7 +70,7 @@ class FibAgentCmd(object):
             raise
 
 
-class FibUnicastRoutesCmd(OpenrCtrlCmd):
+class FibUnicastRoutesCmd(FibCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -84,7 +102,7 @@ class FibUnicastRoutesCmd(OpenrCtrlCmd):
             )
 
 
-class FibMplsRoutesCmd(OpenrCtrlCmd):
+class FibMplsRoutesCmd(FibCmdBase):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -110,21 +128,21 @@ class FibMplsRoutesCmd(OpenrCtrlCmd):
 
 
 class FibCountersCmd(FibAgentCmd):
-    def run(self, json_opt):
+    def _run(self, client: OpenrCtrl.Client, json_opt, *args, **kwargs) -> int:
         try:
-            self.print_counters(self.client.getCounters(), json_opt)
+            self.print_counters(
+                self.fib_agent_client.getCounters(), client.getMyNodeName(), json_opt
+            )
             return 0
         except Exception as e:
             print("Failed to get counter from Fib")
             print("Exception: {}".format(e))
             return 1
 
-    def print_counters(self, counters, json_opt):
+    def print_counters(self, counters, host_id, json_opt) -> None:
         """print the Fib counters"""
 
-        with utils.get_openr_ctrl_client(self.cli_opts.host, self.cli_opts) as client:
-            host_id = client.getMyNodeName()
-        caption = "{}'s Fib counters".format(host_id)
+        caption = f"{host_id}'s Fib counters"
 
         if json_opt:
             utils.print_json(counters)
@@ -141,26 +159,31 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
-    def run(
+    def _run(
         self,
+        client: OpenrCtrl.Client,
         prefixes: List[str],
         labels: Optional[List[int]] = None,
         json_opt: bool = False,
         client_id: Optional[int] = None,
+        *args,
+        **kwargs,
     ):
         routes = []
         mpls_routes = []
-        client_id = client_id if client_id is not None else self.client.client_id
+        client_id = (
+            client_id if client_id is not None else self.fib_agent_client.client_id
+        )
 
         try:
-            routes = self.client.getRouteTableByClient(client_id)
+            routes = self.fib_agent_client.getRouteTableByClient(client_id)
         except Exception as e:
             print("Failed to get routes from Fib.")
             print("Exception: {}".format(e))
             return 1
 
         try:
-            mpls_routes = self.client.getMplsRouteTableByClient(client_id)
+            mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(client_id)
         except Exception:
             pass
 
@@ -180,11 +203,13 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
 
 class FibAddRoutesCmd(FibAgentCmd):
-    def run(self, prefixes, nexthops):
+    def _run(self, client: OpenrCtrl.Client, prefixes, nexthops, *args, **kwargs):
         routes = utils.build_routes(prefixes.split(","), nexthops.split(","))
 
         try:
-            self.client.addUnicastRoutes(self.client.client_id, routes)
+            self.fib_agent_client.addUnicastRoutes(
+                self.fib_agent_client.client_id, routes
+            )
         except Exception as e:
             print("Failed to add routes.")
             print("Exception: {}".format(e))
@@ -195,10 +220,12 @@ class FibAddRoutesCmd(FibAgentCmd):
 
 
 class FibDelRoutesCmd(FibAgentCmd):
-    def run(self, prefixes):
+    def _run(self, client: OpenrCtrl.Client, prefixes, *args, **kwargs):
         prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes.split(",")]
         try:
-            self.client.deleteUnicastRoutes(self.client.client_id, prefixes)
+            self.fib_agent_client.deleteUnicastRoutes(
+                self.fib_agent_client.client_id, prefixes
+            )
         except Exception as e:
             print("Failed to delete routes.")
             print("Exception: {}".format(e))
@@ -209,11 +236,11 @@ class FibDelRoutesCmd(FibAgentCmd):
 
 
 class FibSyncRoutesCmd(FibAgentCmd):
-    def run(self, prefixes, nexthops):
+    def _run(self, client: OpenrCtrl.Client, prefixes, nexthops, *args, **kwargs):
         routes = utils.build_routes(prefixes.split(","), nexthops.split(","))
 
         try:
-            self.client.syncFib(self.client.client_id, routes)
+            self.fib_agent_client.syncFib(self.fib_agent_client.client_id, routes)
         except Exception as e:
             print("Failed to sync routes.")
             print("Exception: {}".format(e))
@@ -223,8 +250,14 @@ class FibSyncRoutesCmd(FibAgentCmd):
         return 0
 
 
-class FibValidateRoutesCmd(object):
-    def run(self, cli_opts):
+class FibValidateRoutesCmd(FibAgentCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> int:
+
         all_success = True
 
         try:
@@ -232,13 +265,12 @@ class FibValidateRoutesCmd(object):
             fib_route_db = None
             lm_links = None
 
-            with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
-                # fetch routes from decision module
-                decision_route_db = client.getRouteDbComputed("")
-                # fetch routes from fib module
-                fib_route_db = client.getRouteDb()
-                # fetch link_db from link-monitor module
-                lm_links = client.getInterfaces().interfaceDetails
+            # fetch routes from decision module
+            decision_route_db = client.getRouteDbComputed("")
+            # fetch routes from fib module
+            fib_route_db = client.getRouteDb()
+            # fetch link_db from link-monitor module
+            lm_links = client.getInterfaces().interfaceDetails
 
             (decision_unicast_routes, decision_mpls_routes) = utils.get_routes(
                 decision_route_db
@@ -246,8 +278,10 @@ class FibValidateRoutesCmd(object):
             (fib_unicast_routes, fib_mpls_routes) = utils.get_routes(fib_route_db)
             # fetch route from net_agent module
             async def _fib_wrapper():
-                async with get_fib_client(cli_opts) as fib_client:
-                    return await fib_client.getRouteTableByClient(cli_opts.client_id)
+                async with get_fib_client(self.cli_opts) as fib_client:
+                    return await fib_client.getRouteTableByClient(
+                        self.cli_opts.client_id
+                    )
 
             agent_unicast_routes = asyncio.run(_fib_wrapper())
 
@@ -255,7 +289,6 @@ class FibValidateRoutesCmd(object):
             print("Failed to validate Fib routes.")
             print("Exception: {}".format(e))
             raise e
-            # return 1
 
         (ret, _) = utils.compare_route_db(
             decision_unicast_routes,
@@ -283,8 +316,8 @@ class FibValidateRoutesCmd(object):
 
         # for backward compatibily of Open/R binary
         try:
-            agent_mpls_routes = self.client.getMplsRouteTableByClient(
-                self.client.client_id
+            agent_mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(
+                self.fib_agent_client.client_id
             )
             (ret, _) = utils.compare_route_db(
                 fib_mpls_routes,
@@ -304,7 +337,7 @@ class FibValidateRoutesCmd(object):
         return 0 if all_success else -1
 
 
-class FibSnoopCmd(OpenrCtrlCmd):
+class FibSnoopCmd(FibCmdBase):
     def print_ip_prefixes_filtered(
         self,
         ip_prefixes: Union[
@@ -499,23 +532,7 @@ class FibSnoopCmd(OpenrCtrlCmd):
             self.print_route_db_delta(msg, prefixes)
 
 
-def ip_key(ip: object):
-    # pyre-fixme[6]: For 1st param expected `Union[bytes, int, IPv4Address,
-    #  IPv4Interface, IPv4Network, IPv6Address, IPv6Interface, IPv6Network, str]` but
-    #  got `object`.
-    net = ipaddress.ip_network(ip)
-    return (net.version, net.network_address, net.prefixlen)
-
-
-def convertTime(intTime) -> str:
-    formatted_time = datetime.datetime.fromtimestamp(intTime / 1000)
-    timezone = pytz.timezone("US/Pacific")
-    formatted_time = timezone.localize(formatted_time)
-    formatted_time = formatted_time.strftime("%Y-%m-%d %H:%M:%S.%f %Z")
-    return formatted_time
-
-
-class StreamSummaryCmd(OpenrCtrlCmd):
+class StreamSummaryCmd(FibCmdBase):
     def get_subscriber_row(self, stream_session_info):
         """
         Takes StreamSubscriberInfo from thrift and returns list[str] (aka row)
@@ -531,7 +548,7 @@ class StreamSummaryCmd(OpenrCtrlCmd):
             uptime_str = str(
                 datetime.timedelta(milliseconds=stream_session_info.uptime)
             )
-            last_msg_time_str = convertTime(stream_session_info.last_msg_sent_time)
+            last_msg_time_str = self.convertTime(stream_session_info.last_msg_sent_time)
             uptime = uptime_str.split(".")[0]
             last_msg_time = last_msg_time_str
 
@@ -578,7 +595,9 @@ class StreamSummaryCmd(OpenrCtrlCmd):
         table.left_padding_width = 0
         table.right_padding_width = 2
 
-        for subscriber in sorted(subscribers, key=lambda x: ip_key(x.subscriber_id)):
+        for subscriber in sorted(
+            subscribers, key=lambda x: self.ip_key(x.subscriber_id)
+        ):
             table.add_row(self.get_subscriber_row(subscriber))
 
         # Print header

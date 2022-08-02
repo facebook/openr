@@ -164,7 +164,7 @@ class FibValidateRoutesCli(object):
     def validate(cli_opts):  # noqa: B902
         """Validator to check that all routes as computed by Decision"""
 
-        sys.exit(fib.FibValidateRoutesCmd().run(cli_opts))
+        sys.exit(fib.FibValidateRoutesCmd(cli_opts).run())
 
 
 class FibSnoopCli(object):

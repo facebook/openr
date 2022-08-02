@@ -255,3 +255,17 @@ def contain_any_prefix(prefix, ip_networks) -> bool:
         return True
     prefix = ipaddress.ip_network(prefix)
     return any(is_subnet_of(prefix, net) for net in ip_networks)
+
+
+def is_ip_addr(addr: str, strict: bool = True) -> bool:
+    """
+    Checks if a string is a valid IPv4 or IPv6 address,
+    If Strict is set to True, will return False if there's
+    mask/host bits
+    """
+
+    try:
+        ipaddress.ip_network(addr, strict=strict)
+        return True
+    except ValueError:
+        return False

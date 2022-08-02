@@ -1242,7 +1242,7 @@ def build_routes(
 
 
 def get_route_as_dict_in_str(
-    routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    routes: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
     route_type: str = "unicast",
 ) -> Dict[str, str]:
     """
@@ -1277,7 +1277,7 @@ def get_route_as_dict_in_str(
 
 
 def get_route_as_dict(
-    routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    routes: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
     route_type: str = "unicast",
 ) -> Dict[str, Union[network_types.UnicastRoute, network_types.MplsRoute]]:
     """
@@ -1301,8 +1301,8 @@ def get_route_as_dict(
 
 
 def routes_difference(
-    lhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
-    rhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    lhs: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
+    rhs: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
     route_type: str = "unicast",
 ) -> List[Union[network_types.UnicastRoute, network_types.MplsRoute]]:
     """
@@ -1326,8 +1326,8 @@ def routes_difference(
 
 
 def prefixes_with_different_nexthops(
-    lhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
-    rhs: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    lhs: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
+    rhs: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
     route_type: str,
 ) -> List[Tuple[str, str, str]]:
     """
@@ -1393,8 +1393,8 @@ def _only_unicast_routes(
 
 
 def compare_route_db(
-    routes_a: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
-    routes_b: List[Union[network_types.UnicastRoute, network_types.MplsRoute]],
+    routes_a: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
+    routes_b: Union[List[network_types.UnicastRoute], List[network_types.MplsRoute]],
     route_type: str,
     sources: List[str],
     quiet: bool = False,
@@ -2046,7 +2046,7 @@ def adjs_nexthop_to_neighbor_name(client: OpenrCtrl.Client) -> Dict[bytes, str]:
     for adj_db in adj_dbs:
         for adj in adj_db.adjacencies:
             ips_to_node_names[adj.nextHopV6.addr] = adj.otherNodeName
-            if adj.nextHopV4 != b"\x00\x00\x00\x00":
+            if adj.nextHopV4 != b"\x00\x00\x00\x00" and adj.nextHopV4 is not None:
                 ips_to_node_names[adj.nextHopV4.addr] = adj.otherNodeName
 
     return ips_to_node_names
