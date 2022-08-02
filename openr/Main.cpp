@@ -56,14 +56,6 @@ using namespace openr;
 using apache::thrift::concurrency::ThreadManager;
 using openr::messaging::ReplicateQueue;
 
-namespace {
-//
-// Local constants
-//
-
-const std::string inet6Path = "/proc/net/if_inet6";
-} // namespace
-
 // jemalloc parameters - http://jemalloc.net/jemalloc.3.html
 // background_thread:false - Disable background jemalloc background thread.
 // prof:true - Memory profiling enabled.
@@ -74,23 +66,7 @@ const char* malloc_conf =
     "background_thread:false,prof:true,prof_active:false,prof_prefix:/tmp/openr_heap";
 
 void
-checkIsIpv6Enabled() {
-  // check if file path exists
-  std::ifstream ifs(inet6Path);
-  if (!ifs) {
-    XLOG(ERR) << "File path: " << inet6Path << " doesn't exist!";
-    return;
-  }
-
-  // check file size for if_inet6_path.
-  // zero-size file means IPv6 is NOT enabled globally.
-  if (ifs.peek() == std::ifstream::traits_type::eof()) {
-    XLOG(FATAL) << "IPv6 is NOT enabled. Pls check system config!";
-  }
-}
-
-void
-waitForFibService(const folly::EventBase& mainEvb, int port) {
+waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
   // TODO: handle case when openr received SIGTERM when waiting for fibService
   auto waitForFibStart = std::chrono::steady_clock::now();
   auto switchState = thrift::SwitchRunState::UNINITIALIZED;
@@ -100,7 +76,7 @@ waitForFibService(const folly::EventBase& mainEvb, int port) {
 
   // Block until the Fib client is ready to accept route updates (aka, of
   // CONFIGURED state).
-  while (mainEvb.isRunning() and
+  while (signalHandlerEvb.isRunning() and
          thrift::SwitchRunState::CONFIGURED != switchState) {
     openr::Fib::createFibClient(evb, socket, client, port);
     try {
@@ -160,24 +136,28 @@ startEventBase(
 
 int
 main(int argc, char** argv) {
-  // Set version string to show when `openr --version` is invoked
+  /*
+   * [Version]
+   *
+   * Set version string for `openr --version`
+   */
   std::stringstream ss;
   BuildInfo::log(ss);
   gflags::SetVersionString(ss.str());
 
-  // Initialize all params
+  /*
+   * [Logging]
+   *
+   * Initialize logging and other params.
+   *
+   * ATTN: log all messages upto INFO level.
+   *
+   * LOG_CONS => Log to console on error
+   * LOG_PID => Log PID along with each message
+   * LOG_NODELAY => Connect immediately
+   */
   folly::init(&argc, &argv);
-
-  // Register the signals to handle before anything else. This guarantees that
-  // any threads created below will inherit the signal mask
-  folly::EventBase mainEvb;
-  EventBaseStopSignalHandler handler(&mainEvb);
-
-  // Initialize syslog
-  // We log all messages upto INFO level.
-  // LOG_CONS => Log to console on error
-  // LOG_PID => Log PID along with each message
-  // LOG_NODELAY => Connect immediately
+  folly::setThreadName("openr");
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
   SYSLOG(INFO) << "Starting OpenR daemon: ppid = " << getpid();
@@ -192,9 +172,6 @@ main(int argc, char** argv) {
     XLOG(ERR) << "Failed initializing sodium";
     return 1;
   }
-
-  // Sanity check for IPv6 global environment
-  checkIsIpv6Enabled();
 
   // start config module
   std::shared_ptr<Config> config;
@@ -213,58 +190,119 @@ main(int argc, char** argv) {
 
   SYSLOG(INFO) << config->getRunningConfig();
 
-  // Set main thread name
-  folly::setThreadName("openr");
+  /*
+   * [Signal Handler]
+   *
+   * Register the signals to handle before anything else. This guarantees that
+   * any threads created below will inherit the signal mask.
+   */
+  folly::EventBase signalHandlerEvb;
+  EventBaseStopSignalHandler handler(&signalHandlerEvb);
 
-  // Queue for inter-module communication
+  // Starting signalHandler eventbase to receive system signal
+  std::thread signalHandlerEvbThread([&]() noexcept {
+    XLOG(INFO) << "Starting openr signal handler evb...";
+    folly::setThreadName("openr-signal");
+    signalHandlerEvb.loopForever();
+    XLOG(INFO) << "Signal handler evb stopped.";
+  });
+  signalHandlerEvb.waitUntilRunning();
+
+  /*
+   * [Fib Service Waiting]
+   */
+  if (not config->isNetlinkFibHandlerEnabled()) {
+    waitForFibService(signalHandlerEvb, *config->getConfig().fib_port());
+  }
+  logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
+
+  /*
+   * [Queue] messaging bus for inter-thread communication
+   *
+   * ATTN:
+   *  - Producer will be marked and passed in with messaging::ReplicateQueue
+   *  - Consumer will be marked and passed in with messaging::RQueue
+   */
+  std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr;
+  std::unique_ptr<DispatcherQueue> kvStorePublicationsDispatcherQueue;
+
+  // DispatcherQueue is the KvStore -> subscribers queue with filtering enabled
+  if (config->isKvStoreDispatcherEnabled()) {
+    kvStorePublicationsDispatcherQueue = std::make_unique<DispatcherQueue>();
+  }
+
+  // Decision -> Fib
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  ReplicateQueue<thrift::InitializationEvent>
-      prefixMgrInitializationEventsQueue;
-  ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
-  ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue;
-  ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
-  ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
-  ReplicateQueue<PeerEvent> peerUpdatesQueue;
-  ReplicateQueue<KeyValueRequest> kvRequestQueue;
-  ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
-  ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
-  ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
-  ReplicateQueue<LogSample> logSampleQueue;
-  std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr{
-      nullptr};
-  std::unique_ptr<DispatcherQueue> kvStorePublicationsDispatcherQueue{nullptr};
-
-  // Create the readers in the first place to make sure they can receive every
-  // messages from the writer(s)
-  auto peerUpdatesQueueReader = peerUpdatesQueue.getReader("decision");
-  auto decisionStaticRouteUpdatesQueueReader =
-      staticRouteUpdatesQueue.getReader("decision");
-  auto decisionKvStoreUpdatesQueueReader =
-      kvStoreUpdatesQueue.getReader("decision");
   auto fibDecisionRouteUpdatesQueueReader =
       routeUpdatesQueue.getReader("fibDecision");
-  auto linkMonitorNeighborUpdatesQueueReader =
-      neighborUpdatesQueue.getReader("linkMonitor");
-  auto linkMonitorNetlinkEventsQueueReader =
-      netlinkEventsQueue.getReader("linkMonitor");
-  auto sparkInitializationEventsQueueReader =
-      prefixMgrInitializationEventsQueue.getReader("spark");
-  auto sparkInterfaceUpdatesQueueReader =
-      interfaceUpdatesQueue.getReader("spark");
-  auto prefixMgrKvStoreUpdatesReader =
-      kvStoreUpdatesQueue.getReader("prefixManager");
+
+  // PrefixManager -> Decision
+  ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  auto decisionStaticRouteUpdatesQueueReader =
+      staticRouteUpdatesQueue.getReader("decision");
+
+  // PrefixManager -> BgpRib
+  ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   if (config->isBgpPeeringEnabled()) {
     pluginRouteReaderPtr =
         std::make_unique<messaging::RQueue<DecisionRouteUpdate>>(
             prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"));
   }
 
-  if (config->isKvStoreDispatcherEnabled()) {
-    kvStorePublicationsDispatcherQueue = std::make_unique<DispatcherQueue>();
-  }
+  // Fib -> PrefixManager
+  ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
+  auto fibRoutesUpdateQueueReader =
+      fibRouteUpdatesQueue.getReader("routeUpdates");
+
+  // PrefixManager -> Spark
+  ReplicateQueue<thrift::InitializationEvent>
+      prefixMgrInitializationEventsQueue;
+  auto sparkInitializationEventsQueueReader =
+      prefixMgrInitializationEventsQueue.getReader("spark");
+
+  // LinkMonitor -> Spark
+  ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue;
+  auto sparkInterfaceUpdatesQueueReader =
+      interfaceUpdatesQueue.getReader("spark");
+
+  // Spark -> LinkMonitor
+  ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue;
+  auto linkMonitorNeighborUpdatesQueueReader =
+      neighborUpdatesQueue.getReader("linkMonitor");
+
+  // Anyone -> PrefixManager
+  ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
+  auto prefixMgrPrefixUpdatesQueueReader =
+      prefixUpdatesQueue.getReader("prefixManager");
+
+  // KvStore -> Subscribers
+  ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
+  auto decisionKvStoreUpdatesQueueReader =
+      kvStoreUpdatesQueue.getReader("decision");
+  auto prefixMgrKvStoreUpdatesReader =
+      kvStoreUpdatesQueue.getReader("prefixManager");
+
+  // LinkMonitor -> KvStore/Decision
+  ReplicateQueue<PeerEvent> peerUpdatesQueue;
+  auto kvStorePeerUpdatesQueueReader = peerUpdatesQueue.getReader("kvstore");
+  auto decisionPeerUpdatesQueueReader = peerUpdatesQueue.getReader("decision");
+
+  // PrefixManager/LinkMonitor -> KvStore
+  ReplicateQueue<KeyValueRequest> kvRequestQueue;
+  auto kvStoreRequestQueueReader = kvRequestQueue.getReader("kvStore");
+
+  // Netlink -> LinkMonitor
+  ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
+  auto linkMonitorNetlinkEventsQueueReader =
+      netlinkEventsQueue.getReader("linkMonitor");
+
+  // Anyone -> Monitor
+  ReplicateQueue<LogSample> logSampleQueue;
 
   // structures to organize our modules
+  std::shared_ptr<ThreadManager> thriftThreadMgr;
+  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
+  std::unique_ptr<std::thread> netlinkFibServerThread;
   std::vector<std::thread> allThreads;
   std::vector<std::unique_ptr<OpenrEventBase>> orderedEvbs;
   Watchdog* watchdog{nullptr};
@@ -279,25 +317,6 @@ main(int argc, char** argv) {
         std::make_unique<Watchdog>(config));
   }
 
-  // Starting main event-loop
-  std::thread mainEvbThread([&]() noexcept {
-    XLOG(INFO) << "Starting openr main event-base...";
-    folly::setThreadName("openr-main");
-    mainEvb.loopForever();
-    XLOG(INFO) << "Main event-base stopped...";
-  });
-  mainEvb.waitUntilRunning();
-
-  if (config->isFibServiceWaitingEnabled() and
-      (not config->isNetlinkFibHandlerEnabled())) {
-    waitForFibService(mainEvb, *config->getConfig().fib_port());
-  }
-  logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
-
-  std::shared_ptr<ThreadManager> thriftThreadMgr{nullptr};
-  std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer{nullptr};
-  std::unique_ptr<std::thread> netlinkFibServerThread{nullptr};
-
   // Create Netlink Protocol object in a new thread
   // NOTE: Start EventBase only after NetlinkProtocolSocket has been constructed
   auto nlOpenrEvb = std::make_unique<OpenrEventBase>();
@@ -305,6 +324,7 @@ main(int argc, char** argv) {
       nlOpenrEvb->getEvb(), netlinkEventsQueue);
   startEventBase(
       allThreads, orderedEvbs, watchdog, "netlink", std::move(nlOpenrEvb));
+  watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
 
   // Start NetlinkFibHandler if specified
   if (config->isNetlinkFibHandlerEnabled()) {
@@ -332,10 +352,9 @@ main(int argc, char** argv) {
           netlinkFibServer->serve();
           XLOG(INFO) << "NetlinkFib server got stopped.";
         });
-    watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
   }
 
-  // Start config-store URL
+  // Start Config-store
   auto configStore = startEventBase(
       allThreads,
       orderedEvbs,
@@ -343,7 +362,7 @@ main(int argc, char** argv) {
       "config_store",
       std::make_unique<PersistentStore>(config));
 
-  // Start monitor Module
+  // Start Monitor
   auto monitor = startEventBase(
       allThreads,
       orderedEvbs,
@@ -353,8 +372,9 @@ main(int argc, char** argv) {
           config,
           Constants::kEventLogCategory.toString(),
           logSampleQueue.getReader("monitor")));
+  watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
-  // Start KVStore
+  // Start KvStore
   auto kvStore = startEventBase(
       allThreads,
       orderedEvbs,
@@ -362,13 +382,12 @@ main(int argc, char** argv) {
       "kvstore",
       std::make_unique<KvStore<thrift::OpenrCtrlCppAsyncClient>>(
           kvStoreUpdatesQueue,
-          peerUpdatesQueue.getReader("kvStore"),
-          kvRequestQueue.getReader("kvStore"),
+          std::move(kvStorePeerUpdatesQueueReader),
+          std::move(kvStoreRequestQueueReader),
           logSampleQueue,
           config->getAreaIds(),
           config->toThriftKvStoreConfig()));
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
-  watchdog->addQueue(logSampleQueue, "logSampleQueue");
 
   Dispatcher* dispatcher{nullptr};
   if (config->isKvStoreDispatcherEnabled()) {
@@ -406,8 +425,8 @@ main(int argc, char** argv) {
           prefixMgrRouteUpdatesQueue,
           prefixMgrInitializationEventsQueue,
           prefixMgrKvStoreUpdatesReader,
-          prefixUpdatesQueue.getReader("prefixManager"),
-          fibRouteUpdatesQueue.getReader("routeUpdates"),
+          prefixMgrPrefixUpdatesQueueReader,
+          fibRoutesUpdateQueueReader,
           config));
   watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
   watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");
@@ -430,9 +449,8 @@ main(int argc, char** argv) {
             Constants::kPrefixAllocatorSyncInterval));
   }
   watchdog->addQueue(prefixUpdatesQueue, "prefixUpdatesQueue");
-  watchdog->addQueue(netlinkEventsQueue, "netlinkEventsQueue");
 
-  // Create Spark instance for neighbor discovery
+  // Start Spark
   auto spark = startEventBase(
       allThreads,
       orderedEvbs,
@@ -446,7 +464,7 @@ main(int argc, char** argv) {
           config));
   watchdog->addQueue(neighborUpdatesQueue, "neighborUpdatesQueue");
 
-  // Create link monitor instance.
+  // Start LinkMonitor
   auto linkMonitor = startEventBase(
       allThreads,
       orderedEvbs,
@@ -516,7 +534,7 @@ main(int argc, char** argv) {
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
 
-  // Start Decision Module
+  // Start Decision
   auto decision = startEventBase(
       allThreads,
       orderedEvbs,
@@ -524,13 +542,13 @@ main(int argc, char** argv) {
       "decision",
       std::make_unique<Decision>(
           config,
-          std::move(peerUpdatesQueueReader),
+          std::move(decisionPeerUpdatesQueueReader),
           std::move(decisionKvStoreUpdatesQueueReader),
           std::move(decisionStaticRouteUpdatesQueueReader),
           routeUpdatesQueue));
   watchdog->addQueue(routeUpdatesQueue, "routeUpdatesQueue");
 
-  // Define and start Fib Module
+  // Start Fib
   auto fib = startEventBase(
       allThreads,
       orderedEvbs,
@@ -569,7 +587,7 @@ main(int argc, char** argv) {
   thriftCtrlServer->start();
 
   // Wait for main eventbase to stop
-  mainEvbThread.join();
+  signalHandlerEvbThread.join();
 
   // Close all queues for inter-module communications
   routeUpdatesQueue.close();
