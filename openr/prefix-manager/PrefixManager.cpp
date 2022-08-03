@@ -369,7 +369,13 @@ std::pair<thrift::PrefixType, const PrefixEntry>
 PrefixManager::getBestPrefixEntry(
     const std::unordered_map<thrift::PrefixType, PrefixEntry>&
         prefixTypeToEntry) {
-  // select the best entry/entries by comparing metric() field
+  // If decision calculation has already considered local routes, then we should
+  // use the best entry provided by decision instead of calculating here again.
+  const auto it = prefixTypeToEntry.find(thrift::PrefixType::RIB);
+  if (prefixTypeToEntry.end() != it and it->second.preferredForRedistribution) {
+    return std::make_pair(thrift::PrefixType::RIB, it->second);
+  }
+  // select the best entry/entries by comparing metric field
   const auto bestTypes = selectBestPrefixMetrics(prefixTypeToEntry);
   auto bestType = *bestTypes.begin();
   // if best route is BGP, and an equivalent CONFIG route exists,
@@ -1702,7 +1708,8 @@ PrefixManager::redistributePrefixesAcrossAreas(
         std::make_shared<thrift::PrefixEntry>(std::move(prefixEntry)),
         std::move(dstAreas),
         policyActionData,
-        policyMatchData);
+        policyMatchData,
+        route.localRouteConsidered /* prefer over local*/);
 
     // Adjust supporting route count due to prefix advertisement
     aggregatesToAdvertise(prefix);

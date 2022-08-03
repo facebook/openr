@@ -705,6 +705,9 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
     EXPECT_EQ(1, routeDb->unicastRoutes.size());
     const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
     EXPECT_EQ(prefix3, ribEntry.bestPrefixEntry);
+    // let others know that local route has been considered when picking the
+    // route (and lost)
+    EXPECT_TRUE(ribEntry.localRouteConsidered);
   }
   {
     auto routeDb = spfSolver.buildRouteDb("3", areaLinkStates, prefixState);

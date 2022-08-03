@@ -221,17 +221,24 @@ struct PrefixEntry {
 
   OpenrPolicyMatchData policyMatchData{};
 
+  /* True if decision have already made calculations with the local routes and
+   * concluded that this is the best route
+   */
+  bool preferredForRedistribution{false};
+
   PrefixEntry() = default;
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
       std::unordered_set<std::string>&& dstAreas,
       std::optional<OpenrPolicyActionData> policyActionData = std::nullopt,
-      OpenrPolicyMatchData policyMatchData = OpenrPolicyMatchData())
+      OpenrPolicyMatchData policyMatchData = OpenrPolicyMatchData(),
+      bool preferredForRedistribution = false)
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
         network(toIPNetwork(*tPrefixEntry->prefix())),
         policyActionData(policyActionData),
-        policyMatchData(policyMatchData) {}
+        policyMatchData(policyMatchData),
+        preferredForRedistribution(preferredForRedistribution) {}
 
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,

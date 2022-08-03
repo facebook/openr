@@ -230,12 +230,20 @@ SpfSolver::createRouteForPrefix(
   // pointers for storing prefix information can be efficient (CPU & Memory)
   //
   auto prefixEntries = folly::copy(allPrefixEntries);
+  bool localPrefixConsidered{false};
   for (auto& [area, linkState] : areaLinkStates) {
     auto const& mySpfResult = linkState.getSpfResult(myNodeName);
 
     // Delete entries of unreachable nodes from prefixEntries
     for (auto it = prefixEntries.cbegin(); it != prefixEntries.cend();) {
       const auto& [prefixNode, prefixArea] = it->first;
+      // TODO: remove this when tie-breaking process completely done in Decision
+      // instead of PrefixManager
+      // This indicates that when we calculated the
+      // best path, we have considered locally originated prefix as well
+      if (myNodeName == prefixNode) {
+        localPrefixConsidered = true;
+      }
       // Only check reachability within the area that prefixNode belongs to.
       if (area != prefixArea || mySpfResult.count(prefixNode)) {
         ++it; // retain
@@ -335,6 +343,7 @@ SpfSolver::createRouteForPrefix(
   if (routeSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
     XLOG(DBG3) << "Skip adding route for prefixes advertised by " << myNodeName
                << " " << folly::IPAddress::networkToString(prefix);
+
     return std::nullopt;
   }
 
@@ -452,7 +461,8 @@ SpfSolver::createRouteForPrefix(
       hasBGP,
       std::move(totalNextHops),
       shortestMetric,
-      ucmpWeight);
+      ucmpWeight,
+      localPrefixConsidered);
 
   // SrPolicy TODO: (T94500292) before returning need to apply prepend label
   // rules. Prepend label rules, may create a new MPLS route (RibMplsEntry)
@@ -994,7 +1004,8 @@ SpfSolver::addBestPaths(
     const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops,
     const Metric shortestMetric,
-    const std::optional<int64_t>& ucmpWeight) {
+    const std::optional<int64_t>& ucmpWeight,
+    const bool localPrefixConsidered) {
   // Check if next-hop list is empty
   if (nextHops.empty()) {
     return std::nullopt;
@@ -1050,7 +1061,8 @@ SpfSolver::addBestPaths(
       routeSelectionResult.bestNodeArea.second,
       isBgp & (not enableBgpRouteProgramming_), // doNotInstall
       shortestMetric,
-      ucmpWeight);
+      ucmpWeight,
+      localPrefixConsidered);
 }
 
 std::pair<

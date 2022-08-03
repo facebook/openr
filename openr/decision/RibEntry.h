@@ -50,6 +50,7 @@ struct RibUnicastEntry : RibEntry {
   // Counter Id assigned to this route. Assignment comes from the
   // RibPolicyStatement that matches to this route.
   std::optional<thrift::RouteCounterID> counterID{std::nullopt};
+  bool localRouteConsidered{false};
 
   // constructor
   explicit RibUnicastEntry() {}
@@ -67,12 +68,14 @@ struct RibUnicastEntry : RibEntry {
       const std::string& bestArea,
       bool doNotInstall = false,
       unsigned int igpCost = 0,
-      const std::optional<int64_t>& ucmpWeight = std::nullopt)
+      const std::optional<int64_t>& ucmpWeight = std::nullopt,
+      bool localRouteConsidered = false)
       : RibEntry(std::move(nexthops), igpCost),
         prefix(prefix),
         bestPrefixEntry(std::move(bestPrefixEntryThrift)),
         bestArea(bestArea),
-        doNotInstall(doNotInstall) {
+        doNotInstall(doNotInstall),
+        localRouteConsidered(localRouteConsidered) {
     bestPrefixEntry.weight().from_optional(ucmpWeight);
   }
 
@@ -80,6 +83,7 @@ struct RibUnicastEntry : RibEntry {
   operator==(const RibUnicastEntry& other) const {
     return prefix == other.prefix && bestPrefixEntry == other.bestPrefixEntry &&
         doNotInstall == other.doNotInstall && counterID == other.counterID &&
+        localRouteConsidered == other.localRouteConsidered &&
         RibEntry::operator==(other);
   }
 
