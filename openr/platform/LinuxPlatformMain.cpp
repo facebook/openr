@@ -29,9 +29,6 @@ main(int argc, char** argv) {
 
   folly::EventBase mainEvb;
   openr::EventBaseStopSignalHandler handler(&mainEvb);
-  handler.registerSignalHandler(SIGINT);
-  handler.registerSignalHandler(SIGQUIT);
-  handler.registerSignalHandler(SIGTERM);
 
   std::vector<std::thread> allThreads{};
 
