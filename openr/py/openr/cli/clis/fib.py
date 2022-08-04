@@ -99,7 +99,7 @@ class FibUnicastRoutesCli(object):
     )
     @click.option(
         "--hostnames/--no-hostnames",
-        default=False,
+        default=True,
         show_default=True,
         help="Show Hostnames rather than IP addresses",
     )
