@@ -690,6 +690,16 @@ Config::toThriftKvStoreConfig() const {
   if (auto maybeIpTos = getConfig().ip_tos()) {
     config.ip_tos() = *maybeIpTos;
   }
+  auto thriftServer = getThriftServerConfig();
+  if (auto x509_cert_path = thriftServer.x509_cert_path()) {
+    config.x509_cert_path() = *x509_cert_path;
+  }
+  if (auto x509_key_path = thriftServer.x509_key_path()) {
+    config.x509_key_path() = *x509_key_path;
+  }
+  if (auto x509_ca_path = thriftServer.x509_ca_path()) {
+    config.x509_ca_path() = *x509_ca_path;
+  }
   return config;
 }
 

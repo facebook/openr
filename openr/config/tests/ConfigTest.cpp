@@ -855,4 +855,13 @@ TEST(ConfigTest, SegmentRoutingConfig) {
       openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
 }
 
+TEST(ConfigTest, ToThriftKvStoreConfig) {
+  auto tConfig = getBasicOpenrConfig();
+  const auto& srConf = getSegmentRoutingConfig();
+  tConfig.segment_routing_config() = srConf;
+  auto config = Config(tConfig);
+
+  EXPECT_NO_THROW(config.toThriftKvStoreConfig());
+}
+
 } // namespace openr

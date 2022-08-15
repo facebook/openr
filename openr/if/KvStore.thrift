@@ -408,6 +408,11 @@ struct KvStoreConfig {
    * Set this to 0 if you don't want to mark packets.
    */
   10: optional i32 ip_tos;
+
+  // For tls thrift encryption
+  11: optional string x509_cert_path;
+  12: optional string x509_key_path;
+  13: optional string x509_ca_path;
 } (cpp.minimize_padding)
 
 /**
