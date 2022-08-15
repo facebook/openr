@@ -413,6 +413,8 @@ struct KvStoreConfig {
   11: optional string x509_cert_path;
   12: optional string x509_key_path;
   13: optional string x509_ca_path;
+  /** Knob to enable/disable TLS thrift client. */
+  14: bool enable_secure_thrift_client = false;
 } (cpp.minimize_padding)
 
 /**

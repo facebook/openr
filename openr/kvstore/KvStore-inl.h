@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/io/async/SSLContext.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
@@ -32,7 +33,11 @@ KvStore<ClientType>::KvStore(
           getKvStoreFilters(kvStoreConfig),
           kvStoreConfig.flood_rate().to_optional(),
           std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms()),
-          std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms())) {
+          std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms()),
+          *kvStoreConfig.enable_secure_thrift_client(),
+          kvStoreConfig.x509_cert_path().to_optional(),
+          kvStoreConfig.x509_key_path().to_optional(),
+          kvStoreConfig.x509_ca_path().to_optional()) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
@@ -795,11 +800,13 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
     const std::string& areaTag,
     const thrift::PeerSpec& ps,
-    const ExponentialBackoff<std::chrono::milliseconds>& expBackoff)
+    const ExponentialBackoff<std::chrono::milliseconds>& expBackoff,
+    const KvStoreParams& kvParams)
     : nodeName(nodeName),
       areaTag(areaTag),
       peerSpec(ps),
-      expBackoff(expBackoff) {
+      expBackoff(expBackoff),
+      kvParams_(kvParams) {
   peerSpec.state() = thrift::KvStorePeerState::IDLE;
   CHECK(not this->nodeName.empty());
   CHECK(not this->areaTag.empty());
@@ -824,19 +831,42 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         *peerSpec.peerAddr(),
         *peerSpec.ctrlPort(),
         nodeName);
+    if (kvParams_.enable_secure_thrift_client) {
+      /*
+       * TLS guide:
+       * https://www.internalfb.com/intern/wiki/Secure_Thrift/User_Guide/TLS/Special_Cases/
+       */
+      auto context = std::make_shared<folly::SSLContext>();
+      context->setVerificationOption(
+          folly::SSLContext::VerifyServerCertificate::IF_PRESENTED);
+      context->loadTrustedCertificates(kvParams_.x509_ca_path->c_str());
+      // Thrift's Rocket transport requires an ALPN
+      context->setAdvertisedNextProtocols({"rs"});
+      context->loadCertificate(kvParams_.x509_cert_path->c_str());
+      context->loadPrivateKey(kvParams_.x509_key_path->c_str());
+      folly::ssl::SSLCommonOptions::setClientOptions(*context);
+      // Explicitly enable TLS1.3 until it becomes the default
+      context->enableTLS13();
 
-    // TODO: migrate to secure thrift connection
-    client = getOpenrCtrlPlainTextClient<
-        ClientType,
-        apache::thrift::HeaderClientChannel>(
-        *(evb->getEvb()),
-        folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
-        *peerSpec.ctrlPort(), /* port to establish TCP connection */
-        Constants::kServiceConnTimeout, /* client connection timeout */
-        Constants::kServiceProcTimeout, /* request processing timeout */
-        folly::AsyncSocket::anyAddress(), /* bindAddress */
-        maybeIpTos /* IP_TOS value for control plane */);
-
+      client = getOpenrCtrlSecureClient<ClientType>(
+          *(evb->getEvb()),
+          context,
+          folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
+          *peerSpec.ctrlPort(), /* port to establish TCP connection */
+          Constants::kServiceConnTimeout, /* client connection timeout */
+          Constants::kServiceProcTimeout, /* request processing timeout */
+          folly::AsyncSocket::anyAddress(), /* bindAddress */
+          maybeIpTos /* IP_TOS value for control plane */);
+    } else {
+      client = getOpenrCtrlPlainTextClient<ClientType>(
+          *(evb->getEvb()),
+          folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
+          *peerSpec.ctrlPort(), /* port to establish TCP connection */
+          Constants::kServiceConnTimeout, /* client connection timeout */
+          Constants::kServiceProcTimeout, /* request processing timeout */
+          folly::AsyncSocket::anyAddress(), /* bindAddress */
+          maybeIpTos /* IP_TOS value for control plane */);
+    }
     // TODO: leverage folly::Socket's KEEP_ALIVE option to manage this
     // instead of manipulating getStatus() call on our own.
     // schedule periodic keepAlive time with 20% jitter variance
@@ -1944,7 +1974,8 @@ KvStoreDb<ClientType>::addThriftPeers(
           AreaTag(),
           newPeerSpec,
           ExponentialBackoff<std::chrono::milliseconds>(
-              Constants::kInitialBackoff, Constants::kMaxBackoff));
+              Constants::kInitialBackoff, Constants::kMaxBackoff),
+          kvParams_);
 
       // TODO: remove this client call to use folly::Socket option to keep-alive
       // initialize keepAlive timer to make sure thrift client connection

@@ -87,6 +87,13 @@ struct KvStoreParams {
   // TTL for self-originated keys
   std::chrono::milliseconds keyTtl{0};
 
+  // TLS knob
+  bool enable_secure_thrift_client{false};
+  // TLS paths
+  std::optional<std::string> x509_cert_path{std::nullopt};
+  std::optional<std::string> x509_key_path{std::nullopt};
+  std::optional<std::string> x509_ca_path{std::nullopt};
+
   KvStoreParams(
       std::string nodeId,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
@@ -97,14 +104,22 @@ struct KvStoreParams {
       // TTL decrement factor
       std::chrono::milliseconds ttldecr,
       // TTL for self-originated keys
-      std::chrono::milliseconds keyTtl)
+      std::chrono::milliseconds keyTtl,
+      bool enable_secure_thrift_client,
+      std::optional<std::string> x509_cert_path,
+      std::optional<std::string> x509_key_path,
+      std::optional<std::string> x509_ca_path)
       : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         logSampleQueue(logSampleQueue),
         filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
-        keyTtl(keyTtl) {}
+        keyTtl(keyTtl),
+        enable_secure_thrift_client(enable_secure_thrift_client),
+        x509_cert_path(x509_cert_path),
+        x509_key_path(x509_key_path),
+        x509_ca_path(x509_ca_path) {}
 };
 
 /*
@@ -453,7 +468,8 @@ class KvStoreDb {
         const std::string& nodeName,
         const std::string& areaTag,
         const thrift::PeerSpec& ps,
-        const ExponentialBackoff<std::chrono::milliseconds>& expBackoff);
+        const ExponentialBackoff<std::chrono::milliseconds>& expBackoff,
+        const KvStoreParams& kvParams);
 
     // util function to create new or get existing thrift client
     bool getOrCreateThriftClient(
@@ -491,6 +507,9 @@ class KvStoreDb {
     // Number of occured Thrift API errors in the process of syncing with
     // peer.
     int64_t numThriftApiErrors{0};
+
+    // Kv store parameters
+    const KvStoreParams& kvParams_;
   };
 
   // Set of peers with all info over thrift channel
