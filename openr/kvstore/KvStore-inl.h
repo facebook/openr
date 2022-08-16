@@ -624,6 +624,10 @@ KvStore<ClientType>::initGlobalCounters() {
    *  3) etc.
    */
   fb303::fbData->addStatExportType(
+      "kvstore.thrift.secure_client", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.plaintext_client", fb303::COUNT);
+  fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_full_sync", fb303::COUNT);
@@ -857,6 +861,9 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
           Constants::kServiceProcTimeout, /* request processing timeout */
           folly::AsyncSocket::anyAddress(), /* bindAddress */
           maybeIpTos /* IP_TOS value for control plane */);
+
+      fb303::fbData->addStatValue(
+          "kvstore.thrift.secure_client", 1, fb303::COUNT);
     } else {
       client = getOpenrCtrlPlainTextClient<ClientType>(
           *(evb->getEvb()),
@@ -866,6 +873,9 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
           Constants::kServiceProcTimeout, /* request processing timeout */
           folly::AsyncSocket::anyAddress(), /* bindAddress */
           maybeIpTos /* IP_TOS value for control plane */);
+
+      fb303::fbData->addStatValue(
+          "kvstore.thrift.plaintext_client", 1, fb303::COUNT);
     }
     // TODO: leverage folly::Socket's KEEP_ALIVE option to manage this
     // instead of manipulating getStatus() call on our own.
@@ -904,6 +914,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  * This module exposes fb303 counters that can be leveraged for monitoring
  * KvStoreDb's correctness and performance behevior in production
  *
+ * kvstore.thrift.secure_client: # of secure client creation;
+ * kvstore.thrift.plaintext_client: # of plaintext client creation;
  * kvstore.thrift.num_client_connection_failure: # of client creation failures;
  * kvstore.thrift.num_full_sync: # of full-sync performed;
  * kvstore.thrift.num_missing_keys: # of missing keys from syncing with peer;
