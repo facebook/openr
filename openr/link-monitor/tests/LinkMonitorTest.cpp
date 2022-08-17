@@ -2646,6 +2646,145 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
 }
 */
 
+/**
+ * Verify that LinkMonitor advertises adjacencies to KvStore after
+ *  expiry of adj_hold_time.
+ */
+TEST_F(LinkMonitorTestFixture, AdjHoldTimerExpireTest) {
+  // Note start time for the test.
+  std::chrono::steady_clock::time_point testStartTime =
+      std::chrono::steady_clock::now();
+  // Create an interface.
+  nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
+  recvAndReplyIfUpdate();
+
+  {
+    // Send neighbor up.
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+  }
+  {
+    // Create expected adjacency.
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+  }
+  // Find the configured time after which adjacency will be advertised
+  // to KvStore. This will be default value of 4 sec.
+  const std::chrono::seconds initialAdjHoldTime{
+      *config->getConfig().adj_hold_time_s()};
+  {
+    // Wait for expected adjacency to advertise.
+    checkNextAdjPub("adj:node-1");
+    // Note the time we successfully received the adj publication.
+    std::chrono::steady_clock::time_point kvStorePubTime =
+        std::chrono::steady_clock::now();
+    // Find the time elapsed since we started.
+    auto elapsedTime = kvStorePubTime - testStartTime;
+    LOG(INFO)
+        << "Elapsed time in seconds: "
+        << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
+        << " sec";
+    // Publication should have been received after adj_hold_time expiry.
+    ASSERT_TRUE(elapsedTime >= std::chrono::seconds(initialAdjHoldTime));
+  }
+}
+
+/**
+ * Verify that LinkMonitor immediately advertises adjacencies to KvStore
+ * after receiving Initialization event -  NEIGHBOR_DISCOVERED.
+ */
+TEST_F(LinkMonitorTestFixture, EventBasedInitializationTest) {
+  // Note start time for the test.
+  std::chrono::steady_clock::time_point testStartTime =
+      std::chrono::steady_clock::now();
+  // Create an interface.
+  nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
+  recvAndReplyIfUpdate();
+
+  {
+    // Send neighbor up.
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    // Signal Intialization event.
+    neighborUpdatesQueue.push(thrift::InitializationEvent::NEIGHBOR_DISCOVERED);
+  }
+  {
+    // Create expected adjacency.
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+  }
+  // Find the configured time after which adjacency will be advertised
+  // to KvStore. This will be default value of 4 sec.
+  const std::chrono::seconds initialAdjHoldTime{
+      *config->getConfig().adj_hold_time_s()};
+
+  {
+    // Wait for expected adjacency to advertise.
+    checkNextAdjPub("adj:node-1");
+    // Note the time we successfully received the adj publication.
+    std::chrono::steady_clock::time_point kvStorePubTime =
+        std::chrono::steady_clock::now();
+    // Find the time elapsed since we started.
+    auto elapsedTime = kvStorePubTime - testStartTime;
+    LOG(INFO)
+        << "Elapsed time in seconds: "
+        << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
+        << " sec";
+
+    // Publication should have been received prior to adj_hold_time expiry.
+    ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+  }
+}
+
+/**
+ * Verify that LinkMonitor immediately advertises adjacencies to KvStore
+ * after receiving Initialization event -  NEIGHBOR_DISCOVERED.
+ */
+TEST_F(LinkMonitorTestFixture, NotAllNeighborsUpInitializationTest) {
+  // Note start time for the test.
+  std::chrono::steady_clock::time_point testStartTime =
+      std::chrono::steady_clock::now();
+  // Create an interface.
+  nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
+  nlEventsInjector->sendLinkEvent("iface_3_1", 100, true);
+  recvAndReplyIfUpdate();
+
+  {
+    // Send neighbor up for 1 and not the other to simulate the 2nd neighbor
+    // not coming up before Spark dumps initial set of discovered neighbors.
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    // Signal Intialization event.
+    neighborUpdatesQueue.push(thrift::InitializationEvent::NEIGHBOR_DISCOVERED);
+  }
+  {
+    // Create expected adjacency.
+    auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+  }
+  // Find the configured time after which adjacency will be advertised
+  // to KvStore. This will be default value of 4 sec.
+  const std::chrono::seconds initialAdjHoldTime{
+      *config->getConfig().adj_hold_time_s()};
+
+  {
+    // Wait for expected adjacency to advertise.
+    checkNextAdjPub("adj:node-1");
+    // Note the time we successfully received the adj publication.
+    std::chrono::steady_clock::time_point kvStorePubTime =
+        std::chrono::steady_clock::now();
+    // Find the time elapsed since we started.
+    auto elapsedTime = kvStorePubTime - testStartTime;
+    LOG(INFO)
+        << "Elapsed time in seconds: "
+        << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
+        << " sec";
+
+    // Publication should have been received prior to adj_hold_time expiry.
+    ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

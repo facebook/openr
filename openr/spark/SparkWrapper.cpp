@@ -129,6 +129,90 @@ SparkWrapper::waitForEvents(
   return std::nullopt;
 }
 
+/**
+ * Attempt to read an initialization event published by Spark.
+ *
+ * Args:
+ *  timeout: The specified time interval till we wait for a message
+ *           to be available.
+ *
+ * Returns:
+ *   thrift::InitializationEvent if read succeeds, std::nullopt otherwise.
+ */
+std::optional<thrift::InitializationEvent>
+SparkWrapper::recvInitializationEvent(
+    std::optional<std::chrono::milliseconds> timeout) {
+  auto startTime = std::chrono::steady_clock::now();
+  while (not neighborUpdatesReader_.size()) {
+    // Break if timeout occurs.
+    auto now = std::chrono::steady_clock::now();
+    if (timeout.has_value() && now - startTime > timeout.value()) {
+      return std::nullopt;
+    }
+    // Yield the thread.
+    std::this_thread::yield();
+  }
+
+  return std::get<thrift::InitializationEvent>(
+      neighborUpdatesReader_.get().value());
+}
+
+/**
+ * Wait to receive NEIGHBOR_DISCOVERED initialization event published by Spark.
+ *
+ * Args:
+ *  expectEmptyNeighborEvent: Should we expect an empty neighbor event published
+ *                            before seeing the initialization event.
+ *  rcvdTimeout: The specified time interval till we wait for an individual
+ *               message to be available.
+ *  procTimeout: The specified time interval till we wait for the initialization
+ *               event. (We may read an empty NeighborEvent prior to the
+ *               initialization signal, depending on the passed in value of
+ *               expectEmptyNeighborEvent.)
+ *
+ * Returns:
+ *   True if the initialization event was received, false otherwise.
+ */
+bool
+SparkWrapper::waitForInitializationEvent(
+    bool expectEmptyNeighborEvent,
+    std::optional<std::chrono::milliseconds> rcvdTimeout,
+    std::optional<std::chrono::milliseconds> procTimeout) noexcept {
+  auto startTime = std::chrono::steady_clock::now();
+
+  while (true) {
+    // Check if we've been trying beyond procTimeout.
+    auto endTime = std::chrono::steady_clock::now();
+    if (endTime - startTime > procTimeout.value()) {
+      XLOG(ERR) << "Timeout receiving event. Time limit: "
+                << procTimeout.value().count();
+      break;
+    }
+    if (expectEmptyNeighborEvent) {
+      if (auto maybeEvents = recvNeighborEvent(rcvdTimeout)) {
+        auto& events = maybeEvents.value();
+        if (events.size() == 0) {
+          expectEmptyNeighborEvent = false;
+          continue;
+        }
+        return false;
+      }
+    }
+
+    if (auto maybeIntializationEvent = recvInitializationEvent(rcvdTimeout)) {
+      if (!maybeIntializationEvent.has_value()) {
+        return false;
+      }
+      auto initializationEvent = maybeIntializationEvent.value();
+      if (initializationEvent ==
+          thrift::InitializationEvent::NEIGHBOR_DISCOVERED) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 std::pair<folly::IPAddress, folly::IPAddress>
 SparkWrapper::getTransportAddrs(const NeighborEvent& event) {
   return {toIPAddress(event.neighborAddrV4), toIPAddress(event.neighborAddrV6)};

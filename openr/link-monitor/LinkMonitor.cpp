@@ -241,12 +241,18 @@ LinkMonitor::LinkMonitor(
             // process different types of event
             processNeighborEvents(std::move(event));
           },
-          [](thrift::InitializationEvent&& event) {
+          [this](thrift::InitializationEvent&& event) {
             CHECK(event == thrift::InitializationEvent::NEIGHBOR_DISCOVERED)
                 << fmt::format(
                        "Unexpected initialization event: {}",
                        apache::thrift::util::enumNameSafe(event));
-            // TODO: Handle InitializationEvent
+
+            XLOG(INFO) << "[Initialization] Initial dump of neighbors "
+                       << "received. Advertising adjacencies and addresses.";
+
+            adjHoldTimer_->cancelTimeout();
+            advertiseAdjacencies();
+            advertiseRedistAddrs();
           });
     }
   });

@@ -302,7 +302,7 @@ Spark::Spark(
           *config->getSparkConfig().fastinit_hello_time_ms())),
       handshakeTime_(std::chrono::milliseconds(
           *config->getSparkConfig().fastinit_hello_time_ms())),
-      initializationHoldTime_(3 * fastInitHelloTime_ + handshakeTime_),
+      initializationHoldTime_(5 * fastInitHelloTime_ + handshakeTime_),
       keepAliveTime_(
           std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
       handshakeHoldTime_(
@@ -378,6 +378,8 @@ Spark::Spark(
         // NOTE: In scenarios of standalone node or first node coming up in the
         // network, there are none announced neighbors.
         neighborUpdatesQueue_.push(std::move(upNeighbors));
+        neighborUpdatesQueue_.push(
+            thrift::InitializationEvent::NEIGHBOR_DISCOVERED);
       });
 
   // Fiber to process interface updates from LinkMonitor
