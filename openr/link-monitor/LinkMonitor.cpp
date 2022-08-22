@@ -246,13 +246,18 @@ LinkMonitor::LinkMonitor(
                 << fmt::format(
                        "Unexpected initialization event: {}",
                        apache::thrift::util::enumNameSafe(event));
-
-            XLOG(INFO) << "[Initialization] Initial dump of neighbors "
+            // TODO(agrewal) LM Must wait for bi-directional adjacency to be
+            // formed before advertising adjacencies, otherwise Decision will
+            // filtered out unsuable one-way adjacencies.
+            /*
+            XLOG(INFO) << "[Initialization] Initial
+            dump of neighbors "
                        << "received. Advertising adjacencies and addresses.";
 
             adjHoldTimer_->cancelTimeout();
             advertiseAdjacencies();
             advertiseRedistAddrs();
+            */
           });
     }
   });

@@ -2731,8 +2731,10 @@ TEST_F(LinkMonitorTestFixture, EventBasedInitializationTest) {
         << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
         << " sec";
 
+    // TODO(agrewal): Enable the below assertion after turning on event
+    // based initialization.
     // Publication should have been received prior to adj_hold_time expiry.
-    ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+    // ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
   }
 }
 
@@ -2780,8 +2782,10 @@ TEST_F(LinkMonitorTestFixture, NotAllNeighborsUpInitializationTest) {
         << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
         << " sec";
 
+    // TODO(agrewal): Enable the below assertion after turning on event
+    // based initialization.
     // Publication should have been received prior to adj_hold_time expiry.
-    ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+    // ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
   }
 }
 

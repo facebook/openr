@@ -224,6 +224,28 @@ SparkWrapper::getSparkNeighState(
   return spark_->getSparkNeighState(ifName, neighborName).get();
 }
 
+/**
+ * Get the count of all active neighbors known to Spark.
+ *
+ * Returns:
+ *  uint64_t: Count of all active neighbors.
+ */
+uint64_t
+SparkWrapper::getTotalNeighborCount() {
+  return spark_->getTotalNeighborCount();
+}
+
+/**
+ * Get the count of all active neighbors known to Spark.
+ *
+ * Returns:
+ *  uint64_t: Count of all active neighbors.
+ */
+uint64_t
+SparkWrapper::getActiveNeighborCount() {
+  return spark_->getActiveNeighborCount();
+}
+
 void
 SparkWrapper::processPacket() {
   spark_->processPacket();

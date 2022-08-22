@@ -342,44 +342,17 @@ Spark::Spark(
               numBuckets, sec));
     }
   }
-  // Timer for collecting neighbors successfully discovered and publishing them
-  // to neighborUpdatesQueue_ in OpenR initialization procedure.
+  // Timer for publishing the NEIGHBOR_DISCOVERED initialization signal
+  // to LM over neighborUpdatesQueue_.
   initializationHoldTimer_ =
       folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-        NeighborEvents upNeighbors;
-        int totalNeighborCnt = 0;
-        for (auto& [ifName, neighborMap] : sparkNeighbors_) {
-          totalNeighborCnt += neighborMap.size();
-          for (auto& [neighborName, neighbor] : neighborMap) {
-            if (neighbor.state == thrift::SparkNeighState::ESTABLISHED) {
-              upNeighbors.emplace_back(NeighborEvent(
-                  NeighborEventType::NEIGHBOR_UP,
-                  neighbor.nodeName,
-                  neighbor.transportAddressV4,
-                  neighbor.transportAddressV6,
-                  neighbor.localIfName,
-                  neighbor.remoteIfName,
-                  neighbor.area,
-                  neighbor.openrCtrlThriftPort,
-                  neighbor.rtt.count(),
-                  neighbor.adjOnlyUsedByOtherNode));
-            }
-          } // for
-        } // for
+        XLOG(INFO) << fmt::format(
+            "[Initialization] Neighbor discovery timer expired."
+            " Active neighbors = {}, total neighbors = {}.",
+            numActiveNeighbors_,
+            numTotalNeighbors_);
 
-        logInitializationEvent(
-            "Spark",
-            thrift::InitializationEvent::NEIGHBOR_DISCOVERED,
-            fmt::format(
-                "Published {} UP neighbors out of {}",
-                upNeighbors.size(),
-                totalNeighborCnt));
-
-        // NOTE: In scenarios of standalone node or first node coming up in the
-        // network, there are none announced neighbors.
-        neighborUpdatesQueue_.push(std::move(upNeighbors));
-        neighborUpdatesQueue_.push(
-            thrift::InitializationEvent::NEIGHBOR_DISCOVERED);
+        initialNeighborsDiscovered();
       });
 
   // Fiber to process interface updates from LinkMonitor
@@ -433,6 +406,17 @@ Spark::Spark(
   fb303::fbData->addStatExportType(
       "slo.neighbor_discovery.time_ms", fb303::AVG);
   fb303::fbData->addStatExportType("slo.neighbor_restart.time_ms", fb303::AVG);
+}
+
+/**
+ * Signal that Spark has finished discovering all the the known neighbors or the
+ * initializationHoldTimer_ has expired.
+ */
+void
+Spark::initialNeighborsDiscovered() {
+  neighborUpdatesQueue_.push(thrift::InitializationEvent::NEIGHBOR_DISCOVERED);
+  logInitializationEvent(
+      "Spark", thrift::InitializationEvent::NEIGHBOR_DISCOVERED);
 }
 
 void
@@ -1129,6 +1113,51 @@ Spark::getNeighbors() {
   return sf;
 }
 
+/**
+ * Determine if Spark has finished discovering all the the known neighbors.
+ *
+ * Returns:
+ *  bool: true if discovery is complete, false otherwise.
+ */
+bool
+Spark::allNeighborsDiscovered() {
+  // TODO(agrewal) This check is not sufficient, since a neighbor comes into
+  // existence when it's helloMsg is processed. So, it is possible that for a
+  // particular neighbor helloMsg is not received by the time others transition
+  // to ESTABLISHED.
+  return (numActiveNeighbors_ == numTotalNeighbors_);
+}
+
+/**
+ * Add a neighbor as active for an interface.
+ *
+ * Args:
+ *  ifName: Reference to interface name to which neighbor belongs.
+ *  neighborName: Name of the neighbor.
+ */
+void
+Spark::addToActiveNeighbors(
+    std::string const& ifName, std::string const& neighborName) {
+  auto result = ifNameToActiveNeighbors_[ifName].emplace(neighborName);
+  if (result.second) {
+    numActiveNeighbors_++;
+  }
+}
+
+/**
+ * Remove a neighbor as active for an interface.
+ *
+ * Args:
+ *  ifName: Reference to interface name to which neighbor belongs.
+ *  neighborName: Name of the neighbor.
+ */
+void
+Spark::remFromActiveNeighbors(
+    std::string const& ifName, std::string const& neighborName) {
+  uint8_t erasedCount = ifNameToActiveNeighbors_.at(ifName).erase(neighborName);
+  numActiveNeighbors_ -= erasedCount;
+}
+
 void
 Spark::neighborUpWrapper(
     SparkNeighbor& neighbor,
@@ -1148,7 +1177,7 @@ Spark::neighborUpWrapper(
   neighbor.heartbeatHoldTimer->scheduleTimeout(neighbor.heartbeatHoldTime);
 
   // add neighborName to collection
-  ifNameToActiveNeighbors_[ifName].emplace(neighborName);
+  addToActiveNeighbors(ifName, neighborName);
 
   // notify LinkMonitor about neighbor UP state
   if (enableOrderedAdjPublication_) {
@@ -1171,6 +1200,13 @@ Spark::neighborUpWrapper(
   } else {
     notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor);
   }
+  if (initializationHoldTimer_->isScheduled() and allNeighborsDiscovered()) {
+    XLOG(INFO) << fmt::format(
+        "[Initialization] All known neighbors ({}) are now discovered.",
+        numTotalNeighbors_);
+    initialNeighborsDiscovered();
+    initializationHoldTimer_->cancelTimeout();
+  }
 }
 
 void
@@ -1178,30 +1214,25 @@ Spark::neighborDownWrapper(
     SparkNeighbor const& neighbor,
     std::string const& ifName,
     std::string const& neighborName) {
-  // notify LinkMonitor about neighbor DOWN state
-  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_DOWN, neighbor);
-
-  // remove neighborship on this interface
+  // Remove neighborship on this interface.
   if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
     XLOG(WARNING) << "Ignore " << ifName << " as there is NO active neighbors.";
     return;
   }
 
-  ifNameToActiveNeighbors_.at(ifName).erase(neighborName);
+  remFromActiveNeighbors(ifName, neighborName);
+
   if (ifNameToActiveNeighbors_.at(ifName).empty()) {
     ifNameToActiveNeighbors_.erase(ifName);
   }
+
+  // Notify LinkMonitor about neighbor DOWN state
+  notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_DOWN, neighbor);
 }
 
 void
 Spark::notifySparkNeighborEvent(
     NeighborEventType eventType, SparkNeighbor const& neighbor) {
-  // In OpenR initialization procedure, initializationHoldTimer_ publishes the
-  // first batch of discovered neighbors.
-  if ((not initialInterfacesReceived_) or
-      initializationHoldTimer_->isScheduled()) {
-    return;
-  }
   neighborUpdatesQueue_.push(NeighborEvents({NeighborEvent(
       eventType,
       neighbor.nodeName,
@@ -1224,7 +1255,7 @@ Spark::processHeartbeatTimeout(
 
   // remove from tracked neighbor at the end
   SCOPE_EXIT {
-    ifNeighbors.erase(neighborName);
+    eraseSparkNeighbor(ifNeighbors, neighborName);
   };
 
   XLOG(INFO) << "Heartbeat timer expired for: " << neighborName
@@ -1309,7 +1340,7 @@ Spark::processGRTimeout(
 
   // remove from tracked neighbor at the end
   SCOPE_EXIT {
-    ifNeighbors.erase(neighborName);
+    eraseSparkNeighbor(ifNeighbors, neighborName);
   };
 
   XLOG(INFO) << fmt::format(
@@ -1354,6 +1385,44 @@ Spark::processGRMsg(
 
   // neihbor is restarting, shutdown heartbeat hold timer
   neighbor.heartbeatHoldTimer.reset();
+}
+
+/**
+ * Remove a neighbor known on an interface.
+ *
+ * Args:
+ *  ifNeighbors: Container storing known SparkNeighbors on an interface (keyed
+ *               by neighborName)
+ *  neighborName: Name of the neighbor.
+ */
+void
+Spark::eraseSparkNeighbor(
+    std::unordered_map<std::string, SparkNeighbor>& ifNeighbors,
+    std::string const& neighborName) {
+  uint8_t erasedNeighborCount = ifNeighbors.erase(neighborName);
+  numTotalNeighbors_ -= erasedNeighborCount;
+}
+
+/**
+ * Get the count of all active neighbors.
+ *
+ * Returns:
+ *  uint64_t: Count of all active neighbors.
+ */
+uint64_t
+Spark::getTotalNeighborCount() {
+  return numTotalNeighbors_;
+}
+
+/**
+ * Get the count of all active neighbors.
+ *
+ * Returns:
+ *  uint64_t: Count of all active neighbors.
+ */
+uint64_t
+Spark::getActiveNeighborCount() {
+  return numActiveNeighbors_;
 }
 
 void
@@ -1431,6 +1500,7 @@ Spark::processHelloMsg(
             keepAliveTime_, // stepDetector sample period
             std::move(rttChangeCb),
             areaId.value()));
+    numTotalNeighbors_++;
 
     auto& neighbor = ifNeighbors.at(neighborName);
     checkNeighborState(neighbor, thrift::SparkNeighState::IDLE);
@@ -1544,7 +1614,7 @@ Spark::processHelloMsg(
       neighborDownWrapper(neighbor, ifName, neighborName);
 
       // remove from tracked neighbor at the end
-      ifNeighbors.erase(neighborName);
+      eraseSparkNeighbor(ifNeighbors, neighborName);
     }
   } else if (neighbor.state == thrift::SparkNeighState::RESTART) {
     // Neighbor is undergoing restart. Will reply immediately for hello msg for
@@ -2024,6 +2094,7 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
       }
       neighborDownWrapper(neighbor, ifName, neighborName);
     }
+    numTotalNeighbors_ -= sparkNeighbors_.at(ifName).size();
     sparkNeighbors_.erase(ifName);
     ifNameToHeartbeatTimers_.erase(ifName);
 
@@ -2188,7 +2259,7 @@ Spark::findInterfaceFromIfindex(int ifIndex) {
 void
 Spark::updateGlobalCounters() {
   // set some flat counters
-  int64_t adjacentNeighborCount{0}, trackedNeighborCount{0};
+  uint64_t adjacentNeighborCount{0}, trackedNeighborCount{0};
   for (auto const& ifaceNeighbors : sparkNeighbors_) {
     trackedNeighborCount += ifaceNeighbors.second.size();
     for (auto const& [_, neighbor] : ifaceNeighbors.second) {
@@ -2206,10 +2277,15 @@ Spark::updateGlobalCounters() {
   }
   fb303::fbData->setCounter(
       "spark.num_tracked_interfaces", sparkNeighbors_.size());
+
   fb303::fbData->setCounter(
       "spark.num_tracked_neighbors", trackedNeighborCount);
+  CHECK_EQ(trackedNeighborCount, numTotalNeighbors_);
   fb303::fbData->setCounter(
       "spark.num_adjacent_neighbors", adjacentNeighborCount);
+  // Established neighbor could should be less than active neighbor
+  // count (the latter include restarting neighbors too.)
+  CHECK_LE(adjacentNeighborCount, numActiveNeighbors_);
   fb303::fbData->setCounter(
       "spark.tracked_adjacent_neighbors_diff",
       trackedNeighborCount - adjacentNeighborCount);

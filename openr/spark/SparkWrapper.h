@@ -91,6 +91,12 @@ class SparkWrapper {
    */
   void processPacket();
 
+  // Get the count of all known neighbors to Spark.
+  uint64_t getTotalNeighborCount();
+
+  // Get the count of all active neighbors to Spark.
+  uint64_t getActiveNeighborCount();
+
  private:
   std::string myNodeName_{""};
   std::shared_ptr<const Config> config_{nullptr};

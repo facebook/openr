@@ -397,6 +397,31 @@ class Spark final : public OpenrEventBase {
       std::optional<thrift::SparkNeighState> const& currState,
       thrift::SparkNeighEvent const& event);
 
+  // Remove the neighbor from being tracked.
+  void eraseSparkNeighbor(
+      std::unordered_map<std::string, SparkNeighbor>& ifNeigbhors,
+      std::string const& neighborName);
+
+  // Add a neighbor as an active neighbor on an interface.
+  void addToActiveNeighbors(
+      std::string const& ifName, std::string const& neighborName);
+
+  // Remove a neighbor as an active neighbor on an interface.
+  void remFromActiveNeighbors(
+      std::string const& ifName, std::string const& neighborName);
+
+  // Find out if all known neighbors are Established.
+  bool allNeighborsDiscovered();
+
+  // Signal completion of initial neighbor discovery..
+  void initialNeighborsDiscovered();
+
+  // Get the count of all known neighbors.
+  uint64_t getTotalNeighborCount();
+
+  // Get the count of all active neighbors.
+  uint64_t getActiveNeighborCount();
+
   //
   // Private state
   //
@@ -464,10 +489,14 @@ class Spark final : public OpenrEventBase {
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};
 
+  // Container storing all the known Spark neighbors, keyed by interface name.
   std::unordered_map<
       std::string /* ifName */,
       std::unordered_map<std::string /* neighborName */, SparkNeighbor>>
       sparkNeighbors_{};
+
+  // Total # of neighbors tracked by Spark.
+  uint64_t numTotalNeighbors_{0};
 
   // Hello packet send timers for each interface
   std::unordered_map<
@@ -481,11 +510,15 @@ class Spark final : public OpenrEventBase {
       std::unique_ptr<folly::AsyncTimeout>>
       ifNameToHeartbeatTimers_{};
 
-  // number of active neighbors for each interface
+  // Container storing active neighbors for each interface. Active
+  // neighbors including ESTABLISHED and restarting neighbors.
   std::unordered_map<
       std::string /* ifName */,
       std::unordered_set<std::string> /* neighbors */>
       ifNameToActiveNeighbors_{};
+
+  // Count of active neighbors tracked by Spark.
+  uint64_t numActiveNeighbors_{0};
 
   // ser/deser messages over sockets
   apache::thrift::CompactSerializer serializer_;

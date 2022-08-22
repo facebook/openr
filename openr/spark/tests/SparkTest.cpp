@@ -175,6 +175,8 @@ class SimpleSparkFixture : public SparkFixture {
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
       ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
     }
 
     {
@@ -189,6 +191,8 @@ class SimpleSparkFixture : public SparkFixture {
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
       ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
     }
   }
 
@@ -257,6 +261,8 @@ class InitializationTestFixture : public SimpleSparkFixture {
           nodeName1_,
           nodeName2_);
       ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
     }
 
     {
@@ -270,6 +276,8 @@ class InitializationTestFixture : public SimpleSparkFixture {
           nodeName2_,
           nodeName1_);
       ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
     }
   }
 };
@@ -341,6 +349,8 @@ class InitializationBackwardCompatibilityTestFixture
           nodeName1_,
           nodeName2_);
       ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
 
       events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
       auto neighbor2 = events.value().back();
@@ -360,6 +370,8 @@ class InitializationBackwardCompatibilityTestFixture
       LOG(INFO) << fmt::format(
           "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
       ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
     }
   }
 };
@@ -550,6 +562,9 @@ TEST_F(SimpleSparkFixture, GRTest) {
     EXPECT_TRUE(node1_->waitForEvents(NB_RESTARTING).has_value());
     LOG(INFO)
         << fmt::format("{} reported {} as RESTARTING", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    // Restarting nodes are considered active neighbors.
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
   }
 
   // Recreate Spark instance
@@ -567,6 +582,10 @@ TEST_F(SimpleSparkFixture, GRTest) {
     EXPECT_TRUE(node1_->waitForEvents(NB_RESTARTED).has_value());
     LOG(INFO)
         << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    // Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
+    // and then eventually back to ESTABLISHED.
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
   }
 
   // node-2 should ultimately report node-1 as 'UP'
@@ -575,6 +594,8 @@ TEST_F(SimpleSparkFixture, GRTest) {
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
     ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
   }
 
   // should NOT receive any event( e.g.NEIGHBOR_DOWN)
@@ -629,6 +650,9 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
     ASSERT_TRUE(
         endTime - startTime <=
         std::chrono::seconds(grTime) + std::chrono::seconds(holdTime));
+    // GR-timeout will lead us to stop tracking that neighbor.
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
   }
 }
 
@@ -671,6 +695,9 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
     EXPECT_EQ(2, event.ctrlThriftPort);
     LOG(INFO)
         << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    // Restarting nodes are considered active neighbors.
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
   }
 
   // node-2 should ultimately report node-1 as 'UP'
@@ -684,6 +711,8 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
     EXPECT_EQ(1, event.ctrlThriftPort);
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
   }
 }
 
@@ -725,6 +754,12 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
         endTime - startTime <=
         std::chrono::seconds(
             *node1_->getSparkConfig().graceful_restart_time_s()));
+
+    // Heartbeat timeout will lead us to stop tracking that neighbor.
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 0);
   }
 }
 
@@ -806,6 +841,10 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     // should NOT receive any event after down adj
     EXPECT_FALSE(node1_->recvNeighborEvent(waitTime).has_value());
     EXPECT_FALSE(node2_->recvNeighborEvent(waitTime).has_value());
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 0);
   }
 
   // Resume interface connection
@@ -825,6 +864,8 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     ASSERT_TRUE(endTime - startTime <= holdTime + keepAliveTime);
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
   }
 
   {
@@ -834,6 +875,143 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     ASSERT_TRUE(endTime - startTime <= holdTime + keepAliveTime);
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
+  }
+}
+
+/**
+ * Test if initial neighbor discovery finishes before initializationHoldTime_.
+ */
+TEST_F(SparkFixture, InitializationTest) {
+  // Define interface names for the test
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // Connect interfaces directly.
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+      {iface1, {{iface2, 10}}},
+  };
+  mockIoProvider_->setConnectedPairs(connectedPairs);
+
+  // Start Spark instances.
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
+
+  {
+    // start tracking interfaces
+    node1->updateInterfaceDb({InterfaceInfo(
+        iface1 /* ifName */,
+        true /* isUp */,
+        ifIndex1 /* ifIndex */,
+        {ip1V4, ip1V6} /* networks */)});
+    node2->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4, ip2V6} /* networks */)});
+
+    // Record current timestamp.
+    const auto startTime = std::chrono::steady_clock::now();
+
+    EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+
+    // Spark calculates initializationHoldTime_ as (3 * fastInitHelloTime_ +
+    // handshakeTime_), where handshakeTime_ is
+    // *config->getSparkConfig().fastinit_hello_time_ms().
+    auto initializationHoldTime_ =
+        4 * *config1->getSparkConfig().fastinit_hello_time_ms();
+
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTime);
+    LOG(INFO) << "Elapsed time: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(duration)
+                     .count()
+              << " milliseconds";
+    EXPECT_LE(duration.count(), initializationHoldTime_);
+  }
+}
+
+/**
+ * Test initialization is forced after initializationHoldTime_, even if some
+ * neighbors couldn't be discovered.
+ */
+TEST_F(SparkFixture, ForcedInitializationTest) {
+  // Define interface names for the test
+  mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+  // Create unidirectional connectivity.
+  ConnectedIfPairs connectedPairs = {
+      {iface2, {{iface1, 10}}},
+  };
+  mockIoProvider_->setConnectedPairs(connectedPairs);
+
+  // Start Spark instances.
+  const std::string nodeName1 = "node-1";
+  const std::string nodeName2 = "node-2";
+
+  auto tConfig1 = getBasicOpenrConfig(nodeName1);
+  auto config1 = std::make_shared<Config>(tConfig1);
+
+  auto tConfig2 = getBasicOpenrConfig(nodeName2);
+  auto config2 = std::make_shared<Config>(tConfig2);
+
+  auto node1 = createSpark(nodeName1, config1);
+  auto node2 = createSpark(nodeName2, config2);
+
+  {
+    // start tracking interfaces
+    node1->updateInterfaceDb({InterfaceInfo(
+        iface1 /* ifName */,
+        true /* isUp */,
+        ifIndex1 /* ifIndex */,
+        {ip1V4, ip1V6} /* networks */)});
+    node2->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4, ip2V6} /* networks */)});
+
+    // Record current timestamp.
+    const auto startTime = std::chrono::steady_clock::now();
+
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
+
+    // Spark calculates initializationHoldTime_ as (3 * fastInitHelloTime_ +
+    // handshakeTime_), where handshakeTime_ is
+    // *config->getSparkConfig().fastinit_hello_time_ms().
+    // fastinit_hello_time_ms is set to 100 milliseconds for tests.
+    auto initializationHoldTime_ =
+        4 * *config1->getSparkConfig().fastinit_hello_time_ms();
+
+    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - startTime);
+    LOG(INFO) << "Elapsed time: "
+              << std::chrono::duration_cast<std::chrono::milliseconds>(duration)
+                     .count()
+              << " milliseconds";
+    EXPECT_GE(duration.count(), initializationHoldTime_);
   }
 }
 
@@ -884,6 +1062,8 @@ TEST_F(SparkFixture, ReadConfigTest) {
     EXPECT_EQ(iface1, event.localIfName);
     EXPECT_EQ(nodeStark, event.remoteNodeName);
     EXPECT_EQ(0, event.ctrlThriftPort);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
   }
 
   {
@@ -893,6 +1073,8 @@ TEST_F(SparkFixture, ReadConfigTest) {
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeLannister, event.remoteNodeName);
     EXPECT_EQ(Constants::kOpenrCtrlPort, event.ctrlThriftPort);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 }
 
@@ -947,8 +1129,12 @@ TEST_F(SparkFixture, VersionTest) {
   {
     EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
     EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 
   LOG(INFO) << "Starting: " << nodeName3;
@@ -982,12 +1168,14 @@ TEST_F(SparkFixture, VersionTest) {
     EXPECT_FALSE(
         node2->waitForEvents(NB_UP, restart_time_s2, restart_time_s2 * 2)
             .has_value());
-    // At the expiry of adj_hold_time, an empty neighbor event will be
-    // generated, followed by the initialization event.
-    ASSERT_TRUE(node3->waitForInitializationEvent(true) == true);
+    // At the expiry of adj_hold_time, an initialization event will be
+    // published.
+    ASSERT_TRUE(node3->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node3->waitForEvents(NB_UP, restart_time_s3, restart_time_s3 * 2)
             .has_value());
+    ASSERT_TRUE(node3->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node3->getActiveNeighborCount() == 0);
   }
 }
 
@@ -1072,12 +1260,15 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   {
     std::map<std::string, NeighborEvent> events;
 
+    // Gather the two distinct event with 1 neighbor each.
     auto maybeEvents = node1->waitForEvents(NB_UP);
-    EXPECT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 2);
-    for (auto& maybeEvent : maybeEvents.value()) {
-      events.emplace(maybeEvent.remoteNodeName, maybeEvent);
-    }
-    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    auto& maybeEvent1 = maybeEvents.value().back();
+    events.emplace(maybeEvent1.remoteNodeName, maybeEvent1);
+    maybeEvents = node1->waitForEvents(NB_UP);
+    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    auto& maybeEvent2 = maybeEvents.value().back();
+    events.emplace(maybeEvent2.remoteNodeName, maybeEvent2);
 
     ASSERT_EQ(1, events.count(nodeName2));
     ASSERT_EQ(1, events.count(nodeName3));
@@ -1096,6 +1287,10 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
         std::make_pair(ip3V4.first, ip3V6.first),
         SparkWrapper::getTransportAddrs(event2));
 
+    // Initialization signal should be received.
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 2);
     LOG(INFO) << nodeName1 << " reported adjacencies to " << nodeName2
               << " and " << nodeName3;
   }
@@ -1111,6 +1306,8 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     EXPECT_EQ(
         std::make_pair(ip1V4_2.first, ip1V6_2.first),
         SparkWrapper::getTransportAddrs(event));
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 
   {
@@ -1123,6 +1320,8 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     EXPECT_EQ(
         std::make_pair(ip1V4_3.first, ip1V6_3.first),
         SparkWrapper::getTransportAddrs(event));
+    ASSERT_TRUE(node3->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node3->getActiveNeighborCount() == 1);
   }
 
   LOG(INFO) << "Stopping " << nodeName1;
@@ -1135,15 +1334,23 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_TRUE(event1.remoteNodeName == nodeName1);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
     auto events2 = node3->waitForEvents(NB_RESTARTING);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_TRUE(event2.remoteNodeName == nodeName1);
+    ASSERT_TRUE(node3->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node3->getActiveNeighborCount() == 1);
 
     // eventually will lose adjacency as node1 never come back
     EXPECT_TRUE(node2->waitForEvents(NB_DOWN).has_value());
     EXPECT_TRUE(node3->waitForEvents(NB_DOWN).has_value());
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node3->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node3->getActiveNeighborCount() == 0);
   }
 }
 
@@ -1188,9 +1395,14 @@ TEST_F(SparkFixture, FastInitTest) {
     const auto startTime = std::chrono::steady_clock::now();
 
     EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
-    EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+
+    EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
     // Initialization should complete in 6 * fastinit_hello_time_ms. It should
     // more or less finish in 1.5 x that duration.
@@ -1293,9 +1505,13 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   {
     EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 
   // add third instance
@@ -1327,6 +1543,8 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     EXPECT_EQ(iface1, event1.localIfName);
     EXPECT_EQ(nodeName3, event1.remoteNodeName);
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 2);
 
     auto events2 = node2->waitForEvents(NB_UP);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
@@ -1334,35 +1552,44 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     EXPECT_EQ(iface2, event2.localIfName);
     EXPECT_EQ(nodeName3, event2.remoteNodeName);
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 2);
   }
 
   // node-3 should hear from node-1 and node-2 on iface3
   {
     std::map<std::string, NeighborEvent> events;
+
+    // Gather the two distinct event with 1 neighbor each.
     auto maybeEvents = node3->waitForEvents(NB_UP);
-    EXPECT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 2);
-    for (auto& maybeEvent : maybeEvents.value()) {
-      events.emplace(maybeEvent.remoteNodeName, maybeEvent);
-    }
+    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    auto& event1 = maybeEvents.value().back();
+    events.emplace(event1.remoteNodeName, event1);
+    maybeEvents = node3->waitForEvents(NB_UP);
+    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    auto& event2 = maybeEvents.value().back();
+    events.emplace(event2.remoteNodeName, event2);
 
     ASSERT_EQ(1, events.count(nodeName1));
     ASSERT_EQ(1, events.count(nodeName2));
 
-    auto event1 = events.at(nodeName1);
-    EXPECT_EQ(iface3, event1.localIfName);
-    EXPECT_TRUE(nodeName1 == event1.remoteNodeName);
+    auto event = events.at(nodeName1);
+    EXPECT_EQ(iface3, event.localIfName);
+    EXPECT_TRUE(nodeName1 == event.remoteNodeName);
     EXPECT_EQ(
         std::make_pair(ip1V4.first, ip1V6.first),
-        SparkWrapper::getTransportAddrs(event1));
+        SparkWrapper::getTransportAddrs(event));
 
-    auto event2 = events.at(nodeName2);
-    EXPECT_EQ(iface3, event2.localIfName);
-    EXPECT_TRUE(nodeName2 == event2.remoteNodeName);
+    event = events.at(nodeName2);
+    EXPECT_EQ(iface3, event.localIfName);
+    EXPECT_TRUE(nodeName2 == event.remoteNodeName);
     EXPECT_EQ(
         std::make_pair(ip2V4.first, ip2V6.first),
-        SparkWrapper::getTransportAddrs(event2));
+        SparkWrapper::getTransportAddrs(event));
 
     LOG(INFO) << "node-3 reported adjacencies to node-1, node-2";
+    ASSERT_TRUE(node3->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node3->getActiveNeighborCount() == 2);
   }
 
   // Now stop spark3
@@ -1386,9 +1613,13 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   {
     auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
     EXPECT_TRUE(neighState1 == ESTABLISHED);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     auto neighState2 = node2->getSparkNeighState(iface2, nodeName1);
     EXPECT_TRUE(neighState2 == ESTABLISHED);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 }
 
@@ -1433,11 +1664,17 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
       {ip2V4, ip2V6} /* networks */)});
 
   {
-    EXPECT_TRUE(node1->recvNeighborEvent(waitTime * 2).value().empty());
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    EXPECT_FALSE(node1->recvNeighborEvent(waitTime * 2).has_value());
     LOG(INFO) << "node-1 doesn't have any neighbor event";
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
 
-    EXPECT_TRUE(node2->recvNeighborEvent(waitTime * 2).value().empty());
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    EXPECT_FALSE(node2->recvNeighborEvent(waitTime * 2).has_value());
     LOG(INFO) << "node-2 doesn't have any neighbor event";
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
   }
 
   {
@@ -1485,13 +1722,15 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
   {
     const auto& graceful_restart_time_s1 = std::chrono::seconds(
         *config1->getSparkConfig().graceful_restart_time_s());
-    ASSERT_TRUE(node1->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node1
             ->waitForEvents(
                 NB_DOWN, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, "node-1").has_value());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
   }
 }
 
@@ -1550,18 +1789,23 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
         *config1->getSparkConfig().graceful_restart_time_s());
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
         *config2->getSparkConfig().graceful_restart_time_s());
-    ASSERT_TRUE(node1->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node1
             ->waitForEvents(
                 NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
-    ASSERT_TRUE(node2->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node2
             ->waitForEvents(
                 NB_UP, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
   }
 
   {
@@ -1585,7 +1829,11 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
         {ip2V4WithSameSubnet, ip2V6} /* networks */)});
 
     EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
     EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
     LOG(INFO) << "node-1 and node-2 successfully form adjacency";
   }
@@ -1648,19 +1896,23 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
         *config2->getSparkConfig().graceful_restart_time_s());
 
-    ASSERT_TRUE(node1->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node1
             ->waitForEvents(
                 NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
 
-    ASSERT_TRUE(node2->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node2
             ->waitForEvents(
                 NB_DOWN, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
   }
 
   // check neighbor state: should be in WARM/NEGOTIATE stage
@@ -1740,12 +1992,16 @@ TEST_F(SparkFixture, AreaMatch) {
     auto& event1 = events1.value().back();
     EXPECT_EQ(event1.remoteNodeName, nodeName2);
     EXPECT_EQ(event1.area, area2);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     auto events2 = node2->waitForEvents(NB_UP);
     auto& event2 = events2.value().back();
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
     EXPECT_EQ(event2.remoteNodeName, nodeName1);
     EXPECT_EQ(event2.area, area2);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
     LOG(INFO) << nodeName1 << " and " << nodeName2
               << " formed adjacency with each other...";
@@ -1813,13 +2069,13 @@ TEST_F(SparkFixture, NoAreaMatch) {
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
         *config2->getSparkConfig().graceful_restart_time_s());
 
-    ASSERT_TRUE(node1->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node1
             ->waitForEvents(
                 NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
-    ASSERT_TRUE(node2->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node2
             ->waitForEvents(
@@ -1827,6 +2083,10 @@ TEST_F(SparkFixture, NoAreaMatch) {
             .has_value());
     EXPECT_FALSE(node1->getSparkNeighState(iface1, nodeName2).has_value());
     EXPECT_FALSE(node2->getSparkNeighState(iface2, nodeName1).has_value());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
   }
 }
 
@@ -1894,18 +2154,22 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
     const auto& graceful_restart_time_s2 = std::chrono::seconds(
         *config2->getSparkConfig().graceful_restart_time_s());
 
-    ASSERT_TRUE(node1->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node1
             ->waitForEvents(
                 NB_UP, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
             .has_value());
-    ASSERT_TRUE(node2->waitForInitializationEvent(true) == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node2
             ->waitForEvents(
                 NB_UP, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
             .has_value());
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
 
     auto neighState1 = node1->getSparkNeighState(iface1, nodeName2);
     EXPECT_TRUE(neighState1 == WARM || neighState1 == NEGOTIATE);
@@ -1978,12 +2242,16 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
     auto& event1 = events1.value().back();
     EXPECT_EQ(event1.remoteNodeName, nodeName2);
     EXPECT_EQ(event1.area, Constants::kDefaultArea.toString());
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     auto events2 = node2->waitForEvents(NB_UP);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(event2.remoteNodeName, nodeName1);
     EXPECT_EQ(event2.area, area2);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 }
 
@@ -2064,6 +2332,8 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     EXPECT_EQ(event1.area, area1);
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName2;
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     auto events2 = node2->waitForEvents(NB_UP);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
@@ -2073,6 +2343,8 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     EXPECT_EQ(event2.area, area1);
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName1;
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }
 
   // add third instance
@@ -2095,6 +2367,8 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     EXPECT_EQ(nodeName3, events1.value().back().remoteNodeName);
     EXPECT_EQ(event1.area, area1);
     LOG(INFO) << nodeName2 << " reported adjacency to " << nodeName3;
+    ASSERT_TRUE(node2->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node2->getActiveNeighborCount() == 2);
 
     auto events2 = node1->waitForEvents(NB_UP);
     ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
@@ -2103,17 +2377,23 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     EXPECT_EQ(nodeName3, events2.value().back().remoteNodeName);
     EXPECT_EQ(event2.area, area2);
     LOG(INFO) << nodeName1 << " reported adjacency to " << nodeName3;
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 2);
   }
 
   // ssw003 should hear from rsw001 and fsw002 on iface3 in DIFF area
   {
     std::map<std::string, NeighborEvent> events;
-    auto maybeEvents = node3->waitForEvents(NB_UP);
 
-    EXPECT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 2);
-    for (auto& maybeEvent : maybeEvents.value()) {
-      events.emplace(maybeEvent.remoteNodeName, maybeEvent);
-    }
+    // Gather the two distinct event with 1 neighbor each.
+    auto maybeEvents = node3->waitForEvents(NB_UP);
+    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    auto& maybeEvent1 = maybeEvents.value().back();
+    events.emplace(maybeEvent1.remoteNodeName, maybeEvent1);
+    maybeEvents = node3->waitForEvents(NB_UP);
+    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    auto& maybeEvent2 = maybeEvents.value().back();
+    events.emplace(maybeEvent2.remoteNodeName, maybeEvent2);
 
     auto& neighbor1 = events.at(nodeName1);
     EXPECT_EQ(iface3, neighbor1.localIfName);
@@ -2126,6 +2406,9 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     EXPECT_TRUE(nodeName2 == neighbor2.remoteNodeName);
     EXPECT_EQ(area1, neighbor2.area);
     LOG(INFO) << nodeName3 << " reported adjacency to " << nodeName2;
+    ASSERT_TRUE(node3->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node3->getTotalNeighborCount() == 2);
+    ASSERT_TRUE(node3->getActiveNeighborCount() == 2);
   }
 }
 
