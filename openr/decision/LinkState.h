@@ -100,8 +100,8 @@ class Link {
  private:
   const std::string area_;
   const std::string n1_, n2_, if1_, if2_;
-  HoldableValue<LinkStateMetric> metric1_{1}, metric2_{1};
-  HoldableValue<bool> overload1_{false}, overload2_{false};
+  LinkStateMetric metric1_{1}, metric2_{1};
+  bool overload1_{false}, overload2_{false};
   int32_t adjLabel1_{0}, adjLabel2_{0};
   // Weight represents a link's capacity (ex: 100Gbps)
   int64_t weight1_, weight2_;
@@ -157,11 +157,7 @@ class Link {
   void setNhV6FromNode(
       const std::string& nodeName, const thrift::BinaryAddress& nhV6);
 
-  bool setMetricFromNode(
-      const std::string& nodeName,
-      LinkStateMetric d,
-      LinkStateMetric holdUpTtl,
-      LinkStateMetric holdDownTtl);
+  bool setMetricFromNode(const std::string& nodeName, LinkStateMetric d);
 
   void setAdjLabelFromNode(const std::string& nodeName, int32_t adjLabel);
 

@@ -113,7 +113,7 @@ TEST(LinkTest, BasicOperation) {
   EXPECT_TRUE(l1.isUp());
   EXPECT_THROW(l1.getOtherNodeName("node3"), std::invalid_argument);
 
-  EXPECT_TRUE(l1.setMetricFromNode(n1, 2, 0, 0));
+  EXPECT_TRUE(l1.setMetricFromNode(n1, 2));
   EXPECT_EQ(2, l1.getMetricFromNode(n1));
 
   EXPECT_TRUE(l1.setOverloadFromNode(n2, true, 0, 0));

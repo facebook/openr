@@ -193,10 +193,10 @@ Link::getIfaceFromNode(const std::string& nodeName) const {
 LinkStateMetric
 Link::getMetricFromNode(const std::string& nodeName) const {
   if (n1_ == nodeName) {
-    return metric1_.value();
+    return metric1_;
   }
   if (n2_ == nodeName) {
-    return metric2_.value();
+    return metric2_;
   }
   throw std::invalid_argument(nodeName);
 }
@@ -226,10 +226,10 @@ Link::getWeightFromNode(const std::string& nodeName) const {
 bool
 Link::getOverloadFromNode(const std::string& nodeName) const {
   if (n1_ == nodeName) {
-    return overload1_.value();
+    return overload1_;
   }
   if (n2_ == nodeName) {
-    return overload2_.value();
+    return overload2_;
   }
   throw std::invalid_argument(nodeName);
 }
@@ -241,7 +241,7 @@ Link::setHoldUpTtl(LinkStateMetric ttl) {
 
 bool
 Link::isUp() const {
-  return (0 == holdUpTtl_) && !overload1_.value() && !overload2_.value();
+  return (0 == holdUpTtl_) && !overload1_ && !overload2_;
 }
 
 bool
@@ -250,17 +250,12 @@ Link::decrementHolds() {
   if (0 != holdUpTtl_) {
     holdExpired |= (0 == --holdUpTtl_);
   }
-  holdExpired |= metric1_.decrementTtl();
-  holdExpired |= metric2_.decrementTtl();
-  holdExpired |= overload1_.decrementTtl();
-  holdExpired |= overload2_.decrementTtl();
   return holdExpired;
 }
 
 bool
 Link::hasHolds() const {
-  return 0 != holdUpTtl_ || metric1_.hasHold() || metric2_.hasHold() ||
-      overload1_.hasHold() || overload2_.hasHold();
+  return 0 != holdUpTtl_;
 }
 
 const thrift::BinaryAddress&
@@ -310,15 +305,13 @@ Link::setNhV6FromNode(
 }
 
 bool
-Link::setMetricFromNode(
-    const std::string& nodeName,
-    LinkStateMetric d,
-    LinkStateMetric holdUpTtl,
-    LinkStateMetric holdDownTtl) {
+Link::setMetricFromNode(const std::string& nodeName, LinkStateMetric d) {
   if (n1_ == nodeName) {
-    return metric1_.updateValue(d, holdUpTtl, holdDownTtl);
+    metric1_ = d;
+    return true;
   } else if (n2_ == nodeName) {
-    return metric2_.updateValue(d, holdUpTtl, holdDownTtl);
+    metric2_ = d;
+    return true;
   }
   throw std::invalid_argument(nodeName);
 }
@@ -353,9 +346,9 @@ Link::setOverloadFromNode(
     LinkStateMetric holdDownTtl) {
   bool const wasUp = isUp();
   if (n1_ == nodeName) {
-    overload1_.updateValue(overload, holdUpTtl, holdDownTtl);
+    overload1_ = overload;
   } else if (n2_ == nodeName) {
-    overload2_.updateValue(overload, holdUpTtl, holdDownTtl);
+    overload2_ = overload;
   } else {
     throw std::invalid_argument(nodeName);
   }
@@ -667,10 +660,7 @@ LinkState::updateAdjacencyDatabase(
           oldLink.getMetricFromNode(nodeName),
           newLink.getMetricFromNode(nodeName));
       change.topologyChanged |= oldLink.setMetricFromNode(
-          nodeName,
-          newLink.getMetricFromNode(nodeName),
-          holdUpTtl,
-          holdDownTtl);
+          nodeName, newLink.getMetricFromNode(nodeName));
     }
 
     if (newLink.getOverloadFromNode(nodeName) !=
