@@ -690,9 +690,12 @@ Config::toThriftKvStoreConfig() const {
   if (auto maybeIpTos = getConfig().ip_tos()) {
     config.ip_tos() = *maybeIpTos;
   }
-  if (auto thriftClient = getThriftClientConfig()) {
+  auto thriftClientConfig = getThriftClientConfig();
+  if (thriftClientConfig) {
     config.enable_secure_thrift_client() =
-        *thriftClient->enable_secure_thrift_client();
+        *thriftClientConfig->enable_secure_thrift_client();
+    config.reload_certificate_interval_s() =
+        *thriftClientConfig->reload_certificate_interval_s();
   }
   auto thriftServer = getThriftServerConfig();
   if (auto x509_cert_path = thriftServer.x509_cert_path()) {

@@ -12,6 +12,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
 #include <openr/common/Types.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace fb303 = facebook::fb303;
 
@@ -37,7 +38,9 @@ KvStore<ClientType>::KvStore(
           *kvStoreConfig.enable_secure_thrift_client(),
           kvStoreConfig.x509_cert_path().to_optional(),
           kvStoreConfig.x509_key_path().to_optional(),
-          kvStoreConfig.x509_ca_path().to_optional()) {
+          kvStoreConfig.x509_ca_path().to_optional(),
+          std::chrono::seconds(
+              *kvStoreConfig.reload_certificate_interval_s())) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
@@ -824,8 +827,18 @@ bool
 KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     OpenrEventBase* evb, std::optional<int> maybeIpTos) {
   // use the existing thrift client if any
+  auto curTime = std::chrono::steady_clock::now();
   if (client) {
-    return true;
+    if (not kvParams_.enable_secure_thrift_client) {
+      // plain text client don't need to refresh
+      return true;
+    }
+    if (std::chrono::duration_cast<std::chrono::seconds>(
+            curTime - clientStartTime) <=
+        kvParams_.reload_certificate_interval_s) {
+      // still within reload interval
+      return true;
+    }
   }
 
   try {
@@ -902,6 +915,7 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     expBackoff.reportError(); // apply exponential backoff
     return false;
   }
+  clientStartTime = curTime; // update client start time
   return true;
 }
 
