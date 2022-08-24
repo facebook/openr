@@ -721,6 +721,15 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
 }
 
 //
+// Dispatcher APIs
+//
+folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
+OpenrCtrlHandler::semifuture_getDispatcherFilters() {
+  CHECK(dispatcher_);
+  return dispatcher_->getDispatcherFilters();
+}
+
+//
 // KvStore APIs
 //
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>

@@ -718,5 +718,5 @@ service OpenrCtrl extends KvStore.KvStoreService {
   /**
    * Get filters for each of the subscribers of Dispatcher
    */
-  list<list<string>> getFilters();
+  list<list<string>> getDispatcherFilters();
 }

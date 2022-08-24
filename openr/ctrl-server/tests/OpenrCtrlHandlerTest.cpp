@@ -2183,7 +2183,7 @@ class OpenrCtrlFixtureWithDispatcher : public OpenrCtrlFixture {
   std::shared_ptr<Dispatcher> dispatcher;
 };
 
-TEST_F(OpenrCtrlFixtureWithDispatcher, verifyDataPath) {
+TEST_F(OpenrCtrlFixtureWithDispatcher, verifyDataPathTest) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
        {"key11",
@@ -2222,6 +2222,30 @@ TEST_F(OpenrCtrlFixtureWithDispatcher, verifyDataPath) {
   });
 
   evb.loop();
+}
+
+TEST_F(OpenrCtrlFixtureWithDispatcher, dispatcherApiTest) {
+  std::vector<std::string> filter1{"adj:", "prefix:"};
+  std::vector<std::string> filter2{"key7:", "key10:", "key25"};
+  std::vector<std::string> filter3{"key3:", "key7"};
+
+  auto reader1 = dispatcher->getReader(filter1);
+  auto reader2 = dispatcher->getReader(filter2);
+  auto reader3 = dispatcher->getReader(filter3);
+
+  auto resp = handler_->semifuture_getDispatcherFilters().get();
+
+  // check returned ptr is non-null
+  EXPECT_NE(resp, nullptr);
+
+  auto filters = *resp;
+
+  EXPECT_NE(
+      std::find(filters.cbegin(), filters.cend(), filter1), filters.cend());
+  EXPECT_NE(
+      std::find(filters.cbegin(), filters.cend(), filter2), filters.cend());
+  EXPECT_NE(
+      std::find(filters.cbegin(), filters.cend(), filter3), filters.cend());
 }
 
 int
