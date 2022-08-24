@@ -14,7 +14,7 @@ struct VipServiceConfig {
   /**
   * tcp port where vip_service will be accepting requests
   */
-  1: i32 port = 3332;
+  1: i32 port = 3333;
   /**
   * enable acl checking on vip injection/withdrawal
   */
