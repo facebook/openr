@@ -710,4 +710,13 @@ service OpenrCtrl extends KvStore.KvStoreService {
   *         not set previously.
   */
   void clearRibPolicy() throws (1: OpenrError error);
+
+  //
+  // Dispatcher APIs
+  //
+
+  /**
+   * Get filters for each of the subscribers of Dispatcher
+   */
+  list<list<string>> getFilters();
 }

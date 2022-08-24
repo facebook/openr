@@ -68,6 +68,12 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
    */
   std::vector<messaging::RWQueueStats> getReplicationStats() override;
 
+  /**
+   * DispatcherQueue API to get all of the filters for
+   * each of the internal RW queues
+   */
+  std::unique_ptr<std::vector<std::vector<std::string>>> getFilters();
+
  private:
   /**
    * Filter all keys for the publicaton that don't start with any of the

@@ -240,6 +240,31 @@ TEST_F(DispatcherTestFixture, EmptyPublicationTest) {
   evb.loop();
 }
 
+TEST_F(DispatcherTestFixture, DispatcherApiTest) {
+  std::vector<std::string> filter1{"adj:"};
+  std::vector<std::string> filter2{
+      "adj:", "prefix:", "key7:", "key10:", "key25"};
+  std::vector<std::string> filter3{};
+
+  auto reader1 = dispatcher_->getReader(filter1);
+  auto reader2 = dispatcher_->getReader(filter2);
+  auto reader3 = dispatcher_->getReader(filter3);
+
+  auto resp = dispatcher_->getDispatcherFilters().get();
+
+  // check returned ptr is non-null
+  EXPECT_NE(resp, nullptr);
+
+  auto filters = *resp;
+
+  EXPECT_NE(
+      std::find(filters.cbegin(), filters.cend(), filter1), filters.cend());
+  EXPECT_NE(
+      std::find(filters.cbegin(), filters.cend(), filter2), filters.cend());
+  EXPECT_NE(
+      std::find(filters.cbegin(), filters.cend(), filter3), filters.cend());
+}
+
 class DispatcherKnobTestFixture : public DispatcherTestFixture {
  public:
   void

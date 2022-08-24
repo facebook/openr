@@ -68,6 +68,12 @@ class Dispatcher : public OpenrEventBase {
    */
   std::vector<messaging::RWQueueStats> getReplicationStats();
 
+  /**
+   * Dispatcher API to get all of the filters for each of the internal RW queues
+   */
+  folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
+  getDispatcherFilters();
+
  private:
   // Queue to publish KvStore Updates
   DispatcherQueue& kvStorePublicationsQueue_;

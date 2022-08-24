@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <memory>
 #include <stdexcept>
+#include <string>
 #include <utility>
 
 #include <folly/Overload.h>
@@ -70,6 +71,17 @@ Dispatcher::getNumReaders() {
 std::vector<messaging::RWQueueStats>
 Dispatcher::getReplicationStats() {
   return kvStorePublicationsQueue_.getReplicationStats();
+}
+
+// Dispatcher API
+folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
+Dispatcher::getDispatcherFilters() {
+  folly::Promise<std::unique_ptr<std::vector<std::vector<std::string>>>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable noexcept {
+    p.setValue(kvStorePublicationsQueue_.getFilters());
+  });
+  return sf;
 }
 
 } // namespace openr

@@ -12,6 +12,7 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <memory>
 
 namespace openr {
 
@@ -200,6 +201,28 @@ DispatcherQueue::filterKeys(
       });
 
   return result;
+}
+
+std::unique_ptr<std::vector<std::vector<std::string>>>
+DispatcherQueue::getFilters() {
+  auto filters = readers_.withWLock([&](auto& lockedReaders) {
+    std::vector<std::vector<std::string>> filtersList;
+    for (auto it = lockedReaders.begin(); it != lockedReaders.end();) {
+      // check for stale readers
+      if ((*it)->first.use_count() == 1) {
+        (*it)->first->close(); // Close before erasing
+        it = lockedReaders.erase(it);
+      } else {
+        // copy vector of filters for each RW queue
+        filtersList.emplace_back(*((*it)->second));
+        ++it;
+      }
+    }
+
+    return filtersList;
+  });
+
+  return std::make_unique<std::vector<std::vector<std::string>>>(filters);
 }
 
 } // namespace openr

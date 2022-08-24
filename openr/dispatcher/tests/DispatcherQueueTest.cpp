@@ -335,4 +335,44 @@ TEST(DispatcherQueueTest, OpenQueueTest) {
   q.close();
 }
 
+/*
+ * Test will check the DispatcherQueue API to check verify all of the correct
+ * filters are returned for each of the internal RW queue. Test will also remove
+ * RW queues from internal DispatcherQueue if reader has become stale.
+ */
+TEST(DispatcherQueueTest, DispatcherQueueFilterApiTest) {
+  DispatcherQueue q;
+
+  std::vector<std::string> filters1{"prefix:"};
+  std::vector<std::string> filters2{"key1:", "key2:"};
+  std::vector<std::string> filters3{"adj:", "prefix:"};
+  std::vector<std::string> filters4{};
+  std::vector<std::string> filters5{"key1:", "key2:", "adj:", "prefix:"};
+
+  {
+    auto r1 = q.getReader(filters1);
+    auto r2 = q.getReader(filters2);
+    auto r3 = q.getReader(filters3);
+    auto r4 = q.getReader(filters4);
+    auto r5 = q.getReader(filters5);
+
+    auto filters = q.getFilters();
+
+    EXPECT_EQ(filters->size(), 5);
+
+    EXPECT_EQ(filters->at(0), filters1);
+    EXPECT_EQ(filters->at(1), filters2);
+    EXPECT_EQ(filters->at(2), filters3);
+    EXPECT_EQ(filters->at(3), filters4);
+    EXPECT_EQ(filters->at(4), filters5);
+  }
+
+  {
+    // attempt to get filters when readers are all out of scope
+    // getFilters functions should remove all of the readers
+    auto filters = q.getFilters();
+    EXPECT_EQ(filters->size(), 0);
+  }
+}
+
 } // namespace openr
