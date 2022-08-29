@@ -336,43 +336,35 @@ KVSTORE_KEYVALS_OK = Publication(
 BAD_VALIDATE_TIMESTAMP = 1631215989
 # Trailing spaces on the two lines is expected ...
 EXPECTED_VALIDATE_OUTPUT_BAD = """\
-> Area: area1
-> node openr-right's adj db in Decision out of sync with KvStore's 
+[Decision] Running validation checks on area: area1
+> node openr-right's adj db in Decision out of sync with KvStore's
 
 
 NEIGHBOR_UPDATE: openr-center via right0
 ---------  ----------  ---  ----------
 timestamp  1631215989  -->  1631215060
 ---------  ----------  ---  ----------
-PASS
-adj table for Decision and KvStore match
-PASS
-prefix table for Decision and KvStore match
-> Area: area2
-> node openr-right's adj db in Decision out of sync with KvStore's 
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: area2
+> node openr-right's adj db in Decision out of sync with KvStore's
 
 
 NEIGHBOR_UPDATE: openr-center via right0
 ---------  ----------  ---  ----------
 timestamp  1631215989  -->  1631215060
 ---------  ----------  ---  ----------
-PASS
-adj table for Decision and KvStore match
-PASS
-prefix table for Decision and KvStore match
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
 """
 
 EXPECTED_VALIDATE_OUTPUT_OK = """\
-> Area: area1
-PASS
-adj table for Decision and KvStore match
-PASS
-prefix table for Decision and KvStore match
-> Area: area2
-PASS
-adj table for Decision and KvStore match
-PASS
-prefix table for Decision and KvStore match
+[Decision] Running validation checks on area: area1
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: area2
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
 """
 
 

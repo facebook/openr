@@ -447,7 +447,9 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         errors = 0
         for area in sorted(areas):
-            click.secho(f"> Area: {area}", bold=True)
+            click.secho(
+                f"[Decision] Running validation checks on area: {area}", bold=True
+            )
             (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
                 client, area
             )
@@ -603,8 +605,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                     printing.render_vertical_table(
                         [
                             [
-                                "node {}'s prefix db in Decision out of sync with "
-                                "KvStore's".format(node_name)
+                                f"node {node_name}'s prefix db in Decision out of sync with KvStore's"
                             ]
                         ]
                     )
@@ -667,18 +668,13 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 print(printing.render_vertical_table(rows))
                 return_code = 1
 
-        if return_code == 1:
-            if utils.is_color_output_supported():
-                click.echo(click.style("FAIL", bg="red", fg="black"))
-            else:
-                click.echo("FAIL")
-            print("{} table for {} and {} do not match".format(db_type, *db_sources))
-        else:
-            if utils.is_color_output_supported():
-                click.echo(click.style("PASS", bg="green", fg="black"))
-            else:
-                click.echo("PASS")
-            print("{} table for {} and {} match".format(db_type, *db_sources))
+        click.secho(
+            self.validation_result_str(
+                "decision",
+                "{} table for {} and {} match check".format(db_type, *db_sources),
+                return_code == 0,
+            )
+        )
 
         return return_code
 

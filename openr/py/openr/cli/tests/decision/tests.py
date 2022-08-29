@@ -88,7 +88,12 @@ class CliDecisionTests(TestCase):
                 catch_exceptions=False,
             )
         self.assertEqual(2, invoked_return.exit_code)
-        self.assertEqual(EXPECTED_VALIDATE_OUTPUT_BAD, invoked_return.stdout)
+        print(invoked_return.stdout)
+        # Print vertical table adds spaces which are difficult to catch so we remove them
+        self.assertEqual(
+            EXPECTED_VALIDATE_OUTPUT_BAD.replace(" ", ""),
+            invoked_return.stdout.replace(" ", ""),
+        )
 
     @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
     def test_decision_received_routes_json(
