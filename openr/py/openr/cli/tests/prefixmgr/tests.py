@@ -41,7 +41,10 @@ class CliPrefixManagerTests(TestCase):
         self.assertEqual(0, invoked_return.exit_code)
 
     @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
-    def test_prefixmgr_advertised_routes(self, mocked_openr_client: MagicMock) -> None:
+    @patch(f"{BASE_CMD_MODULE}.PrefixMgrCmd._get_config")
+    def test_prefixmgr_advertised_routes(
+        self, mocked_openr_config: MagicMock, mocked_openr_client: MagicMock
+    ) -> None:
         # Set mock data for testing
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -50,10 +53,19 @@ class CliPrefixManagerTests(TestCase):
             MOCKED_ADVERTISED_ROUTES
         )
 
+        tag_map = {
+            "NOT_USED_TAG_NAME": {"tagSet": ["not_used_tag"]},
+            "TAG_NAME2": {"tagSet": ["65520:822"]},
+        }
+
+        mocked_openr_config.return_value = {
+            "area_policies": {"definitions": {"openrTag": {"objects": tag_map}}}
+        }
+
         # Invoke with no flags & verify output
         invoked_return = self.runner.invoke(
             prefix_mgr.AdvertisedRoutesCli.show,
-            ["all"],
+            ["--no-detail", "all"],
             catch_exceptions=False,
         )
         self.assertEqual(0, invoked_return.exit_code)

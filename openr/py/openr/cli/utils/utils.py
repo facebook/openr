@@ -2031,10 +2031,13 @@ def print_route_helper(
 
 def get_tag_to_name_map(config) -> Dict[str, str]:
     """
-    Get mapping from tag_value to tag_name. e.g
-    65527:36706 -> FABRIC_POST_FSW_LOOP_AGG
+    Get mapping from tag_value to tag_name if it exists.
+    e.g 65527:36706 -> FABRIC_POST_FSW_LOOP_AGG
     """
-    tag_def = config["area_policies"]["definitions"]["openrTag"]["objects"]
+    try:
+        tag_def = config["area_policies"]["definitions"]["openrTag"]["objects"]
+    except KeyError:
+        return {}
     return {v["tagSet"][0]: k for k, v in tag_def.items()}
 
 

@@ -97,12 +97,14 @@ class AdvertisedRoutesCli(object):
     )
     @click.option(
         "--detail/--no-detail",
-        default=False,
+        "-d/-D",
+        default=True,
         help="Show all details including tags and area-stack",
     )
     @click.option(
         "--tag2name/--no-tag2name",
-        default=False,
+        "-n/-N",
+        default=True,
         help="Translate tag string to human readable name",
     )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
