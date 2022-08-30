@@ -732,6 +732,15 @@ TEST(ConfigTest, PopulateInternalDb) {
   }
 }
 
+TEST(ConfigTest, SoftdrainConfigTest) {
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.enable_soft_drain() = true;
+
+  // no soft-drained flag
+  auto config = Config(tConfig);
+  EXPECT_TRUE(config.isSoftdrainEnabled());
+}
+
 TEST(ConfigTest, GeneralGetter) {
   // config without bgp peering
   {
@@ -762,6 +771,8 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isV4OverV6NexthopEnabled());
     // enable_vip_service
     EXPECT_FALSE(config.isVipServiceEnabled());
+    // enable_soft_drain
+    EXPECT_FALSE(config.isSoftdrainEnabled());
 
     // getSparkConfig
     EXPECT_EQ(*tConfig.spark_config(), config.getSparkConfig());

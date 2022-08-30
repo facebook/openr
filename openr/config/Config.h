@@ -520,9 +520,14 @@ class Config {
     return *config_.vip_service_config();
   }
 
-  //
-  // Drain state
-  //
+  /*
+   * [Drain Status]
+   *
+   * Based on configured file flag path, Open/R will determine the node
+   * is in either:
+   *  - UNDRAINED;
+   *  - DRAINED with either SOFTDRAINED(metric bump) or HARDDRAINED(overloaded);
+   */
   bool
   isAssumeDrained() const {
     auto undrainedFlagPath = config_.undrained_flag_path();
@@ -531,6 +536,16 @@ class Config {
       return false;
     }
     return *config_.assume_drained();
+  }
+
+  bool
+  isSoftdrainEnabled() const {
+    return *config_.enable_soft_drain();
+  }
+
+  int64_t
+  getNodeMetricIncrement() const {
+    return *config_.softdrained_node_increment();
   }
 
   //

@@ -776,12 +776,16 @@ struct OpenrConfig {
   34: optional ThriftClientConfig thrift_client;
 
   /**
+  * [Hard-Drain]
+  *
   * If set, will assume node is drained if no drain state
   * is found in the persistent store.
   */
   35: bool assume_drained = true;
 
   /**
+  * [Hard-Drain]
+  *
   * Set the file path for undrained_flag. If the file undrained_flag
   * found, will set assume_drained to false.
   */
@@ -796,6 +800,23 @@ struct OpenrConfig {
   * Config for periodically dumping the heap memory profile of Open/R process.
   */
   38: optional MemoryProfilingConfig memory_profiling_config;
+
+  /**
+  * [Soft-Drain]
+  *
+  * Set the file path for softdrained_flag. If the file flag is set. Open/R
+  * will be set SOFT_DRAINED.
+  */
+  39: bool enable_soft_drain = false;
+
+  /**
+  * [Soft-Drain]
+  *
+  * Set the default value for soft-drained node increment. Can be adjusted
+  * accordingly in case we choose different types of adj metric and different
+  * size of the network.
+  */
+  40: i64 softdrained_node_increment = 100;
 
   /**
    * This knob is meant for migrating BGP config routes to Open/R-originated.

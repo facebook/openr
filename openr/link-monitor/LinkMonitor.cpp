@@ -38,20 +38,20 @@ void
 printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   // Hard-drain state
   XLOG(DBG1) << fmt::format(
-      "[Hard-Drain] Node Overloaded: {}",
+      "[Drain Status] Node Overloaded: {}",
       (*state.isOverloaded() ? "true" : "false"));
   if (not state.overloadedLinks()->empty()) {
     XLOG(DBG1) << fmt::format(
-        "[Hard-Drain] Overloaded Links: {}",
+        "[Drain Status] Overloaded Links: {}",
         folly::join(",", *state.overloadedLinks()));
   }
 
   // Soft-drain state
   XLOG(DBG1) << fmt::format(
-      "[Soft-Drain] Node Metric Increment: {}",
+      "[Drain Status] Node Metric Increment: {}",
       *state.nodeMetricIncrementVal());
   if (not state.linkMetricIncrementMap()->empty()) {
-    XLOG(DBG1) << fmt::format("[Soft-Drain] Link Metric Increment:");
+    XLOG(DBG1) << fmt::format("[Drain Status] Link Metric Increment:");
     for (auto const& [key, val] : *state.linkMetricIncrementMap()) {
       XLOG(DBG1) << fmt::format("\t{}: {}", key, val);
     }
@@ -173,8 +173,17 @@ LinkMonitor::LinkMonitor(
   advertiseIfaceAddrTimer_->scheduleTimeout(
       Constants::kMaxDurationLinkDiscovery);
 
-  // Create config-store client
+  /*
+   * [Config-Store]
+   *
+   * Load link-monitor state from previous incarnation. This includes:
+   *  - drain/undrain/softdrain state;
+   *  - link/node overload status;
+   *  - allocated node label;
+   *  - etc.;
+   */
   XLOG(INFO) << "Loading link-monitor state";
+
   auto state =
       configStore_->loadThriftObj<thrift::LinkMonitorState>(kConfigKey).get();
   // If assumeDrained is set, we will assume drained if no drain state
@@ -186,16 +195,34 @@ LinkMonitor::LinkMonitor(
     printLinkMonitorState(state_);
   } else {
     XLOG(INFO) << fmt::format(
-        "Failed to load link-monitor-state from disk. Setting node as {}",
+        "[Drain Status] Failed to load link-monitor-state from disk. Setting node as {}",
         assumeDrained ? "DRAINED" : "UNDRAINED");
     state_.isOverloaded() = assumeDrained;
   }
 
-  // overrideDrainState provided, use assumeDrained
+  /*
+   * [Drain/Undrain/Softdrain Status]
+   *
+   *  - isOverloaded: this is the HARD-DRAIN status. The Open/R instance will
+   *                  be hard-drained if this flag is TRUE;
+   *  - nodeMetricIncrementVal: this is the SOFT_DRAIN value. The Open/R
+   *                            instance will add metric to the adj database;
+   */
   if (overrideDrainState) {
-    XLOG(INFO) << fmt::format(
-        "Override node as {}", assumeDrained ? "DRAINED" : "UNDRAINED");
-    state_.isOverloaded() = assumeDrained;
+    if (config->isSoftdrainEnabled()) {
+      const auto nodeInc = config->getNodeMetricIncrement();
+      state_.nodeMetricIncrementVal() = nodeInc;
+
+      XLOG(INFO) << fmt::format(
+          "[Drain Status] Override node soft-drain increment value: {}",
+          nodeInc);
+    } else {
+      state_.isOverloaded() = assumeDrained;
+
+      XLOG(INFO) << fmt::format(
+          "[Drain Status] Override node as {}",
+          assumeDrained ? "DRAINED" : "UNDRAINED");
+    }
   }
 
   if (enableSegmentRouting_) {

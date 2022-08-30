@@ -217,7 +217,7 @@ class LinkMonitorTestFixture : public testing::Test {
     createPrefixManager();
 
     // start a link monitor
-    createLinkMonitor();
+    createLinkMonitor(true /* overrideDrainState */);
   }
 
   void
@@ -2543,6 +2543,45 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
   }
 }
 
+class DrainStatusTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    // disable softdrain
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+    tConfig.enable_soft_drain() = true;
+
+    return tConfig;
+  }
+};
+
+TEST_F(DrainStatusTestFixture, SoftDrainStatusUponStart) {
+  {
+    // Create an interface.
+    nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
+    recvAndReplyIfUpdate();
+  }
+
+  {
+    // Send neighbor up.
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+  }
+  {
+    // Create expected adjacency.
+    // ATTN: expect node metric increment to be applied.
+    auto adj_2_1_modified = adj_2_1;
+    adj_2_1_modified.metric() =
+        *adj_2_1.metric() + config->getNodeMetricIncrement();
+
+    auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+  }
+
+  // verify adjDb
+  checkNextAdjPub("adj:node-1");
+}
+
 class MultiAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>
@@ -2557,8 +2596,8 @@ class MultiAreaTestFixture : public LinkMonitorTestFixture {
 
 /*
  * TODO: T101565435 to track this flaky test under OSS env and re-enable it
- *
-TEST_F(MultiAreaTestFixture, AreaTest) {
+ */
+TEST_F(MultiAreaTestFixture, DISABLED_AreaTest) {
   // Verify that we receive empty adjacency database in all 3 areas
   expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel));
   expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel, false, planeArea_));
@@ -2583,8 +2622,9 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     {
-      auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
-      neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+      auto neighborEvent = nb2_up_event;
+      neighborUpdatesQueue.push(
+          NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
       LOG(INFO) << "Testing neighbor UP event in default area!";
 
       checkNextAdjPub("adj:node-1", kTestingAreaName);
@@ -2597,10 +2637,10 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
     adjDb = createAdjDb("node-1", {adj_3_1}, kNodeLabel, false, planeArea_);
     expectedAdjDbs.push(std::move(adjDb));
     {
-      auto cp = nb3;
-      cp.area() = planeArea_;
-      auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
-      neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+      auto neighborEvent = nb3_up_event;
+      // cp.area() = planeArea_;
+      neighborUpdatesQueue.push(
+          NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
       LOG(INFO) << "Testing neighbor UP event in plane area!";
 
       checkNextAdjPub("adj:node-1", planeArea_);
@@ -2610,8 +2650,9 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
   {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
-    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, nb2);
-    neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", kTestingAreaName);
     checkPeerDump(*adj_2_1.otherNodeName(), peerSpec_2_1);
@@ -2622,29 +2663,27 @@ TEST_F(MultiAreaTestFixture, AreaTest) {
         createAdjDb("node-1", {adj_3_1}, kNodeLabel, false, AreaId{planeArea_});
     expectedAdjDbs.push(std::move(adjDb));
 
-    auto cp = nb3;
-    cp.area() = planeArea_;
-    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_UP, cp);
-    neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+    auto neighborEvent = nb3_up_event;
+    // cp.area() = planeArea_;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor UP event!";
     checkNextAdjPub("adj:node-1", planeArea_);
-    checkPeerDump(
-        *adj_3_1.otherNodeName(), peerSpec_3_1, AreaId{planeArea_});
+    checkPeerDump(*adj_3_1.otherNodeName(), peerSpec_3_1, AreaId{planeArea_});
   }
   // verify neighbor down in "plane" area
   {
     auto adjDb = createAdjDb("node-1", {}, kNodeLabel, false, planeArea_);
     expectedAdjDbs.push(std::move(adjDb));
 
-    auto cp = nb3;
-    cp.area() = planeArea_;
-    auto neighborEvent = NeighborEvent(NeighborEventType::NEIGHBOR_DOWN, cp);
-    neighborUpdatesQueue.push(NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+    auto neighborEvent = nb3_down_event;
+    // cp.area() = planeArea_;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
     LOG(INFO) << "Testing neighbor down event!";
     checkNextAdjPub("adj:node-1", planeArea_);
   }
 }
-*/
 
 /**
  * Verify that LinkMonitor advertises adjacencies to KvStore after
