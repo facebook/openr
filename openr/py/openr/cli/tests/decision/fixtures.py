@@ -6,7 +6,12 @@
 
 # pyre-ignore-all-errors
 
-from openr.KvStore.ttypes import KvStoreAreaSummary, Publication, Value
+from openr.KvStore.ttypes import (
+    InitializationEvent,
+    KvStoreAreaSummary,
+    Publication,
+    Value,
+)
 from openr.Network.ttypes import BinaryAddress, IpPrefix
 from openr.OpenrCtrl.ttypes import NodeAndArea, ReceivedRoute, ReceivedRouteDetail
 from openr.Types.ttypes import (
@@ -333,9 +338,25 @@ KVSTORE_KEYVALS_OK = Publication(
     area="area2",
 )
 
+MOCKED_INIT_EVENTS_PASS = {
+    InitializationEvent.RIB_COMPUTED: 9204,
+}
+
+MOCKED_INIT_EVENTS_WARNING = {
+    InitializationEvent.RIB_COMPUTED: 170000,
+}
+
+MOCKED_INIT_EVENTS_TIMEOUT = {
+    InitializationEvent.RIB_COMPUTED: 300000,
+}
+
+
 BAD_VALIDATE_TIMESTAMP = 1631215989
 # Trailing spaces on the two lines is expected ...
 EXPECTED_VALIDATE_OUTPUT_BAD = """\
+[Decision] Initialization Event Check: FAIL
+RIB_COMPUTED event duration exceeds acceptable timelimit (>300000ms)
+Time elapsed for event, RIB_COMPUTED, since Open/R started: 300000ms
 [Decision] Running validation checks on area: area1
 > node openr-right's adj db in Decision out of sync with KvStore's
 
@@ -359,6 +380,30 @@ timestamp  1631215989  -->  1631215060
 """
 
 EXPECTED_VALIDATE_OUTPUT_OK = """\
+[Decision] Initialization Event Check: PASS
+Time elapsed for event, RIB_COMPUTED, since Open/R started: 9204ms
+[Decision] Running validation checks on area: area1
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: area2
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+"""
+
+EXPECTED_VALIDATE_OUTPUT_WARNING = """\
+[Decision] Initialization Event Check: PASS
+Time elapsed for event, RIB_COMPUTED, since Open/R started: 170000ms
+[Decision] Running validation checks on area: area1
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: area2
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+"""
+
+EXPECTED_VALIDATE_OUTPUT_NO_PUBLISH = """\
+[Decision] Initialization Event Check: FAIL
+RIB_COMPUTED event is not published
 [Decision] Running validation checks on area: area1
 [Decision] Adj Table For Decision And Kvstore Match Check: PASS
 [Decision] Prefix Table For Decision And Kvstore Match Check: PASS

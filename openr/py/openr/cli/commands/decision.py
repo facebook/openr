@@ -6,7 +6,6 @@
 
 
 import ipaddress
-import json
 import sys
 from collections import defaultdict
 from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
@@ -17,6 +16,7 @@ from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
+from openr.thrift.KvStore import types as kv_store_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -30,13 +30,13 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
         nodes: set,
         prefixes: Any,
         labels: Any,
-        json: bool,
+        json_opt: bool,
         *args,
         **kwargs,
     ) -> None:
         if "all" in nodes:
             nodes = self._get_all_nodes(client)
-        if json:
+        if json_opt:
             route_db_dict = {}
             for node in nodes:
                 route_db = client.getRouteDbComputed(node)
@@ -66,7 +66,7 @@ class DecisionAdjCmd(OpenrCtrlCmd):
         nodes: set,
         areas: set,
         bidir: bool,
-        json: bool,
+        json_opt: bool,
         *args,
         **kwargs,
     ) -> None:
@@ -78,7 +78,7 @@ class DecisionAdjCmd(OpenrCtrlCmd):
         # convert list<adjDb> from server to a two level map: {area: {node: adjDb}}
         adjs_map_all_areas = utils.adj_dbs_to_area_dict(adj_dbs, nodes, bidir)
 
-        if json:
+        if json_opt:
             utils.print_json(adjs_map_all_areas)
         else:
             # print per-node adjDb tables on a per-area basis
@@ -435,17 +435,35 @@ class DecisionValidateCmd(OpenrCtrlCmd):
     def _run(
         self,
         client: OpenrCtrl.Client,
-        json: bool = False,
+        json_opt: bool = False,
         areas: Sequence[str] = (),
         *args: Any,
         **kwargs: Any,
     ) -> int:
         """Returns a status code. 0 = success, >= 1 failure"""
+
+        errors = 0
+
+        initialization_events = self.fetch_initialization_events(client)
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+            initialization_events,
+            kv_store_types.InitializationEvent.RIB_COMPUTED,
+        )
+
+        errors += 0 if init_is_pass else 1
+
+        self.print_initialization_event_check(
+            init_is_pass,
+            init_err_msg_str,
+            init_dur_str,
+            kv_store_types_py3.InitializationEvent.RIB_COMPUTED,
+            "decision",
+        )
+
         if not areas:
             areas_summary = client.getKvStoreAreaSummary(set())
             areas = tuple(a.area for a in areas_summary)
 
-        errors = 0
         for area in sorted(areas):
             click.secho(
                 f"[Decision] Running validation checks on area: {area}", bold=True
@@ -460,14 +478,17 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             for key, value in sorted(kvstore_keyvals.items()):
                 if key.startswith(Consts.ADJ_DB_MARKER):
                     return_code = self.print_db_delta_adj(
-                        key, value, kvstore_adj_node_names, decision_adj_dbs, json
+                        key, value, kvstore_adj_node_names, decision_adj_dbs, json_opt
                     )
                     if return_code:
                         errors += return_code
                         continue
 
             return_code, decision_prefix_node_names = self.print_db_delta_prefix(
-                kvstore_keyvals, kvstore_prefix_node_names, decision_prefix_dbs, json
+                kvstore_keyvals,
+                kvstore_prefix_node_names,
+                decision_prefix_dbs,
+                json_opt,
             )
             if return_code:
                 errors += return_code
@@ -480,7 +501,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 kvstore_adj_node_names,
                 ["Decision", "KvStore"],
                 "adj",
-                json,
+                json_opt,
             )
 
             errors += self.print_db_diff(
@@ -488,7 +509,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 kvstore_prefix_node_names,
                 ["Decision", "KvStore"],
                 "prefix",
-                json,
+                json_opt,
             )
 
         return errors
@@ -521,7 +542,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         value: Any,
         kvstore_adj_node_names: Set,
         decision_adj_dbs: Sequence[openr_types.AdjacencyDatabase],
-        json: bool,
+        json_opt: bool,
     ) -> int:
         """Returns status code. 0 = success, 1 = failure"""
 
@@ -544,7 +565,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 decision_adj_db = db
 
         return_code = 0
-        if json:
+        if json_opt:
             tags = ("in_decision", "in_kvstore", "changed_in_decision_and_kvstore")
             adj_list_deltas = utils.find_adj_list_deltas(
                 decision_adj_db.adjacencies, kvstore_adj_db.adjacencies, tags=tags
@@ -577,7 +598,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         kvstore_keyvals: Dict,
         kvstore_prefix_node_names: Set,
         decision_prefix_dbs: Sequence[ctrl_types.ReceivedRouteDetail],
-        json: bool,
+        json_opt: bool,
     ) -> Tuple[int, Set[str]]:
         """Returns status code. 0 = success, 1 = failure"""
 
@@ -620,14 +641,14 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         nodes_set_b: Set,
         db_sources: List[str],
         db_type: str,
-        json: bool,
+        json_opt: bool,
     ) -> int:
         """Returns a status code, 0 = success, 1 = failure"""
         a_minus_b = sorted(nodes_set_a - nodes_set_b)
         b_minus_a = sorted(nodes_set_b - nodes_set_a)
         return_code = 0
 
-        if json:
+        if json_opt:
             diffs_up = []
             diffs_down = []
             for node in a_minus_b:
@@ -724,7 +745,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         prefixes: List[str],
         node: Optional[str],
         area: Optional[str],
-        json: bool,
+        json_opt: bool,
         detailed: bool,
         tag2name: bool,
         *args,
@@ -732,7 +753,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
     ) -> None:
         routes = self.fetch(client, prefixes, node, area)
 
-        if json:
+        if json_opt:
             print(serialize_json(routes))
         else:
             self.render(routes, detailed, tag2name)
