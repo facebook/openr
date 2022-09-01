@@ -446,7 +446,9 @@ class ValidateCmd(PrefixMgrCmd):
         client: OpenrCtrl.Client,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> bool:
+
+        is_pass = True
 
         # Get Data
         initialization_events = self.fetch_initialization_events(client)
@@ -457,6 +459,8 @@ class ValidateCmd(PrefixMgrCmd):
             kv_store_types.InitializationEvent.PREFIX_DB_SYNCED,
         )
 
+        is_pass = is_pass and init_is_pass
+
         # Print Validation Check Results
         self.print_initialization_event_check(
             init_is_pass,
@@ -465,3 +469,5 @@ class ValidateCmd(PrefixMgrCmd):
             kv_store_types_py3.InitializationEvent.PREFIX_DB_SYNCED,
             "PrefixManager",
         )
+
+        return is_pass

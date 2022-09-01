@@ -1409,21 +1409,19 @@ def compare_route_db(
 
     # if all good, then return early
     if not extra_routes_in_a and not extra_routes_in_b and not diff_prefixes:
-        if not quiet:
-            if is_color_output_supported():
-                click.echo(click.style("PASS", bg="green", fg="black"))
-            else:
-                click.echo("PASS")
-            print("{} and {} routing table match".format(*sources))
+        if is_color_output_supported():
+            click.echo(click.style("PASS", bg="green", fg="black"))
+        else:
+            click.echo("PASS")
+        print("{} and {} routing table match".format(*sources))
         return True, error_msg
 
     # Something failed.. report it
-    if not quiet:
-        if is_color_output_supported():
-            click.echo(click.style("FAIL", bg="red", fg="black"))
-        else:
-            click.echo("FAIL")
-        print("{} and {} routing table do not match".format(*sources))
+    if is_color_output_supported():
+        click.echo(click.style("FAIL", bg="red", fg="black"))
+    else:
+        click.echo("FAIL")
+    print("{} and {} routing table do not match".format(*sources))
     if extra_routes_in_a:
         caption = "Routes in {} but not in {}".format(*sources)
         if not quiet:

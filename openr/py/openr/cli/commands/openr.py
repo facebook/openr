@@ -4,10 +4,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+from openr.cli.commands import decision, fib, kvstore, lm, prefix_mgr, spark
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.OpenrCtrl import OpenrCtrl
-from openr.utils import printing
+from openr.utils import printing, serializer
 
 
 class VersionCmd(OpenrCtrlCmd):
@@ -66,3 +67,34 @@ class VersionCmd(OpenrCtrlCmd):
                     rows, column_labels=[], tablefmt="plain"
                 )
             )
+
+
+class OpenrValidateCmd(OpenrCtrlCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        suppress_error=False,
+        json=False,
+        *args,
+        **kwargs,
+    ) -> None:
+
+        spark_pass = spark.ValidateCmd(self.cli_opts).run(False)
+        lm_pass = lm.LMValidateCmd(self.cli_opts).run()
+        kvstore_pass = kvstore.ValidateCmd(self.cli_opts).run()
+        fib_pass = fib.FibValidateRoutesCmd(self.cli_opts).run(suppress_error)
+        decision_pass = decision.DecisionValidateCmd(self.cli_opts).run(
+            suppress=suppress_error
+        )
+        prefixmgr_pass = prefix_mgr.ValidateCmd(self.cli_opts).run()
+
+        if json:
+            check_res = {
+                "Spark": spark_pass,
+                "Link Monitor": lm_pass,
+                "KvStore": kvstore_pass == 0,
+                "Fib": fib_pass == 0,
+                "Decision": decision_pass == 0,
+                "Prefix Manager": prefixmgr_pass,
+            }
+            print(serializer.serialize_json(check_res))

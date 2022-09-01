@@ -436,6 +436,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         self,
         client: OpenrCtrl.Client,
         json_opt: bool = False,
+        suppress: bool = False,
         areas: Sequence[str] = (),
         *args: Any,
         **kwargs: Any,
@@ -502,6 +503,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 ["Decision", "KvStore"],
                 "adj",
                 json_opt,
+                suppress,
             )
 
             errors += self.print_db_diff(
@@ -510,6 +512,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 ["Decision", "KvStore"],
                 "prefix",
                 json_opt,
+                suppress,
             )
 
         return errors
@@ -642,6 +645,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         db_sources: List[str],
         db_type: str,
         json_opt: bool,
+        suppress: bool,
     ) -> int:
         """Returns a status code, 0 = success, 1 = failure"""
         a_minus_b = sorted(nodes_set_a - nodes_set_b)
@@ -686,7 +690,8 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                     ]
                 )
             if rows:
-                print(printing.render_vertical_table(rows))
+                if not suppress:
+                    print(printing.render_vertical_table(rows))
                 return_code = 1
 
         click.secho(

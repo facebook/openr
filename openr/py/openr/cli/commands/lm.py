@@ -543,7 +543,9 @@ class LMValidateCmd(LMCmdBase):
         client: OpenrCtrl.Client,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> bool:
+
+        is_pass = True
 
         # Get Data
         links = self.fetch_lm_links(client)
@@ -556,9 +558,13 @@ class LMValidateCmd(LMCmdBase):
             kv_store_types.InitializationEvent.LINK_DISCOVERED,
         )
 
+        is_pass = is_pass and init_is_pass
+
         regex_invalid_interfaces = self._validate_interface_regex(
             links, openr_config.areas
         )
+
+        is_pass = is_pass and (len(regex_invalid_interfaces) == 0)
 
         # Render Validation Results
         self.print_initialization_event_check(
@@ -569,6 +575,8 @@ class LMValidateCmd(LMCmdBase):
             "link monitor",
         )
         self._print_interface_validation_info(regex_invalid_interfaces)
+
+        return is_pass
 
     def _validate_interface_regex(
         self, links: openr_types.DumpLinksReply, areas: List[Any]

@@ -160,11 +160,16 @@ class FibSyncRoutesCli(object):
 
 class FibValidateRoutesCli(object):
     @click.command()
+    @click.option(
+        "--suppress-error/--print-all-info",
+        default=False,
+        help="Only print validation results, without extra info",
+    )
     @click.pass_obj
-    def validate(cli_opts):  # noqa: B902
+    def validate(cli_opts, suppress_error):  # noqa: B902
         """Validator to check that all routes as computed by Decision"""
 
-        sys.exit(fib.FibValidateRoutesCmd(cli_opts).run())
+        sys.exit(fib.FibValidateRoutesCmd(cli_opts).run(suppress_error))
 
 
 class FibSnoopCli(object):

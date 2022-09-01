@@ -137,7 +137,9 @@ class NeighborCmd(SparkBaseCmd):
 
 
 class ValidateCmd(SparkBaseCmd):
-    def _run(self, client: OpenrCtrl.Client, detail: bool, *args, **kwards) -> None:
+    def _run(self, client: OpenrCtrl.Client, detail: bool, *args, **kwards) -> bool:
+
+        is_pass = True
 
         # Get data
         neighbors = self.fetch_spark_neighbors(client)
@@ -147,15 +149,21 @@ class ValidateCmd(SparkBaseCmd):
         # Validate spark details
         state_non_estab_neighbors = self._validate_neighbor_state(neighbors)
 
+        is_pass = is_pass and (len(state_non_estab_neighbors) == 0)
+
         init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
             kv_store_types.InitializationEvent.NEIGHBOR_DISCOVERED,
         )
 
+        is_pass = is_pass and init_is_pass
+
         (
             regex_invalid_neighbors,
             regex_dict,
         ) = self._validate_neigbor_regex(neighbors, openr_config.areas)
+
+        is_pass = is_pass and (len(regex_invalid_neighbors) == 0)
 
         # Render
         self._print_neighbor_info(state_non_estab_neighbors, len(neighbors), detail)
@@ -167,6 +175,8 @@ class ValidateCmd(SparkBaseCmd):
             "spark",
         )
         self._print_neighbor_regex_info(regex_invalid_neighbors, regex_dict, detail)
+
+        return is_pass
 
     def _validate_neighbor_state(
         self, neighbors: List[openr_types.SparkNeighbor]

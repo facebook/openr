@@ -111,6 +111,11 @@ class DecisionAdjCli:
 class DecisionValidateCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.option(
+        "--suppress-error/--print-all-info",
+        default=False,
+        help="Only print validation results, without extra info",
+    )
     @click.argument("areas", nargs=-1)
     @click.pass_obj
     @click.pass_context
@@ -118,6 +123,7 @@ class DecisionValidateCli:
         ctx: click.Context,  # noqa: B902
         cli_opts: bunch.Bunch,
         json: bool,
+        suppress_error: bool,
         areas: Sequence[str],
     ) -> None:
         """
@@ -150,7 +156,9 @@ class DecisionValidateCli:
             }
         """
 
-        ctx.exit(decision.DecisionValidateCmd(cli_opts).run(json, areas))
+        ctx.exit(
+            decision.DecisionValidateCmd(cli_opts).run(json, suppress_error, areas)
+        )
 
 
 class DecisionRibPolicyCli:

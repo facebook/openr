@@ -1341,7 +1341,9 @@ class ValidateCmd(KvStoreCmdBase):
         client: OpenrCtrl.Client,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> bool:
+
+        is_pass = True
 
         # Get data
         openr_config = self.fetch_running_config_thrift(client)
@@ -1364,7 +1366,11 @@ class ValidateCmd(KvStoreCmdBase):
             is_prefix_advertised,
         ) = self._validate_local_key_advertisement(area_to_publication_dict)
 
+        is_pass = is_pass and is_adj_advertised and is_prefix_advertised
+
         invalid_peers = self._validate_peer_state(area_to_peers_dict)
+
+        is_pass = is_pass and (len(invalid_peers) == 0)
 
         # Refetch the keys to get updated ttl
         keyDumpParams = self.buildKvStoreKeyDumpParams()
@@ -1372,10 +1378,14 @@ class ValidateCmd(KvStoreCmdBase):
             self.fetch_keyvals(client, self.areas, keyDumpParams), configured_ttl
         )
 
+        is_pass = is_pass and (len(area_to_invalid_keys) == 0)
+
         init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
             kvstore_types.InitializationEvent.KVSTORE_SYNCED,
         )
+
+        is_pass = is_pass and init_is_pass
 
         # Render validation results
         self._print_local_node_advertising_check(
@@ -1392,6 +1402,8 @@ class ValidateCmd(KvStoreCmdBase):
             kvstore_types_py3.InitializationEvent.KVSTORE_SYNCED,
             "KvStore",
         )
+
+        return is_pass
 
     def _validate_local_key_advertisement(
         self, area_to_publication_dict: Dict[str, kvstore_types.Publication]

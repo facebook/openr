@@ -254,6 +254,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
     def _run(
         self,
         client: OpenrCtrl.Client,
+        suppress_error=False,
         *args,
         **kwargs,
     ) -> int:
@@ -295,6 +296,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             fib_unicast_routes,
             "unicast",
             ["Openr-Decision:unicast", "Openr-Fib:unicast"],
+            suppress_error,
         )
         all_success = all_success and ret
 
@@ -303,6 +305,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             fib_mpls_routes,
             "mpls",
             ["Openr-Decision:mpls", "Openr-Fib:mpls"],
+            suppress_error,
         )
         all_success = all_success and ret
 
@@ -311,6 +314,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             agent_unicast_routes,
             "unicast",
             ["Openr-Fib:unicast", "FibAgent:unicast"],
+            suppress_error,
         )
         all_success = all_success and ret
 
@@ -324,13 +328,16 @@ class FibValidateRoutesCmd(FibAgentCmd):
                 agent_mpls_routes,
                 "mpls",
                 ["Openr-Fib:mpls", "FibAgent:mpls"],
+                suppress_error,
             )
             all_success = all_success and ret
         except Exception:
             pass
 
         (ret, _) = utils.validate_route_nexthops(
-            fib_unicast_routes, lm_links, ["Openr-Fib:unicast", "LinkMonitor"]
+            fib_unicast_routes,
+            lm_links,
+            ["Openr-Fib:unicast", "LinkMonitor"],
         )
         all_success = all_success and ret
 
