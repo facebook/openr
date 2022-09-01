@@ -8,6 +8,7 @@
 
 
 from enum import Enum
+from typing import Dict
 
 from openr.KvStore import ttypes as kvstore_types
 from openr.thrift.OpenrConfig.types import AreaConfig, KvstoreConfig, OpenrConfig
@@ -135,4 +136,16 @@ MOCKED_KVSTORE_PEERS_ONE_FAIL = {
         ctrlPort=1000,
         state=kvstore_types.KvStorePeerState.IDLE,
     ),
+}
+
+MOCKED_INIT_EVENTS_PASS: Dict[kvstore_types.InitializationEvent, int] = {
+    kvstore_types.InitializationEvent.KVSTORE_SYNCED: 9204,
+}
+
+MOCKED_INIT_EVENTS_WARNING: Dict[kvstore_types.InitializationEvent, int] = {
+    kvstore_types.InitializationEvent.KVSTORE_SYNCED: 170000,
+}
+
+MOCKED_INIT_EVENTS_TIMEOUT: Dict[kvstore_types.InitializationEvent, int] = {
+    kvstore_types.InitializationEvent.KVSTORE_SYNCED: 300000,
 }
