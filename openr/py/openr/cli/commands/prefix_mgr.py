@@ -13,9 +13,11 @@ from openr.cli.utils.utils import (
     print_route_details,
     PrintAdvertisedTypes,
 )
+from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig.ttypes import PrefixForwardingAlgorithm, PrefixForwardingType
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
+from openr.thrift.KvStore import types as kv_store_types_py3
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, serializer
 
@@ -436,3 +438,30 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
             tag_to_name = get_tag_to_name_map(self._get_config())
         print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)
+
+
+class ValidateCmd(PrefixMgrCmd):
+    def _run(
+        self,
+        client: OpenrCtrl.Client,
+        *args,
+        **kwargs,
+    ) -> None:
+
+        # Get Data
+        initialization_events = self.fetch_initialization_events(client)
+
+        # Run Validation Checks
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+            initialization_events,
+            kv_store_types.InitializationEvent.PREFIX_DB_SYNCED,
+        )
+
+        # Print Validation Check Results
+        self.print_initialization_event_check(
+            init_is_pass,
+            init_err_msg_str,
+            init_dur_str,
+            kv_store_types_py3.InitializationEvent.PREFIX_DB_SYNCED,
+            "PrefixManager",
+        )

@@ -20,6 +20,7 @@ class PrefixMgrCli:
         self.prefixmgr.add_command(SyncCli().sync)
         self.prefixmgr.add_command(AdvertisedRoutesCli().show)
         self.prefixmgr.add_command(OriginatedRoutesCli().show)
+        self.prefixmgr.add_command(PrefixMgrValidateCli().validate)
 
     @click.group()
     @click.pass_context
@@ -327,3 +328,12 @@ class OriginatedRoutesCli(object):
         """
 
         prefix_mgr.OriginatedRoutesCmd(cli_opts).run(detail, tag2name)
+
+
+class PrefixMgrValidateCli(object):
+    @click.command()
+    @click.pass_obj
+    def validate(cli_opts):
+        """Runs validation checks on prefix manager module"""
+
+        prefix_mgr.ValidateCmd(cli_opts).run()
