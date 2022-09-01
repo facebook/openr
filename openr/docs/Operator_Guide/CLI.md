@@ -132,6 +132,94 @@ Open Source Version                   :  20200825
 Lowest Supported Open Source Version  :  20200604
 ```
 
+### Run sanity checks to try and narrow down the issue
+
+The command `breeze openr validate` will run a series of sanity checks for each
+module, and report additional information in the case of failure. Specific
+information about each check can be found in the `Validation` section of each
+sub command.
+
+Example with everything passing:
+
+```console
+$ breeze openr validate
+[Spark] Neighbor State Check: PASS
+Total Neighbors: 96, Neigbors in ESTABLISHED State: 96, Neighbors in Other States: 0
+[Spark] Initialization Event Check: PASS
+Time elapsed for event, NEIGHBOR_DISCOVERED, since Open/R started: 18309ms
+[Spark] Neighbor Regex Matching Check: PASS
+Neighbor Regexes: {'rva1.f01.s001': ['fsw.*'], 'rva.slice001': ['fa.*']}
+[Link Monitor] Initialization Event Check: PASS
+Time elapsed for event, LINK_DISCOVERED, since Open/R started: 16308ms
+[Link Monitor] Interface Regex Check: PASS
+[Kvstore] Prefix And Adjacency Key Advertisement Check: PASS
+[Kvstore] Peer State Check: PASS
+[Kvstore] Key Ttl Check: PASS
+Configured Time-To-Live(TTL): 3600000ms, Threshold to alarm: 2700000ms
+[Kvstore] Initialization Event Check: PASS
+Time elapsed for event, KVSTORE_SYNCED, since Open/R started: 19606ms
+PASS
+Openr-Decision:unicast and Openr-Fib:unicast routing table match
+PASS
+Openr-Decision:mpls and Openr-Fib:mpls routing table match
+PASS
+Route validation successful
+[Decision] Initialization Event Check: PASS
+Time elapsed for event, RIB_COMPUTED, since Open/R started: 19782ms
+[Decision] Running validation checks on area: rva.slice001
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: rva1.f01.s001
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Prefixmanager] Initialization Event Check: PASS
+Time elapsed for event, PREFIX_DB_SYNCED, since Open/R started: 20297ms
+```
+
+Example with some decision checks failing:
+
+```console
+$ breeze openr validate
+[Spark] Neighbor State Check: PASS
+Total Neighbors: 96, Neigbors in ESTABLISHED State: 96, Neighbors in Other States: 0
+[Spark] Initialization Event Check: PASS
+Time elapsed for event, NEIGHBOR_DISCOVERED, since Open/R started: 18309ms
+[Spark] Neighbor Regex Matching Check: PASS
+Neighbor Regexes: {'rva1.f01.s001': ['fsw.*'], 'rva.slice001': ['fa.*']}
+[Link Monitor] Initialization Event Check: PASS
+Time elapsed for event, LINK_DISCOVERED, since Open/R started: 16308ms
+[Link Monitor] Interface Regex Check: PASS
+[Kvstore] Prefix And Adjacency Key Advertisement Check: PASS
+[Kvstore] Peer State Check: PASS
+[Kvstore] Key Ttl Check: PASS
+Configured Time-To-Live(TTL): 3600000ms, Threshold to alarm: 2700000ms
+[Kvstore] Initialization Event Check: PASS
+Time elapsed for event, KVSTORE_SYNCED, since Open/R started: 19606ms
+PASS
+Openr-Decision:unicast and Openr-Fib:unicast routing table match
+PASS
+Openr-Decision:mpls and Openr-Fib:mpls routing table match
+PASS
+Route validation successful
+[Decision] Initialization Event Check: PASS
+Time elapsed for event, RIB_COMPUTED, since Open/R started: 19782ms
+[Decision] Running validation checks on area: rva.slice001
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+> node fsw001.p106.f01.rva1's prefix db in Decision but not in KvStore
+
+> node fsw001.p107.f01.rva1's prefix db in Decision but not in KvStore
+
+> node fsw001.p108.f01.rva1's prefix db in Decision but not in KvStore
+
+
+[Decision] Prefix Table For Decision And Kvstore Match Check: FAIL
+[Decision] Running validation checks on area: rva1.f01.s001
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Prefixmanager] Initialization Event Check: PASS
+Time elapsed for event, PREFIX_DB_SYNCED, since Open/R started: 20297ms
+```
+
 ### What interfaces is Open/R configured to perform neighbor discovery over?
 
 Lets see what interface(s) Open/R is _trying_ to form adjacencies on:
@@ -454,13 +542,12 @@ information about a node's KvStore peers and details of the connections.
 ```console
 $ breeze kvstore peers
 
-> node2
-cmd via tcp://[fe80::e0fd:b7ff:fe23:e73f%if_1_2_0]:60002
-pub via tcp://[fe80::e0fd:b7ff:fe23:e73f%if_1_2_0]:60001
+== node1's peers  ==
 
-> node3
-cmd via tcp://[fe80::ecf4:d3ff:fef1:4cb6%if_1_3_0]:60002
-pub via tcp://[fe80::ecf4:d3ff:fef1:4cb6%if_1_3_0]:60001
+Peer    State        Address                               Port  Area
+------  -----------  ----------------------------------  ------  ------------------
+node2   INITIALIZED  fe80::2421:5ff:fe42:f9e%if_1_2_1      2018  non-default-areaId
+node5   INITIALIZED  fe80::3c7f:72ff:fec4:497c%if_1_5_1    2018  non-default-areaId
 ```
 
 #### Snoop
@@ -512,14 +599,62 @@ Timestamp: 2020-09-10 09:08:01.738
 + 192.168.0.2/32
 ```
 
-#### Visualize topology
+#### Kvstore Validate
 
-Generates an image file with a visualization of the topology. Use `scp` to copy
-it to your local machine to open the image file.
+Runs the following checks:
+
+- The target node is advertising at least one adj key and one prefix key from
+  its local kvstore. On failure this check will print out the advertisement
+  status of both types of keys.
+- All peers are in the `INITIALIZED` state. On failure this check will print out
+  information about peers which are not in the `INITIALIZED` state:
+- All keys in the target node's local kvstore have a TTL above 3/4 of the
+  defined maximum TTL. On failure, print out information about keys which have a
+  TTL below 3/4 of the defined maximum.
+- The `KVSTORE_SYNCED` initialization event has been published within a time
+  limit. On failure, an error message will indicate whether the check failed
+  because the initialization event has not been published, or if it was
+  published but exceeded acceptable time limits. Output if all checks pass:
 
 ```console
-$ breeze kvstore topology
-Saving topology to file => /tmp/openr-topology.png
+$ breeze kvstore validate
+[Kvstore] Prefix And Adjacency Key Advertisement Check: PASS
+[Kvstore] Peer State Check: PASS
+[Kvstore] Key Ttl Check: PASS
+Configured Time-To-Live(TTL): 3600000ms, Threshold to alarm: 2700000ms
+[Kvstore] Initialization Event Check: PASS
+Time elapsed for event, KVSTORE_SYNCED, since Open/R started: 2566ms
+```
+
+Output if all checks fail:
+
+```console
+$ breeze kvstore validate
+[Kvstore] Prefix And Adjacency Key Advertisement Check: FAIL
+Local node has advertised an adjacency key: FAIL
+Local node has advertised a prefix key: PASS
+[Kvstore] Peer State Check: FAIL
+Information about peers in other states:
+
+== node1's peers  ==
+
+Peer    State        Address                               Port  Area
+------  -----------  ----------------------------------  ------  ------------------
+node2   IDLE  fe80::2421:5ff:fe42:f9e%if_1_2_1      2018  non-default-areaId
+node5   IDLE  fe80::3c7f:72ff:fec4:497c%if_1_5_1    2018  non-default-areaId
+[Kvstore] Key Ttl Check: FAIL
+Configured Time-To-Live(TTL): 3600000ms, Threshold to alarm: 2700000ms
+Key-Value pairs with unexpected low TTL:
+
+== KvStore Data - 16 keys, 972 B  ==
+
+Key                   Originator      Ver  Hash               Size    Area                TTL - Ver
+--------------------  ------------  -----  -----------------  ------  ------------------  --------------------
+allocprefix:10215106  node12            1  +669bbca555202565  62 B    non-default-areaId  0:04:35.190000 - 130
+allocprefix:12161659  node9             1  -510dcedceef62388  61 B    non-default-areaId  0:04:35.710000 - 130
+[Kvstore] Initialization Event Check: FAIL
+KVSTORE_SYNCED event is not published
+
 ```
 
 ### Decision Commands
@@ -619,11 +754,20 @@ via fe80::ecf4:d3ff:fef1:4cb6@if_1_3_0 metric 2
 
 #### Validate
 
-Check all prefix & adj dbs in Decision against that in KvStore.
+- Checks if the RIB_COMPUTED initialization event has been published within
+  acceptable time limits. In the case of failure prints out whether or not the
+  event has been published
+- For each of the configured areas of the target node, checks if the adj and
+  prefix table for kvstore and decision match. If the check fails, prints out
+  entries which are in one db but not the other.
 
 ```console
 $ breeze decision validate
-Decision is in sync with KvStore if nothing shows up
+[Decision] Initialization Event Check: PASS
+Time elapsed for event, RIB_COMPUTED, since Open/R started: 2566ms
+[Decision] Running validation checks on area: non-default-areaId
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
 ```
 
 ### LinkMonitor Commands
@@ -728,6 +872,24 @@ Are you sure to unset overload bit for node node1 ? [yn] y
 Successfully unset overload bit..
 ```
 
+#### Validate
+
+- Checks if the `LINK_DISCOVERED` initialization event has been published within
+  acceptable time limits. If the check fails, prints whether or not the event
+  has been published
+- For each interface, checks if it matches atleast one inclusion regex of any
+  configured area, and does not match any exclusion regexes. If the interface
+  does not match any inclsuion regex, checks if it matches the redistribution
+  interface regex. On failure prints out information about the interfaces which
+  fail these qualifications
+
+```console
+$ breeze lm validate
+[Link Monitor] Initialization Event Check: PASS
+Time elapsed for event, LINK_DISCOVERED, since Open/R started: 565ms
+[Link Monitor] Interface Regex Check: PASS
+```
+
 ### PrefixManager Commands
 
 PrefixManager exposes APIs to list, advertise and withdraw prefixes into the
@@ -778,6 +940,16 @@ Withdrew face:b00c::/80
 
 > NOTE: You can use different a prefix-type while advertising/syncing routes
 > with the `--prefix-type` option
+
+#### Validate
+
+- Checks if the `PREFIX_DB_SYNCED` initialization event has been published
+
+```console
+$ breeze prefixmgr validate
+[Prefixmanager] Initialization Event Check: PASS
+Time elapsed for event, PREFIX_DB_SYNCED, since Open/R started: 2567ms
+```
 
 ### Config Commands
 
@@ -998,4 +1170,54 @@ Routes in kernel but not in Fib
 
 > fc00:cafe:babe::999/128
 via fe80::1@terra_241_3
+```
+
+### Spark Commands
+
+#### graceful-restart
+
+Sends a yes/no prompt, then gracefully restarts, sending a notifying message
+
+```console
+$ breeze spark graceful-restart
+Are you sure to force sending GR msg to neighbors? [yn] y
+Successfully forcing to send GR msgs.
+
+```
+
+#### neighbors
+
+prints information about all discovered neighbors of the local node
+
+```console
+$ breeze spark neighbors
+
+
+ Neighbor    State        Latest Event    Local Intf    Remote Intf    Area                  Rtt(us)
+----------  -----------  --------------  ------------  -------------  ------------------  ---------
+node2       ESTABLISHED  HANDSHAKE_RCVD  if_1_2_3      if_2_1_3       non-default-areaId       1000
+node2       ESTABLISHED  HANDSHAKE_RCVD  if_1_2_2      if_2_1_2       non-default-areaId       1000
+node2       ESTABLISHED  HANDSHAKE_RCVD  if_1_2_1      if_2_1_1       non-default-areaId       1000
+node5       ESTABLISHED  HANDSHAKE_RCVD  if_1_5_1      if_5_1_1       non-default-areaId       1000
+node5       ESTABLISHED  HANDSHAKE_RCVD  if_1_5_3      if_5_1_3       non-default-areaId       1000
+node5       ESTABLISHED  HANDSHAKE_RCVD  if_1_5_2      if_5_1_2       non-default-areaId       1000
+```
+
+#### validate
+
+- Checks if all discovered neighbors are in `ESTABLISHED` state. On failure,
+  prints information about neighbors which are not
+- Checks if all neighbors match at least one neighbor regex defined in the
+  configured areas of the local node
+- Checks if the `NEIGHBOR_DISCOVERED` initialization event has been published
+  within acceptable time limits
+
+```console
+$ breeze spark validate
+[Spark] Neighbor State Check: PASS
+Total Neighbors: 6, Neigbors in ESTABLISHED State: 6, Neighbors in Other States: 0
+[Spark] Initialization Event Check: PASS
+Time elapsed for event, NEIGHBOR_DISCOVERED, since Open/R started: 2566ms
+[Spark] Neighbor Regex Matching Check: PASS
+Neighbor Regexes: {'non-default-areaId': ['.*']}
 ```
