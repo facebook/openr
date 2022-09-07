@@ -1998,7 +1998,7 @@ def print_route_helper(
             )
         tag_map = tag_map if tag_map is not None else {}
         rows.append(
-            f"     Tags - {', '.join(sorted([tag_map.get(t,t) for t in route.route.tags]))}"
+            f"     Tags - {', '.join(sorted([format_openr_tag(t,tag_map) for t in route.route.tags]))}"
         )
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
         if (
@@ -2037,6 +2037,10 @@ def get_tag_to_name_map(config) -> Dict[str, str]:
     except KeyError:
         return {}
     return {v["tagSet"][0]: k for k, v in tag_def.items()}
+
+
+def format_openr_tag(tag: str, tag_to_name_map: Dict[str, str]) -> str:
+    return f"{tag_to_name_map.get(tag, '(NA)')}/{tag}"
 
 
 def adjs_nexthop_to_neighbor_name(client: OpenrCtrl.Client) -> Dict[bytes, str]:

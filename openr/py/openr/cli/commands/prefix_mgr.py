@@ -6,6 +6,8 @@
 
 from typing import Dict, List, Optional, Tuple
 
+from openr.cli.utils import utils
+
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.cli.utils.utils import (
     get_tag_to_name_map,
@@ -312,7 +314,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             prefix_tags = prefix_entry.prefix.tags
             if prefix_tags:
                 rows.append(
-                    f"     Tags - {', '.join([tag_to_name.get(t,t) for t in prefix_tags])}"
+                    f"     Tags - {', '.join([utils.format_openr_tag(t,tag_to_name) for t in prefix_tags])}"
                 )
             area_stack = prefix_entry.prefix.area_stack
             if area_stack:

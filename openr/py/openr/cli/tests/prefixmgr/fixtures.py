@@ -108,7 +108,7 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
      Metrics - path-preference: 1000, source-preference: 100, distance: 4
      Performance - min-nexthops: 24
      Misc - prepend-label: 65001, weight: None
-     Tags - 65527:896, 65529:15990, COMMODITY:EGRESS, TAG_NAME2
+     Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
      Area Stack - 64984, 65333, 64900, 65301
 
 > 0.0.0.0/0, 1/1
@@ -117,7 +117,7 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
      Metrics - path-preference: 1000, source-preference: 100, distance: 4
      Performance - min-nexthops: 24
      Misc - prepend-label: 60000, weight: None
-     Tags - 65527:896, 65529:15990, COMMODITY:EGRESS, TAG_NAME2
+     Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
      Area Stack - 64984, 65333, 64900, 65301
 
 """
