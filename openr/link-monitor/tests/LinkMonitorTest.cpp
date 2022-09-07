@@ -771,20 +771,20 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect neighbor up first
+      // 0. expect neighbor up first
       auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
-      // expect node overload bit set
+      // 1. expect node overload bit set
       auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
-      // expect link metric value override
+      // 2. expect link metric value override
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
 
@@ -794,7 +794,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect link overloaded bit set
+      // 3. expect link overloaded bit set
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
       adj_2_1_modified.isOverloaded() = true;
@@ -805,7 +805,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect node overloaded bit unset
+      // 4. expect node overloaded bit unset
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
       adj_2_1_modified.isOverloaded() = true;
@@ -815,7 +815,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect link overloaded bit unset
+      // 5. expect link overloaded bit unset
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
 
@@ -824,20 +824,20 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect link metric value unset
+      // 6. expect link metric value unset
       auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
-      // expect node overload bit set
+      // 7. expect node overload bit set
       auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
       adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
     {
-      // expect link metric value override
+      // 8. expect link metric value override
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
 
@@ -847,7 +847,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // set adjacency metric, this should override the link metric
+      // 9. set adjacency metric, this should override the link metric
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = adjMetric;
 
@@ -857,7 +857,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // unset adjacency metric, this will remove the override
+      // 10. unset adjacency metric, this will remove the override
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
 
@@ -867,7 +867,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect node-level metric increment value set on the link override
+      // 11.1 expect node-level metric increment value set on the link override
       // metric
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = nodeMetric + linkMetric;
@@ -876,7 +876,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
 
-      // change node-level metric
+      // 11.2 change node-level metric
       // it will add the new metric to the previous the link override metric
       adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = changeNodeMetric + linkMetric;
@@ -887,7 +887,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // add interface-level metric
+      // 11.3 add interface-level metric
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = changeNodeMetric + linkMetric + linkIncMetric;
 
@@ -895,7 +895,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
 
-      // change interface-level metric
+      // 11.4 change interface-level metric
       adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() =
           changeNodeMetric + linkMetric + changelinkIncMetric;
@@ -906,15 +906,15 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // expect node-level metric increment value unset, only keeping metric
-      // override + interface-level metric increment
+      // 12.1 expect node-level metric increment value unset, only keeping
+      // metric override + interface-level metric increment
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric + changelinkIncMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
-      // expect interface-level metric increment value unset, only keeping
+      // 12.2 expect interface-level metric increment value unset, only keeping
       // metric override
       adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
