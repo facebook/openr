@@ -213,11 +213,17 @@ LinkMonitor::LinkMonitor(
       const auto nodeInc = config->getNodeMetricIncrement();
       state_.nodeMetricIncrementVal() = nodeInc;
 
+      // ATTN: node should NOT be soft and hard drained at the same time
+      state_.isOverloaded() = false;
+
       XLOG(INFO) << fmt::format(
           "[Drain Status] Override node soft-drain increment value: {}",
           nodeInc);
     } else {
       state_.isOverloaded() = assumeDrained;
+
+      // ATTN: node should NOT be soft and hard drained at the same time
+      state_.nodeMetricIncrementVal() = 0;
 
       XLOG(INFO) << fmt::format(
           "[Drain Status] Override node as {}",

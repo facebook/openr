@@ -2552,7 +2552,7 @@ class DrainStatusTestFixture : public LinkMonitorTestFixture {
  public:
   thrift::OpenrConfig
   createConfig() override {
-    // disable softdrain
+    // enable softdrain
     auto tConfig = LinkMonitorTestFixture::createConfig();
     tConfig.enable_soft_drain() = true;
 
