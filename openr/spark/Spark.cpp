@@ -1179,8 +1179,11 @@ Spark::neighborUpWrapper(
   // add neighborName to collection
   addToActiveNeighbors(ifName, neighborName);
 
-  // notify LinkMonitor about neighbor UP state
-  if (enableOrderedAdjPublication_) {
+  // The neighbor is coming up for the first time or cold booting. Mark the
+  // neighbor to reflect that the corresponding adjacency can't be used by the
+  // local node.
+  if (enableOrderedAdjPublication_ and
+      (not neighbor.gracefulRestartHoldTimer)) {
     // ATTN: expect adjacency attribute to be removed later with heartbeatMsg
     neighbor.adjOnlyUsedByOtherNode = true;
 
@@ -1189,9 +1192,10 @@ Spark::neighborUpWrapper(
         neighborName);
   }
 
+  // Notify LinkMonitor about neighbor UP event.
   // ATTN: both WARM_BOOT(GR) and COLD_BOOT shared the SAME:
-  //  negotiation -> established
-  // state transiion. Differentiate them by reporting different types of events.
+  // negotiation -> established state transiion.
+  // Differentiate them by reporting different types of events.
   if (neighbor.gracefulRestartHoldTimer) {
     // stop the graceful-restart hold-timer
     neighbor.gracefulRestartHoldTimer.reset();

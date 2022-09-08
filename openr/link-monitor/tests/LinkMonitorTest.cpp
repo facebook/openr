@@ -2496,13 +2496,12 @@ TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
   // with `adjOnlyUsedByOtherNode` set to true.
   auto neighborEvent = nb2_up_event;
   neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTED;
-  neighborEvent.adjOnlyUsedByOtherNode = true;
   neighborUpdatesQueue.push(
       NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
   // NOTE: adjacency db will contain adj_2_1 with
-  // `adjOnlyUsedByOtherNode=false` as special flag will be ignored under
-  // WARM_BOOT(GR) case.
+  // `adjOnlyUsedByOtherNode=false` as special flag is not set when neighboring
+  // node does WARM_BOOT(GR).
   auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
   expectedAdjDbs.push(std::move(adjDb));
   checkNextAdjPub("adj:node-1");
@@ -2518,7 +2517,8 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
     // NOTE: adjacency db will contain adj_2_1 with
-    // `adjOnlyUsedByOtherNode=true`
+    // `adjOnlyUsedByOtherNode=true` as the neighbor is coming up for the first
+    // time i.e cold booting.
     auto adj_2_1Copy = folly::copy(adj_2_1);
     adj_2_1Copy.adjOnlyUsedByOtherNode() = true;
     auto adjDb = createAdjDb("node-1", {adj_2_1Copy}, kNodeLabel);
