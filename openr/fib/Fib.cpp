@@ -53,7 +53,7 @@ Fib::Fib(
     messaging::ReplicateQueue<LogSample>& logSampleQueue)
     : myNodeName_(*config->getConfig().node_name()),
       thriftPort_(*config->getConfig().fib_port()),
-      dryrun_(config->getConfig().dryrun().value_or(false)),
+      dryrun_(config->isDryrun()),
       enableSegmentRouting_(
           config->getConfig().enable_segment_routing().value_or(false)),
       routeDeleteDelay_(*config->getConfig().route_delete_delay_ms()),

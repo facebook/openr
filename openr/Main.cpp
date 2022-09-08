@@ -225,7 +225,7 @@ main(int argc, char** argv) {
   /*
    * [Fib Service Waiting]
    */
-  if (not config->isNetlinkFibHandlerEnabled()) {
+  if (not config->isNetlinkFibHandlerEnabled() and not config->isDryrun()) {
     if (not waitForFibService(
             signalHandlerEvb, *config->getConfig().fib_port())) {
       signalHandlerEvbThread.join();
