@@ -516,7 +516,8 @@ main(int argc, char** argv) {
     sslContext = std::make_shared<wangle::SSLContextConfig>();
     sslContext->setCertificate(
         config->getSSLCertPath(), config->getSSLKeyPath(), "");
-    sslContext->clientCAFile = config->getSSLCaPath();
+    sslContext->clientCAFiles =
+        std::vector<std::string>{config->getSSLCaPath()};
     sslContext->sessionContext = Constants::kOpenrCtrlSessionContext.toString();
     sslContext->setNextProtocols(
         **apache::thrift::ThriftServer::defaultNextProtocols());
