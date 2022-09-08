@@ -162,6 +162,7 @@ void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
   LOG(INFO) << "Node: " << *adjDb.thisNodeName()
             << ", Overloaded: " << *adjDb.isOverloaded()
+            << ", Node Metric Increment: " << *adjDb.nodeMetricIncrementVal()
             << ", Label: " << *adjDb.nodeLabel() << ", area: " << *adjDb.area();
   for (auto const& adj : *adjDb.adjacencies()) {
     LOG(INFO) << "  " << *adj.otherNodeName() << "@" << *adj.ifName()
@@ -874,6 +875,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
+      adjDb.nodeMetricIncrementVal() = nodeMetric;
       expectedAdjDbs.push(std::move(adjDb));
 
       // 11.2 change node-level metric
@@ -883,6 +885,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
       adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
+      adjDb.nodeMetricIncrementVal() = changeNodeMetric;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -893,6 +896,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
+      adjDb.nodeMetricIncrementVal() = changeNodeMetric;
       expectedAdjDbs.push(std::move(adjDb));
 
       // 11.4 change interface-level metric
@@ -902,6 +906,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
       adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
+      adjDb.nodeMetricIncrementVal() = changeNodeMetric;
       expectedAdjDbs.push(std::move(adjDb));
     }
 
@@ -2574,7 +2579,13 @@ TEST_F(DrainStatusTestFixture, SoftDrainStatusUponStart) {
     adj_2_1_modified.metric() =
         *adj_2_1.metric() + config->getNodeMetricIncrement();
 
-    auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
+    auto adjDb = createAdjDb(
+        "node-1",
+        {adj_2_1_modified},
+        kNodeLabel,
+        false /* nodeOverloaded */,
+        kTestingAreaName,
+        config->getNodeMetricIncrement() /* nodeMetricIncrement */);
     expectedAdjDbs.push(std::move(adjDb));
   }
 

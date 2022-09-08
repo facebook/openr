@@ -179,10 +179,11 @@ struct AdjacencyDatabase {
   1: string thisNodeName;
 
   /**
+   * [Hard-drain]
    * Overload or drain bit. Indicates if node should be use for transit(false)
    * or not(true).
    */
-  2: bool isOverloaded = 0;
+  2: bool isOverloaded = false;
 
   /**
    * All adjacent neighbors for this node
@@ -204,6 +205,14 @@ struct AdjacencyDatabase {
    * Area to which this adjacency database belongs.
    */
   6: string area;
+
+  /**
+   * [Soft-drain]
+   * Non zero value indicates that this node is soft-drained
+   * Higher the value indicates this node is less preferred to be chosen a destination
+   * of a route.
+   */
+  7: i32 nodeMetricIncrementVal = 0;
 } (cpp.minimize_padding)
 
 /**

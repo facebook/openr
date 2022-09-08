@@ -911,6 +911,9 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   // [Hard-Drain] set node overload bit
   adjDb.isOverloaded() = *state_.isOverloaded();
 
+  // [Soft-Drain] set nodeMetricIncrementVal
+  adjDb.nodeMetricIncrementVal() = *state_.nodeMetricIncrementVal();
+
   // populate thrift::AdjacencyDatabase.adjacencies based on
   // various condition.
   auto areaAdjIt = adjacencies_.find(area);

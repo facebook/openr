@@ -168,7 +168,8 @@ thrift::AdjacencyDatabase createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit = false,
-    const std::string& area = kTestingAreaName);
+    const std::string& area = kTestingAreaName,
+    int32_t nodeMetricIncrementVal = 0);
 
 thrift::PrefixDatabase createPrefixDb(
     const std::string& nodeName,

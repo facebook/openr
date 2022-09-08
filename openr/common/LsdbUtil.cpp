@@ -482,13 +482,15 @@ createAdjDb(
     const std::vector<thrift::Adjacency>& adjs,
     int32_t nodeLabel,
     bool overLoadBit,
-    const std::string& area) {
+    const std::string& area,
+    int nodeMetricIncrementVal) {
   thrift::AdjacencyDatabase adjDb;
   adjDb.thisNodeName() = nodeName;
   adjDb.isOverloaded() = overLoadBit;
   adjDb.adjacencies() = adjs;
   adjDb.nodeLabel() = nodeLabel;
   adjDb.area() = area;
+  adjDb.nodeMetricIncrementVal() = nodeMetricIncrementVal;
   return adjDb;
 }
 
