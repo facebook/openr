@@ -251,10 +251,17 @@ class SpfSolver {
       RouteSelectionResult nodes, PrefixEntries const& prefixEntries);
 
   // Helper to filter overloaded nodes for anycast addresses
-  //
-  // TODO: This should go away, once Open/R policy is in place. The overloaded
-  // nodes will stop advertising specific prefixes if they're overloaded
   RouteSelectionResult maybeFilterDrainedNodes(
+      RouteSelectionResult&& result,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+
+  // [hard-drain]
+  RouteSelectionResult maybeFilterHardDrainedNodes(
+      RouteSelectionResult&& result,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+
+  // [soft-drain]
+  RouteSelectionResult maybeFilterSoftDrainedNodes(
       RouteSelectionResult&& result,
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 

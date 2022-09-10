@@ -8,6 +8,7 @@
 #pragma once
 
 #include <algorithm>
+#include <cstdint>
 #include <memory>
 #include <numeric>
 #include <string>
@@ -445,6 +446,8 @@ class LinkState {
 
   bool isNodeOverloaded(const std::string& nodeName) const;
 
+  uint64_t getNodeMetricIncrement(const std::string& nodeName) const;
+
   bool hasHolds() const;
 
   size_t
@@ -537,8 +540,16 @@ class LinkState {
   // useful for iterating over all the links
   LinkSet allLinks_;
 
+  // [hard-drain]
+  // [TODO] remove holdableValue
   std::unordered_map<std::string /* nodeName */, HoldableValue<bool>>
       nodeOverloads_;
+
+  // [soft-drain]
+  // track nodeMetricInc per node, 0 means not softdrained. Higher the value,
+  // less it is preferred
+  std::unordered_map<std::string /* nodeName */, uint64_t>
+      nodeMetricIncrementVals_;
 
   // the latest AdjacencyDatabase we've received from each node
   std::unordered_map<std::string, thrift::AdjacencyDatabase>

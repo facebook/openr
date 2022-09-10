@@ -510,6 +510,15 @@ LinkState::isNodeOverloaded(const std::string& nodeName) const {
   return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName).value();
 }
 
+std::uint64_t
+LinkState::getNodeMetricIncrement(const std::string& nodeName) const {
+  const auto it = nodeMetricIncrementVals_.find(nodeName);
+  if (it != nodeMetricIncrementVals_.cend()) {
+    return it->second;
+  }
+  return 0;
+}
+
 LinkState::LinkStateChange
 LinkState::decrementHolds() {
   LinkStateChange change;
@@ -609,8 +618,15 @@ LinkState::updateAdjacencyDatabase(
   std::unordered_set<Link> linksUp;
   std::unordered_set<Link> linksDown;
 
+  // topology changed if a node is overloaded / un-overloaded
   change.topologyChanged |= updateNodeOverloaded(
       nodeName, *newAdjacencyDb.isOverloaded(), holdUpTtl, holdDownTtl);
+
+  // topology is changed if softdrain value is changed.
+  change.topologyChanged |= *priorAdjacencyDb.nodeMetricIncrementVal() !=
+      *newAdjacencyDb.nodeMetricIncrementVal();
+  nodeMetricIncrementVals_.insert_or_assign(
+      nodeName, *newAdjacencyDb.nodeMetricIncrementVal());
 
   change.nodeLabelChanged =
       *priorAdjacencyDb.nodeLabel() != *newAdjacencyDb.nodeLabel();

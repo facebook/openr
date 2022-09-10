@@ -606,6 +606,134 @@ TEST(ShortestPathTest, UnknownNode) {
 }
 
 /*
+ * 1 - 2 - 3, 1 and 3 both originating same prefix
+ * 1) 1 is softdrained(50), 2 will reach prefix via 3
+ * 2) both 1, 3 softdrained(50), 2 will reach prefix via both
+ * 3) drain 1 with 100, 2 will reach via 3
+ * 4) undrain 1, 2 will reach via 1
+ */
+
+TEST(SpfSolver, NodeSoftDrainedChoice) {
+  auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj23}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj32}, 0);
+
+  std::string nodeName("2");
+  SpfSolver spfSolver(
+      nodeName,
+      false /* disable v4 */,
+      true /* enable segment label */,
+      true /* enable adj labels */,
+      false /* disable LFA */);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  PrefixState prefixState;
+  //
+  // Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
+  //
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+    EXPECT_FALSE(res.topologyChanged);
+  }
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+
+  // Originate same prefix
+  const auto prefix1 = createPrefixEntry(addr1, thrift::PrefixType::CONFIG);
+  const auto prefixDb1 = createPrefixDb("1", {prefix1});
+  const auto prefixDb2 = createPrefixDb("2", {});
+  const auto prefixDb3 = createPrefixDb("3", {prefix1});
+
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_TRUE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+
+  const unsigned int nodeIncVal50 = 50;
+  const unsigned int nodeIncVal100 = 100;
+
+  // 1] Soft Drain 1; 2 should only have one nexthop
+  adjacencyDb1.nodeMetricIncrementVal() = nodeIncVal50;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj23, false, *adj23.metric()), nh);
+  }
+
+  // 2] Soft Drain 3, now both 1 and 3 are drained; 2 should have two nexthop
+  adjacencyDb3.nodeMetricIncrementVal() = nodeIncVal50;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(2, ribEntry.nexthops.size());
+  }
+
+  // 3] soft Drain 1 harder (100), 2 will have 3 as next hop
+  adjacencyDb1.nodeMetricIncrementVal() = nodeIncVal100;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj23, false, *adj23.metric()), nh);
+  }
+
+  // 4] undrain 1, 3 is still softdrained. Will choose 1
+  adjacencyDb1.nodeMetricIncrementVal() = 0;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj21, false, *adj21.metric()), nh);
+  }
+}
+
+/*
  * 1-2-3, where both 1 and 3 advertise same prefix but 1 is overloaded.
  * 1 and 2 will choose only 3 (despite 1 advertising the prefix itself)
  * 3 will choose itself

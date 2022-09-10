@@ -730,6 +730,17 @@ RouteSelectionResult
 SpfSolver::maybeFilterDrainedNodes(
     RouteSelectionResult&& result,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  auto hardDrainedFiltered = maybeFilterHardDrainedNodes(
+      std::forward<RouteSelectionResult>(result), areaLinkStates);
+  return maybeFilterSoftDrainedNodes(
+      std::move(hardDrainedFiltered), areaLinkStates);
+}
+
+RouteSelectionResult
+SpfSolver::maybeFilterHardDrainedNodes(
+    RouteSelectionResult&& result,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  // Filter out all hard-drained nodes (node with overloaded bit set)
   RouteSelectionResult filtered = folly::copy(result);
   bool shouldUpdateBestNodeArea{false};
   for (auto iter = filtered.allNodeAreas.cbegin();
@@ -750,7 +761,50 @@ SpfSolver::maybeFilterDrainedNodes(
     filtered.bestNodeArea = *filtered.allNodeAreas.begin();
   }
 
+  // [ATTN] if everything is hard drained, then they are all viable candidates
   return filtered.allNodeAreas.empty() ? result : filtered;
+}
+
+RouteSelectionResult
+SpfSolver::maybeFilterSoftDrainedNodes(
+    RouteSelectionResult&& result,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  bool shouldUpdateBestNodeArea{false};
+
+  // Find the lowest node metric increment
+  const auto& [bestNode, bestArea] = *std::min_element(
+      result.allNodeAreas.cbegin(),
+      result.allNodeAreas.cend(),
+      [&areaLinkStates](const auto& a, const auto& b) {
+        const auto& [nodeA, areaA] = a;
+        const auto& [nodeB, areaB] = b;
+        return areaLinkStates.at(areaA).getNodeMetricIncrement(nodeA) <
+            areaLinkStates.at(areaB).getNodeMetricIncrement(nodeB);
+      });
+  const auto minNodeMetricInc =
+      areaLinkStates.at(bestArea).getNodeMetricIncrement(bestNode);
+
+  // Filter all nodes having higher node metric increment
+  for (auto iter = result.allNodeAreas.cbegin();
+       iter != result.allNodeAreas.cend();) {
+    const auto& [node, area] = *iter;
+    if (areaLinkStates.at(area).getNodeMetricIncrement(node) >
+        minNodeMetricInc) {
+      if (result.bestNodeArea == *iter) {
+        shouldUpdateBestNodeArea = true;
+      }
+      iter = result.allNodeAreas.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+
+  // Update the bestNodeArea to a valid key
+  if (shouldUpdateBestNodeArea) {
+    result.bestNodeArea = *result.allNodeAreas.begin();
+  }
+
+  return std::move(result);
 }
 
 RouteSelectionResult
