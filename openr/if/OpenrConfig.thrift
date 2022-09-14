@@ -299,8 +299,8 @@ struct ThriftServerConfig {
   10: optional VerifyClientType verify_client_type;
   /** Knob to enable/disable non-default VRF thrift server. */
   11: optional bool enable_non_default_vrf_thrift_server;
-  /** Timeout (2 seconds by default) of Cpp2Worker join in Thrift server */
-  12: i32 workers_join_timeout = 2;
+  /** Timeout (4 seconds by default) of Cpp2Worker join in Thrift server */
+  12: i32 workers_join_timeout = 4;
 }
 
 struct ThriftClientConfig {
@@ -476,7 +476,7 @@ struct SegmentRoutingConfig {
    *  (b) type is sr_adj_label.SegmentRoutingAdjLabelType
    *      is DISABLE
    */
-  2: optional SegmentRoutingAdjLabel sr_adj_label;
+  2: optional SegmentRoutingAdjLabel sr_adj_label (deprecated);
 
   /**
    * Specifies the ranges for prepend labels
@@ -582,7 +582,7 @@ struct AreaConfig {
    * Relevant for routing scheme with alternative
    * topology(non-CLOS)
    */
-  10: optional MplsLabelRanges prepend_label_ranges;
+  10: optional MplsLabelRanges prepend_label_ranges (deprecated);
 } (cpp.minimize_padding)
 
 /**
@@ -666,8 +666,6 @@ struct BgpRouteTranslationConfig {
 
 struct OpenrConfig {
   1: string node_name;
-  /** Deprecated. Use area config. */
-  2: string domain (deprecated);
   3: list<AreaConfig> areas = [];
 
   /** Thrift Server - Bind dddress */
@@ -900,7 +898,7 @@ struct OpenrConfig {
    * Flag to indicate if adjacencyDb publication after prefixDb sync is enabled.
    * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
    */
-  201: bool enable_ordered_adj_publication = false;
+  201: bool enable_ordered_adj_publication = true;
 
   /**
    * Flag to enable Dispatcher module in the architecture.

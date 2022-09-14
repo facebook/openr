@@ -6298,6 +6298,7 @@ TEST_F(DecisionTestFixture, RibPolicyClear) {
 TEST(Decision, RibPolicyFeatureKnob) {
   auto tConfig = getBasicOpenrConfig("1");
   tConfig.enable_rib_policy() = false; // Disable rib_policy feature
+  tConfig.enable_ordered_adj_publication() = false; // skip gr singals
 
   auto config = std::make_shared<Config>(tConfig);
   ASSERT_FALSE(config->isRibPolicyEnabled());

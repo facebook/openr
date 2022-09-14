@@ -64,7 +64,6 @@ MonitorBase::MonitorBase(
             auto inputLog = maybeLog.value();
             // add common attributes
             inputLog.addString("node_name", config->getNodeName());
-            inputLog.addString("domain", *config->getConfig().domain());
 
             // throws std::invalid_argument if not exist
             inputLog.getString("event");

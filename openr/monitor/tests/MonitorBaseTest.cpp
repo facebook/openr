@@ -37,7 +37,6 @@ class MonitorTestFixture : public ::testing::Test {
     // generate a config for testing
     openr::thrift::OpenrConfig config;
     *config.node_name() = "node1";
-    *config.domain() = "domain1";
 
     monitor = make_unique<MonitorMock>(
         std::make_unique<openr::Config>(config),
@@ -103,8 +102,7 @@ TEST_F(MonitorTestFixture, LogBasicOperation) {
       auto sample = LogSample::fromJson(monitor->getRecentEventLogs().front());
       EXPECT_EQ(sample.getString("event"), "event_unit_test");
       EXPECT_EQ(sample.getInt("num"), 200);
-      // `domain` and `node_name` should be added to each log message
-      EXPECT_FALSE(sample.getString("domain").empty());
+      // `node_name` should be added to each log message
       EXPECT_FALSE(sample.getString("node_name").empty());
       break;
     }
