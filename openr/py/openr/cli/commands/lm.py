@@ -522,19 +522,31 @@ class LMLinksCmd(LMCmdBase):
         if json:
             self.print_links_json(links)
         else:
+            overload_status = None
+            node_metric_inc_status = None
             if utils.is_color_output_supported():
+                # [Hard-Drain]
                 overload_color = "red" if links.isOverloaded else "green"
                 overload_status = click.style(
                     "{}".format("YES" if links.isOverloaded else "NO"),
                     fg=overload_color,
                 )
-                caption = "Node Overload: {}".format(overload_status)
-                self.print_links_table(links.interfaceDetails, caption)
-            else:
-                caption = "Node Overload: {}".format(
-                    "YES" if links.isOverloaded else "NO"
+                # [Soft-Drain]
+                node_metric_inc_color = (
+                    "red" if links.nodeMetricIncrementVal > 0 else "green"
                 )
-                self.print_links_table(links.interfaceDetails, caption)
+                node_metric_inc_status = click.style(
+                    "{}".format(links.nodeMetricIncrementVal),
+                    fg=node_metric_inc_color,
+                )
+            else:
+                overload_status = "YES" if links.isOverloaded else "NO"
+                node_metric_inc_status = "{}".format(links.nodeMetricIncrementVal)
+
+            caption = "Node Overload: {}, Node Metric Increment: {}".format(
+                overload_status, node_metric_inc_status
+            )
+            self.print_links_table(links.interfaceDetails, caption)
 
 
 class LMValidateCmd(LMCmdBase):

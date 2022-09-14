@@ -71,7 +71,7 @@ LM_LINKS_OPENR_RIGHT_OK = DumpLinksReply(
 )
 
 LM_LINKS_EXPECTED_OPENR_RIGHT_STDOUT = """
-== Node Overload: NO  ==
+== Node Overload: NO, Node Metric Increment: 0  ==
 
 Interface    Status    Metric Override    Addresses
 -----------  --------  -----------------  -------------------------
