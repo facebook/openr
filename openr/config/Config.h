@@ -534,10 +534,15 @@ class Config {
    *  - DRAINED with either SOFTDRAINED(metric bump) or HARDDRAINED(overloaded);
    */
   bool
-  isAssumeDrained() const {
+  isUndrainedPathExist() const {
     auto undrainedFlagPath = config_.undrained_flag_path();
+    return undrainedFlagPath and fs::exists(*undrainedFlagPath);
+  }
+
+  bool
+  isAssumeDrained() const {
     // Do not assume drain if the undrained_flag_path is set and the file exists
-    if (undrainedFlagPath && fs::exists(*undrainedFlagPath)) {
+    if (isUndrainedPathExist()) {
       return false;
     }
     return *config_.assume_drained();
