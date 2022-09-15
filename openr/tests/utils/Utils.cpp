@@ -145,6 +145,8 @@ getBasicOpenrConfig(
   sparkConfig.fastinit_hello_time_ms() = 100;
   sparkConfig.hold_time_s() = 2;
   sparkConfig.graceful_restart_time_s() = 6;
+  sparkConfig.min_neighbor_discovery_interval_s() = 2;
+  sparkConfig.max_neighbor_discovery_interval_s() = 4;
   config.spark_config() = sparkConfig;
 
   /*

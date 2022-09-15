@@ -422,6 +422,10 @@ class Spark final : public OpenrEventBase {
   // Get the count of all active neighbors.
   uint64_t getActiveNeighborCount();
 
+  // Determine if the initialization process related neighbor discovery is
+  // complete.
+  bool isInitialNeighborDiscoveryComplete();
+
   //
   // Private state
   //
@@ -441,11 +445,15 @@ class Spark final : public OpenrEventBase {
   // Spark handshake msg sendout interval
   const std::chrono::milliseconds handshakeTime_{0};
 
-  // Interval that Spark holds before publishing discovered neighbors in OpenR
-  // initialization procedure. It is set as '3 * fastInitHelloTime_ +
-  // handshakeTime_' to make sure Spark has enough time to process fast neighbor
-  // discovery among all received interfaces.
-  const std::chrono::milliseconds initializationHoldTime_{0};
+  // The minimum time that must be elapsed during Open/R Initialization, before
+  // which Spark may not notify LinkMonitor that neighbor discovery process is
+  // complete.
+  const std::chrono::milliseconds minNeighborDiscoveryInterval_{0};
+
+  // The max time elapsed during Open/R Initialization, at which point
+  // Spark must notify LinkMonitor that neighbor discovery process is
+  // complete.
+  const std::chrono::milliseconds maxNeighborDiscoveryInterval_{0};
 
   // Spark heartbeat msg sendout interval (keepAliveTime)
   const std::chrono::milliseconds keepAliveTime_{0};
@@ -542,9 +550,17 @@ class Spark final : public OpenrEventBase {
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 
-  // Timer for collecting neighbors successfully discovered and publishing them
-  // to neighborUpdatesQueue_ in OpenR initialization procedure.
-  std::unique_ptr<folly::AsyncTimeout> initializationHoldTimer_{nullptr};
+  // Open/R initialization process related timer, representing the lower bound
+  // of time, after which NEIGHBORS_DISCOVERED initialization signal may be
+  // published to LinkMonitor via the neighborUpdatesQueue_.
+  std::unique_ptr<folly::AsyncTimeout> minNeighborDiscoveryIntervalTimer_{
+      nullptr};
+
+  // Open/R initialization process related timer, representing the upper bound
+  // of time, when NEIGHBORS_DISCOVERED initialization signal must be
+  // published to LinkMonitor via the neighborUpdatesQueue_.
+  std::unique_ptr<folly::AsyncTimeout> maxNeighborDiscoveryIntervalTimer_{
+      nullptr};
 
   // Boolean flag indicating whether initial interfaces are received during
   // Open/R initialization procedure.

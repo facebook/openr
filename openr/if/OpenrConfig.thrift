@@ -223,6 +223,18 @@ struct SparkConfig {
   6: i32 graceful_restart_time_s = 30;
 
   7: StepDetectorConfig step_detector_conf;
+
+  /**
+   * The minimum time that must be elapsed, during Open/R Initialization process,
+   * before NEIGHBOR_DISCOVERED signal can be published to LinkMonitor.
+   */
+  8: i32 min_neighbor_discovery_interval_s = 2;
+
+  /**
+   * The max interval, at the expiry of which NEIGHBOR_DISCOVERED signal must be
+   * published to LinkMonitor during Open/R Initialization process.
+   */
+  9: i32 max_neighbor_discovery_interval_s = 4;
 }
 
 struct WatchdogConfig {

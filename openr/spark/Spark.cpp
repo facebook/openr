@@ -302,7 +302,10 @@ Spark::Spark(
           *config->getSparkConfig().fastinit_hello_time_ms())),
       handshakeTime_(std::chrono::milliseconds(
           *config->getSparkConfig().fastinit_hello_time_ms())),
-      initializationHoldTime_(5 * fastInitHelloTime_ + handshakeTime_),
+      minNeighborDiscoveryInterval_(std::chrono::seconds(
+          *config->getSparkConfig().min_neighbor_discovery_interval_s())),
+      maxNeighborDiscoveryInterval_(std::chrono::seconds(
+          *config->getSparkConfig().max_neighbor_discovery_interval_s())),
       keepAliveTime_(
           std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
       handshakeHoldTime_(
@@ -320,7 +323,7 @@ Spark::Spark(
           *config->getConfig().enable_ordered_adj_publication()),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
-      << "Keep-alive-time must be less than hold-time.";
+      << "Keepalive time must be less than GR-time.";
   CHECK(keepAliveTime_ > std::chrono::milliseconds(0))
       << "heartbeatMsg interval can't be 0";
   CHECK(helloTime_ > std::chrono::milliseconds(0))
@@ -330,6 +333,8 @@ Spark::Spark(
   CHECK(fastInitHelloTime_ <= helloTime_)
       << "fastInit helloMsg interval must be smaller than normal interval";
   CHECK(ioProvider_) << "Got null IoProvider";
+  CHECK(maxNeighborDiscoveryInterval_ > minNeighborDiscoveryInterval_)
+      << "maxNeighborDiscoveryInterval_ must be greater than minNeighborDiscoveryInterval_.";
 
   // Initialize list of BucketedTimeSeries
   const std::chrono::seconds sec{1};
@@ -342,16 +347,41 @@ Spark::Spark(
               numBuckets, sec));
     }
   }
-  // Timer for publishing the NEIGHBOR_DISCOVERED initialization signal
-  // to LM over neighborUpdatesQueue_.
-  initializationHoldTimer_ =
+  // Timer scheduled with lower bound timeout, after which  NEIGHBOR_DISCOVERED
+  // initialization signal may be published to LM over neighborUpdatesQueue_.
+  minNeighborDiscoveryIntervalTimer_ =
       folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
         XLOG(INFO) << fmt::format(
-            "[Initialization] Neighbor discovery timer expired."
+            "[Initialization] Min neighbor discovery time has elapsed."
             " Active neighbors = {}, total neighbors = {}.",
             numActiveNeighbors_,
             numTotalNeighbors_);
 
+        // If all known neighbors are discovered, send initialization signal.
+        if (allNeighborsDiscovered()) {
+          maxNeighborDiscoveryIntervalTimer_->cancelTimeout();
+          initialNeighborsDiscovered();
+        } else {
+          // Defer until the pending neighbors become active or the
+          // maxNeighborDiscoveryInterval expires.
+          XLOG(INFO) << fmt::format(
+              "[Initialization] Deferring publishing  NEIGHBOR_DISCOVERED"
+              " initialization signal upto {}ms",
+              minNeighborDiscoveryInterval_.count());
+        }
+      });
+
+  // Timer scheduled with upper bound timeout, after which  NEIGHBOR_DISCOVERED
+  // initialization signal must be published to LM over neighborUpdatesQueue_.
+  maxNeighborDiscoveryIntervalTimer_ =
+      folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+        XLOG(INFO) << fmt::format(
+            "[Initialization] Max neighbor discovery time has elapsed."
+            " Active neighbors = {}, total neighbors = {}.",
+            numActiveNeighbors_,
+            numTotalNeighbors_);
+
+        // Send initialization signal.
         initialNeighborsDiscovered();
       });
 
@@ -365,14 +395,21 @@ Spark::Spark(
       }
 
       if (not initialInterfacesReceived_) {
-        // In OpenR initialization procedure, set up reasonable long enough
-        // timer to handle neighbor discovery.
-        initializationHoldTimer_->scheduleTimeout(initializationHoldTime_);
+        // Set up min-max interval related timers that control when Spark can
+        // publish the NEIGHBOR_DISCOVERED signal to LinkMonitor. The min
+        // interval is a lower bound that must elapse before considering
+        // publishing this signal while the max interval is an upper bound at
+        // which point the signal must be published, if signal has still not
+        // been sent.
+        minNeighborDiscoveryIntervalTimer_->scheduleTimeout(
+            minNeighborDiscoveryInterval_);
+        maxNeighborDiscoveryIntervalTimer_->scheduleTimeout(
+            maxNeighborDiscoveryInterval_);
         initialInterfacesReceived_ = true;
 
         XLOG(INFO) << fmt::format(
             "[Initialization] Initial interface update received. Scheduled timer after {}ms",
-            initializationHoldTime_.count());
+            minNeighborDiscoveryInterval_.count());
       }
       processInterfaceUpdates(std::move(interfaceUpdates).value());
     }
@@ -1121,10 +1158,6 @@ Spark::getNeighbors() {
  */
 bool
 Spark::allNeighborsDiscovered() {
-  // TODO(agrewal) This check is not sufficient, since a neighbor comes into
-  // existence when it's helloMsg is processed. So, it is possible that for a
-  // particular neighbor helloMsg is not received by the time others transition
-  // to ESTABLISHED.
   return (numActiveNeighbors_ == numTotalNeighbors_);
 }
 
@@ -1204,14 +1237,40 @@ Spark::neighborUpWrapper(
   } else {
     notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor);
   }
-  if (initializationHoldTimer_->isScheduled() and allNeighborsDiscovered()) {
+  if (isInitialNeighborDiscoveryComplete()) {
     XLOG(INFO) << fmt::format(
         "[Initialization] All known neighbors ({}) are now discovered.",
         numTotalNeighbors_);
     initialNeighborsDiscovered();
-    initializationHoldTimer_->cancelTimeout();
+    maxNeighborDiscoveryIntervalTimer_->cancelTimeout();
   }
 }
+
+// clang-format off
+/**
+ * Determine if the initialization process related neighbor discovery is
+ * complete. The status of intial discovery is as follows -
+ *  -----------------------------------------------------------------------------
+ * |         State                                   |        Discovery status   |
+ *  -----------------------------------------------------------------------------
+ * | before min discovery timer elapses              |  discovering              |
+ *  -----------------------------------------------------------------------------
+ * | after min discovery timer elapses but before    |  complete if all known    |
+ * | max delivery timer elapses                      |  neighbors are discovered |
+ *  -----------------------------------------------------------------------------
+ * | after max delivery timer elapses                |   complete                |
+ *  ------------------------------------------------------------------------------
+ *
+ * Returns:
+ *  bool: true if discovery is complete, false otherwise.
+ */
+bool
+Spark::isInitialNeighborDiscoveryComplete() {
+  return maxNeighborDiscoveryIntervalTimer_->isScheduled() and
+      not minNeighborDiscoveryIntervalTimer_->isScheduled() and
+      allNeighborsDiscovered();
+}
+// clang-format on
 
 void
 Spark::neighborDownWrapper(

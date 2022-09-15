@@ -348,9 +348,6 @@ class InitializationBackwardCompatibilityTestFixture
           "{} reported adjacency UP towards {} with adjacency hold",
           nodeName1_,
           nodeName2_);
-      ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
-      ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
-      ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
 
       events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
       auto neighbor2 = events.value().back();
@@ -359,6 +356,10 @@ class InitializationBackwardCompatibilityTestFixture
           "{} reported adjacency UP towards {} without adjacency hold",
           nodeName1_,
           nodeName2_);
+
+      ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
+      ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+      ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
     }
 
     {
@@ -728,10 +729,9 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   // record time for future comparison
   auto startTime = std::chrono::steady_clock::now();
 
-  auto fastInitTime = *config1_->getSparkConfig().fastinit_hello_time_ms();
-  auto initialNbrHandlingTime =
-      (3 * std::chrono::milliseconds(fastInitTime) +
-       std::chrono::milliseconds(fastInitTime));
+  auto keepAliveTime =
+      std::chrono::seconds(*config1_->getSparkConfig().keepalive_time_s());
+  auto holdTime = std::chrono::seconds(*node1_->getSparkConfig().hold_time_s());
 
   // remove underneath connections between to nodes
   ConnectedIfPairs connectedPairs = {};
@@ -746,12 +746,15 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
 
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
-    // initialNbrHandlingTime needs to be accounted.
-    ASSERT_TRUE(
-        initialNbrHandlingTime + endTime - startTime >=
+
+    // The time it takes for the neighbor to go down will be
+    // hold time +/- 1 keepalive interval.
+    ASSERT_GE(keepAliveTime + endTime - startTime, holdTime);
+    ASSERT_LE(
+        endTime - startTime - keepAliveTime,
         std::chrono::seconds(*node1_->getSparkConfig().hold_time_s()));
-    ASSERT_TRUE(
-        endTime - startTime <=
+    ASSERT_LE(
+        endTime - startTime,
         std::chrono::seconds(
             *node1_->getSparkConfig().graceful_restart_time_s()));
 
@@ -932,11 +935,12 @@ TEST_F(SparkFixture, InitializationTest) {
     ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
 
-    // Spark calculates initializationHoldTime_ as (3 * fastInitHelloTime_ +
-    // handshakeTime_), where handshakeTime_ is
-    // *config->getSparkConfig().fastinit_hello_time_ms().
-    auto initializationHoldTime_ =
-        4 * *config1->getSparkConfig().fastinit_hello_time_ms();
+    // The initialization event is published when
+    // minNeighborDiscoveryInterval elapses and far sooner than
+    // maxNeighborDiscoveryInterval.
+    auto minNeighborDiscoveryInterval =
+        *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
+    auto maxNeighborDiscoveryInterval = 2 * minNeighborDiscoveryInterval;
 
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
@@ -944,7 +948,8 @@ TEST_F(SparkFixture, InitializationTest) {
               << std::chrono::duration_cast<std::chrono::milliseconds>(duration)
                      .count()
               << " milliseconds";
-    EXPECT_LE(duration.count(), initializationHoldTime_);
+    EXPECT_GE(duration.count(), minNeighborDiscoveryInterval);
+    EXPECT_LE(duration.count(), maxNeighborDiscoveryInterval);
   }
 }
 
@@ -991,27 +996,40 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     // Record current timestamp.
     const auto startTime = std::chrono::steady_clock::now();
 
-    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
-    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
-    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
     ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
 
-    // Spark calculates initializationHoldTime_ as (3 * fastInitHelloTime_ +
-    // handshakeTime_), where handshakeTime_ is
-    // *config->getSparkConfig().fastinit_hello_time_ms().
-    // fastinit_hello_time_ms is set to 100 milliseconds for tests.
-    auto initializationHoldTime_ =
-        4 * *config1->getSparkConfig().fastinit_hello_time_ms();
+    // The initialization event is published when
+    // minNeighborDiscoveryInterval elapses and far sooner than
+    // maxNeighborDiscoveryInterval.
+    auto minNeighborDiscoveryInterval =
+        *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
+    auto maxNeighborDiscoveryInterval =
+        *config1->getSparkConfig().max_neighbor_discovery_interval_s() * 1000;
 
-    const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
-        std::chrono::steady_clock::now() - startTime);
-    LOG(INFO) << "Elapsed time: "
-              << std::chrono::duration_cast<std::chrono::milliseconds>(duration)
-                     .count()
+    const auto node2ElapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+
+    LOG(INFO) << "Elapsed time: " << node2ElapsedTime.count()
               << " milliseconds";
-    EXPECT_GE(duration.count(), initializationHoldTime_);
+    EXPECT_GE(node2ElapsedTime.count(), minNeighborDiscoveryInterval);
+    EXPECT_LE(node2ElapsedTime.count(), maxNeighborDiscoveryInterval);
+
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+    const auto node1ElapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+
+    // The initialization event is published when
+    // maxNeighborDiscoveryInterval elapses, as active neighbors are
+    // fewer than total neighbors.
+    LOG(INFO) << "Elapsed time: " << node1ElapsedTime.count()
+              << " milliseconds";
+    EXPECT_GE(node1ElapsedTime.count(), maxNeighborDiscoveryInterval);
   }
 }
 
@@ -1397,6 +1415,14 @@ TEST_F(SparkFixture, FastInitTest) {
     EXPECT_TRUE(node1->waitForEvents(NB_UP).has_value());
     ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
+    // Neighbor up should complete in 6 * fastinit_hello_time_ms.
+    const auto neighUpDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+    EXPECT_GE(
+        6 * *config2->getSparkConfig().fastinit_hello_time_ms(),
+        neighUpDuration.count());
+
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
 
     EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
@@ -1404,13 +1430,17 @@ TEST_F(SparkFixture, FastInitTest) {
     ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
-    // Initialization should complete in 6 * fastinit_hello_time_ms. It should
-    // more or less finish in 1.5 x that duration.
+    // The initialization event is published when
+    // minNeighborDiscoveryInterval elapses and far sooner than
+    // maxNeighborDiscoveryInterval.
+    auto minNeighborDiscoveryInterval =
+        *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
+    auto maxNeighborDiscoveryInterval = 2 * minNeighborDiscoveryInterval;
+
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
-    EXPECT_GE(
-        9 * *config1->getSparkConfig().fastinit_hello_time_ms(),
-        duration.count());
+    EXPECT_GE(duration.count(), minNeighborDiscoveryInterval);
+    EXPECT_LE(duration.count(), maxNeighborDiscoveryInterval);
   }
 
   // kill and restart node-2
@@ -1432,13 +1462,27 @@ TEST_F(SparkFixture, FastInitTest) {
 
     EXPECT_TRUE(node2->waitForEvents(NB_UP).has_value());
 
-    // Initialization should complete in 6 * fastinit_hello_time_ms. It should
-    // more or less finish in 1.5 x that duration.
+    // Neighbor up should complete in 6 * fastinit_hello_time_ms.
+    const auto neighUpDuration =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+    EXPECT_GE(
+        6 * *config2->getSparkConfig().fastinit_hello_time_ms(),
+        neighUpDuration.count());
+
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+
+    // The initialization event is published when
+    // minNeighborDiscoveryInterval elapses and far sooner than
+    // maxNeighborDiscoveryInterval.
+    auto minNeighborDiscoveryInterval =
+        *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
+    auto maxNeighborDiscoveryInterval = 2 * minNeighborDiscoveryInterval;
+
     const auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - startTime);
-    EXPECT_GE(
-        9 * *config2->getSparkConfig().fastinit_hello_time_ms(),
-        duration.count());
+    EXPECT_GE(duration.count(), minNeighborDiscoveryInterval);
+    EXPECT_LE(duration.count(), maxNeighborDiscoveryInterval);
   }
 }
 
