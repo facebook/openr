@@ -4,7 +4,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 import copy
 import curses
 import datetime
@@ -453,7 +452,9 @@ def build_global_prefix_db(resp):
     return global_prefix_db
 
 
-def dump_adj_db_full(global_adj_db, adj_db, bidir):
+def dump_adj_db_full(
+    global_adj_db, adj_db, bidir
+) -> Tuple[int, int, bool, List[openr_types.Adjacency], str]:
     """given an adjacency database, dump neighbors. Use the
         global adj database to validate bi-dir adjacencies
 
@@ -462,17 +463,29 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
     :param adj_db openr_types.AdjacencyDatabase: latest from kv store
     :param bidir bool: only dump bidir adjacencies
 
-    :return (nodeLabel, [adjacencies]): tuple of node label and list
-        of adjacencies
+    :return (<param1>, <param2>, ...,  [adjacencies]): tuple of params and
+     list of adjacencies
     """
 
     assert isinstance(adj_db, openr_types.AdjacencyDatabase)
     this_node_name = adj_db.thisNodeName
     area = adj_db.area if adj_db.area is not None else "N/A"
+    node_metric_increment_val = (
+        adj_db.nodeMetricIncrementVal
+        if adj_db.nodeMetricIncrementVal is not None
+        else 0
+    )
 
     if not bidir:
-        return (adj_db.nodeLabel, adj_db.isOverloaded, adj_db.adjacencies, area)
+        return (
+            adj_db.nodeLabel,
+            node_metric_increment_val,
+            adj_db.isOverloaded,
+            adj_db.adjacencies,
+            area,
+        )
 
+    # filter out non bi-dir adjacencies
     adjacencies = []
 
     for adj in adj_db.adjacencies:
@@ -486,15 +499,25 @@ def dump_adj_db_full(global_adj_db, adj_db, bidir):
             continue
         adjacencies.append(adj)
 
-    return (adj_db.nodeLabel, adj_db.isOverloaded, adjacencies, area)
+    return (
+        adj_db.nodeLabel,
+        adj_db.nodeMetricIncrementVal,
+        adj_db.isOverloaded,
+        adjacencies,
+        area,
+    )
 
 
 def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
     """convert adj db to dict"""
 
-    node_label, is_overloaded, adjacencies, area = dump_adj_db_full(
-        adj_dbs, adj_db, bidir
-    )
+    (
+        node_label,
+        node_metric_increment_val,
+        is_overloaded,
+        adjacencies,
+        area,
+    ) = dump_adj_db_full(adj_dbs, adj_db, bidir)
 
     if not adjacencies:
         return
@@ -519,12 +542,11 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
     # Dump is keyed by node name with attrs as key values
     adjs_map[adj_db.thisNodeName] = {
         "node_label": node_label,
-        "overloaded": is_overloaded,
+        "is_overloaded": is_overloaded,
         "adjacencies": adjacencies,
         "area": area,
+        "node_metric_increment_val": node_metric_increment_val,
     }
-    if version:
-        adjs_map[adj_db.thisNodeName]["version"] = version
 
 
 def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
@@ -537,6 +559,7 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
     :return map(node, map(adjacency_keys, (adjacency_values)): the parsed
         adjacency DB in a map with keys and values in strings
     """
+
     adj_dbs = resp
     if isinstance(adj_dbs, kv_store_types.Publication):
         adj_dbs = build_global_adj_db(resp)
@@ -634,22 +657,21 @@ def print_adjs_table(adjs_map, neigh=None, interface=None) -> None:
     for node, val in sorted(adjs_map.items()):
         adj_tokens = []
 
-        # report adjacency version
-        if "version" in val:
-            adj_tokens.append("Version: {}".format(val["version"]))
-
-        # report overloaded only when it is overloaded
-        is_overloaded = val["overloaded"]
+        # [Hard-Drain] report overloaded if it is overloaded
+        is_overloaded = val["is_overloaded"]
         if is_overloaded:
-            overload_str = "{}".format(is_overloaded)
+            overload_str = f"{is_overloaded}"
             if is_color_output_supported():
                 overload_str = click.style(overload_str, fg="red")
-            adj_tokens.append("Overloaded: {}".format(overload_str))
+            adj_tokens.append(f"Overloaded: {overload_str}")
 
-        # report node label if non zero
-        node_label = val["node_label"]
-        if node_label:
-            adj_tokens.append("Node Label: {}".format(node_label))
+        # [Soft-Drain] report node metric increment if it is soft-drained
+        node_metric_inc = val["node_metric_increment_val"]
+        if int(node_metric_inc) > 0:
+            node_metric_inc_str = f"{node_metric_inc}"
+            if is_color_output_supported():
+                node_metric_inc_str = click.style(node_metric_inc_str, fg="red")
+            adj_tokens.append(f"Node Metric Increment: {node_metric_inc_str}")
 
         # horizontal adj table for a node
         rows = []
@@ -720,8 +742,6 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir) -> str:
         f"{adj_db.isOverloaded}", fg="red" if adj_db.isOverloaded else None
     )
     title_tokens.append("Overloaded: {}".format(overload_str))
-    if adj_db.nodeLabel:
-        title_tokens.append(f"Node Label: {adj_db.nodeLabel}")
 
     column_labels = [
         "Neighbor",
