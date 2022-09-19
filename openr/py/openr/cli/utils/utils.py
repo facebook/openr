@@ -454,7 +454,7 @@ def build_global_prefix_db(resp):
 
 def dump_adj_db_full(
     global_adj_db, adj_db, bidir
-) -> Tuple[int, int, bool, List[openr_types.Adjacency], str]:
+) -> Tuple[int, bool, List[openr_types.Adjacency], str]:
     """given an adjacency database, dump neighbors. Use the
         global adj database to validate bi-dir adjacencies
 
@@ -478,7 +478,6 @@ def dump_adj_db_full(
 
     if not bidir:
         return (
-            adj_db.nodeLabel,
             node_metric_increment_val,
             adj_db.isOverloaded,
             adj_db.adjacencies,
@@ -500,7 +499,6 @@ def dump_adj_db_full(
         adjacencies.append(adj)
 
     return (
-        adj_db.nodeLabel,
         adj_db.nodeMetricIncrementVal,
         adj_db.isOverloaded,
         adjacencies,
@@ -512,7 +510,6 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
     """convert adj db to dict"""
 
     (
-        node_label,
         node_metric_increment_val,
         is_overloaded,
         adjacencies,
@@ -541,7 +538,6 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
 
     # Dump is keyed by node name with attrs as key values
     adjs_map[adj_db.thisNodeName] = {
-        "node_label": node_label,
         "is_overloaded": is_overloaded,
         "adjacencies": adjacencies,
         "area": area,
