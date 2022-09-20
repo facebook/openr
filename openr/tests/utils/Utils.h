@@ -78,8 +78,7 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
     bool enableSegmentRouting = false,
     bool dryrun = true,
     bool enableV4OverV6Nexthop = false,
-    bool enableAdjLabels = false,
-    bool enablePrependLabels = false);
+    bool enableAdjLabels = false);
 
 std::vector<thrift::PrefixEntry> generatePrefixEntries(
     const PrefixGenerator& prefixGenerator, uint32_t num);

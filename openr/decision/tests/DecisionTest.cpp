@@ -7626,13 +7626,12 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
   openr::thrift::OpenrConfig
   createConfig() override {
     tConfig_ = getBasicOpenrConfig(
-        "1", // nodeName
-        {}, // areaCfg
-        true, // enableV4
-        true, // enableSegmentRouting (so that adj segment label is enabled)
-        false, // enableBgpRouteProgramming
-        true // enableV4OverV6Nexthop
-    );
+        "1", /* nodeName */
+        {}, /* areaCfg */
+        true, /* enable v4 */
+        true, /* enableSegmentRouting */
+        false, /* dryrun */
+        true /* enableV4OverV6Nexthop */);
     return tConfig_;
   }
 
@@ -7742,13 +7741,12 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
   openr::thrift::OpenrConfig
   createConfig() override {
     tConfig_ = getBasicOpenrConfig(
-        "1", // nodeName
-        {}, // areaCfg
-        false, // enableV4
-        true, // enableSegmentRouting
-        false, // enableBgpRouteProgramming
-        true // enableV4OverV6Nexthop
-    );
+        "1", /* nodeName */
+        {}, /* areaCfg */
+        false, /* enable v4 */
+        true, /* enableSegmentRouting */
+        false, /* dryrun */
+        true /* enableV4OverV6Nexthop */);
     return tConfig_;
   }
 

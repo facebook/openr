@@ -102,8 +102,7 @@ getBasicOpenrConfig(
     bool enableSegmentRouting,
     bool dryrun,
     bool enableV4OverV6Nexthop,
-    bool enableAdjLabels,
-    bool enablePrependLabels) {
+    bool enableAdjLabels) {
   /*
    * [DEFAULT] thrift::OpenrConfig
    */
@@ -165,24 +164,6 @@ getBasicOpenrConfig(
   } else {
     config.areas() = areaCfg;
   }
-
-  /*
-   * [OVERRIDE] (SR) thrift::SegmentRoutingConfig
-   */
-  openr::thrift::SegmentRoutingConfig srConfig;
-  if (enablePrependLabels) {
-    openr::thrift::MplsLabelRanges prepend_label_ranges;
-    openr::thrift::LabelRange lr4;
-    openr::thrift::LabelRange lr6;
-    lr4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-    lr4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-    lr6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-    lr6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-    prepend_label_ranges.v4() = lr4;
-    prepend_label_ranges.v6() = lr6;
-    srConfig.prepend_label_ranges() = prepend_label_ranges;
-  }
-  config.segment_routing_config() = srConfig;
 
   return config;
 }
