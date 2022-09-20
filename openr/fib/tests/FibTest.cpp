@@ -24,7 +24,6 @@
 #include <openr/tests/mocks/MockNetlinkFibHandler.h>
 #include <openr/tests/utils/Utils.h>
 
-using namespace std;
 using namespace openr;
 
 using apache::thrift::ThriftServer;
@@ -320,7 +319,7 @@ class FibTestFixture : public ::testing::Test {
   SetUp() override {
     mockFibHandler_ = std::make_shared<MockNetlinkFibHandler>();
 
-    server = make_shared<ThriftServer>();
+    server = std::make_shared<ThriftServer>();
     server->setNumIOWorkerThreads(1);
     server->setNumAcceptThreads(1);
     server->setPort(0);
@@ -332,13 +331,12 @@ class FibTestFixture : public ::testing::Test {
         "node-1",
         {}, /* area config */
         true, /* enableV4 */
-        true /*enableSegmentRouting*/,
-        false /*orderedFibProgramming*/,
-        false /*dryrun*/);
+        true, /* enableSegmentRouting */
+        false /* dryrun */);
     tConfig.route_delete_delay_ms() = routeDeleteDelay_;
     tConfig.fib_port() = fibThriftThread.getAddress()->getPort();
 
-    config_ = make_shared<Config>(tConfig);
+    config_ = std::make_shared<Config>(tConfig);
 
     fib_ = std::make_shared<Fib>(
         config_,
@@ -396,8 +394,8 @@ class FibTestFixture : public ::testing::Test {
     fib_.reset();
 
     // stop mocked nl platform
-    mockFibHandler_->stop();
     fibThriftThread.stop();
+    mockFibHandler_->stop();
     LOG(INFO) << "Mock fib platform is stopped";
   }
 
@@ -539,11 +537,131 @@ class FibTestFixture : public ::testing::Test {
 
   std::shared_ptr<MockNetlinkFibHandler> mockFibHandler_;
   std::shared_ptr<OpenrCtrlHandler> handler_;
-  const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
  private:
   const int32_t routeDeleteDelay_{0};
 };
+
+class FibDryRunTestFixture : public ::testing::Test {
+ public:
+  void
+  SetUp() override {
+    // create mockFibHandler to mimick underneath platform FIB agent
+    // to receive route programming request
+    mockFibHandler_ = std::make_shared<MockNetlinkFibHandler>();
+    auto server = std::make_shared<ThriftServer>();
+    server->setNumIOWorkerThreads(1);
+    server->setNumAcceptThreads(1);
+    server->setPort(0);
+    server->setInterface(mockFibHandler_);
+
+    fibThriftThread_.start(server);
+
+    auto tConfig = getBasicOpenrConfig(
+        "node-1",
+        {}, /* area config */
+        true, /* enableV4 */
+        false, /* enableSegmentRouting */
+        true /* dryrun */);
+    tConfig.fib_port() = fibThriftThread_.getAddress()->getPort();
+
+    config_ = std::make_shared<Config>(std::move(tConfig));
+    fib_ = std::make_shared<Fib>(
+        config_,
+        routeUpdatesQueue.getReader(),
+        fibRouteUpdatesQueue,
+        logSampleQueue);
+
+    fibThread_ = std::make_unique<std::thread>([this]() {
+      LOG(INFO) << "Fib thread starting";
+      fib_->run();
+      LOG(INFO) << "Fib thread finishing";
+    });
+    fib_->waitUntilRunning();
+  }
+
+  void
+  TearDown() override {
+    fibRouteUpdatesQueue.close();
+    routeUpdatesQueue.close();
+    logSampleQueue.close();
+
+    LOG(INFO) << "Stopping the Fib thread";
+    fib_->stop();
+    fibThread_->join();
+    fib_.reset();
+
+    // stop mocked nl platform
+    fibThriftThread_.stop();
+    mockFibHandler_->stop();
+    LOG(INFO) << "Mock fib platform is stopped";
+  }
+
+  std::shared_ptr<MockNetlinkFibHandler> mockFibHandler_;
+  ScopedServerThread fibThriftThread_;
+
+  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
+  messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
+  messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader =
+      fibRouteUpdatesQueue.getReader();
+
+  std::shared_ptr<Config> config_;
+  std::shared_ptr<Fib> fib_;
+  std::unique_ptr<std::thread> fibThread_;
+};
+
+TEST_F(FibTestFixture, initialRouteCleanupTest) {
+  // reset all fb303 counters
+  fb303::fbData->resetAllData();
+
+  // validate initialization counter
+  auto counterKey = fmt::format(
+      Constants::kInitEventCounterFormat,
+      apache::thrift::util::enumNameSafe(
+          thrift::InitializationEvent::FIB_SYNCED));
+  EXPECT_FALSE(fb303::fbData->hasCounter(counterKey));
+
+  // push update from RIB to trigger initial state transition of FIB
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix1),
+      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+  routeUpdatesQueue.push(routeUpdate1);
+
+  // wait for the counter to be published
+  while (not fb303::fbData->hasCounter(counterKey)) {
+  }
+
+  // waiting for one-time clean up signal under dryrun
+  EXPECT_FALSE(fib_->getUnicastRoutesCleared());
+}
+
+TEST_F(FibDryRunTestFixture, initialRouteCleanupTest) {
+  // reset all fb303 counters
+  fb303::fbData->resetAllData();
+
+  // validate initialization counter
+  auto counterKey = fmt::format(
+      Constants::kInitEventCounterFormat,
+      apache::thrift::util::enumNameSafe(
+          thrift::InitializationEvent::FIB_SYNCED));
+  EXPECT_FALSE(fb303::fbData->hasCounter(counterKey));
+
+  // push update from RIB to trigger initial state transition of FIB
+  DecisionRouteUpdate routeUpdate1;
+  routeUpdate1.unicastRoutesToUpdate.emplace(
+      toIPNetwork(prefix1),
+      RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
+  routeUpdatesQueue.push(routeUpdate1);
+
+  // wait for the counter to be published
+  while (not fb303::fbData->hasCounter(counterKey)) {
+  }
+
+  // waiting for one-time clean up signal under dryrun
+  EXPECT_TRUE(fib_->getUnicastRoutesCleared());
+}
 
 // Fib single streaming client test.
 // Case 1: Verify initial full dump is received properly.

@@ -815,11 +815,44 @@ Fib::syncRoutes() {
   //
   // Sync Unicast routes
   //
-  XLOG(INFO) << "Syncing " << unicastRoutes.size() << " unicast routes in FIB";
+  XLOG(INFO)
+      << fmt::format("Syncing {} unicast routes in FIB", unicastRoutes.size());
+
   printUnicastRoutesAddUpdate(unicastRoutes);
   if (dryrun_) {
-    XLOG(INFO) << "Skipping programming of unicast routes in dryrun ... ";
+    /*
+     * ATTN:
+     * to handle Open/R rollback from dryrun_=false to dryrun_=true.
+     * Open/R needs to clean up a set of programmed routes by its previous
+     * incarnation.
+     */
+    if (isUnicastRoutesCleared_) {
+      XLOG(INFO) << fmt::format(
+          "[Dry-run] Skipping programming of {} unicast routes.",
+          unicastRoutes.size());
+    } else {
+      try {
+        auto emptyRoutes = std::vector<thrift::UnicastRoute>{};
+        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        client_->sync_syncFib(kFibId_, emptyRoutes);
+      } catch (std::exception const& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
+        XLOG(ERR) << "[Dry-run] Failed to sync 0 unicast routes in FIB. Error: "
+                  << folly::exceptionStr(e);
+        return false;
+      }
+      // set one-time flag once
+      isUnicastRoutesCleared_ = true;
+
+      XLOG(INFO)
+          << "[Dry-run] Synced 0 unicast routes to clean up the stale routes.";
+    }
   } else {
+    CHECK(not isUnicastRoutesCleared_)
+        << "flag should ONLY be set in dry_run mode";
+
     try {
       createFibClient(*getEvb(), socket_, client_, thriftPort_);
       client_->sync_syncFib(kFibId_, unicastRoutes);

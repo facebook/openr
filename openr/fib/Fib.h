@@ -115,6 +115,11 @@ class Fib final : public OpenrEventBase {
    */
   messaging::RQueue<DecisionRouteUpdate> getFibUpdatesReader();
 
+  inline bool
+  getUnicastRoutesCleared() {
+    return isUnicastRoutesCleared_;
+  }
+
  private:
   // No-copy
   Fib(const Fib&) = delete;
@@ -392,6 +397,10 @@ class Fib final : public OpenrEventBase {
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
+
+  // Special flag handling dryrun_ case to clean up routes programmed
+  // by previous incarnation
+  bool isUnicastRoutesCleared_{false};
 };
 
 } // namespace openr
