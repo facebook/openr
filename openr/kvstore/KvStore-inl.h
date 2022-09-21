@@ -865,7 +865,9 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
       // Explicitly enable TLS1.3 until it becomes the default
       context->enableTLS13();
 
-      client = getOpenrCtrlSecureClient<ClientType>(
+      client = getOpenrCtrlSecureClient<
+          ClientType,
+          apache::thrift::RocketClientChannel>(
           *(evb->getEvb()),
           context,
           folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
