@@ -627,6 +627,10 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       "kvstore.thrift.secure_client", fb303::COUNT);
   fb303::fbData->addStatExportType(
+      "kvstore.thrift.secure_client.success", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.secure_client.failure", fb303::COUNT);
+  fb303::fbData->addStatExportType(
       "kvstore.thrift.plaintext_client", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
@@ -820,6 +824,35 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
 }
 
+/*
+ * A callback that gets triggered on socket connection result
+ */
+struct SecureConnectCallback : public folly::AsyncSocket::ConnectCallback {
+  SecureConnectCallback() : fallback_(false) {}
+  virtual void
+  connectSuccess() noexcept override {
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.secure_client.success", 1, fb303::COUNT);
+  }
+
+  virtual void
+  connectErr(const folly::AsyncSocketException& ex) noexcept override {
+    XLOG_EVERY_N(ERR, 1000)
+        << "Secure client connection failure. Triggering callback...";
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.secure_client.failure", 1, fb303::COUNT);
+    fallback_ = true;
+  }
+
+  bool
+  shouldFallback() {
+    return fallback_;
+  }
+
+ private:
+  bool fallback_ = false;
+};
+
 template <class ClientType>
 bool
 KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
@@ -836,6 +869,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         *peerSpec.peerAddr(),
         *peerSpec.ctrlPort(),
         nodeName);
+
+    auto secureClientCallback = std::make_shared<SecureConnectCallback>();
     if (kvParams_.enable_secure_thrift_client) {
       /*
        * TLS guide:
@@ -863,11 +898,15 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
           Constants::kServiceConnTimeout, /* client connection timeout */
           Constants::kServiceProcTimeout, /* request processing timeout */
           folly::AsyncSocket::anyAddress(), /* bindAddress */
-          maybeIpTos /* IP_TOS value for control plane */);
+          maybeIpTos /* IP_TOS value for control plane */,
+          secureClientCallback);
 
       fb303::fbData->addStatValue(
           "kvstore.thrift.secure_client", 1, fb303::COUNT);
-    } else {
+    }
+
+    if (not kvParams_.enable_secure_thrift_client or
+        secureClientCallback->shouldFallback()) {
       client = getOpenrCtrlPlainTextClient<ClientType>(
           *(evb->getEvb()),
           folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
