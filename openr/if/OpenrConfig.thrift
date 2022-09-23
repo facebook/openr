@@ -321,8 +321,6 @@ struct ThriftClientConfig {
   1: bool enable_secure_thrift_client = false;
   /** Verify type for server when enabling secure client. */
   2: VerifyServerType verify_server_type;
-  /** Interval for reloading certificate. */
-  3: i32 reload_certificate_interval_s = 3600;
 }
 
 enum PrefixAllocationMode {

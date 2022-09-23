@@ -93,8 +93,6 @@ struct KvStoreParams {
   std::optional<std::string> x509_cert_path{std::nullopt};
   std::optional<std::string> x509_key_path{std::nullopt};
   std::optional<std::string> x509_ca_path{std::nullopt};
-  // reload certificate interval
-  std::chrono::seconds reload_certificate_interval_s{3600};
 
   KvStoreParams(
       std::string nodeId,
@@ -110,8 +108,7 @@ struct KvStoreParams {
       bool enable_secure_thrift_client,
       std::optional<std::string> x509_cert_path,
       std::optional<std::string> x509_key_path,
-      std::optional<std::string> x509_ca_path,
-      std::chrono::seconds reload_certificate_interval_s)
+      std::optional<std::string> x509_ca_path)
       : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         logSampleQueue(logSampleQueue),
@@ -122,8 +119,7 @@ struct KvStoreParams {
         enable_secure_thrift_client(enable_secure_thrift_client),
         x509_cert_path(x509_cert_path),
         x509_key_path(x509_key_path),
-        x509_ca_path(x509_ca_path),
-        reload_certificate_interval_s(reload_certificate_interval_s) {}
+        x509_ca_path(x509_ca_path) {}
 };
 
 /*
@@ -495,9 +491,6 @@ class KvStoreDb {
     // 1. thrift::OpenrCtrlCppAsyncClient -> KvStore runs with Open/R;
     // 2. thrift::KvStoreServiceAsyncClient -> KvStore runs independently;
     std::unique_ptr<ClientType> client{nullptr};
-
-    // used to check if we need to reload certificate
-    std::chrono::time_point<std::chrono::steady_clock> clientStartTime{};
 
     // [TO BE DEPRECATED]
     // timer to periodically send keep-alive status
