@@ -1898,9 +1898,19 @@ Spark::processHeartbeatMsg(
   // Just ignore it.
   if (neighbor.state != thrift::SparkNeighState::ESTABLISHED) {
     XLOG(DBG3) << fmt::format(
-        "[SparkHeartbeatMsg] Current state of neighbor: {} is: [{}], expected state: [ESTABLISHED]",
+        "[SparkHeartbeatMsg] Received heartbeat. Expected state: [ESTABLISHED], current state of neighbor: {} is: [{}]",
         neighborName,
         apache::thrift::util::enumNameSafe(neighbor.state));
+    // Only if the neighbor is in Warm state, we need a helloMsg to unblock
+    // ourselve to transition this neighbor to established quickly
+    if (neighbor.state == thrift::SparkNeighState::WARM) {
+      XLOG(WARNING)
+          << "[SparkHelloMsg] Sending HelloMsg to solicit a response immediately";
+      sendHelloMsg(
+          ifName,
+          true /* fast init (solicit response) */,
+          false /* restarting */);
+    }
     return;
   }
 
