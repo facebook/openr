@@ -211,8 +211,7 @@ LinkMonitor::LinkMonitor(
   if (overrideDrainState) {
     if (config->isSoftdrainEnabled()) {
       const auto nodeInc = config->getNodeMetricIncrement();
-      state_.nodeMetricIncrementVal() =
-          config->isUndrainedPathExist() ? 0 : nodeInc;
+      state_.nodeMetricIncrementVal() = assumeDrained ? nodeInc : 0;
 
       // ATTN: node should NOT be soft and hard drained at the same time
       state_.isOverloaded() = false;

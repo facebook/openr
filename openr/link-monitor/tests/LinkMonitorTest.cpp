@@ -2555,6 +2555,7 @@ class DrainStatusTestFixture : public LinkMonitorTestFixture {
     // enable softdrain
     auto tConfig = LinkMonitorTestFixture::createConfig();
     tConfig.enable_soft_drain() = true;
+    tConfig.assume_drained() = true;
 
     return tConfig;
   }
@@ -2593,6 +2594,44 @@ TEST_F(DrainStatusTestFixture, SoftDrainStatusUponStart) {
   checkNextAdjPub("adj:node-1");
 }
 
+class UndrainStatusTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    // enable softdrain
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+    tConfig.enable_soft_drain() = true;
+    tConfig.assume_drained() = false;
+
+    return tConfig;
+  }
+};
+
+TEST_F(UndrainStatusTestFixture, SoftDrainStatusUponStartWithUndrain) {
+  {
+    // Create an interface.
+    nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
+    recvAndReplyIfUpdate();
+  }
+
+  {
+    // Send neighbor up.
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+  }
+  {
+    auto adjDb = createAdjDb(
+        "node-1",
+        {adj_2_1},
+        kNodeLabel,
+        false /* nodeOverloaded */,
+        kTestingAreaName);
+    expectedAdjDbs.push(std::move(adjDb));
+  }
+
+  // verify adjDb
+  checkNextAdjPub("adj:node-1");
+}
 class MultiAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>
