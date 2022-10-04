@@ -279,6 +279,25 @@ LinkMonitor::LinkMonitor(
                 << fmt::format(
                        "Unexpected initialization event: {}",
                        apache::thrift::util::enumNameSafe(event));
+            // Publish all peers to KvStore in OpenR initialization procedure.
+            CHECK(not initialNeighborsReceived_)
+                << "Received NEIGHBOR_DISCOVERED when initial neighbors received is set to true";
+            initialNeighborsReceived_ = true;
+
+            PeerEvent peerEvent;
+            for (auto& [area, areaPeers] : peers_) {
+              // Get added peers in each area.
+              thrift::PeersMap peersToAdd;
+              for (auto& [remoteNodeName, peerVal] : areaPeers) {
+                peersToAdd.emplace(remoteNodeName, peerVal.tPeerSpec);
+                logPeerEvent("ADD_PEER", remoteNodeName, peerVal.tPeerSpec);
+              }
+              peerEvent.emplace(
+                  area, AreaPeerEvent(peersToAdd, {} /* peersToDel */));
+            }
+            // Send peers to add in all areas in a batch.
+            peerUpdatesQueue_.push(std::move(peerEvent));
+
             // TODO(agrewal) LM Must wait for bi-directional adjacency to be
             // formed before advertising adjacencies, otherwise Decision will
             // filtered out unsuable one-way adjacencies.
@@ -1207,19 +1226,16 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
       break;
     }
     case NeighborEventType::NEIGHBOR_RESTARTING: {
-      CHECK(initialNeighborsReceived_);
       logNeighborEvent(event);
       neighborRestartingEvent(event);
       break;
     }
     case NeighborEventType::NEIGHBOR_DOWN: {
-      CHECK(initialNeighborsReceived_);
       logNeighborEvent(event);
       neighborDownEvent(event);
       break;
     }
     case NeighborEventType::NEIGHBOR_RTT_CHANGE: {
-      CHECK(initialNeighborsReceived_);
       if (!useRttMetric_) {
         break;
       }
@@ -1231,24 +1247,6 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
       XLOG(ERR) << "Unknown event type " << (int32_t)event.eventType;
     }
   } // for
-
-  // Publish all peers to KvStore in OpenR initialization procedure.
-  if (not initialNeighborsReceived_) {
-    PeerEvent event;
-    for (auto& [area, areaPeers] : peers_) {
-      // Get added peers in each area.
-      thrift::PeersMap peersToAdd;
-      for (auto& [remoteNodeName, peerVal] : areaPeers) {
-        peersToAdd.emplace(remoteNodeName, peerVal.tPeerSpec);
-        logPeerEvent("ADD_PEER", remoteNodeName, peerVal.tPeerSpec);
-      }
-      event.emplace(area, AreaPeerEvent(peersToAdd, {} /* peersToDel */));
-    }
-    // Send peers to add in all areas in a batch.
-    peerUpdatesQueue_.push(std::move(event));
-
-    initialNeighborsReceived_ = true;
-  }
 }
 
 // NOTE: add commands which set/unset overload bit or metric values will

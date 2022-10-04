@@ -27,6 +27,7 @@
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/tests/mocks/NetlinkEventsInjector.h>
 #include <openr/tests/utils/Utils.h>
+#include <exception>
 
 using namespace openr;
 using namespace folly::literals::shell_literals;
@@ -960,6 +961,9 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     auto neighborEvent = nb2_up_event;
     neighborUpdatesQueue.push(
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
     LOG(INFO) << "Sent neighbor UP event.";
 
     // Makes sure peerUpdatesQueue gets PeerEvent.
@@ -1177,6 +1181,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   {
     auto neighborEvent = nb2_up_event;
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
     LOG(INFO) << "14. Testing adj up event!";
     checkNextAdjPub("adj:node-1");
   }
@@ -1287,6 +1293,9 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
+
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
 
     // kvstore peer initial sync
     checkNextAdjPub("adj:node-1");
@@ -1411,6 +1420,9 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
+
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
 
     // check for adj update: initial adjacency db includes adj_2_1
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
@@ -1560,6 +1572,9 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
 
     // no adj up before KvStore Peer finish initial sync
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
+
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
 
     // check for adj update: initial adjacency db includes adj_2_1
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
@@ -2537,6 +2552,9 @@ TEST_F(InitializationTestFixture, AdjacencyUpTest) {
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_ADJ_SYNCED;
     neighborUpdatesQueue.push(
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
 
     // check adjacency will be published as `adjOnlyUsedByOtherNode` is reset
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
