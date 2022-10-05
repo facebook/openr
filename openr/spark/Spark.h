@@ -341,7 +341,9 @@ class Spark final : public OpenrEventBase {
 
   // util function to check thrift::SparkNeighState
   void checkNeighborState(
-      SparkNeighbor const& neighbor, thrift::SparkNeighState const& state);
+      SparkNeighbor const& neighbor,
+      std::string const& ifName,
+      thrift::SparkNeighState const& state);
 
   // wrapper call to declare neighborship down
   void neighborUpWrapper(

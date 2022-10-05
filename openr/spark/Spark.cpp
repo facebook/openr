@@ -1077,10 +1077,13 @@ Spark::logStateTransition(
 
 void
 Spark::checkNeighborState(
-    SparkNeighbor const& neighbor, thrift::SparkNeighState const& state) {
+    SparkNeighbor const& neighbor,
+    std::string const& ifName,
+    thrift::SparkNeighState const& state) {
   CHECK(neighbor.state == state) << fmt::format(
-      "Neighbor: {}, expected state: [{}], actual state: [{}]",
+      "Neighbor: {} on interface {}, expected state: [{}], actual state: [{}]",
       neighbor.nodeName,
+      ifName,
       apache::thrift::util::enumNameSafe(state),
       apache::thrift::util::enumNameSafe(neighbor.state));
 }
@@ -1325,7 +1328,7 @@ Spark::processHeartbeatTimeout(
              << " on interface " << ifName;
 
   // neighbor must in 'ESTABLISHED' state
-  checkNeighborState(neighbor, thrift::SparkNeighState::ESTABLISHED);
+  checkNeighborState(neighbor, ifName, thrift::SparkNeighState::ESTABLISHED);
 
   // state transition
   thrift::SparkNeighState oldState = neighbor.state;
@@ -1380,7 +1383,7 @@ Spark::processNegotiateTimeout(
       ifName);
 
   // neighbor must in 'NEGOTIATE' state
-  checkNeighborState(neighbor, thrift::SparkNeighState::NEGOTIATE);
+  checkNeighborState(neighbor, ifName, thrift::SparkNeighState::NEGOTIATE);
 
   // state transition
   thrift::SparkNeighState oldState = neighbor.state;
@@ -1566,7 +1569,7 @@ Spark::processHelloMsg(
     numTotalNeighbors_++;
 
     auto& neighbor = ifNeighbors.at(neighborName);
-    checkNeighborState(neighbor, thrift::SparkNeighState::IDLE);
+    checkNeighborState(neighbor, ifName, thrift::SparkNeighState::IDLE);
   }
 
   // Up till now, node knows about this neighbor and perform SM check
