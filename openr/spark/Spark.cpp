@@ -1768,9 +1768,6 @@ Spark::processHandshakeMsg(
         neighborName,
         neighbor.area,
         neighbor.state != thrift::SparkNeighState::NEGOTIATE);
-    XLOG(INFO) << "[SparkHandshakeMsg] Neighbor: " << neighborName
-               << " has NOT formed adj with us yet. "
-               << "Reply to handshakeMsg immediately.";
   }
 
   // skip NEGOTIATE step if neighbor is NOT in state. This can happen:
@@ -1791,8 +1788,8 @@ Spark::processHandshakeMsg(
 
   // update neighbor holdTime as "NEGOTIATING" process
   neighbor.heartbeatHoldTime =
-      std::max(std::chrono::milliseconds(*handshakeMsg.holdTime()), holdTime_);
-  neighbor.gracefulRestartHoldTime = std::max(
+      std::min(std::chrono::milliseconds(*handshakeMsg.holdTime()), holdTime_);
+  neighbor.gracefulRestartHoldTime = std::min(
       std::chrono::milliseconds(*handshakeMsg.gracefulRestartTime()),
       gracefulRestartTime_);
 
@@ -1855,9 +1852,11 @@ Spark::processHandshakeMsg(
   // state transition
   XLOG(DBG1) << fmt::format(
       "[SparkHandshakeMsg] Successfully negotiated with peer: {} with "
-      "TCP port: {}",
+      "TCP port: {}, holdTime: {}ms, gracefulRestartHoldTime: {}ms",
       neighborName,
-      neighbor.openrCtrlThriftPort);
+      neighbor.openrCtrlThriftPort,
+      neighbor.heartbeatHoldTime.count(),
+      neighbor.gracefulRestartHoldTime.count());
 
   thrift::SparkNeighState oldState = neighbor.state;
   neighbor.state =

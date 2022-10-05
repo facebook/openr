@@ -282,6 +282,74 @@ class InitializationTestFixture : public SimpleSparkFixture {
   }
 };
 
+/*
+ * This is the test fixture used for Open/R Initialization sequence
+ * testing. Config will be explicitly overridden and more test cases
+ * will be added.
+ */
+class SparkConfigFixture : public SimpleSparkFixture {
+ protected:
+  void
+  createConfig() override {
+    auto tConfig1 = getBasicOpenrConfig(nodeName1_);
+    auto tConfig2 = getBasicOpenrConfig(nodeName2_);
+    // ATTN: specify different hold_time in purpose
+    auto sparkConfig1 = *tConfig1.spark_config();
+    sparkConfig1.hold_time_s() = 4;
+    tConfig1.spark_config() = sparkConfig1;
+
+    auto sparkConfig2 = *tConfig2.spark_config();
+    sparkConfig2.hold_time_s() = 2;
+    tConfig2.spark_config() = sparkConfig2;
+
+    config1_ = std::make_shared<Config>(tConfig1);
+    config2_ = std::make_shared<Config>(tConfig2);
+  }
+};
+
+TEST_F(SparkConfigFixture, MinHeartbeatHoldTimerTest) {
+  // create 2 Spark instances with proper config and connect them
+  createAndConnect();
+
+  // record time for future comparison
+  auto startTime = std::chrono::steady_clock::now();
+
+  auto holdTime1 =
+      std::chrono::seconds(*node1_->getSparkConfig().hold_time_s());
+  auto holdTime2 =
+      std::chrono::seconds(*node2_->getSparkConfig().hold_time_s());
+  auto keepAliveTime =
+      std::chrono::seconds(*config1_->getSparkConfig().keepalive_time_s());
+
+  // remove underneath connections between to nodes
+  ConnectedIfPairs connectedPairs = {};
+  mockIoProvider_->setConnectedPairs(connectedPairs);
+
+  // wait for sparks to lose each other
+  {
+    LOG(INFO) << "Waiting for both nodes to time out with each other";
+
+    EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
+    EXPECT_TRUE(node2_->waitForEvents(NB_DOWN).has_value());
+
+    // record time for expiration time test
+    auto endTime = std::chrono::steady_clock::now();
+
+    // The time it takes for the neighbor to go down will be
+    // hold time +/- 1 keepalive interval.
+    ASSERT_GE(
+        keepAliveTime + endTime - startTime, std::min(holdTime1, holdTime2));
+    ASSERT_LE(
+        endTime - startTime - keepAliveTime, std::min(holdTime1, holdTime2));
+
+    // Heartbeat timeout will lead us to stop tracking that neighbor.
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 0);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 0);
+  }
+}
+
 TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
   // create 2 Spark instances with proper config and connect them
   createAndConnect();
