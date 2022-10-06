@@ -53,7 +53,6 @@ namespace fs = std::experimental::filesystem;
 
 using namespace openr;
 
-using apache::thrift::concurrency::ThreadManager;
 using openr::messaging::ReplicateQueue;
 
 // jemalloc parameters - http://jemalloc.net/jemalloc.3.html
@@ -322,7 +321,6 @@ main(int argc, char** argv) {
   ReplicateQueue<LogSample> logSampleQueue;
 
   // structures to organize our modules
-  std::shared_ptr<ThreadManager> thriftThreadMgr;
   std::unique_ptr<apache::thrift::ThriftServer> netlinkFibServer;
   std::unique_ptr<std::thread> netlinkFibServerThread;
   std::vector<std::thread> allThreads;
@@ -350,16 +348,13 @@ main(int argc, char** argv) {
 
   // Start NetlinkFibHandler if specified
   if (config->isNetlinkFibHandlerEnabled()) {
-    // Create ThreadManager for thrift services
-    thriftThreadMgr =
-        ThreadManager::newPriorityQueueThreadManager(2 /* num of threads */);
-    thriftThreadMgr->setNamePrefix("ThriftCpuPool");
-    thriftThreadMgr->start();
-    CHECK(thriftThreadMgr);
-
     netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
+    netlinkFibServer->setThreadManagerType(
+        apache::thrift::BaseThriftServer::ThreadManagerType::PRIORITY_QUEUE);
+    netlinkFibServer->setNumCPUWorkerThreads(2 /* num of threads */);
+    netlinkFibServer->setCPUWorkerThreadName("ThriftCpuPool");
+
     netlinkFibServer->setIdleTimeout(Constants::kPlatformThriftIdleTimeout);
-    netlinkFibServer->setThreadManager(thriftThreadMgr);
     netlinkFibServer->setNumIOWorkerThreads(1);
     netlinkFibServer->setCpp2WorkerThreadName("FibTWorker");
     netlinkFibServer->setPort(*config->getConfig().fib_port());
@@ -661,10 +656,6 @@ main(int argc, char** argv) {
     netlinkFibServerThread->join();
     netlinkFibServerThread.reset();
     netlinkFibServer.reset();
-  }
-
-  if (thriftThreadMgr) {
-    thriftThreadMgr->stop();
   }
 
   nlSock.reset();
