@@ -31,11 +31,32 @@ const std::chrono::milliseconds counterUpdateWaitTime(5500);
 // Timeout of checking keys are propagated in all KvStores in the same area.
 const std::chrono::milliseconds kTimeoutOfKvStorePropagation(500);
 
+folly::StringPiece
+getContainingDirectory(folly::StringPiece input) {
+  auto pos = folly::rfind(input, '/');
+  return (pos == std::string::npos) ? "" : input.subpiece(0, pos + 1);
+}
+
+const std::string kTestDir = getContainingDirectory(__FILE__).str();
+
 // [CONFIG OVERRIDE]
 thrift::KvStoreConfig
 getTestKvConf(std::string nodeId) {
   thrift::KvStoreConfig kvConf;
   kvConf.node_name() = nodeId;
+  return kvConf;
+}
+
+// [SECURE CONFIG OVERRIDE]
+thrift::KvStoreConfig
+getSecureTestKvConf(std::string nodeId) {
+  thrift::KvStoreConfig kvConf;
+  kvConf.node_name() = nodeId;
+  kvConf.enable_secure_thrift_client() = true;
+
+  kvConf.x509_cert_path() = fmt::format("{}certs/test_cert1.pem", kTestDir);
+  kvConf.x509_key_path() = fmt::format("{}certs/test_key1.pem", kTestDir);
+  kvConf.x509_ca_path() = fmt::format("{}certs/ca_cert.pem", kTestDir);
   return kvConf;
 }
 
@@ -2532,6 +2553,23 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
   evb.stop();
   evb.waitUntilStopped();
   evbThread.join();
+}
+
+/**
+ * Validate client
+ */
+TEST_F(KvStoreTestFixture, SecureClientTest) {
+  AreaId defaultAreaId{Constants::kDefaultArea.toString()};
+
+  auto storeA = createKvStore(
+      getSecureTestKvConf("storeA"), {Constants::kDefaultArea.toString()});
+  auto storeB =
+      createKvStore(getSecureTestKvConf("storeB"), {kTestingAreaName});
+  storeA->run();
+  storeB->run();
+  EXPECT_TRUE(
+      storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec()));
+  EXPECT_TRUE(storeB->addPeer(defaultAreaId, "storeA", storeA->getPeerSpec()));
 }
 
 int

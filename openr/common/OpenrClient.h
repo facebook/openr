@@ -10,6 +10,8 @@
 #include <folly/io/SocketOptionMap.h>
 #include <folly/io/async/AsyncSSLSocket.h>
 #include <folly/io/async/AsyncSocket.h>
+#include <folly/logging/xlog.h>
+
 #include <openr/common/Constants.h>
 #include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 
@@ -125,8 +127,7 @@ getOpenrCtrlSecureClient(
         Constants::kServiceProcTimeout,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
     std::optional<int> maybeIpTos = std::nullopt,
-    std::shared_ptr<folly::AsyncSSLSocket::ConnectCallback> callback =
-        nullptr) {
+    folly::AsyncSSLSocket::ConnectCallback* callback = nullptr) {
   // NOTE: It is possible to have caching for socket. We're not doing it as
   // we expect clients to be persistent/sticky.
   std::unique_ptr<ClientType> client{nullptr};
@@ -140,7 +141,7 @@ getOpenrCtrlSecureClient(
 
     // Establish connection
     transport->connect(
-        callback.get(),
+        callback,
         sa,
         connectTimeout.count(),
         detail::getSocketOptionMap(maybeIpTos),
