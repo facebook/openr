@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.clients.openr_client import get_fib_agent_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
@@ -261,7 +262,7 @@ class PathCmd(OpenrCtrlCmd):
             return []
 
         try:
-            client = utils.get_fib_agent_client(src_addr, fib_agent_port, timeout)
+            client = get_fib_agent_client(src_addr, fib_agent_port, timeout)
             routes = client.getRouteTableByClient(client.client_id)
         except Exception:
             return []

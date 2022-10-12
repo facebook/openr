@@ -11,13 +11,14 @@ from typing import Optional
 import bunch
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
+from openr.Platform import FibService, ttypes as platform_types
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
-from openr.thrift.Platform.clients import FibService as FibServiceClient
 from openr.utils import consts
 from thrift.protocol import THeaderProtocol
-from thrift.py3.client import ClientType, get_client
-from thrift.py3.ssl import SSLContext, SSLVerifyOption
+from thrift.py.client.common import ClientType, Protocol, SSLContext, SSLVerifyOption
+from thrift.py.client.sync_client_factory import get_client
 from thrift.transport import THeaderTransport, TSocket, TSSLSocket
+from thrift.transport.TTransport import TTransportException
 
 
 class OpenrCtrlClient(OpenrCtrl.Client):
@@ -118,16 +119,10 @@ def get_openr_ctrl_client(
         )
 
 
-def get_fib_client(
-    cli_opts: bunch.Bunch,
-    client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
-) -> FibServiceClient:
-    """
-    Get fib client. With correct SSL setup.
-    """
+def get_ssl_context(options: bunch.Bunch) -> Optional[SSLContext]:
+    # The options are the local settings to connect to the host
 
-    options = getDefaultOptions(cli_opts.host)
-    ssl_context = None
+    ssl_context: Optional[SSLContext] = None
     # Create ssl context if specified
     if options.ssl:
         # Translate ssl verification option
@@ -144,17 +139,61 @@ def get_fib_client(
             certfile=options.cert_file, keyfile=options.key_file
         )
         ssl_context.load_verify_locations(cafile=options.ca_file)
+    return ssl_context
 
-    # Create and return client
-    return get_client(
-        FibServiceClient,
-        host=cli_opts.host,
-        port=cli_opts.fib_agent_port,
-        timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
-        client_type=client_type,
-        ssl_context=ssl_context,
-        ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
-    )
+
+def get_fib_agent_client(
+    host: str,
+    port: int,
+    timeout_ms: int,
+    client_id: int = platform_types.FibClient.OPENR,
+):
+    """
+    Get thrift client for talking to Fib thrift service
+
+    :param host: thrift server name or ip
+    :param port: thrift server port
+
+    :returns: The thrift client
+    :rtype: FibService.Client
+    """
+
+    ssl_context: Optional[SSLContext] = get_ssl_context(getDefaultOptions(host))
+    try:
+        client: FibService.Client = get_client(
+            FibService.Client,
+            host=host,
+            port=port,
+            timeout=float(timeout_ms) / 1000.0,  # NOTE: Timeout expected is in seconds
+            client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+            protocol=Protocol.BINARY,
+            ssl_context=ssl_context,
+            ssl_timeout=float(timeout_ms)
+            / 1000.0,  # NOTE: Timeout expected is in seconds
+        )
+    except TTransportException as e:
+        if ssl_context is not None:
+            # cannot establish tls, fallback to plain text
+            client: FibService.Client = get_client(
+                FibService.Client,
+                host=host,
+                port=port,
+                timeout=float(timeout_ms)
+                / 1000.0,  # NOTE: Timeout expected is in seconds
+                client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+                protocol=Protocol.BINARY,
+                ssl_context=None,
+                ssl_timeout=float(timeout_ms)
+                / 1000.0,  # NOTE: Timeout expected is in seconds
+            )
+        else:
+            raise e
+
+    # Assign so that we can refer to later on
+    # Pyre does not allow us to assign a non-existing attribute to FibService.Client
+    # Therefore we need to explicitly ignore the error
+    client.client_id = client_id  # pyre-ignore
+    return client
 
 
 def get_openr_ctrl_cpp_client(
@@ -171,23 +210,6 @@ def get_openr_ctrl_cpp_client(
     """
 
     options = options if options else getDefaultOptions(host)
-    ssl_context = None
-    # Create ssl context if specified
-    if options.ssl:
-        # Translate ssl verification option
-        ssl_verify_opt = SSLVerifyOption.NO_VERIFY
-        if options.cert_reqs == ssl.CERT_OPTIONAL:
-            ssl_verify_opt = SSLVerifyOption.VERIFY_REQ_CLIENT_CERT
-        if options.cert_reqs == ssl.CERT_REQUIRED:
-            ssl_verify_opt = SSLVerifyOption.VERIFY
-
-        # Create ssl context
-        ssl_context = SSLContext()
-        ssl_context.set_verify_option(ssl_verify_opt)
-        ssl_context.load_cert_chain(
-            certfile=options.cert_file, keyfile=options.key_file
-        )
-        ssl_context.load_verify_locations(cafile=options.ca_file)
 
     # Create and return client
     return get_client(
@@ -196,6 +218,6 @@ def get_openr_ctrl_cpp_client(
         port=options.openr_ctrl_port,
         timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
         client_type=client_type,
-        ssl_context=ssl_context,
+        ssl_context=get_ssl_context(options),
         ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
     )

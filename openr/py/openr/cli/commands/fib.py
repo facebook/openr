@@ -15,7 +15,7 @@ import prettytable
 import pytz
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients.openr_client import get_fib_client, get_openr_ctrl_cpp_client
+from openr.clients.openr_client import get_fib_agent_client, get_openr_ctrl_cpp_client
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import StreamSubscriberType
@@ -54,7 +54,7 @@ class FibAgentCmd(FibCmdBase):
 
         super().__init__(cli_opts)
         try:
-            self.fib_agent_client = utils.get_fib_agent_client(
+            self.fib_agent_client = get_fib_agent_client(
                 cli_opts.host,
                 cli_opts.fib_agent_port,
                 cli_opts.timeout,
@@ -277,14 +277,10 @@ class FibValidateRoutesCmd(FibAgentCmd):
                 decision_route_db
             )
             (fib_unicast_routes, fib_mpls_routes) = utils.get_routes(fib_route_db)
-            # fetch route from net_agent module
-            async def _fib_wrapper():
-                async with get_fib_client(self.cli_opts) as fib_client:
-                    return await fib_client.getRouteTableByClient(
-                        self.cli_opts.client_id
-                    )
 
-            agent_unicast_routes = asyncio.run(_fib_wrapper())
+            agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
+                self.fib_agent_client.client_id
+            )
 
         except Exception as e:
             print("Failed to validate Fib routes.")
