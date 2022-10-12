@@ -724,11 +724,22 @@ Fib::updateMplsRoutes(
 }
 
 bool
-Fib::updateRoutes(DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay) {
+Fib::updateRoutes(
+    std::optional<DecisionRouteUpdate>&& maybeRouteUpdate,
+    bool useDeleteDelay) {
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
   updateRoutesSemaphore_.wait();
+
+  DecisionRouteUpdate routeUpdate;
+  if (maybeRouteUpdate.has_value()) {
+    routeUpdate = *maybeRouteUpdate;
+    XLOG(INFO) << "Processing route update from Decision";
+  } else {
+    routeUpdate = routeState_.createUpdate();
+    XLOG(INFO) << "Retry programming of dirty route entries";
+  }
 
   // Return if empty
   if (routeUpdate.empty()) {
@@ -953,21 +964,38 @@ void
 Fib::retryRoutes() noexcept {
   bool success{false};
   retryRoutesExpBackoff_.reportError(); // We increase backoff on every retry
-  XLOG(INFO) << "Increasing backoff "
-             << retryRoutesExpBackoff_.getCurrentBackoff().count() << "ms";
+
+  XLOG(INFO) << fmt::format(
+      "Increasing backoff {}ms",
+      retryRoutesExpBackoff_.getCurrentBackoff().count());
+
+  /*
+   * ATTN: the following route updating/programming will run into CRITICAL
+   * SECTION and needs to be guarded by lock. Fib module maintains `routeState_`
+   * as the snapshot of routes to be programmed;
+   *
+   * A few facts:
+   * - `routeState_` will be updated via `update()` API;
+   * - `routeState_` should NOT be modified when `updateRoutes()` is invoked;
+   * - `routeState_` should honor the latest update from Decision module no
+   *    matter what the order of update/retry fiber tasks are invoked;
+   */
   if (routeState_.state == RouteState::SYNCING) {
-    // SYNC routes if we've RIB snapshot from Decision
+    /*
+     * [CRITICAL SECTION]
+     *
+     * SYNC routes if we've RIB snapshot from Decision
+     */
     success |= syncRoutes();
   } else {
-    // We retry incremental update of routes based on dirty state in AWAITING
-    // & SYNCED states
-    auto routeUpdate = routeState_.createUpdate();
-    if (routeUpdate.empty()) {
-      XLOG(INFO) << "Returning because of empty updates";
-      return; // Do not process further as this incurred no change
-    }
-    XLOG(INFO) << "Retry programming of dirty route entries";
-    success |= updateRoutes(std::move(routeUpdate), false /* useDeleteDelay */);
+    /*
+     * [CRITICAL SECTION]
+     *
+     * Retry incremental update of routes based on dirty state in AWAITING
+     * & SYNCED states
+     */
+    success |= updateRoutes(
+        std::nullopt /* indicate retry */, false /* useDeleteDelay */);
   }
 
   // Clear backoff if programming is successful

@@ -149,10 +149,17 @@ class Fib final : public OpenrEventBase {
 
   /**
    * Incremental route programming.
+   * ATTN: there are 2 ways to invoke this util call within CRITICAL SECTION.
+   *
+   *  1. routeUpdate is NOT std::nullopt - update routeState_ with it;
+   *  2. routeUpdate is std::nullopt - generate update from routeState_ when
+   *    retrying failed routes programming;
+   *
    * @return true if all routes are successfully programmed
    */
   bool updateRoutes(
-      DecisionRouteUpdate&& routeUpdate, bool useDeleteDelay = true);
+      std::optional<DecisionRouteUpdate>&& routeUpdate,
+      bool useDeleteDelay = true);
 
   /**
    * The helper function of updateRoutes that programs unicast routes. On route
