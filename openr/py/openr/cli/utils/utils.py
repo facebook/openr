@@ -10,6 +10,7 @@ import datetime
 import ipaddress
 import json
 import re
+import ssl
 import sys
 from builtins import chr, input, map
 from collections import defaultdict
@@ -31,6 +32,7 @@ from typing import (
 
 import bunch
 import click
+from openr.cli.utils.options import getDefaultOptions
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
@@ -42,9 +44,9 @@ from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object, object_to_dict
-from thrift.protocol import THeaderProtocol
-from thrift.transport import THeaderTransport, TSocket
-
+from thrift.py.client.common import ClientType, Protocol, SSLContext, SSLVerifyOption
+from thrift.py.client.sync_client_factory import get_client
+from thrift.transport.TTransport import TTransportException
 
 PrintAdvertisedTypes = Union[
     ctrl_types.AdvertisedRoute,
@@ -134,6 +136,29 @@ def time_since(timestamp) -> str:
     return fmt.format(**d)
 
 
+def get_ssl_context(options: bunch.Bunch) -> Optional[SSLContext]:
+    # The options are the local settings to connect to the host
+
+    ssl_context = None
+    # Create ssl context if specified
+    if options.ssl:
+        # Translate ssl verification option
+        ssl_verify_opt = SSLVerifyOption.NO_VERIFY
+        if options.cert_reqs == ssl.CERT_OPTIONAL:
+            ssl_verify_opt = SSLVerifyOption.VERIFY_REQ_CLIENT_CERT
+        if options.cert_reqs == ssl.CERT_REQUIRED:
+            ssl_verify_opt = SSLVerifyOption.VERIFY
+
+        # Create ssl context
+        ssl_context = SSLContext()
+        ssl_context.set_verify_option(ssl_verify_opt)
+        ssl_context.load_cert_chain(
+            certfile=options.cert_file, keyfile=options.key_file
+        )
+        ssl_context.load_verify_locations(cafile=options.ca_file)
+    return ssl_context
+
+
 def get_fib_agent_client(
     host, port, timeout_ms, client_id=platform_types.FibClient.OPENR, service=FibService
 ):
@@ -146,15 +171,39 @@ def get_fib_agent_client(
     :returns: The thrift client
     :rtype: FibService.Client
     """
-    transport = TSocket.TSocket(host, port)
-    transport.setTimeout(timeout_ms)
-    transport = THeaderTransport.THeaderTransport(transport)
-    protocol = THeaderProtocol.THeaderProtocol(transport)
-    client = service.Client(protocol)
-    client.host = host  # Assign so that we can refer later on
-    client.port = port  # Assign so that we can refer later on
+
+    ssl_context = get_ssl_context(getDefaultOptions(host))
+    try:
+        client = get_client(
+            service.Client,
+            host=host,
+            port=port,
+            timeout=float(timeout_ms) / 1000.0,  # NOTE: Timeout expected is in seconds
+            client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+            protocol=Protocol.BINARY,
+            ssl_context=ssl_context,
+            ssl_timeout=float(timeout_ms)
+            / 1000.0,  # NOTE: Timeout expected is in seconds
+        )
+    except TTransportException as e:
+        if ssl_context is not None:
+            # cannot establish tls, fallback to plain text
+            client = get_client(
+                service.Client,
+                host=host,
+                port=port,
+                timeout=float(timeout_ms)
+                / 1000.0,  # NOTE: Timeout expected is in seconds
+                client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+                protocol=Protocol.BINARY,
+                ssl_context=None,
+                ssl_timeout=float(timeout_ms)
+                / 1000.0,  # NOTE: Timeout expected is in seconds
+            )
+        else:
+            raise e
+
     client.client_id = client_id  # Assign so that we can refer later on
-    transport.open()
     return client
 
 
