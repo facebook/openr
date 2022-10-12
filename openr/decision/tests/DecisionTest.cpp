@@ -440,7 +440,7 @@ updatePrefixDatabase(
   auto const& nodeName = *prefixDb.thisNodeName();
 
   std::unordered_set<PrefixKey> oldKeys, newKeys;
-  auto oldDb = getPrefixDbForNode(state, prefixDb.get_thisNodeName(), area);
+  auto oldDb = getPrefixDbForNode(state, prefixDb.thisNodeName().value(), area);
   for (auto const& entry : *oldDb.prefixEntries()) {
     oldKeys.emplace(nodeName, toIPNetwork(*entry.prefix()), area);
   }

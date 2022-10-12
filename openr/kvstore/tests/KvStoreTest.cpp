@@ -410,27 +410,36 @@ TEST_F(KvStoreTestFixture, ResyncUponInconsistentUpdate) {
           EXPECT_EQ(1, allKeyVals.size());
           auto val = allKeyVals[key];
           // compare everything except ttl version
-          EXPECT_EQ(version + 1, val.get_version());
-          EXPECT_EQ(thriftVal.get_originatorId(), val.get_originatorId());
-          EXPECT_EQ(*thriftVal.get_value(), *val.get_value());
+          EXPECT_EQ(version + 1, val.version().value());
+          EXPECT_EQ(
+              thriftVal.originatorId().value(), val.originatorId().value());
+          EXPECT_EQ(
+              *apache::thrift::get_pointer(thriftVal.value()),
+              *apache::thrift::get_pointer(val.value()));
         }
         {
           auto allKeyVals = inconsistentStore->dumpAll(kTestingAreaName);
           EXPECT_EQ(1, allKeyVals.size());
           auto val = allKeyVals[key];
           // compare everything except ttl version
-          EXPECT_EQ(version + 1, val.get_version());
-          EXPECT_EQ(thriftVal.get_originatorId(), val.get_originatorId());
-          EXPECT_EQ(*thriftVal.get_value(), *val.get_value());
+          EXPECT_EQ(version + 1, val.version().value());
+          EXPECT_EQ(
+              thriftVal.originatorId().value(), val.originatorId().value());
+          EXPECT_EQ(
+              *apache::thrift::get_pointer(thriftVal.value()),
+              *apache::thrift::get_pointer(val.value()));
         }
         {
           auto allKeyVals = storeC->dumpAll(kTestingAreaName);
           EXPECT_EQ(1, allKeyVals.size());
           auto val = allKeyVals[key];
           // compare everything except ttl version
-          EXPECT_EQ(version + 1, val.get_version());
-          EXPECT_EQ(thriftVal.get_originatorId(), val.get_originatorId());
-          EXPECT_EQ(*thriftVal.get_value(), *val.get_value());
+          EXPECT_EQ(version + 1, val.version().value());
+          EXPECT_EQ(
+              thriftVal.originatorId().value(), val.originatorId().value());
+          EXPECT_EQ(
+              *apache::thrift::get_pointer(thriftVal.value()),
+              *apache::thrift::get_pointer(val.value()));
         }
 
         evb.stop();
