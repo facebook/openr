@@ -1051,6 +1051,7 @@ KvStoreDb<ClientType>::stop() {
     selfOriginatedTtlUpdatesThrottled_.reset();
     unsetSelfOriginatedKeysThrottled_.reset();
     advertiseSelfOriginatedKeysThrottled_.reset();
+    ttlCountdownTimer_.reset();
     XLOG(INFO) << AreaTag() << "Successfully destroyed thriftPeers and timers";
   });
 
