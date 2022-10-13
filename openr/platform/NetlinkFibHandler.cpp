@@ -13,6 +13,8 @@
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
 
+#include <net/if.h>
+
 namespace openr {
 
 namespace {
@@ -545,13 +547,31 @@ NetlinkFibHandler::buildMplsRoute(
   return rtBuilder.setValid(true).build();
 }
 
+void
+NetlinkFibHandler::checkIfIndex(const int ifIndex) {
+  char indexName[IF_NAMESIZE];
+  if (if_indextoname(ifIndex, indexName) == nullptr) {
+    XLOG(INFO)
+        << "ifIndex " << ifIndex
+        << " is invalid, setting flag to reload ifIndex cache on next request";
+    cacheInvalid_ = true;
+  }
+}
+
 std::optional<int>
 NetlinkFibHandler::getIfIndex(const std::string& ifName) {
+  // The cache can become invalid if network interfaces are destroyed and
+  // recreated. If the cache is found to be invalid, rebuild the cache.
+  if (cacheInvalid_) {
+    initializeInterfaceCache();
+    cacheInvalid_ = false;
+  }
   // Lambda function to lookup ifName in cache
   auto getCachedIndex = [this, &ifName]() -> std::optional<int> {
     auto cache = ifNameToIndex_.rlock();
     auto it = cache->find(ifName);
     if (it != cache->end()) {
+      checkIfIndex(it->second);
       return it->second;
     }
     return std::nullopt;

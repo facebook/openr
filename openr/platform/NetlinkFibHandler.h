@@ -176,6 +176,12 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
   NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
 
   /**
+   * Test if ifindex returned by cache is valid or not,
+   * if invalid we set a flag and on next request update cache
+   */
+  void checkIfIndex(const int ifIndex);
+
+  /**
    * Initialize cache related to interfaces. Especially loopbackIfIndex_
    * and interface name <-> index mappings
    */
@@ -190,6 +196,9 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
 
   // Time when service started, in number of seconds, since epoch
   const int64_t startTime_{0};
+
+  // Flag indicating the interface cache contains invalid entries
+  bool cacheInvalid_{false};
 };
 
 } // namespace openr
