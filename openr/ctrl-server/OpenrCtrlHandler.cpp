@@ -725,7 +725,12 @@ OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
 //
 folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
 OpenrCtrlHandler::semifuture_getDispatcherFilters() {
-  CHECK(dispatcher_);
+  if (not dispatcher_) {
+    folly::Promise<std::unique_ptr<std::vector<std::vector<std::string>>>> p;
+    auto sf = p.getSemiFuture();
+    p.setValue(nullptr);
+    return sf;
+  }
   return dispatcher_->getDispatcherFilters();
 }
 
