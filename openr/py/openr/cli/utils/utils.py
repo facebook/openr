@@ -2043,3 +2043,33 @@ def adjs_nexthop_to_neighbor_name(client: OpenrCtrl.Client) -> Dict[bytes, str]:
                 ips_to_node_names[adj.nextHopV4.addr] = adj.otherNodeName
 
     return ips_to_node_names
+
+
+def print_filters_table(filters: List[List[str]], json: bool) -> None:
+    """print Dispatcher filters
+
+    :param filters as list of lists
+    """
+
+    column_labels = ["Reader ID", "Prefix Filters"]
+
+    output = []
+    for i, prefix_filters in enumerate(filters):
+        reader = "#{}".format(i)
+
+        # replace the empty filter by a tag "(empty prefix: match all)"
+        prefix_filters = [
+            f if f else "(empty prefix: match all)" for f in prefix_filters
+        ]
+        if prefix_filters:
+            row = [reader, ", ".join(prefix_filters)]
+        else:
+            row = [reader, "(no filter: unfiltered)"]
+
+        output.append(row)
+
+    if json:
+        json_data = {k: v for k, v in output}
+        print(json_dumps(json_data))
+    else:
+        print(printing.render_horizontal_table(output, column_labels))

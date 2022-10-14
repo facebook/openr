@@ -8,6 +8,7 @@ import click
 from openr.cli.clis import (
     config,
     decision,
+    dispatcher,
     fib,
     kvstore,
     lm,
@@ -76,6 +77,7 @@ def get_breeze_cli():
     # add cli submodules
     cli.add_command(config.ConfigCli().config)
     cli.add_command(decision.DecisionCli().decision)
+    cli.add_command(dispatcher.DispatcherCli().dispatcher)
     cli.add_command(fib.FibCli().fib)
     cli.add_command(kvstore.KvStoreCli().kvstore)
     cli.add_command(lm.LMCli().lm)
