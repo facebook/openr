@@ -17,6 +17,11 @@ from openr.utils import consts
 from thrift.protocol import THeaderProtocol
 from thrift.py.client.common import ClientType, Protocol, SSLContext, SSLVerifyOption
 from thrift.py.client.sync_client_factory import get_client
+from thrift.py3.client import ClientType as ClientTypePy3, get_client as get_client_py3
+from thrift.py3.ssl import (
+    SSLContext as SSLContextPy3,
+    SSLVerifyOption as SSLVerifyOptionPy3,
+)
 from thrift.transport import THeaderTransport, TSocket, TSSLSocket
 from thrift.transport.TTransport import TTransportException
 
@@ -119,21 +124,25 @@ def get_openr_ctrl_client(
         )
 
 
-def get_ssl_context(options: bunch.Bunch) -> Optional[SSLContext]:
+def get_ssl_context(
+    options: bunch.Bunch,
+    ssl_context_class=SSLContext,
+    ssl_verify_option_class=SSLVerifyOption,
+):
     # The options are the local settings to connect to the host
 
-    ssl_context: Optional[SSLContext] = None
+    ssl_context = None
     # Create ssl context if specified
     if options.ssl:
         # Translate ssl verification option
-        ssl_verify_opt = SSLVerifyOption.NO_VERIFY
+        ssl_verify_opt = ssl_verify_option_class.NO_VERIFY
         if options.cert_reqs == ssl.CERT_OPTIONAL:
-            ssl_verify_opt = SSLVerifyOption.VERIFY_REQ_CLIENT_CERT
+            ssl_verify_opt = ssl_verify_option_class.VERIFY_REQ_CLIENT_CERT
         if options.cert_reqs == ssl.CERT_REQUIRED:
-            ssl_verify_opt = SSLVerifyOption.VERIFY
+            ssl_verify_opt = ssl_verify_option_class.VERIFY
 
         # Create ssl context
-        ssl_context = SSLContext()
+        ssl_context = ssl_context_class()
         ssl_context.set_verify_option(ssl_verify_opt)
         ssl_context.load_cert_chain(
             certfile=options.cert_file, keyfile=options.key_file
@@ -199,7 +208,7 @@ def get_fib_agent_client(
 def get_openr_ctrl_cpp_client(
     host: str,
     options: Optional[bunch.Bunch] = None,
-    client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+    client_type=ClientTypePy3.THRIFT_HEADER_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient:
     """
     Utility function to get py3 OpenrClient. We must eventually move all of our
@@ -212,12 +221,16 @@ def get_openr_ctrl_cpp_client(
     options = options if options else getDefaultOptions(host)
 
     # Create and return client
-    return get_client(
+    return get_client_py3(
         OpenrCtrlCppClient,
         host=host,
         port=options.openr_ctrl_port,
         timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
         client_type=client_type,
-        ssl_context=get_ssl_context(options),
+        ssl_context=get_ssl_context(
+            options=options,
+            ssl_context_class=SSLContextPy3,
+            ssl_verify_option_class=SSLVerifyOptionPy3,
+        ),
         ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
     )
