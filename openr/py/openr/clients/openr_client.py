@@ -11,19 +11,21 @@ from typing import Optional
 import bunch
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
-from openr.Platform import FibService, ttypes as platform_types
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Platform.thrift_clients import FibService as FibServiceClient
+from openr.thrift.Platform.thrift_types import FibClient
 from openr.utils import consts
 from thrift.protocol import THeaderProtocol
-from thrift.py.client.common import ClientType, Protocol, SSLContext, SSLVerifyOption
-from thrift.py.client.sync_client_factory import get_client
 from thrift.py3.client import ClientType as ClientTypePy3, get_client as get_client_py3
 from thrift.py3.ssl import (
     SSLContext as SSLContextPy3,
     SSLVerifyOption as SSLVerifyOptionPy3,
 )
+from thrift.python.client import ClientType, get_sync_client
+from thrift.python.client.ssl import SSLContext, SSLVerifyOption
+from thrift.python.exceptions import TransportError
+from thrift.python.serializer import Protocol
 from thrift.transport import THeaderTransport, TSocket, TSSLSocket
-from thrift.transport.TTransport import TTransportException
 
 
 class OpenrCtrlClient(OpenrCtrl.Client):
@@ -155,22 +157,25 @@ def get_fib_agent_client(
     host: str,
     port: int,
     timeout_ms: int,
-    client_id: int = platform_types.FibClient.OPENR,
+    client_id: int = FibClient.OPENR,
 ):
     """
-    Get thrift client for talking to Fib thrift service
+    Get thrift-python client for talking to Fib thrift service
 
     :param host: thrift server name or ip
     :param port: thrift server port
 
-    :returns: The thrift client
-    :rtype: FibService.Client
+    :returns: The (sync) thrift-python client
+
+    NOTE: We get a sync client here as we currently use sync clients in FibAgentCmd.
+    When we migrate to async client, we just need to change the function
+    `get_sync_client` below to `get_client`, which provides the async client.
     """
 
     ssl_context: Optional[SSLContext] = get_ssl_context(getDefaultOptions(host))
     try:
-        client: FibService.Client = get_client(
-            FibService.Client,
+        client = get_sync_client(
+            FibServiceClient,
             host=host,
             port=port,
             timeout=float(timeout_ms) / 1000.0,  # NOTE: Timeout expected is in seconds
@@ -180,11 +185,11 @@ def get_fib_agent_client(
             ssl_timeout=float(timeout_ms)
             / 1000.0,  # NOTE: Timeout expected is in seconds
         )
-    except TTransportException as e:
+    except TransportError as e:
         if ssl_context is not None:
             # cannot establish tls, fallback to plain text
-            client: FibService.Client = get_client(
-                FibService.Client,
+            client = get_sync_client(
+                FibServiceClient,
                 host=host,
                 port=port,
                 timeout=float(timeout_ms)
@@ -199,7 +204,7 @@ def get_fib_agent_client(
             raise e
 
     # Assign so that we can refer to later on
-    # Pyre does not allow us to assign a non-existing attribute to FibService.Client
+    # Pyre does not allow us to assign a non-existing attribute to FibServiceClient
     # Therefore we need to explicitly ignore the error
     client.client_id = client_id  # pyre-ignore
     return client
