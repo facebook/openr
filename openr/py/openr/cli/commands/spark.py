@@ -13,7 +13,7 @@ from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
-from openr.thrift.KvStore import types as kv_store_types_py3
+from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
 
@@ -171,7 +171,7 @@ class ValidateCmd(SparkBaseCmd):
             init_is_pass,
             init_err_msg_str,
             init_dur_str,
-            kv_store_types_py3.InitializationEvent.NEIGHBOR_DISCOVERED,
+            InitializationEvent.NEIGHBOR_DISCOVERED,
             "spark",
         )
         self._print_neighbor_regex_info(regex_invalid_neighbors, regex_dict, detail)

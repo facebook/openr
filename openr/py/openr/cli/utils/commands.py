@@ -13,7 +13,11 @@ import bunch
 import click
 from openr.clients.openr_client import get_openr_ctrl_client
 from openr.KvStore import ttypes as kv_store_types
-from openr.thrift.KvStore import types as kv_store_types_py3
+from openr.thrift.KvStore.thrift_types import (
+    InitializationEvent,
+    InitializationEventTimeDuration,
+    InitializationEventTimeLabels,
+)
 from openr.utils import printing
 from openr.utils.consts import Consts
 
@@ -226,19 +230,15 @@ class OpenrCtrlCmd:
             is_pass = False
             err_msg_str = f"{init_event_name} event is not published"
         else:
-            warning_label = kv_store_types_py3.InitializationEventTimeLabels[
+            warning_label = InitializationEventTimeLabels[
                 f"{init_event_name}_WARNING_MS"
             ]
-            timeout_label = kv_store_types_py3.InitializationEventTimeLabels[
+            timeout_label = InitializationEventTimeLabels[
                 f"{init_event_name}_TIMEOUT_MS"
             ]
 
-            warning_time = kv_store_types_py3.InitializationEventTimeDuration[
-                warning_label
-            ]
-            timeout_time = kv_store_types_py3.InitializationEventTimeDuration[
-                timeout_label
-            ]
+            warning_time = InitializationEventTimeDuration[warning_label]
+            timeout_time = InitializationEventTimeDuration[timeout_label]
 
             init_event_dur = init_event_dict[init_event]
 
@@ -282,7 +282,7 @@ class OpenrCtrlCmd:
         is_pass: bool,
         err_msg_str: Optional[str],
         dur_str: Optional[str],
-        init_event: kv_store_types_py3.InitializationEvent,
+        init_event: InitializationEvent,
         module: str,
     ) -> None:
         """

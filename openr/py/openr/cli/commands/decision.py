@@ -16,7 +16,7 @@ from openr.clients.openr_client import get_fib_agent_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
-from openr.thrift.KvStore import types as kv_store_types_py3
+from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -456,7 +456,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             init_is_pass,
             init_err_msg_str,
             init_dur_str,
-            kv_store_types_py3.InitializationEvent.RIB_COMPUTED,
+            InitializationEvent.RIB_COMPUTED,
             "decision",
         )
 

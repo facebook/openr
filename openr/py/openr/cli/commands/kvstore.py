@@ -33,6 +33,7 @@ from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import StreamSubscriberType
 from openr.thrift.KvStore import types as kvstore_types_py3
+from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
@@ -1399,7 +1400,7 @@ class ValidateCmd(KvStoreCmdBase):
             init_is_pass,
             init_err_msg_str,
             init_dur_str,
-            kvstore_types_py3.InitializationEvent.KVSTORE_SYNCED,
+            InitializationEvent.KVSTORE_SYNCED,
             "KvStore",
         )
 
