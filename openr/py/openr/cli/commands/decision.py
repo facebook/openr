@@ -4,7 +4,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-
 import ipaddress
 import sys
 from collections import defaultdict
@@ -444,16 +443,15 @@ class DecisionValidateCmd(OpenrCtrlCmd):
     ) -> int:
         """Returns a status code. 0 = success, >= 1 failure"""
 
+        # Global error counter
         errors = 0
 
+        # Validate Open/R Initialization Event
         initialization_events = self.fetch_initialization_events(client)
         init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
             kv_store_types.InitializationEvent.RIB_COMPUTED,
         )
-
-        errors += 0 if init_is_pass else 1
-
         self.print_initialization_event_check(
             init_is_pass,
             init_err_msg_str,
@@ -462,6 +460,10 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             "decision",
         )
 
+        errors += 0 if init_is_pass else 1
+
+        # ATTN: validate cmd can run against specified area.
+        # By default, it runs against ALL areas.
         if not areas:
             areas_summary = client.getKvStoreAreaSummary(set())
             areas = tuple(a.area for a in areas_summary)
@@ -474,9 +476,13 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                 client, area
             )
 
+            # set to be populated by:
+            #   - self.print_db_delta_adj();
+            #   - self.print_db_delta_prefix();
             kvstore_adj_node_names = set()
             kvstore_prefix_node_names = set()
 
+            # check adj db delta between decision and kvstore
             for key, value in sorted(kvstore_keyvals.items()):
                 if key.startswith(Consts.ADJ_DB_MARKER):
                     return_code = self.print_db_delta_adj(
@@ -486,6 +492,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
                         errors += return_code
                         continue
 
+            # check prefix db delta between decision and kvstore
             return_code, decision_prefix_node_names = self.print_db_delta_prefix(
                 kvstore_keyvals,
                 kvstore_prefix_node_names,
@@ -550,6 +557,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
     ) -> int:
         """Returns status code. 0 = success, 1 = failure"""
 
+        # fetch the adj database for one particular node
         kvstore_adj_db = deserialize_thrift_object(
             value.value, openr_types.AdjacencyDatabase
         )
@@ -563,11 +571,14 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             )
             return 1
 
+        # fetch the corresponding node's adj database inside decision
         decision_adj_db = openr_types.AdjacencyDatabase()
         for db in decision_adj_dbs:
             if db.thisNodeName == node_name:
                 decision_adj_db = db
+                break
 
+        # compare and find delta
         return_code = 0
         if json_opt:
             tags = ("in_decision", "in_kvstore", "changed_in_decision_and_kvstore")
@@ -609,8 +620,8 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
         decision_prefix_nodes = set()
         for received_route_detail in decision_prefix_dbs:
-            for node_and_area in received_route_detail.bestKeys:
-                decision_prefix_nodes.add(node_and_area.node)
+            for route in received_route_detail.routes:
+                decision_prefix_nodes.add(route.key.node)
 
         for node_name, prefix_db in prefix_maps.items():
             kvstore_prefix_node_names.add(node_name)
