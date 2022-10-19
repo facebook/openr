@@ -1410,8 +1410,8 @@ class ValidateCmd(KvStoreCmdBase):
         self, area_to_publication_dict: Dict[str, kvstore_types.Publication]
     ) -> Tuple[bool, bool]:
         """
-        Checks if the local node is advertising atleast one adjacency key and one prefix key
-        to the kvstore. Returns a boolean for each
+        Checks if the local node is advertising atleast one adjacency key and
+        one prefix key to the kvstore. Returns a boolean for each key type.
         """
 
         keys = []
@@ -1435,7 +1435,8 @@ class ValidateCmd(KvStoreCmdBase):
     ) -> Dict[str, Dict[str, kvstore_types_py3.PeerSpec]]:
         """
         Checks if all peers are in INITIALIZED state,
-        returns a dictionary of {area : peersmap of peers} which are not in INITIALIZED state
+        returns a dictionary of {area : peersmap of peers} which are not in
+        INITIALIZED state.
         """
 
         invalid_peers = defaultdict(dict)
@@ -1461,11 +1462,14 @@ class ValidateCmd(KvStoreCmdBase):
             invalid_keyvals = {
                 k: v
                 for (k, v) in publication.keyVals.items()
-                if v.ttl < threshold * ttl  # Since we renew every ttl/4
+                # - the left ttl should be over ttl * 3/4 given refreshing
+                #   interval is every ttl/4;
+                # - ttl can be INFINITY(represented by -1). Skip alerting;
+                if (v.ttl >= 0 and v.ttl < threshold * ttl)
+                or (v.ttl < 0 and v.ttl != Consts.CONST_TTL_INF)
             }
 
-            # We map to a publication since _print_key_ttl_check() and print_kvstore_keys()
-            # take in dict {area : publication}
+            # Map the invalid k-v pairs to a publication for displaying purpose
             if len(invalid_keyvals) > 0:
                 area_to_invalid_keyvals[area] = kvstore_types.Publication(
                     keyVals=invalid_keyvals

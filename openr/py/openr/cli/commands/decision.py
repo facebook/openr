@@ -460,7 +460,8 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             "decision",
         )
 
-        errors += 0 if init_is_pass else 1
+        if not init_is_pass:
+            errors += 1
 
         # ATTN: validate cmd can run against specified area.
         # By default, it runs against ALL areas.
