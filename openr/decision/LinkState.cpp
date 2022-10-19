@@ -585,11 +585,11 @@ LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
 
 LinkState::LinkStateChange
 LinkState::updateAdjacencyDatabase(
-    thrift::AdjacencyDatabase const& newAdjacencyDb,
-    std::string area,
-    LinkStateMetric holdUpTtl,
-    LinkStateMetric holdDownTtl) {
+    thrift::AdjacencyDatabase const& newAdjacencyDb, std::string area) {
   LinkStateChange change;
+
+  // TODO remove holdable value
+  LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
 
   // Area field must be specified and match with area_
   DCHECK_EQ(area_, area);

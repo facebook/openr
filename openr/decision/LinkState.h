@@ -414,10 +414,7 @@ class LinkState {
 
   // update adjacencies for the given router
   LinkStateChange updateAdjacencyDatabase(
-      thrift::AdjacencyDatabase const& adjacencyDb,
-      std::string area,
-      LinkStateMetric holdUpTtl = 0,
-      LinkStateMetric holdDownTtl = 0);
+      thrift::AdjacencyDatabase const& adjacencyDb, std::string area);
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph

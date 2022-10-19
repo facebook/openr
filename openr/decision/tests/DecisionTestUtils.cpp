@@ -37,7 +37,7 @@ getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
           ((node << 16) + adj)));
     }
     linkState.updateAdjacencyDatabase(
-        createAdjDb(format("{}", node), adjs, node), kTestingAreaName, 0, 0);
+        createAdjDb(format("{}", node), adjs, node), kTestingAreaName);
   }
   return linkState;
 }

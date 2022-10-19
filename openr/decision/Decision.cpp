@@ -719,13 +719,10 @@ Decision::updateKeyInLsdb(
       filterUnuseableAdjacency(adjacencyDb);
 
       auto& nodeName = *adjacencyDb.thisNodeName();
-      LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
-      // TODO: deprecate area_ref()
       adjacencyDb.area() = area;
       pendingUpdates_.applyLinkStateChange(
           nodeName,
-          areaLinkState.updateAdjacencyDatabase(
-              adjacencyDb, area, holdUpTtl, holdDownTtl),
+          areaLinkState.updateAdjacencyDatabase(adjacencyDb, area),
           adjacencyDb.perfEvents());
       return;
     }
