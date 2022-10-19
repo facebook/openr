@@ -4,6 +4,7 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
+
 import asyncio
 import datetime
 import ipaddress
@@ -261,6 +262,9 @@ class FibValidateRoutesCmd(FibAgentCmd):
 
         all_success = True
 
+        # fetch openr config for comparison
+        openr_config = self.fetch_running_config_thrift(client)
+
         try:
             decision_route_db = None
             fib_route_db = None
@@ -287,6 +291,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             print("Exception: {}".format(e))
             raise e
 
+        # compare UNICAST route database between Decision and Fib module
         (ret, _) = utils.compare_route_db(
             decision_unicast_routes,
             fib_unicast_routes,
@@ -296,6 +301,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
         )
         all_success = all_success and ret
 
+        # compare MPLS route database between Decision and Fib module
         (ret, _) = utils.compare_route_db(
             decision_mpls_routes,
             fib_mpls_routes,
@@ -305,31 +311,35 @@ class FibValidateRoutesCmd(FibAgentCmd):
         )
         all_success = all_success and ret
 
-        (ret, _) = utils.compare_route_db(
-            fib_unicast_routes,
-            agent_unicast_routes,
-            "unicast",
-            ["Openr-Fib:unicast", "FibAgent:unicast"],
-            suppress_error,
-        )
-        all_success = all_success and ret
-
-        # for backward compatibily of Open/R binary
-        try:
-            agent_mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(
-                self.fib_agent_client.client_id
-            )
+        # ATTN: with dryrun=true. Fib module will skip programming routes
+        if not openr_config.dryrun:
+            # compare UNICAST route database between Fib module and FibAgent
             (ret, _) = utils.compare_route_db(
-                fib_mpls_routes,
-                agent_mpls_routes,
-                "mpls",
-                ["Openr-Fib:mpls", "FibAgent:mpls"],
+                fib_unicast_routes,
+                agent_unicast_routes,
+                "unicast",
+                ["Openr-Fib:unicast", "FibAgent:unicast"],
                 suppress_error,
             )
             all_success = all_success and ret
-        except Exception:
-            pass
 
+            # compare MPLS route database between Fib module and FibAgent
+            try:
+                agent_mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(
+                    self.fib_agent_client.client_id
+                )
+                (ret, _) = utils.compare_route_db(
+                    fib_mpls_routes,
+                    agent_mpls_routes,
+                    "mpls",
+                    ["Openr-Fib:mpls", "FibAgent:mpls"],
+                    suppress_error,
+                )
+                all_success = all_success and ret
+            except Exception:
+                pass
+
+        # validate UNICAST routes nexthops
         (ret, _) = utils.validate_route_nexthops(
             fib_unicast_routes,
             lm_links,

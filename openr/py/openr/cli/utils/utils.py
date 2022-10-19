@@ -1514,7 +1514,7 @@ def validate_route_nexthops(routes, interfaces, sources, quiet: bool = False):
                 click.echo(click.style("PASS", bg="green", fg="black"))
             else:
                 click.echo("PASS")
-            print("Route validation successful")
+            print("Route nexthop validation successful")
         return True, error_msg
 
     # Something failed.. report it
@@ -1523,7 +1523,7 @@ def validate_route_nexthops(routes, interfaces, sources, quiet: bool = False):
             click.echo(click.style("FAIL", bg="red", fg="black"))
         else:
             click.echo("FAIL")
-        print("Route validation failed")
+        print("Route nexthop validation failed")
     # Output report per error type
     for err, route_db in invalid_routes.items():
         caption = "Error: {}".format(err)
