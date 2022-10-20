@@ -36,7 +36,7 @@ from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
-from openr.thrift.Network import types as network_types_py3
+from openr.thrift.Network import thrift_types as network_types_python
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
@@ -1536,7 +1536,7 @@ def validate_route_nexthops(routes, interfaces, sources, quiet: bool = False):
 
 
 def mpls_action_to_str(
-    mpls_action: Union[network_types.MplsAction, network_types_py3.MplsAction]
+    mpls_action: Union[network_types.MplsAction, network_types_python.MplsAction]
 ) -> str:
     """
     Convert Network.MplsAction to string representation
@@ -1559,7 +1559,7 @@ def mpls_action_to_str(
 
 
 def ip_nexthop_to_str(
-    nextHop: Union[network_types.NextHopThrift, network_types_py3.NextHopThrift],
+    nextHop: Union[network_types.NextHopThrift, network_types_python.NextHopThrift],
     ignore_v4_iface: bool = False,
     ignore_v6_iface: bool = False,
 ) -> str:
@@ -1592,7 +1592,7 @@ def ip_nexthop_to_str(
 def print_unicast_routes(
     caption: str,
     unicast_routes: Union[
-        Sequence[network_types_py3.UnicastRoute], List[network_types.UnicastRoute]
+        Sequence[network_types_python.UnicastRoute], List[network_types.UnicastRoute]
     ],
     prefixes: Optional[List[str]] = None,
     element_prefix: str = ">",
@@ -1642,7 +1642,7 @@ def print_unicast_routes(
 
 
 def build_unicast_route(
-    route: Union[network_types_py3.UnicastRoute, network_types.UnicastRoute],
+    route: Union[network_types_python.UnicastRoute, network_types.UnicastRoute],
     filter_for_networks: Optional[
         List[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]
     ] = None,
@@ -1679,7 +1679,7 @@ def build_unicast_route(
 def print_mpls_routes(
     caption: str,
     mpls_routes: Union[
-        List[network_types.MplsRoute], Sequence[network_types_py3.MplsRoute]
+        List[network_types.MplsRoute], Sequence[network_types_python.MplsRoute]
     ],
     labels: Optional[List[int]] = None,
     element_prefix: str = ">",

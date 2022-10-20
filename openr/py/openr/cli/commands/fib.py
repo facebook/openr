@@ -20,12 +20,11 @@ from openr.clients.openr_client import get_fib_agent_client, get_openr_ctrl_cpp_
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import StreamSubscriberType
-from openr.thrift.Network import types as network_types_py3
-from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
-from openr.thrift.Types import types as openr_types_py3
-from openr.Types import ttypes as openr_types
+from openr.thrift.Network.thrift_types import IpPrefix
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types.thrift_types import RouteDatabase, RouteDatabaseDelta
 from openr.utils import ipnetwork, printing
-from thrift.py3.client import ClientType
+from thrift.python.client import ClientType
 
 
 class FibCmdBase(OpenrCtrlCmd):
@@ -353,9 +352,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
 class FibSnoopCmd(FibCmdBase):
     def print_ip_prefixes_filtered(
         self,
-        ip_prefixes: Union[
-            Sequence[network_types_py3.IpPrefix], List[network_types.IpPrefix]
-        ],
+        ip_prefixes: Union[Sequence[IpPrefix], List[network_types.IpPrefix]],
         prefixes_filter: Optional[List[str]] = None,
         element_prefix: str = ">",
         element_suffix: str = "",
@@ -419,10 +416,7 @@ class FibSnoopCmd(FibCmdBase):
 
     def print_route_db_delta(
         self,
-        delta_db: Union[
-            openr_types.RouteDatabaseDelta,
-            openr_types_py3.RouteDatabaseDelta,
-        ],
+        delta_db: RouteDatabaseDelta,
         prefixes: Optional[List[str]] = None,
     ) -> None:
         """print the RouteDatabaseDelta from Fib module"""
@@ -463,7 +457,7 @@ class FibSnoopCmd(FibCmdBase):
 
     def print_route_db(
         self,
-        route_db: Union[openr_types.RouteDatabase, openr_types_py3.RouteDatabase],
+        route_db: RouteDatabase,
         prefixes: Optional[List[str]] = None,
         labels: Optional[List[int]] = None,
     ) -> None:
@@ -506,7 +500,7 @@ class FibSnoopCmd(FibCmdBase):
 
     async def _run(
         self,
-        client: OpenrCtrlCppClient,
+        client: OpenrCtrlCppClient.Async,
         duration: int,
         initial_dump: bool,
         prefixes: List[str],
@@ -514,7 +508,7 @@ class FibSnoopCmd(FibCmdBase):
         **kwargs,
     ) -> None:
 
-        initialDb, updates = (await client.subscribeAndGetFib()).__iter__()
+        initialDb, updates = await client.subscribeAndGetFib()
         # Print summary
         print(f" Routes for {initialDb.thisNodeName}.")
         print(f" {len(initialDb.unicastRoutes)} unicast routes in initial dump.")
@@ -587,7 +581,7 @@ class StreamSummaryCmd(FibCmdBase):
 
     async def _run(
         self,
-        client: OpenrCtrlCppClient,
+        client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> None:

@@ -18,7 +18,17 @@ from builtins import str
 from collections import defaultdict
 from collections.abc import Iterable
 from itertools import combinations
-from typing import AbstractSet, Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import (
+    AbstractSet,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Set,
+    Tuple,
+)
 
 import bunch
 import click
@@ -33,12 +43,18 @@ from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import StreamSubscriberType
 from openr.thrift.KvStore import types as kvstore_types_py3
-from openr.thrift.KvStore.thrift_types import InitializationEvent
-from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.KvStore.thrift_types import (
+    FilterOperator,
+    InitializationEvent,
+    KeyDumpParams,
+    Publication,
+    Value,
+)
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
 from openr.utils.consts import Consts
-from thrift.py3.client import ClientType
+from thrift.python.client import ClientType
 
 
 class KvStoreCmdBase(OpenrCtrlCmd):
@@ -909,7 +925,7 @@ class SnoopCmd(KvStoreCmdBase):
 
     async def _run(
         self,
-        client: OpenrCtrlCppClient,
+        client: OpenrCtrlCppClient.Async,
         delta: bool,
         ttl: bool,
         regexes: Optional[List[str]],
@@ -921,18 +937,14 @@ class SnoopCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        kvDumpParams = kvstore_types_py3.KeyDumpParams(
+        kvDumpParams = KeyDumpParams(
             ignoreTtl=not ttl,
             keys=regexes,
             originatorIds=originator_ids,
-            oper=kvstore_types_py3.FilterOperator.AND
-            if match_all
-            else kvstore_types_py3.FilterOperator.OR,
+            oper=FilterOperator.AND if match_all else FilterOperator.OR,
         )
 
         print("Retrieving and subcribing KvStore ... ")
-        # pyre-fixme[23]: Unable to unpack
-        # ResponseAndClientBufferedStream__List__Types_Publication_Types_Publication
         (snapshot, updates) = await client.subscribeAndGetAreaKvStores(
             kvDumpParams,
             select_areas,
@@ -967,7 +979,7 @@ class SnoopCmd(KvStoreCmdBase):
             else:
                 print(f"ERROR: got publication for unexpected area: {msg.area}")
 
-    def print_expired_keys(self, msg: kvstore_types.Publication, global_dbs: Dict):
+    def print_expired_keys(self, msg: Publication, global_dbs: Dict):
         rows = []
         if len(msg.expiredKeys):
             print("Traversal List: {}".format(msg.nodeIds))
@@ -999,7 +1011,7 @@ class SnoopCmd(KvStoreCmdBase):
 
     def print_delta(
         self,
-        msg: kvstore_types.Publication,
+        msg: Publication,
         ttl: bool,
         delta: bool,
         global_dbs: Dict,
@@ -1046,7 +1058,7 @@ class SnoopCmd(KvStoreCmdBase):
     def print_prefix_delta(
         self,
         key: str,
-        value: kvstore_types.Value,
+        value: Value,
         delta: bool,
         global_prefix_db: Dict,
         global_publication_db: Dict,
@@ -1076,7 +1088,7 @@ class SnoopCmd(KvStoreCmdBase):
     def print_adj_delta(
         self,
         key: str,
-        value: kvstore_types.Value,
+        value: Value,
         delta: bool,
         global_adj_db: Dict,
         global_publication_db: Dict,
@@ -1107,7 +1119,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def process_snapshot(self, resp: List[kvstore_types.Publication]) -> Dict:
+    def process_snapshot(self, resp: Sequence[Publication]) -> Dict:
         snapshots = {}
         print("Processing initial snapshots...")
         for pub in resp:
@@ -1302,7 +1314,7 @@ class StreamSummaryCmd(KvStoreCmdBase):
 
     async def _run(
         self,
-        client: OpenrCtrlCppClient,
+        client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> None:

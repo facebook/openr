@@ -11,7 +11,8 @@ from typing import Optional
 import bunch
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
-from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClientPy3
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Platform.thrift_clients import FibService as FibServiceClient
 from openr.thrift.Platform.thrift_types import FibClient
 from openr.utils import consts
@@ -21,7 +22,7 @@ from thrift.py3.ssl import (
     SSLContext as SSLContextPy3,
     SSLVerifyOption as SSLVerifyOptionPy3,
 )
-from thrift.python.client import ClientType, get_sync_client
+from thrift.python.client import ClientType, get_client, get_sync_client
 from thrift.python.client.ssl import SSLContext, SSLVerifyOption
 from thrift.python.exceptions import TransportError
 from thrift.python.serializer import Protocol
@@ -128,23 +129,21 @@ def get_openr_ctrl_client(
 
 def get_ssl_context(
     options: bunch.Bunch,
-    ssl_context_class=SSLContext,
-    ssl_verify_option_class=SSLVerifyOption,
-):
+) -> Optional[SSLContext]:
     # The options are the local settings to connect to the host
 
-    ssl_context = None
+    ssl_context: Optional[SSLContext] = None
     # Create ssl context if specified
     if options.ssl:
         # Translate ssl verification option
-        ssl_verify_opt = ssl_verify_option_class.NO_VERIFY
+        ssl_verify_opt = SSLVerifyOption.NO_VERIFY
         if options.cert_reqs == ssl.CERT_OPTIONAL:
-            ssl_verify_opt = ssl_verify_option_class.VERIFY_REQ_CLIENT_CERT
+            ssl_verify_opt = SSLVerifyOption.VERIFY_REQ_CLIENT_CERT
         if options.cert_reqs == ssl.CERT_REQUIRED:
-            ssl_verify_opt = ssl_verify_option_class.VERIFY
+            ssl_verify_opt = SSLVerifyOption.VERIFY
 
         # Create ssl context
-        ssl_context = ssl_context_class()
+        ssl_context = SSLContext()
         ssl_context.set_verify_option(ssl_verify_opt)
         ssl_context.load_cert_chain(
             certfile=options.cert_file, keyfile=options.key_file
@@ -158,7 +157,7 @@ def get_fib_agent_client(
     port: int,
     timeout_ms: int,
     client_id: int = FibClient.OPENR,
-):
+) -> FibServiceClient.Sync:
     """
     Get thrift-python client for talking to Fib thrift service
 
@@ -213,11 +212,11 @@ def get_fib_agent_client(
 def get_openr_ctrl_cpp_client(
     host: str,
     options: Optional[bunch.Bunch] = None,
-    client_type=ClientTypePy3.THRIFT_HEADER_CLIENT_TYPE,
-) -> OpenrCtrlCppClient:
+    client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+) -> OpenrCtrlCppClient.Async:
     """
-    Utility function to get py3 OpenrClient. We must eventually move all of our
-    client use-case to py3 as python2 support is deprecated.
+    Utility function to get thrift-python OpenrClient. We must eventually move all of our
+    client use-case to thrift-python as python2 support is deprecated.
     https://fburl.com/ef0eq78f
 
     Major Usecase for: py3 supports streaming
@@ -226,16 +225,53 @@ def get_openr_ctrl_cpp_client(
     options = options if options else getDefaultOptions(host)
 
     # Create and return client
-    return get_client_py3(
+    return get_client(
         OpenrCtrlCppClient,
         host=host,
         port=options.openr_ctrl_port,
         timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
         client_type=client_type,
-        ssl_context=get_ssl_context(
-            options=options,
-            ssl_context_class=SSLContextPy3,
-            ssl_verify_option_class=SSLVerifyOptionPy3,
-        ),
+        ssl_context=get_ssl_context(options=options),
+        ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
+    )
+
+
+def get_openr_ctrl_cpp_client_py3(
+    host: str,
+    options: Optional[bunch.Bunch] = None,
+    client_type=ClientTypePy3.THRIFT_HEADER_CLIENT_TYPE,
+):
+    """
+    Once we fully migrate from thrift-py3 to thrift-python, we could remove this function
+    """
+
+    options = options if options else getDefaultOptions(host)
+
+    ssl_context: Optional[SSLContextPy3] = None
+    # Create ssl context if specified
+    if options.ssl:
+        # Translate ssl verification option
+        ssl_verify_opt = SSLVerifyOptionPy3.NO_VERIFY
+        if options.cert_reqs == ssl.CERT_OPTIONAL:
+            ssl_verify_opt = SSLVerifyOptionPy3.VERIFY_REQ_CLIENT_CERT
+        if options.cert_reqs == ssl.CERT_REQUIRED:
+            ssl_verify_opt = SSLVerifyOptionPy3.VERIFY
+
+        # Create ssl context
+        ssl_context = SSLContextPy3()
+        ssl_context.set_verify_option(ssl_verify_opt)
+        ssl_context.load_cert_chain(
+            certfile=options.cert_file, keyfile=options.key_file
+        )
+        ssl_context.load_verify_locations(cafile=options.ca_file)
+
+    # Create and return client
+    return get_client_py3(
+        OpenrCtrlCppClientPy3,
+        host=host,
+        port=options.openr_ctrl_port,
+        timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
+        client_type=client_type,
+        ssl_context=ssl_context,
         ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
     )

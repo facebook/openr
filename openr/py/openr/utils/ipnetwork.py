@@ -12,6 +12,7 @@ from typing import List, Optional, Union
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
 from openr.thrift.Network import types as network_types_py3
+from openr.thrift.Network.thrift_types import IpPrefix
 from openr.Types import ttypes as openr_types
 
 
@@ -25,7 +26,7 @@ def sprint_addr(addr: bytes) -> str:
 
 
 def sprint_prefix(
-    prefix: Union[network_types_py3.IpPrefix, network_types.IpPrefix]
+    prefix: Union[IpPrefix, network_types_py3.IpPrefix, network_types.IpPrefix]
 ) -> str:
     """
     :param prefix: network_types.IpPrefix representing an CIDR network
