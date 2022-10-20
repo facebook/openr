@@ -466,7 +466,7 @@ LinkMonitor::neighborAdjSyncedEvent(const NeighborEvent& event) {
   adjIt->second.onlyUsedByOtherNode_ = false;
 
   // advertise new adjacencies in a throttled fashion
-  advertiseAdjacenciesThrottled_->operator()();
+  advertiseAdjacencies(area);
 }
 
 void
