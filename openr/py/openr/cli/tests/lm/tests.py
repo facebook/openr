@@ -32,7 +32,7 @@ class CliLmTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_lm_links(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client

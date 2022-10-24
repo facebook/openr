@@ -137,7 +137,7 @@ class CliFibTests(TestCase):
             else:
                 line_idx += 1
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_fib_unicast_routes_simple(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -177,7 +177,7 @@ class CliFibTests(TestCase):
         addr_to_name = utils.adjs_nexthop_to_neighbor_name(mocked_returned_connection)
         self.check_printed_routes(stdout_lines, MOCKED_UNICAST_ROUTELIST, addr_to_name)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_fib_unicast_routes_multiple_routes(
         self, mocked_openr_client: MagicMock
     ) -> None:

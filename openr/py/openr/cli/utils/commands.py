@@ -11,7 +11,7 @@ from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import bunch
 import click
-from openr.clients.openr_client import get_openr_ctrl_client
+from openr.clients.openr_client import get_openr_ctrl_client_py
 from openr.KvStore import ttypes as kv_store_types
 from openr.thrift.KvStore.thrift_types import (
     InitializationEvent,
@@ -46,7 +46,7 @@ class OpenrCtrlCmd:
         """
 
         ret_val: Optional[int] = 0
-        with get_openr_ctrl_client(self.host, self.cli_opts) as client:
+        with get_openr_ctrl_client_py(self.host, self.cli_opts) as client:
             ret_val = self._run(client, *args, **kwargs)
             if ret_val is None:
                 ret_val = 0
@@ -66,7 +66,7 @@ class OpenrCtrlCmd:
 
     def _get_config(self) -> Dict[str, Any]:
         if self._config is None:
-            with get_openr_ctrl_client(self.host, self.cli_opts) as client:
+            with get_openr_ctrl_client_py(self.host, self.cli_opts) as client:
                 resp = client.getRunningConfig()
                 self._config = json.loads(resp)
         return self._config

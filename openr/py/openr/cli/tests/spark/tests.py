@@ -53,7 +53,7 @@ class CliSparkTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_neighbors(self, mocked_openr_client: MagicMock) -> None:
         # Set mock data for testing
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
@@ -103,7 +103,7 @@ class CliSparkTests(TestCase):
         )
         return stdout_lines
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate(self, mocked_openr_client: MagicMock) -> None:
         # Since print output uses neighbor command, we just validate if numbers are correct
         # Testing with one non ESTABLISHED neighbor node and one ESTABLISHED node
@@ -144,7 +144,7 @@ class CliSparkTests(TestCase):
             "Incorrect number of non-ESTABLISHED neighbors",
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_all_estab(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -181,7 +181,7 @@ class CliSparkTests(TestCase):
             "Incorrect number of non-ESTABLISHED neighbors",
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_no_estab(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -218,7 +218,7 @@ class CliSparkTests(TestCase):
             "Incorrect number of non-ESTABLISHED neighbors",
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_no_neighbors(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -253,7 +253,7 @@ class CliSparkTests(TestCase):
             "Incorrect number of non-ESTABLISHED neighbors",
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_init_event(self, mocked_openr_client: MagicMock) -> None:
         # Checking when everything is good: NEIGHBOR_DISCOVERED is published and the duration is below warning
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
@@ -336,7 +336,7 @@ class CliSparkTests(TestCase):
         self.assertEqual("FAIL", init_event_pass_state)
         self.assertEqual("NEIGHBOR_DISCOVERED event is not published", error_msg_line)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_regex_accept_all(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -364,7 +364,7 @@ class CliSparkTests(TestCase):
         self.assertEqual("PASS", regex_pass_state)
         self.assertTrue(".*" in regexes_line)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_regex_diff_ids(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -422,7 +422,7 @@ class CliSparkTests(TestCase):
             f"Missing nodeName alien2 in failed neighbors string: \n {failed_neighbor}",
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_spark_validate_regex_accept_none(
         self, mocked_openr_client: MagicMock
     ) -> None:

@@ -34,7 +34,7 @@ class CliConfigTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_dryrun(self, mocked_openr_client: MagicMock) -> None:
         # Test we fail when exception is raised
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
@@ -66,7 +66,7 @@ class CliConfigTests(TestCase):
             self.assertEqual(0, invoked_return.exit_code)
 
     # TODO: Handle bad return - Code does not today - We just spew exception
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_show(self, mocked_openr_client: MagicMock) -> None:
         # Mock the thrift call used here
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(

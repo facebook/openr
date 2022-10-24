@@ -101,7 +101,7 @@ class OpenrCtrlSecureClient(OpenrCtrlClient):
         OpenrCtrlClient.__init__(self, host, THeaderTransport.THeaderTransport(socket))
 
 
-def get_openr_ctrl_client(
+def get_openr_ctrl_client_py(
     host: str, options: Optional[bunch.Bunch] = None
 ) -> OpenrCtrl.Client:
     """
@@ -159,7 +159,7 @@ def get_fib_agent_client(
     client_id: int = FibClient.OPENR,
 ) -> FibServiceClient.Sync:
     """
-    Get thrift-python client for talking to Fib thrift service
+    Get thrift-python sync client for talking to Fib thrift service
 
     :param host: thrift server name or ip
     :param port: thrift server port
@@ -215,7 +215,7 @@ def get_openr_ctrl_cpp_client(
     client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient.Async:
     """
-    Utility function to get thrift-python OpenrClient. We must eventually move all of our
+    Utility function to get thrift-python async OpenrClient. We must eventually move all of our
     client use-case to thrift-python as python2 support is deprecated.
     https://fburl.com/ef0eq78f
 
@@ -225,15 +225,39 @@ def get_openr_ctrl_cpp_client(
     options = options if options else getDefaultOptions(host)
 
     # Create and return client
-    return get_client(
-        OpenrCtrlCppClient,
-        host=host,
-        port=options.openr_ctrl_port,
-        timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
-        client_type=client_type,
-        ssl_context=get_ssl_context(options=options),
-        ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
-    )
+    ssl_context: Optional[SSLContext] = get_ssl_context(options)
+    try:
+        client = get_client(
+            OpenrCtrlCppClient,
+            host=host,
+            port=options.openr_ctrl_port,
+            timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
+            client_type=client_type,
+            ssl_context=ssl_context,
+            ssl_timeout=(
+                options.timeout / 1000
+            ),  # NOTE: Timeout expected is in seconds
+        )
+    except TransportError as e:
+        if ssl_context is not None:
+            # cannot establish tls, fallback to plain text
+            client = get_client(
+                OpenrCtrlCppClient,
+                host=host,
+                port=options.openr_ctrl_port,
+                timeout=(
+                    options.timeout / 1000
+                ),  # NOTE: Timeout expected is in seconds
+                client_type=client_type,
+                ssl_context=None,
+                ssl_timeout=(
+                    options.timeout / 1000
+                ),  # NOTE: Timeout expected is in seconds
+            )
+        else:
+            raise e
+
+    return client
 
 
 def get_openr_ctrl_cpp_client_py3(

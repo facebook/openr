@@ -246,7 +246,7 @@ class CliKvStoreTests(TestCase):
         # The last keyval is printed on the line before the next validation str
         return stdout_lines[key_start_idx:next_validation_str_idx]
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_peers(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -291,7 +291,7 @@ class CliKvStoreTests(TestCase):
             f"Expected the check to {pass_str}, instead the check {validation_state}ed",
         )
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_check_key_advertising_and_ttl_pass(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -355,7 +355,7 @@ class CliKvStoreTests(TestCase):
             True, pass_line_ttl_check
         )  # True implies we expect this check to pass
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_check_key_advertising_fail(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -448,7 +448,7 @@ class CliKvStoreTests(TestCase):
         self.assertEqual("FAIL", adj_key_advertisement_state)
         self.assertEqual("FAIL", pref_key_advertisement_state)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_validate_peer_state_pass(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -505,7 +505,7 @@ class CliKvStoreTests(TestCase):
         invalid_peer_lines = stdout_lines[10:last_peer_idx]
         self._test_kvstore_peers_helper(invalid_peer_lines, invalid_peers)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_validate_peer_state_fail(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -562,7 +562,7 @@ class CliKvStoreTests(TestCase):
             invoked_return_all_fail.stdout, expected_peers_all_fail
         )
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_check_key_ttl_fail(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -625,7 +625,7 @@ class CliKvStoreTests(TestCase):
 
         self._test_keys_helper(keyval_lines, invalid_keys)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_check_key_ttl_high_ttl(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -668,7 +668,7 @@ class CliKvStoreTests(TestCase):
         }
         self._test_keys_helper(keyval_lines, invalid_key)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
     def test_kvstore_check_init_event(self, mocked_openr_client: MagicMock) -> None:
         # Check with a different configured ttl
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(

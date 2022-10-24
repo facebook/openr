@@ -51,7 +51,7 @@ class CliDecisionTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_decision_validate_all_areas(self, mocked_openr_client: MagicMock) -> None:
         mocked_returned_connection = helpers.get_enter_thrift_magicmock(
             mocked_openr_client
@@ -135,7 +135,7 @@ class CliDecisionTests(TestCase):
             invoked_return.stdout.replace(" ", ""),
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_decision_received_routes_json(
         self, mocked_openr_client: MagicMock
     ) -> None:
@@ -154,7 +154,7 @@ class CliDecisionTests(TestCase):
         self.assertEqual(0, invoked_return.exit_code)
         self.assertEqual(EXPECTED_ROUTES_RECEIVED_JSON, invoked_return.stdout)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
     def test_decision_received_routes_json_no_data(
         self, mocked_openr_client: MagicMock
     ) -> None:

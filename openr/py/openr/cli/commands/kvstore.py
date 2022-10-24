@@ -37,7 +37,10 @@ import prettytable
 import pytz
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.clients.openr_client import get_openr_ctrl_client, get_openr_ctrl_cpp_client
+from openr.clients.openr_client import (
+    get_openr_ctrl_client_py,
+    get_openr_ctrl_cpp_client,
+)
 from openr.KvStore import ttypes as kvstore_types
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -85,7 +88,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         run method that invokes _run with client and arguments
         """
 
-        with get_openr_ctrl_client(self.host, self.cli_opts) as client:
+        with get_openr_ctrl_client_py(self.host, self.cli_opts) as client:
             self._init_area(client)
             self._run(client, *args, **kwargs)
         return 0

@@ -31,7 +31,7 @@ from typing import (
 
 import bunch
 import click
-from openr.clients.openr_client import get_openr_ctrl_client
+from openr.clients.openr_client import get_openr_ctrl_client_py
 from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as config_types
@@ -137,7 +137,7 @@ def parse_nodes(cli_opts: bunch.Bunch, nodes: str) -> Set[str]:
     """
 
     if not nodes:
-        with get_openr_ctrl_client(cli_opts.host, cli_opts) as client:
+        with get_openr_ctrl_client_py(cli_opts.host, cli_opts) as client:
             nodes = client.getMyNodeName()
     nodes_set = set(nodes.strip().split(","))
 
@@ -1178,7 +1178,7 @@ def dump_node_kvs(
 ) -> kv_store_types.Publication:
     pub = None
 
-    with get_openr_ctrl_client(host, cli_opts) as client:
+    with get_openr_ctrl_client_py(host, cli_opts) as client:
         keyDumpParams = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
         keyDumpParams.keys = [Consts.ALL_DB_MARKER]
         if area is None:
