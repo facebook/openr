@@ -6,21 +6,21 @@
 
 from openr.cli.commands import decision, fib, kvstore, lm, prefix_mgr, spark
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.OpenrCtrl import OpenrCtrl
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.utils import printing, serializer
 
 
-class VersionCmd(OpenrCtrlCmdPy):
-    def _run(
+class VersionCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         json: bool,
         *args,
         **kwargs,
     ) -> None:
-        openr_version = client.getOpenrVersion()
-        build_info = client.getBuildInfo()
+        openr_version = await client.getOpenrVersion()
+        build_info = await client.getBuildInfo()
 
         if json:
             if build_info.buildPackageName:
@@ -69,10 +69,10 @@ class VersionCmd(OpenrCtrlCmdPy):
             )
 
 
-class OpenrValidateCmd(OpenrCtrlCmdPy):
-    def _run(
+class OpenrValidateCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         suppress_error=False,
         json=False,
         *args,
