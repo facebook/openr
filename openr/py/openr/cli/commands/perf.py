@@ -8,18 +8,18 @@
 from builtins import range
 
 import tabulate
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.OpenrCtrl import OpenrCtrl
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 
 
-class ViewFibCmd(OpenrCtrlCmdPy):
-    def _run(
+class ViewFibCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> None:
-        resp = client.getPerfDb()
+        resp = await client.getPerfDb()
         headers = ["Node", "Events", "Duration", "Unix Timestamp"]
         for i in range(len(resp.eventInfo)):
             rows = []
