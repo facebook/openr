@@ -7,16 +7,16 @@
 
 import json
 import time
-from typing import Dict, List
+from typing import Dict, List, Mapping
 
 import tabulate
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.OpenrCtrl import OpenrCtrl
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.utils import printing
 
 
-class MonitorCmd(OpenrCtrlCmdPy):
+class MonitorCmd(OpenrCtrlCmd):
     def print_log_list_type(self, llist: List) -> str:
         idx = 1
         str_txt = "{}".format("".join(llist[0]) + "\n")
@@ -42,23 +42,27 @@ class MonitorCmd(OpenrCtrlCmdPy):
 
 
 class CountersCmd(MonitorCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefix: str = "",
         json: bool = False,
         *args,
         **kwargs,
     ) -> None:
-        resp = client.getCounters()
-        self.print_counters(client, resp, prefix, json)
+        resp = await client.getCounters()
+        await self.print_counters(client, resp, prefix, json)
 
-    def print_counters(
-        self, client: OpenrCtrl.Client, resp: Dict, prefix: str, json: bool
+    async def print_counters(
+        self,
+        client: OpenrCtrlCppClient.Async,
+        resp: Mapping[str, int],
+        prefix: str,
+        json: bool,
     ) -> None:
         """print the Kv Store counters"""
 
-        host_id = client.getMyNodeName()
+        host_id = await client.getMyNodeName()
         caption = "{}'s counters".format(host_id)
 
         rows = []
@@ -80,18 +84,18 @@ class CountersCmd(MonitorCmd):
 
 
 class LogCmd(MonitorCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         json_opt: bool = False,
         *args,
         **kwargs,
     ) -> None:
         try:
-            resp = client.getEventLogs()
+            resp = await client.getEventLogs()
             self.print_log_data(resp, json_opt)
         except TypeError:
-            host_id = client.getMyNodeName()
+            host_id = await client.getMyNodeName()
             print(
                 "Incompatible return type. Please upgrade Open/R binary on {}".format(
                     host_id
@@ -113,9 +117,9 @@ class LogCmd(MonitorCmd):
 
 
 class StatisticsCmd(MonitorCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> None:
@@ -160,5 +164,5 @@ class StatisticsCmd(MonitorCmd):
             },
         ]
 
-        counters = client.getCounters()
+        counters = await client.getCounters()
         self.print_stats(stats_templates, counters)
