@@ -36,7 +36,7 @@ import hexdump
 import prettytable
 import pytz
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.clients.openr_client import (
     get_openr_ctrl_client_py,
     get_openr_ctrl_cpp_client,
@@ -60,7 +60,7 @@ from openr.utils.consts import Consts
 from thrift.python.client import ClientType
 
 
-class KvStoreCmdBase(OpenrCtrlCmd):
+class KvStoreCmdBase(OpenrCtrlCmdPy):
     def __init__(self, cli_opts: bunch.Bunch):
         super().__init__(cli_opts)
         self.area_feature: bool = False

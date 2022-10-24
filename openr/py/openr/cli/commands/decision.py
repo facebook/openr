@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
 
 import click
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.clients.openr_client import get_fib_agent_client
 from openr.KvStore import ttypes as kv_store_types
 from openr.Network import ttypes as network_types
@@ -23,7 +23,7 @@ from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object, serialize_json
 
 
-class DecisionRoutesComputedCmd(OpenrCtrlCmd):
+class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -59,7 +59,7 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
         return nodes
 
 
-class DecisionAdjCmd(OpenrCtrlCmd):
+class DecisionAdjCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -87,7 +87,7 @@ class DecisionAdjCmd(OpenrCtrlCmd):
                 utils.print_adjs_table(adjs_map, None, None)
 
 
-class PathCmd(OpenrCtrlCmd):
+class PathCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -431,7 +431,7 @@ class PathCmd(OpenrCtrlCmd):
             print()
 
 
-class DecisionValidateCmd(OpenrCtrlCmd):
+class DecisionValidateCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -718,7 +718,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         return return_code
 
 
-class DecisionRibPolicyCmd(OpenrCtrlCmd):
+class DecisionRibPolicyCmd(OpenrCtrlCmdPy):
     # @override
     def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         policy = None
@@ -755,7 +755,7 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
                 print(f"        {neighbor}: {weight}")
 
 
-class ReceivedRoutesCmd(OpenrCtrlCmd):
+class ReceivedRoutesCmd(OpenrCtrlCmdPy):
     # @override
     def _run(
         self,

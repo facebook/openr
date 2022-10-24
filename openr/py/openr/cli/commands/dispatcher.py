@@ -7,13 +7,13 @@
 from typing import Dict
 
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import printing
 from thrift.Thrift import TApplicationException
 
 
-class FiltersCmd(OpenrCtrlCmd):
+class FiltersCmd(OpenrCtrlCmdPy):
     def _run(self, client: OpenrCtrl.Client, json: bool, *args, **kwargs) -> None:
         try:
             dispatcher_filters = client.getDispatcherFilters()
@@ -24,7 +24,7 @@ class FiltersCmd(OpenrCtrlCmd):
         utils.print_filters_table(dispatcher_filters, json)
 
 
-class QueuesCmd(OpenrCtrlCmd):
+class QueuesCmd(OpenrCtrlCmdPy):
     def _run(self, client: OpenrCtrl.Client, json: bool, *args, **kwargs) -> None:
         resp = client.getCounters()
         self.print_queue_counters(client, resp, json)

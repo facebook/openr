@@ -5,13 +5,17 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import asyncio
 import json
 import re
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple
 
 import bunch
 import click
-from openr.clients.openr_client import get_openr_ctrl_client_py
+from openr.clients.openr_client import (
+    get_openr_ctrl_client_py,
+    get_openr_ctrl_cpp_client,
+)
 from openr.KvStore import ttypes as kv_store_types
 from openr.thrift.KvStore.thrift_types import (
     InitializationEvent,
@@ -20,9 +24,10 @@ from openr.thrift.KvStore.thrift_types import (
 )
 from openr.utils import printing
 from openr.utils.consts import Consts
+from thrift.python.client import ClientType
 
 
-class OpenrCtrlCmd:
+class OpenrCtrlCmdPy:
     """
     Command wrapping OpenrCtrl.Client
     """
@@ -327,3 +332,22 @@ class OpenrCtrlCmd:
                 return False
 
         return True
+
+
+class OpenrCtrlCmd(OpenrCtrlCmdPy):
+    # @override
+    def run(self, *args, **kwargs) -> int:
+        """
+        run method that invokes _run with client and arguments
+        """
+
+        async def _wrapper() -> int:
+            async with get_openr_ctrl_cpp_client(
+                self.host,
+                self.cli_opts,
+                client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
+            ) as client:
+                await self._run(client, *args, **kwargs)
+            return 0
+
+        return asyncio.run(_wrapper())

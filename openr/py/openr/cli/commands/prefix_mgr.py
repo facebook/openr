@@ -8,7 +8,7 @@ from typing import Dict, List, Optional, Tuple
 
 from openr.cli.utils import utils
 
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.cli.utils.utils import (
     get_tag_to_name_map,
     print_advertised_routes,
@@ -87,7 +87,7 @@ def to_thrift_forwarding_type(forwarding_type: str) -> PrefixForwardingType:
     return FORWARDING_TYPE_TO_VALUES[forwarding_type]
 
 
-class PrefixMgrCmd(OpenrCtrlCmd):
+class PrefixMgrCmd(OpenrCtrlCmdPy):
     pass
 
 

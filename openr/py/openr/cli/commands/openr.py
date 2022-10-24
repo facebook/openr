@@ -6,12 +6,12 @@
 
 from openr.cli.commands import decision, fib, kvstore, lm, prefix_mgr, spark
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import printing, serializer
 
 
-class VersionCmd(OpenrCtrlCmd):
+class VersionCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,
@@ -69,7 +69,7 @@ class VersionCmd(OpenrCtrlCmd):
             )
 
 
-class OpenrValidateCmd(OpenrCtrlCmd):
+class OpenrValidateCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,

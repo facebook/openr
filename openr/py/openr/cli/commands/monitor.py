@@ -11,12 +11,12 @@ from typing import Dict, List
 
 import tabulate
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.OpenrCtrl import OpenrCtrl
 from openr.utils import printing
 
 
-class MonitorCmd(OpenrCtrlCmd):
+class MonitorCmd(OpenrCtrlCmdPy):
     def print_log_list_type(self, llist: List) -> str:
         idx = 1
         str_txt = "{}".format("".join(llist[0]) + "\n")

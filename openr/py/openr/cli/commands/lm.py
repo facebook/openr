@@ -11,7 +11,7 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import click
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.KvStore.thrift_types import InitializationEvent
@@ -19,7 +19,7 @@ from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 
 
-class LMCmdBase(OpenrCtrlCmd):
+class LMCmdBase(OpenrCtrlCmdPy):
     """
     Base class for LinkMonitor cmds. All of LinkMonitor cmd
     is spawn out of this.

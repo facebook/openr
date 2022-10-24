@@ -10,7 +10,7 @@ from typing import Any, Dict, List, Tuple
 import click
 
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.KvStore import ttypes as kv_store_types
 from openr.OpenrCtrl import OpenrCtrl
 from openr.thrift.KvStore.thrift_types import InitializationEvent
@@ -18,7 +18,7 @@ from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing, serializer
 
 
-class SparkBaseCmd(OpenrCtrlCmd):
+class SparkBaseCmd(OpenrCtrlCmdPy):
     def print_spark_neighbors_detailed(
         self, neighbors: List[openr_types.SparkNeighbor]
     ) -> None:
@@ -281,7 +281,7 @@ class ValidateCmd(SparkBaseCmd):
                 self.print_spark_neighbors(invalid_neighbors)
 
 
-class GracefulRestartCmd(OpenrCtrlCmd):
+class GracefulRestartCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,

@@ -8,11 +8,11 @@
 from builtins import range
 
 import tabulate
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.OpenrCtrl import OpenrCtrl
 
 
-class ViewFibCmd(OpenrCtrlCmd):
+class ViewFibCmd(OpenrCtrlCmdPy):
     def _run(
         self,
         client: OpenrCtrl.Client,

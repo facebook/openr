@@ -10,7 +10,7 @@ from typing import Optional, Tuple, Union
 import click
 import jsondiff
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.OpenrCtrl import OpenrCtrl
 from openr.OpenrCtrl.ttypes import OpenrError
 from openr.Types import ttypes as openr_types
@@ -19,14 +19,14 @@ from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_object
 
 
-class ConfigShowCmd(OpenrCtrlCmd):
+class ConfigShowCmd(OpenrCtrlCmdPy):
     def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
         resp = client.getRunningConfig()
         config = json.loads(resp)
         utils.print_json(config)
 
 
-class ConfigDryRunCmd(OpenrCtrlCmd):
+class ConfigDryRunCmd(OpenrCtrlCmdPy):
     def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs) -> int:
         try:
             file_conf = client.dryrunConfig(file)
@@ -39,7 +39,7 @@ class ConfigDryRunCmd(OpenrCtrlCmd):
         return 0
 
 
-class ConfigCompareCmd(OpenrCtrlCmd):
+class ConfigCompareCmd(OpenrCtrlCmdPy):
     def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs):
         running_conf = client.getRunningConfig()
 
@@ -58,7 +58,7 @@ class ConfigCompareCmd(OpenrCtrlCmd):
             click.echo(click.style("SAME", fg="green"))
 
 
-class ConfigStoreCmdBase(OpenrCtrlCmd):
+class ConfigStoreCmdBase(OpenrCtrlCmdPy):
     def getConfigWrapper(
         self, client: OpenrCtrl.Client, config_key: str
     ) -> Tuple[Optional[bytes], Optional[str]]:

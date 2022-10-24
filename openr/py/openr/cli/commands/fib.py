@@ -15,7 +15,7 @@ from typing import List, Optional, Sequence, Union
 import prettytable
 import pytz
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.cli.utils.commands import OpenrCtrlCmdPy
 from openr.clients.openr_client import get_fib_agent_client, get_openr_ctrl_cpp_client
 from openr.Network import ttypes as network_types
 from openr.OpenrCtrl import OpenrCtrl
@@ -27,7 +27,7 @@ from openr.utils import ipnetwork, printing
 from thrift.python.client import ClientType
 
 
-class FibCmdBase(OpenrCtrlCmd):
+class FibCmdBase(OpenrCtrlCmdPy):
     """define Fib specific methods here"""
 
     def __init__(self, cli_opts):
