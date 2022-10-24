@@ -45,7 +45,7 @@ class CliPrefixManagerTests(TestCase):
         self.assertEqual(0, invoked_return.exit_code)
 
     @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
-    @patch(f"{BASE_CMD_MODULE}.PrefixMgrCmd._get_config")
+    @patch(f"{BASE_CMD_MODULE}.PrefixMgrCmd._get_config_py")
     def test_prefixmgr_advertised_routes(
         self, mocked_openr_config: MagicMock, mocked_openr_client: MagicMock
     ) -> None:

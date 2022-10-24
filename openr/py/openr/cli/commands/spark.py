@@ -143,7 +143,7 @@ class ValidateCmd(SparkBaseCmd):
 
         # Get data
         neighbors = self.fetch_spark_neighbors(client)
-        initialization_events = self.fetch_initialization_events(client)
+        initialization_events = self.fetch_initialization_events_py(client)
         openr_config = self.fetch_running_config_thrift(client)
 
         # Validate spark details
@@ -151,7 +151,7 @@ class ValidateCmd(SparkBaseCmd):
 
         is_pass = is_pass and (len(state_non_estab_neighbors) == 0)
 
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
             initialization_events,
             kv_store_types.InitializationEvent.NEIGHBOR_DISCOVERED,
         )

@@ -21,6 +21,9 @@ from openr.thrift.KvStore.thrift_types import (
     InitializationEvent,
     InitializationEventTimeDuration,
     InitializationEventTimeLabels,
+    KeyDumpParams,
+    Publication,
+    Value,
 )
 from openr.utils import printing
 from openr.utils.consts import Consts
@@ -69,7 +72,7 @@ class OpenrCtrlCmdPy:
 
         raise NotImplementedError
 
-    def _get_config(self) -> Dict[str, Any]:
+    def _get_config_py(self) -> Dict[str, Any]:
         if self._config is None:
             with get_openr_ctrl_client_py(self.host, self.cli_opts) as client:
                 resp = client.getRunningConfig()
@@ -136,8 +139,8 @@ class OpenrCtrlCmdPy:
                     ).strip("\n")
                 )
 
-    # common function used by decision, kvstore mnodule
-    def buildKvStoreKeyDumpParams(
+    # common function used by decision, kvstore module
+    def buildKvStoreKeyDumpParamsPy(
         self,
         prefix: str = Consts.ALL_DB_MARKER,
         originator_ids: Optional[Set[str]] = None,
@@ -154,7 +157,7 @@ class OpenrCtrlCmdPy:
 
         return params
 
-    def fetch_initialization_events(
+    def fetch_initialization_events_py(
         self, client: Any
     ) -> Dict[kv_store_types.InitializationEvent, int]:
         """
@@ -187,7 +190,7 @@ class OpenrCtrlCmdPy:
 
         return client.getKvStorePeers()
 
-    def fetch_keyvals(
+    def fetch_keyvals_py(
         self,
         client: Any,
         areas: Set[Any],
@@ -206,7 +209,7 @@ class OpenrCtrlCmdPy:
             )
         return area_to_publication_dict
 
-    def validate_init_event(
+    def validate_init_event_py(
         self,
         init_event_dict: Dict[kv_store_types.InitializationEvent, int],
         init_event: kv_store_types.InitializationEvent,
@@ -351,3 +354,105 @@ class OpenrCtrlCmd(OpenrCtrlCmdPy):
             return 0
 
         return asyncio.run(_wrapper())
+
+    async def _get_config(self) -> Dict[str, Any]:
+        if self._config is None:
+            async with get_openr_ctrl_cpp_client(self.host, self.cli_opts) as client:
+                resp = await client.getRunningConfig()
+                self._config = json.loads(resp)
+        return self._config
+
+    def buildKvStoreKeyDumpParams(
+        self,
+        prefix: str = Consts.ALL_DB_MARKER,
+        originator_ids: Optional[Set[str]] = None,
+        keyval_hash: Optional[Dict[str, Value]] = None,
+    ) -> KeyDumpParams:
+        """
+        Build KeyDumpParams based on input parameter list
+
+        In thrift-python, the objects are immutable, and hence
+        we should assign the attributes upon initialization
+        """
+
+        return KeyDumpParams(
+            prefix=prefix,
+            originatorIds=originator_ids,
+            keyValHashes=keyval_hash,
+            keys=[prefix] if prefix else None,
+        )
+
+    def fetch_initialization_events(
+        self, client: Any
+    ) -> Dict[InitializationEvent, int]:
+        """
+        Fetch Initialization events as a dictionary via thrift call
+        """
+
+        return client.getInitializationEvents()
+
+    def fetch_keyvals(
+        self,
+        client: Any,
+        areas: Set[Any],
+        keyDumpParams: KeyDumpParams,
+    ) -> Dict[str, Publication]:
+        """
+        Fetch the keyval publication for each area specified in areas via thrift call
+        Returned as a dict {area : publication}
+        If keyDumpParams is specified, returns keyvals filtered accordingly
+        """
+
+        area_to_publication_dict = {}
+        for area in areas:
+            area_to_publication_dict[area] = client.getKvStoreKeyValsFilteredArea(
+                keyDumpParams, area
+            )
+        return area_to_publication_dict
+
+    def validate_init_event(
+        self,
+        init_event_dict: Dict[InitializationEvent, int],
+        init_event: InitializationEvent,
+    ) -> Tuple[bool, Optional[str], Optional[str]]:
+        """
+        Returns True if the init_event specified is published within it's defined time limit
+        If init_event is published, returns the duration as a stylized string. If the checks fail,
+        returns False along with an error message.
+        """
+
+        # Keeps track of whether or not the checks pass
+        is_pass = True
+
+        # If the check fails, this will hold the error msg string
+        err_msg_str = None
+
+        # If the init_event is published, stores the duration as a stylized string
+        dur_str = None
+
+        if init_event not in init_event_dict:
+            is_pass = False
+            err_msg_str = f"{init_event.name} event is not published"
+        else:
+            warning_label = InitializationEventTimeLabels[
+                f"{init_event.name}_WARNING_MS"
+            ]
+            timeout_label = InitializationEventTimeLabels[
+                f"{init_event.name}_TIMEOUT_MS"
+            ]
+
+            warning_time = InitializationEventTimeDuration[warning_label]
+            timeout_time = InitializationEventTimeDuration[timeout_label]
+
+            init_event_dur = init_event_dict[init_event]
+
+            if init_event_dur < warning_time:
+                dur_str = click.style(str(init_event_dur), fg="green")
+            elif init_event_dur < timeout_time:
+                dur_str = click.style(str(init_event_dur), fg="yellow")
+            else:
+                dur_str = click.style(str(init_event_dur), fg="red")
+                err_msg_str = f"{init_event.name} event duration exceeds acceptable time limit (>{timeout_time}ms)"
+                is_pass = False
+
+        return is_pass, err_msg_str, dur_str

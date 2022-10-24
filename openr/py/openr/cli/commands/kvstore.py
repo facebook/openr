@@ -144,7 +144,7 @@ class KvStoreCmdBase(OpenrCtrlCmdPy):
         """get the dict of all nodes to their IP in the network"""
 
         node_dict = {}
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(Consts.PREFIX_DB_MARKER)
         resp = kvstore_types.Publication()
         if not self.area_feature:
             resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -286,7 +286,7 @@ class KvPrefixesCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(Consts.PREFIX_DB_MARKER)
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
         self.print_prefix({"": resp}, nodes, json, prefix, client_type)
 
@@ -326,7 +326,7 @@ class PrefixesCmd(KvPrefixesCmd):
         if not self.area_feature:
             super()._run(client, nodes, json, prefix, client_type)
             return
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(Consts.PREFIX_DB_MARKER)
         area_kv = {}
         for area in self.areas:
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
@@ -345,7 +345,7 @@ class KvKeysCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(
             prefix, {originator} if originator else None
         )
         resp = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -367,7 +367,7 @@ class KeysCmd(KvKeysCmd):
             super()._run(client, json, prefix, originator, ttl)
             return
 
-        keyDumpParams = self.buildKvStoreKeyDumpParams(
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(
             prefix, {originator} if originator else None
         )
 
@@ -470,10 +470,10 @@ class KvNodesCmd(KvStoreCmdBase):
         **kwargs,
     ) -> None:
         prefix_keys = client.getKvStoreKeyValsFiltered(
-            self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
+            self.buildKvStoreKeyDumpParamsPy(Consts.PREFIX_DB_MARKER)
         )
         adj_keys = client.getKvStoreKeyValsFiltered(
-            self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+            self.buildKvStoreKeyDumpParamsPy(Consts.ADJ_DB_MARKER)
         )
         host_id = client.getMyNodeName()
         self.print_kvstore_nodes(
@@ -578,11 +578,11 @@ class NodesCmd(KvNodesCmd):
         nodes = set()
         for area in self.areas:
             prefix_keys = client.getKvStoreKeyValsFilteredArea(
-                self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER), area
+                self.buildKvStoreKeyDumpParamsPy(Consts.PREFIX_DB_MARKER), area
             )
             all_kv.keyVals.update(prefix_keys.keyVals)
             adj_keys = client.getKvStoreKeyValsFilteredArea(
-                self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER), area
+                self.buildKvStoreKeyDumpParamsPy(Consts.ADJ_DB_MARKER), area
             )
             host_id = client.getMyNodeName()
             node_set = self.get_connected_nodes(adj_keys, host_id)
@@ -622,7 +622,7 @@ class KvShowAdjNodeCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(Consts.ADJ_DB_MARKER)
         publication = client.getKvStoreKeyValsFiltered(keyDumpParams)
         self.printAdjNode(publication, nodes, node, interface)
 
@@ -647,7 +647,7 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
             super()._run(client, nodes, node, interface, args, kwargs)
             return
 
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(Consts.ADJ_DB_MARKER)
         resp = kvstore_types.Publication()
         resp.keyVals = {}
         for area in self.areas:
@@ -675,7 +675,7 @@ class KvCompareCmd(KvStoreCmdBase):
             if host_id in nodes:
                 nodes.remove(host_id)
 
-            keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
+            keyDumpParams = self.buildKvStoreKeyDumpParamsPy(Consts.ALL_DB_MARKER)
             pub = None
             if not self.area_feature:
                 pub = client.getKvStoreKeyValsFiltered(keyDumpParams)
@@ -894,7 +894,7 @@ class KvSignatureCmd(KvStoreCmdBase):
         **kwargs,
     ) -> None:
         area = self.get_area_id()
-        keyDumpParams = self.buildKvStoreKeyDumpParams(prefix)
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(prefix)
         resp = None
         if area is None:
             resp = client.getKvStoreHashFiltered(keyDumpParams)
@@ -1368,13 +1368,15 @@ class ValidateCmd(KvStoreCmdBase):
         for area in self.areas:
             area_to_peers_dict[area] = self.fetch_kvstore_peers(client, area=area)
 
-        keyDumpParams = self.buildKvStoreKeyDumpParams(
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy(
             originator_ids={openr_config.node_name}
         )
-        area_to_publication_dict = self.fetch_keyvals(client, self.areas, keyDumpParams)
+        area_to_publication_dict = self.fetch_keyvals_py(
+            client, self.areas, keyDumpParams
+        )
         configured_ttl = openr_config.kvstore_config.key_ttl_ms
 
-        initialization_events = self.fetch_initialization_events(client)
+        initialization_events = self.fetch_initialization_events_py(client)
 
         # Run validation checks
         (
@@ -1389,14 +1391,14 @@ class ValidateCmd(KvStoreCmdBase):
         is_pass = is_pass and (len(invalid_peers) == 0)
 
         # Refetch the keys to get updated ttl
-        keyDumpParams = self.buildKvStoreKeyDumpParams()
+        keyDumpParams = self.buildKvStoreKeyDumpParamsPy()
         area_to_invalid_keys = self._validate_key_ttl(
-            self.fetch_keyvals(client, self.areas, keyDumpParams), configured_ttl
+            self.fetch_keyvals_py(client, self.areas, keyDumpParams), configured_ttl
         )
 
         is_pass = is_pass and (len(area_to_invalid_keys) == 0)
 
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
             initialization_events,
             kvstore_types.InitializationEvent.KVSTORE_SYNCED,
         )

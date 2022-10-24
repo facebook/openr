@@ -186,7 +186,7 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         """
         tag_to_name = None
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
-            tag_to_name = get_tag_to_name_map(self._get_config())
+            tag_to_name = get_tag_to_name_map(self._get_config_py())
         print_route_details(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
@@ -214,7 +214,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         """
         rows = [""]
 
-        tag_to_name = get_tag_to_name_map(self._get_config()) if tag2name else None
+        tag_to_name = get_tag_to_name_map(self._get_config_py()) if tag2name else None
         if detailed:
             self._print_orig_routes_detailed(rows, originated_prefixes, tag_to_name)
         else:
@@ -383,7 +383,7 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
         """
         tag_to_name = None
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
-            tag_to_name = get_tag_to_name_map(self._get_config())
+            tag_to_name = get_tag_to_name_map(self._get_config_py())
         print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
@@ -438,7 +438,7 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         """
         tag_to_name = None
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
-            tag_to_name = get_tag_to_name_map(self._get_config())
+            tag_to_name = get_tag_to_name_map(self._get_config_py())
         print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
@@ -453,10 +453,10 @@ class ValidateCmd(PrefixMgrCmd):
         is_pass = True
 
         # Get Data
-        initialization_events = self.fetch_initialization_events(client)
+        initialization_events = self.fetch_initialization_events_py(client)
 
         # Run Validation Checks
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
             initialization_events,
             kv_store_types.InitializationEvent.PREFIX_DB_SYNCED,
         )

@@ -561,11 +561,11 @@ class LMValidateCmd(LMCmdBase):
 
         # Get Data
         links = self.fetch_lm_links(client)
-        initialization_events = self.fetch_initialization_events(client)
+        initialization_events = self.fetch_initialization_events_py(client)
         openr_config = self.fetch_running_config_thrift(client)
 
         # Run the validation checks
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
             initialization_events,
             kv_store_types.InitializationEvent.LINK_DISCOVERED,
         )

@@ -447,8 +447,8 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
         errors = 0
 
         # Validate Open/R Initialization Event
-        initialization_events = self.fetch_initialization_events(client)
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        initialization_events = self.fetch_initialization_events_py(client)
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
             initialization_events,
             kv_store_types.InitializationEvent.RIB_COMPUTED,
         )
@@ -815,7 +815,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmdPy):
             return (key.node, key.area)
 
         tag_to_name = (
-            utils.get_tag_to_name_map(self._get_config()) if tag2name else None
+            utils.get_tag_to_name_map(self._get_config_py()) if tag2name else None
         )
 
         utils.print_route_details(routes, key_fn, detailed, tag_to_name)
