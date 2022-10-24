@@ -4,35 +4,72 @@
 # LICENSE file in the root directory of this source tree.
 
 
-from typing import Dict
+from typing import Mapping, Sequence
 
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.OpenrCtrl import OpenrCtrl
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.utils import printing
-from thrift.Thrift import TApplicationException
+from thrift.python.exceptions import ApplicationError
 
 
-class FiltersCmd(OpenrCtrlCmdPy):
-    def _run(self, client: OpenrCtrl.Client, json: bool, *args, **kwargs) -> None:
+class FiltersCmd(OpenrCtrlCmd):
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, json: bool, *args, **kwargs
+    ) -> None:
         try:
-            dispatcher_filters = client.getDispatcherFilters()
-        except TApplicationException:
-            print("getDispatcherFilters failed. The host might not enable dispatcher")
+            dispatcher_filters = await client.getDispatcherFilters()
+        except ApplicationError as e:
+            print(
+                f"getDispatcherFilters failed. The host might not enable dispatcher. Error message {e}"
+            )
             return
 
-        utils.print_filters_table(dispatcher_filters, json)
+        self.print_filters_table(dispatcher_filters, json)
+
+    def print_filters_table(self, filters: Sequence[Sequence[str]], json: bool) -> None:
+        """print Dispatcher filters
+
+        :param filters as list of lists
+        """
+
+        column_labels = ["Reader ID", "Prefix Filters"]
+
+        output = []
+        for i, prefix_filters in enumerate(filters):
+            reader = "#{}".format(i)
+
+            # replace the empty filter by a tag "(empty prefix: match all)"
+            prefix_filters = [
+                f if f else "(empty prefix: match all)" for f in prefix_filters
+            ]
+            if prefix_filters:
+                row = [reader, ", ".join(prefix_filters)]
+            else:
+                row = [reader, "(no filter: unfiltered)"]
+
+            output.append(row)
+
+        if json:
+            json_data = {k: v for k, v in output}
+            print(utils.json_dumps(json_data))
+        else:
+            print(printing.render_horizontal_table(output, column_labels))
 
 
-class QueuesCmd(OpenrCtrlCmdPy):
-    def _run(self, client: OpenrCtrl.Client, json: bool, *args, **kwargs) -> None:
-        resp = client.getCounters()
-        self.print_queue_counters(client, resp, json)
+class QueuesCmd(OpenrCtrlCmd):
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, json: bool, *args, **kwargs
+    ) -> None:
+        resp = await client.getCounters()
+        await self.print_queue_counters(client, resp, json)
 
-    def print_queue_counters(self, client: OpenrCtrl.Client, resp: Dict, json: bool):
+    async def print_queue_counters(
+        self, client: OpenrCtrlCppClient.Async, resp: Mapping[str, int], json: bool
+    ):
         """print the queue counters for Dispatcher"""
 
-        host_id = client.getMyNodeName()
+        host_id = await client.getMyNodeName()
         caption = "{}'s Dispatcher counters".format(host_id)
 
         output = []
