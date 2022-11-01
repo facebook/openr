@@ -661,39 +661,41 @@ RouteSelectionResult
 SpfSolver::selectBestRoutes(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
-    PrefixEntries const& prefixEntries,
+    PrefixEntries& prefixEntries,
     bool const isBgp,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   RouteSelectionResult ret;
 
+  auto filteredPrefixes = filterDrainedNodes(prefixEntries, areaLinkStates);
+
   if (enableBestRouteSelection_) {
     // Perform best route selection based on metrics
     ret.allNodeAreas = selectRoutes(
-        prefixEntries, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
+        filteredPrefixes, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
     ret.success = true;
   } else if (isBgp) {
-    ret = runBestPathSelectionBgp(prefix, prefixEntries, areaLinkStates);
+    ret = runBestPathSelectionBgp(prefix, filteredPrefixes, areaLinkStates);
   } else {
     // If it is openr route, all nodes are considered as best nodes.
-    for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
+    // Except for drained
+    for (auto const& [nodeAndArea, prefixEntry] : filteredPrefixes) {
       ret.allNodeAreas.emplace(nodeAndArea);
     }
     ret.bestNodeArea = *ret.allNodeAreas.begin();
     ret.success = true;
   }
 
-  auto res = maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
-  // TODO: michaeluw: make it a check when it is safe
-  if (res.allNodeAreas.find(res.bestNodeArea) == res.allNodeAreas.end()) {
-    XLOG(ERR)
-        << "Best prefix not part of best prefixes when selecting route to "
-        << folly::IPAddress::networkToString;
-    fb303::fbData->addStatValue(
-        "decision.incorrect_redistribution_route", 1, fb303::COUNT);
+  if (isNodeDrained(ret.bestNodeArea, areaLinkStates)) {
+    // Decision will change RibEntry's drain_metric to 1 if isBestNodeDrained is
+    // true, when it creates routeDB. So nodes in other areas would know
+    // that this forwarding path has a drained node when RibEntry is
+    // redistributed
+    ret.isBestNodeDrained = true;
   }
-  return res;
+
+  return ret;
 }
 
 void
@@ -724,6 +726,61 @@ SpfSolver::getMinNextHopThreshold(
         : maxMinNexthopForPrefix;
   }
   return maxMinNexthopForPrefix;
+}
+
+PrefixEntries
+SpfSolver::filterDrainedNodes(
+    PrefixEntries& prefixes,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  auto hardDrainFiltered = filterHardDrainedNodes(prefixes, areaLinkStates);
+  return filterSoftDrainedNodes(hardDrainFiltered, areaLinkStates);
+}
+
+PrefixEntries
+SpfSolver::filterSoftDrainedNodes(
+    PrefixEntries& prefixes,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  int minVal = std::numeric_limits<int32_t>::max();
+  PrefixEntries filteredEntries;
+  for (auto& [nodeArea, metricsWrapper] : prefixes) {
+    const auto& [node, area] = nodeArea;
+    int softDrainValue = areaLinkStates.at(area).getNodeMetricIncrement(node);
+    if (softDrainValue < minVal) {
+      minVal = softDrainValue;
+      filteredEntries.clear();
+    }
+    if (softDrainValue == minVal) {
+      filteredEntries.emplace(nodeArea, metricsWrapper);
+    }
+  }
+  return filteredEntries;
+}
+
+PrefixEntries
+SpfSolver::filterHardDrainedNodes(
+    PrefixEntries& prefixes,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  PrefixEntries filtered = folly::copy(prefixes);
+  for (auto iter = filtered.cbegin(); iter != filtered.cend();) {
+    const auto& [node, area] = iter->first;
+    if (areaLinkStates.at(area).isNodeOverloaded(node)) {
+      iter = filtered.erase(iter);
+    } else {
+      ++iter;
+    }
+  }
+  // Erase hard-drained nodes as candidates, unless everything is hard-drained
+  return filtered.empty() ? prefixes : filtered;
+}
+
+bool
+SpfSolver::isNodeDrained(
+    const NodeAndArea& nodeArea,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+  const auto& [node, area] = nodeArea;
+  const auto& linkState = areaLinkStates.at(area);
+  return linkState.isNodeOverloaded(node) or
+      linkState.getNodeMetricIncrement(node) != 0;
 }
 
 RouteSelectionResult
@@ -1105,6 +1162,12 @@ SpfSolver::addBestPaths(
       XLOG(ERR) << "Static nexthops do not exist for static mpls label "
                 << prependLabel.value();
     }
+  }
+
+  if (routeSelectionResult.isBestNodeDrained) {
+    auto entry =
+        *(prefixEntries.at(routeSelectionResult.bestNodeArea)); // copy intended
+    *entry.metrics()->drain_metric() = 1;
   }
 
   // Create RibUnicastEntry and add it the list

@@ -548,6 +548,7 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
           "forwardingType": 0,
           "metrics": {
             "distance": 0,
+            "drain_metric": 0,
             "path_preference": 1000,
             "source_preference": 200,
             "version": 1
@@ -591,6 +592,7 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
           "forwardingType": 0,
           "metrics": {
             "distance": 0,
+            "drain_metric": 0,
             "path_preference": 1000,
             "source_preference": 200,
             "version": 1
@@ -634,6 +636,7 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
           "forwardingType": 0,
           "metrics": {
             "distance": 0,
+            "drain_metric": 0,
             "path_preference": 1000,
             "source_preference": 200,
             "version": 1

@@ -145,7 +145,8 @@ toString(thrift::PrefixType const& value) {
 std::string
 toString(thrift::PrefixMetrics const& metrics) {
   return fmt::format(
-      "Metrics: [SP={}, PP={}, D={}]",
+      "Metrics: [Drain={}, SP={}, PP={}, D={}]",
+      *metrics.drain_metric(),
       *metrics.source_preference(),
       *metrics.path_preference(),
       *metrics.distance());
@@ -836,15 +837,19 @@ std::set<NodeAndArea>
 selectRoutes(
     const PrefixEntries& prefixEntries,
     thrift::RouteSelectionAlgorithm algorithm) {
-  // First, select prefixEntries with best <path_preference, source_preference>
-  // tuples. This is a must-have regardless of route selection algorithms.
-  // Leverage tuple for ease of comparision.
-  std::tuple<int32_t, int32_t> bestMetricsTuple{
-      std::numeric_limits<int32_t>::min(), std::numeric_limits<int32_t>::min()};
+  // Best Route Selection] Part (1/2):
+  // 1st tie-breaker : drain_metric - prefer lower;
+  // 2nd tie-breaker: path_preference - prefer higher;
+  // 3rd tie-breaker: source_preference - prefer higher;
+  std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min(),
+      std::numeric_limits<int32_t>::min()};
   std::set<NodeAndArea> nodeAreaSet;
   for (auto& [key, metricsWrapper] : prefixEntries) {
     auto& metrics = *metricsWrapper->metrics();
-    std::tuple<int32_t, int32_t> metricsTuple{
+    std::tuple<int32_t, int32_t, int32_t> metricsTuple{
+        -(*metrics.drain_metric()), /* prefer-lower */
         *metrics.path_preference(), /* prefer-higher */
         *metrics.source_preference() /* prefer-higher */};
 
@@ -862,6 +867,8 @@ selectRoutes(
   // Second, select routes based on selection algorithm.
   switch (algorithm) {
   case thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE:
+    // [Best Route Selection] Part (2/2):
+    // distance - prefer lower
     return selectShortestDistance(prefixEntries, nodeAreaSet);
   case thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2:
     return selectShortestDistance2(prefixEntries, nodeAreaSet);

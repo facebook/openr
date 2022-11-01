@@ -105,7 +105,7 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
 > ::/0, 1/1
 *@ from BGP
      Forwarding - algorithm: SP_ECMP, type: SR_MPLS
-     Metrics - path-preference: 1000, source-preference: 100, distance: 4
+     Metrics - path-preference: 1000, source-preference: 100, distance: 4, drained-path: 0
      Performance - min-nexthops: 24
      Misc - prepend-label: 65001, weight: None
      Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
@@ -114,7 +114,7 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
 > 0.0.0.0/0, 1/1
 *@ from BGP
      Forwarding - algorithm: SP_ECMP, type: SR_MPLS
-     Metrics - path-preference: 1000, source-preference: 100, distance: 4
+     Metrics - path-preference: 1000, source-preference: 100, distance: 4, drained-path: 0
      Performance - min-nexthops: 24
      Misc - prepend-label: 60000, weight: None
      Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
@@ -148,6 +148,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           "forwardingType": 1,
           "metrics": {
             "distance": 4,
+            "drain_metric": 0,
             "path_preference": 1000,
             "source_preference": 100,
             "version": 1
@@ -191,6 +192,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           "forwardingType": 1,
           "metrics": {
             "distance": 4,
+            "drain_metric": 0,
             "path_preference": 1000,
             "source_preference": 100,
             "version": 1

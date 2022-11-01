@@ -1977,6 +1977,7 @@ def print_route_helper(
             f"     Metrics - path-preference: {metrics.path_preference}"
             f", source-preference: {metrics.source_preference}"
             f", distance: {metrics.distance}"
+            f", drained-path: {metrics.drain_metric}"
         )
         if route.route.minNexthop:
             rows.append(f"     Performance - min-nexthops: {route.route.minNexthop}")

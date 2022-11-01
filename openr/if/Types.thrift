@@ -346,6 +346,15 @@ struct PrefixMetrics {
 
   /**
    * 1st tie-breaker
+   * Comparator: `prefer-lower`
+   * Policy Compatibility: `transitive`, `mutable`
+   * 0 means there is no drained devices in the forwarding path of this route
+   * 1 if there are drained device(s)
+   */
+  5: i32 drain_metric = 0;
+
+  /**
+   * 2nd tie-breaker
    * Comparator: `prefer-higher`
    * Policy Compatibility: `transitive`, `mutable`
    * Network path preference for this route. This is set and updated as route
@@ -354,7 +363,7 @@ struct PrefixMetrics {
   2: i32 path_preference = 0;
 
   /**
-   * 2nd tie-breaker
+   * 3rd tie-breaker
    * Comparator: `prefer-higher`
    * Policy Compatibility: `transitive`, `immutable`
    * User aka application preference of route. This is set at the origination
@@ -363,7 +372,7 @@ struct PrefixMetrics {
   3: i32 source_preference = 0;
 
   /**
-   * 3rd tie-breaker
+   * 4th tie-breaker
    * Comparator: `prefer-lower`
    * Policy Compatibility: `transitive`, `mutable`
    * Intends to indicate the cost to reach the originating node from

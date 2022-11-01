@@ -40,6 +40,8 @@ struct RouteSelectionResult {
   // redistribution across areas.
   NodeAndArea bestNodeArea;
 
+  bool isBestNodeDrained{false};
+
   /**
    * Function to check if provide node is one of the selected nodes.
    */
@@ -228,7 +230,7 @@ class SpfSolver {
   RouteSelectionResult selectBestRoutes(
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
-      PrefixEntries const& prefixEntries,
+      PrefixEntries& prefixEntries,
       bool const hasBgp,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
@@ -250,6 +252,27 @@ class SpfSolver {
   std::optional<int64_t> getMinNextHopThreshold(
       RouteSelectionResult nodes, PrefixEntries const& prefixEntries);
 
+  // Filter hard-drained then soft-drained nodes, unless there is no more viable
+  // candidate after that operations
+  PrefixEntries filterDrainedNodes(
+      PrefixEntries& prefixes,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+
+  // [hard-drain]
+  PrefixEntries filterHardDrainedNodes(
+      PrefixEntries& prefixes,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+
+  // [soft-drain]
+  PrefixEntries filterSoftDrainedNodes(
+      PrefixEntries& prefixes,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+
+  bool isNodeDrained(
+      const NodeAndArea& nodeArea,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+
+  // [To be deprecated], filter before rather after route selection
   // Helper to filter overloaded nodes for anycast addresses
   RouteSelectionResult maybeFilterDrainedNodes(
       RouteSelectionResult&& result,
