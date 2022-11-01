@@ -5023,6 +5023,7 @@ class DecisionTestFixture : public ::testing::Test {
     tConfig.decision_config()->debounce_min_ms() = debounceTimeoutMin.count();
     tConfig.decision_config()->debounce_max_ms() = debounceTimeoutMax.count();
     tConfig.enable_ordered_adj_publication() = true;
+    tConfig.enable_best_route_selection() = true;
     tConfig.decision_config()->save_rib_policy_min_ms() = 500;
     tConfig.decision_config()->save_rib_policy_max_ms() = 2000;
     return tConfig;
@@ -7332,29 +7333,12 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
   sendKvPublication(publication);
 }
 
-// DecisionTestFixture with different enableBestRouteSelection_ input
-class EnableBestRouteSelectionFixture
-    : public DecisionTestFixture,
-      public ::testing::WithParamInterface<bool> {
-  openr::thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = DecisionTestFixture::createConfig();
-    tConfig.enable_best_route_selection() = GetParam();
-    return tConfig;
-  }
-};
-
-INSTANTIATE_TEST_CASE_P(
-    EnableBestRouteSelectionInstance,
-    EnableBestRouteSelectionFixture,
-    ::testing::Bool());
-
 //
 // Mixed type prefix announcements (e.g. prefix1 with type BGP and type RIB )
 // are allowed when enableBestRouteSelection_ = true,
 // Otherwise prefix will be skipped in route programming.
 //
-TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
+TEST_F(DecisionTestFixture, PrefixWithMixedTypeRoutes) {
   // Verifiy some initial/default counters
   {
     decision->updateGlobalCounters();
@@ -7415,13 +7399,6 @@ TEST_P(EnableBestRouteSelectionFixture, PrefixWithMixedTypeRoutes) {
     sendKvPublication(publication);
     recvRouteUpdates();
   }
-  // Verify counters
-  decision->updateGlobalCounters();
-  const auto counters = fb303::fbData->getCounters();
-  int skippedUnicastRouteCnt = GetParam() ? 0 : 1;
-  EXPECT_EQ(
-      skippedUnicastRouteCnt,
-      counters.at("decision.skipped_unicast_route.count.60"));
 }
 
 /**

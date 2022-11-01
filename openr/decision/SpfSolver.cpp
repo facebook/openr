@@ -263,50 +263,18 @@ SpfSolver::createRouteForPrefix(
   }
 
   // TODO: These variables are deprecated and will go away soon
-  bool hasBGP = false, hasNonBGP = false, missingMv = false;
+  bool hasBGP = false;
 
   // Boolean flag indicating whether current node advertises the prefix entry
   // with prepend label.
   bool hasSelfPrependLabel{true};
 
-  // TODO: With new PrefixMetrics we no longer treat routes differently based
-  // on their origin source aka `prefixEntry.type`
+  // TODO: the following logic to set hasBGP to true is ONLY used for UT.
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
     bool isBGP = prefixEntry->type().value() == thrift::PrefixType::BGP;
     hasBGP |= isBGP;
-    hasNonBGP |= !isBGP;
     if (nodeAndArea.first == myNodeName) {
       hasSelfPrependLabel &= prefixEntry->prependLabel().has_value();
-    }
-    if (isBGP and not prefixEntry->mv().has_value()) {
-      missingMv = true;
-      XLOG_IF(ERR, not enableBestRouteSelection_)
-          << "Prefix entry for " << folly::IPAddress::networkToString(prefix)
-          << " advertised by " << nodeAndArea.first << ", area "
-          << nodeAndArea.second
-          << " is of type BGP and missing the metric vector.";
-    }
-  }
-
-  // TODO: With new PrefixMetrics we no longer treat routes differently based
-  // on their origin source aka `prefixEntry.type`
-  // skip adding route for BGP prefixes that have issues
-  if (hasBGP) {
-    if (hasNonBGP and not enableBestRouteSelection_) {
-      XLOG(ERR) << "Skipping route for "
-                << folly::IPAddress::networkToString(prefix)
-                << " which is advertised with BGP and non-BGP type.";
-      fb303::fbData->addStatValue(
-          "decision.skipped_unicast_route", 1, fb303::COUNT);
-      return std::nullopt;
-    }
-    if (missingMv and not enableBestRouteSelection_) {
-      XLOG(ERR) << "Skipping route for "
-                << folly::IPAddress::networkToString(prefix)
-                << " at least one advertiser is missing its metric vector.";
-      fb303::fbData->addStatValue(
-          "decision.skipped_unicast_route", 1, fb303::COUNT);
-      return std::nullopt;
     }
   }
 
