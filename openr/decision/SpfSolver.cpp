@@ -262,22 +262,25 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // TODO: These variables are deprecated and will go away soon
-  bool hasBGP = false;
-
-  // Boolean flag indicating whether current node advertises the prefix entry
-  // with prepend label.
-  bool hasSelfPrependLabel{true};
-
   // TODO: the following logic to set hasBGP to true is ONLY used for UT.
+  bool hasBGP = false;
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
     bool isBGP = prefixEntry->type().value() == thrift::PrefixType::BGP;
     hasBGP |= isBGP;
-    if (nodeAndArea.first == myNodeName) {
-      hasSelfPrependLabel &= prefixEntry->prependLabel().has_value();
-    }
   }
 
+  /*
+   * [Best Path Selection]
+   *
+   * Prefix can be advertised from multiple places:
+   *  - locally originated;
+   *  - re-distributeed from BGP speaker;
+   *  - re-advertised across multiple areas;
+   *  - etc.;
+   *
+   * route selection procedure will find the best candidate(NodeAndArea) to run
+   * Dijkstra(SPF) or K-Shortest Path Forwarding algorithm against.
+   */
   auto routeSelectionResult = selectBestRoutes(
       myNodeName, prefix, prefixEntries, hasBGP, areaLinkStates);
   if (not routeSelectionResult.success) {
@@ -295,6 +298,7 @@ SpfSolver::createRouteForPrefix(
 
   // Skip adding route for one prefix advertised by current node in all
   // following scenarios:
+  //
   // - Scenario1: The node has routes of fine-granularity prefixes
   //   (e.g., 10.0.0.0/25 and 10.0.0.128/25) programmed locally. It originates
   //   the aggregated prefix (e.g., 10.0.0.0/24) to attract traffic.
@@ -304,11 +308,7 @@ SpfSolver::createRouteForPrefix(
   //   previous area1.
   // Other scenarios: re-distributed from other protocols (unclear),
   //   interface-subnets, etc;
-  //
-  // TODO: We program self advertise prefix only iff, we're advertising our
-  // prefix-entry with the prepend label. Once we support multi-area routing,
-  // we can deprecate the check of hasSelfPrependLabel
-  if (routeSelectionResult.hasNode(myNodeName) and !hasSelfPrependLabel) {
+  if (routeSelectionResult.hasNode(myNodeName)) {
     XLOG(DBG3) << "Skip adding route for prefixes advertised by " << myNodeName
                << " " << folly::IPAddress::networkToString(prefix);
 
@@ -320,19 +320,6 @@ SpfSolver::createRouteForPrefix(
   auto routeComputationRules = getRouteComputationRules(
       prefixEntries, routeSelectionResult, areaLinkStates);
 
-  // Avoid duplicated efforts with selectBestRoutes() in case of
-  // SHORTEST_DISTANCE route selection algorithm.
-  auto routeSelectionAlgo = *routeComputationRules.routeSelectionAlgo();
-  if (routeSelectionAlgo !=
-      thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE) {
-    extendRoutes(
-        routeSelectionAlgo,
-        prefixEntries,
-        areaLinkStates,
-        routeSelectionResult);
-  }
-
-  //
   // Route computation flow
   // - For each area:
   //    - Switch on algorithm type
@@ -431,10 +418,6 @@ SpfSolver::createRouteForPrefix(
       shortestMetric,
       ucmpWeight,
       localPrefixConsidered);
-
-  // SrPolicy TODO: (T94500292) before returning need to apply prepend label
-  // rules. Prepend label rules, may create a new MPLS route (RibMplsEntry)
-  // that needs to be return along with the IP route (RibUnicastEntry)
 }
 
 std::optional<DecisionRouteDb>
@@ -664,21 +647,6 @@ SpfSolver::selectBestRoutes(
   }
 
   return ret;
-}
-
-void
-SpfSolver::extendRoutes(
-    const thrift::RouteSelectionAlgorithm algorithm,
-    const PrefixEntries& prefixEntries,
-    const std::unordered_map<std::string, LinkState>& areaLinkStates,
-    RouteSelectionResult& selectedRoutes) {
-  // Select rouets according to specified algorithm, and store the results in
-  // selectedRoutes.allNodeAreas.
-  for (const auto& nodeArea : selectRoutes(prefixEntries, algorithm)) {
-    selectedRoutes.allNodeAreas.insert(nodeArea);
-  }
-  selectedRoutes =
-      maybeFilterDrainedNodes(std::move(selectedRoutes), areaLinkStates);
 }
 
 std::optional<int64_t>

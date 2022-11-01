@@ -234,20 +234,6 @@ class SpfSolver {
       bool const hasBgp,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
-  /**
-   * Extend selected routes from received route announcements of one prefix,
-   * assuming that the best routes are already selected, and following the
-   * instruction of route selection algorithm. Extended routes are stored in
-   * selectedRoutes.allNodeAreas.
-   * TODO: After selectBestRoutes() is cleaned up, merge selectBestRoutes() and
-   * extendRoutes()
-   */
-  void extendRoutes(
-      const thrift::RouteSelectionAlgorithm algorithm,
-      const PrefixEntries& prefixEntries,
-      const std::unordered_map<std::string, LinkState>& areaLinkStates,
-      RouteSelectionResult& selectedRoutes);
-
   // helper to get min nexthop for a prefix, used in selectKsp2
   std::optional<int64_t> getMinNextHopThreshold(
       RouteSelectionResult nodes, PrefixEntries const& prefixEntries);
