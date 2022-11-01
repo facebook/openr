@@ -837,10 +837,13 @@ std::set<NodeAndArea>
 selectRoutes(
     const PrefixEntries& prefixEntries,
     thrift::RouteSelectionAlgorithm algorithm) {
-  // Best Route Selection] Part (1/2):
-  // 1st tie-breaker : drain_metric - prefer lower;
-  // 2nd tie-breaker: path_preference - prefer higher;
-  // 3rd tie-breaker: source_preference - prefer higher;
+  /*
+   * [Best Route Selection] Part 1/2:
+   *
+   *  - 1st tie-breaker : drain_metric - prefer lower;
+   *  - 2nd tie-breaker: path_preference - prefer higher;
+   *  - 3rd tie-breaker: source_preference - prefer higher;
+   */
   std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{
       std::numeric_limits<int32_t>::min(),
       std::numeric_limits<int32_t>::min(),
@@ -864,11 +867,16 @@ selectRoutes(
     nodeAreaSet.emplace(key);
   }
 
-  // Second, select routes based on selection algorithm.
+  /*
+   * [Best Route Selection] Part 2/2:
+   *
+   * With different selection algorithm, the preference over distance is
+   * different.
+   *
+   * Please see `openr/if/OpenrConfig.thrift` for detailed reference.
+   */
   switch (algorithm) {
   case thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE:
-    // [Best Route Selection] Part (2/2):
-    // distance - prefer lower
     return selectShortestDistance(prefixEntries, nodeAreaSet);
   case thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2:
     return selectShortestDistance2(prefixEntries, nodeAreaSet);

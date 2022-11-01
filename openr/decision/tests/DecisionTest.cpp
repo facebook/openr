@@ -7559,7 +7559,7 @@ TEST(DecisionPendingUpdates, perfEvents) {
 //        \ /
 //        (1)
 //
-TEST(DecisionTest, Ucmp) {
+TEST(DecisionTest, DISABLED_Ucmp) {
   std::string nodeName("1");
   auto spfSolver = std::make_unique<SpfSolver>(
       nodeName,

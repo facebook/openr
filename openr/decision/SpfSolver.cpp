@@ -270,7 +270,7 @@ SpfSolver::createRouteForPrefix(
   }
 
   /*
-   * [Best Path Selection]
+   * [Best Route Selection]
    *
    * Prefix can be advertised from multiple places:
    *  - locally originated;
@@ -296,18 +296,10 @@ SpfSolver::createRouteForPrefix(
   // Set best route selection in prefix state
   bestRoutesCache_.insert_or_assign(prefix, routeSelectionResult);
 
-  // Skip adding route for one prefix advertised by current node in all
-  // following scenarios:
-  //
-  // - Scenario1: The node has routes of fine-granularity prefixes
-  //   (e.g., 10.0.0.0/25 and 10.0.0.128/25) programmed locally. It originates
-  //   the aggregated prefix (e.g., 10.0.0.0/24) to attract traffic.
-  // - Scenario2: The node locates in multi areas and the prefix is
-  //   distributed cross areas (e.g., from previous area1 to current area2). IP
-  //   routes for the prefix were programmed when OpenR handled the prefix in
-  //   previous area1.
-  // Other scenarios: re-distributed from other protocols (unclear),
-  //   interface-subnets, etc;
+  /*
+   * ATTN:
+   * Skip adding route if one prefix is advertised by local node.
+   */
   if (routeSelectionResult.hasNode(myNodeName)) {
     XLOG(DBG3) << "Skip adding route for prefixes advertised by " << myNodeName
                << " " << folly::IPAddress::networkToString(prefix);
@@ -320,18 +312,21 @@ SpfSolver::createRouteForPrefix(
   auto routeComputationRules = getRouteComputationRules(
       prefixEntries, routeSelectionResult, areaLinkStates);
 
-  // Route computation flow
-  // - For each area:
-  //    - Switch on algorithm type
-  //    - Compute paths, algorithm type influences this step (SP or KSP2)
-  //    - Create next-hops from paths, forwarding type influences this step
-  //    - Only use the next-hop set if it has the shortest metric
-  //        - TODO: support this functionality for KSP2 forwarding algorithm
-  //    - Combine shortest metric next-hops from all area
+  /*
+   * [Route Computation]
+   *
+   * For each area:
+   * - Switch on algorithm type:
+   *   - Compute paths, algorithm type influences this step (SP or KSP2);
+   *   - Create next-hops from paths, forwarding type influences this step;
+   *   - Only use the next-hop set if it has the shortest metric;
+   *   - Combine shortest metric next-hops from all areas;
+   */
   std::unordered_set<thrift::NextHopThrift> totalNextHops;
   std::unordered_set<thrift::NextHopThrift> ksp2NextHops;
-  std::optional<int64_t> ucmpWeight;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
+
+  // TODO: simplify the areaPathComputationRules usage. No more SR policy.
   for (const auto& [area, areaRules] :
        *routeComputationRules.areaPathComputationRules()) {
     const auto& linkState = areaLinkStates.find(area);
@@ -358,25 +353,15 @@ SpfSolver::createRouteForPrefix(
           area,
           linkState->second,
           *areaRules.forwardingAlgo());
+
       // Only use next-hops in areas with the shortest IGP metric
-      //
-      // TODO: bypass this code to allow UCMP paths between areas if
-      // new RouteComputationRules flag allowUcmpPathsBetweenAreas is true
       if (shortestMetric >= spfAreaResults.bestMetric) {
         if (shortestMetric > spfAreaResults.bestMetric) {
           shortestMetric = spfAreaResults.bestMetric;
           totalNextHops.clear();
-          ucmpWeight = std::nullopt;
         }
         totalNextHops.insert(
             spfAreaResults.nextHops.begin(), spfAreaResults.nextHops.end());
-
-        if (not ucmpWeight) {
-          ucmpWeight = spfAreaResults.ucmpWeight;
-        } else if (spfAreaResults.ucmpWeight) {
-          // Add the ucmp weight from all areas where we will use next-hops.
-          *ucmpWeight += *spfAreaResults.ucmpWeight;
-        }
       }
     } break;
     case thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP: {
@@ -416,7 +401,7 @@ SpfSolver::createRouteForPrefix(
       hasBGP,
       std::move(totalNextHops),
       shortestMetric,
-      ucmpWeight,
+      std::nullopt,
       localPrefixConsidered);
 }
 
