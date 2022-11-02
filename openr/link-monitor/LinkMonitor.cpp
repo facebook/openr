@@ -797,8 +797,9 @@ LinkMonitor::advertiseRedistAddrs() {
   for (auto& [_, interface] : interfaces_) {
     // Ignore in-active interfaces
     if (not interface.isActive()) {
-      XLOG(DBG1) << "Interface: " << interface.getIfName()
-                 << " is NOT active. Skip advertising.";
+      XLOG(DBG2) << fmt::format(
+          "Interface: {} is NOT active. Skip advertising.",
+          interface.getIfName());
       continue;
     }
 

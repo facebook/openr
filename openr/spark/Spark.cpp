@@ -1777,7 +1777,7 @@ Spark::processHandshakeMsg(
   //  1). negotiate hold timer already expired;
   //  2). v4 validation failed and fall back to WARM;
   if (neighbor.state != thrift::SparkNeighState::NEGOTIATE) {
-    XLOG(DBG1) << fmt::format(
+    XLOG(DBG3) << fmt::format(
         "[SparkHandshakeMsg] Current state of neighbor: {} is [{}], expected state: [NEGOTIIATE]",
         neighborName,
         apache::thrift::util::enumNameSafe(neighbor.state));
@@ -1909,7 +1909,7 @@ Spark::processHeartbeatMsg(
     // Only if the neighbor is in Warm state, we need a helloMsg to unblock
     // ourselve to transition this neighbor to established quickly
     if (neighbor.state == thrift::SparkNeighState::WARM) {
-      XLOG(WARNING)
+      XLOG(DBG3)
           << "[SparkHelloMsg] Sending HelloMsg to solicit a response immediately";
       sendHelloMsg(
           ifName,
@@ -2053,10 +2053,6 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
 
   CHECK(event == thrift::InitializationEvent::PREFIX_DB_SYNCED) << fmt::format(
       "Unexpected initialization event: {}",
-      apache::thrift::util::enumNameSafe(event));
-
-  LOG(INFO) << fmt::format(
-      "[Initialization] {} event received.",
       apache::thrift::util::enumNameSafe(event));
 
   // ATTN: must toggle this flag before sending SparkHeartbeatMsg
