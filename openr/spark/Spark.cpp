@@ -1155,13 +1155,16 @@ Spark::getNeighbors() {
 
 /**
  * Determine if Spark has finished discovering all the the known neighbors.
+ * We will assume neighbora are not all discovered if there's no active
+ * Neighbors.
  *
  * Returns:
  *  bool: true if discovery is complete, false otherwise.
  */
 bool
 Spark::allNeighborsDiscovered() {
-  return (numActiveNeighbors_ == numTotalNeighbors_);
+  return (numActiveNeighbors_ == numTotalNeighbors_) and
+      (numActiveNeighbors_ > 0);
 }
 
 /**

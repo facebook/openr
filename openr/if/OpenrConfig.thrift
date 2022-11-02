@@ -234,7 +234,7 @@ struct SparkConfig {
    * The max interval, at the expiry of which NEIGHBOR_DISCOVERED signal must be
    * published to LinkMonitor during Open/R Initialization process.
    */
-  9: i32 max_neighbor_discovery_interval_s = 4;
+  9: i32 max_neighbor_discovery_interval_s = 15;
 }
 
 struct WatchdogConfig {
