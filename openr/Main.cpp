@@ -447,6 +447,7 @@ main(int argc, char** argv) {
           config));
   watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
   watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");
+  watchdog->addQueue(prefixMgrRouteUpdatesQueue, "prefixMgrRouteUpdatesQueue");
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (config->isPrefixAllocationEnabled()) {

@@ -595,12 +595,12 @@ void
 PrefixManager::deleteKvStoreKeyHelper(
     const folly::CIDRNetwork& prefix,
     const std::unordered_set<std::string>& deletedArea) {
-  // Prepare thrift::PrefixDatabase object for deletion
-  thrift::PrefixDatabase deletedPrefixDb;
-  deletedPrefixDb.thisNodeName() = nodeId_;
-  deletedPrefixDb.deletePrefix() = true;
-
   for (const auto& area : deletedArea) {
+    // Prepare thrift::PrefixDatabase object for deletion
+    thrift::PrefixDatabase deletedPrefixDb;
+    deletedPrefixDb.thisNodeName() = nodeId_;
+    deletedPrefixDb.deletePrefix() = true;
+
     const auto prefixKeyStr = PrefixKey(nodeId_, prefix, area).getPrefixKeyV2();
     thrift::PrefixEntry entry;
     entry.prefix() = toIpPrefix(prefix);
@@ -628,10 +628,14 @@ PrefixManager::triggerInitialPrefixDbSync() {
     // types and all inital prefix keys from KvStore.
     syncKvStore();
 
-    // Send FULL_SYNC to bgp speaker, signal bgp speaker to send EoR
-    DecisionRouteUpdate routeUpdatesForBgp;
-    routeUpdatesForBgp.type = DecisionRouteUpdate::FULL_SYNC;
-    prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
+    // ATTN: when BGP peersing is NOT enabled, do NOT push to this queue since
+    // there is NO reader!
+    if (config_->isBgpPeeringEnabled()) {
+      // Send FULL_SYNC to bgp speaker, signal bgp speaker to send EoR
+      DecisionRouteUpdate routeUpdatesForBgp;
+      routeUpdatesForBgp.type = DecisionRouteUpdate::FULL_SYNC;
+      prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
+    }
 
     // Logging for initialization stage duration computation
     logInitializationEvent(
@@ -747,10 +751,14 @@ PrefixManager::syncKvStore() {
   // Push originatedRoutes that does not go through fib to
   // prefixMgrRouteUpdatesQueue_. Note: the routes that do go through fib will
   // be pushed to this queue once fib finishes installing
-  if (not routeUpdatesForBgp.empty()) {
-    CHECK(routeUpdatesForBgp.mplsRoutesToUpdate.empty());
-    CHECK(routeUpdatesForBgp.mplsRoutesToDelete.empty());
-    prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
+  // ATTN: when BGP peersing is NOT enabled, do NOT push to this queue since
+  // there is NO reader!
+  if (config_->isBgpPeeringEnabled()) {
+    if (not routeUpdatesForBgp.empty()) {
+      CHECK(routeUpdatesForBgp.mplsRoutesToUpdate.empty());
+      CHECK(routeUpdatesForBgp.mplsRoutesToDelete.empty());
+      prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
+    }
   }
 
   XLOG(DBG1) << fmt::format(
@@ -1566,10 +1574,17 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   // We send fib update as INCREMENTAL, this has to be done before
   // triggerInitialPrefixDbSync().
   //
-  // TODO: treat bgprib as another area, move this logic into syncKvStore()
-  auto fibRouteUpdateCp = fibRouteUpdate;
-  fibRouteUpdateCp.type = DecisionRouteUpdate::INCREMENTAL;
-  prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
+  // TODO: remove this when openr -> bgp redistribution is gone
+  if (config_->isBgpPeeringEnabled()) {
+    // ATTN: when BGP peersing is NOT enabled, do NOT push to this queue since
+    // there is NO reader!
+    auto fibRouteUpdateCp = fibRouteUpdate;
+    fibRouteUpdateCp.type = DecisionRouteUpdate::INCREMENTAL;
+    prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
+  }
+
+  // Store update type first
+  auto type = fibRouteUpdate.type;
 
   // Store programmed label/unicast routes info.
   storeProgrammedRoutes(fibRouteUpdate);
@@ -1577,7 +1592,7 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   // Re-advertise prefixes received from one area to other areas.
   redistributePrefixesAcrossAreas(std::move(fibRouteUpdate));
 
-  if (fibRouteUpdate.type == DecisionRouteUpdate::FULL_SYNC and
+  if (type == DecisionRouteUpdate::FULL_SYNC and
       uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
     XLOG(INFO) << "[Initialization] Received initial RIB type routes.";
     triggerInitialPrefixDbSync();

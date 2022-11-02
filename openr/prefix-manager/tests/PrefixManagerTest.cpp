@@ -2932,7 +2932,6 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   // RQueue interface to read route updates sent by PrefixManager to
   // Decision. This queue is expressly used for originated routes
   auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
-  auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
   auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
 
   // dummy nexthop
@@ -2997,11 +2996,6 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //    - 1st supporting route for v4Prefix_;
   //    - 1st supporting route for v6Prefix_;
   // Verification:
-  //    a. v4Prefix_ will be sent to Decision on staticRouteUpdatesQueue (since
-  //       the install_to_fib bit is set for v4Prefix_)
-  //    b. v6Prefix_ will NOT be sent to Decision on staticRouteUpdatesQueue
-  //       (since min_supporting_route is not met for v6Prefix_, plus the
-  //       install_to_fib bit is NOT set for v6Prefix_)
   //    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
   //    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
   //    e. Config values and supporting routes count is as expected for both
@@ -3032,29 +3026,6 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   routeUpdate.addRouteToUpdate(unicastEntryV4_1);
   routeUpdate.addRouteToUpdate(unicastEntryV6_1);
   fibRouteUpdatesQueue.push(std::move(routeUpdate));
-
-  // Verify 1a and 1b: PrefixManager -> forward fib routes to Bgp/Plugin
-  // routeUpdate;
-  {
-    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
-    EXPECT_TRUE(update.has_value());
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(3));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-
-    const auto prefixes = {
-        *updatedRoutes.at(0).dest(),
-        *updatedRoutes.at(1).dest(),
-        *updatedRoutes.at(2).dest()};
-    EXPECT_THAT(
-        prefixes,
-        testing::UnorderedElementsAre(
-            addressV4, toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
-
-    // Does not originate v4 because install_to_fib = true
-    EXPECT_FALSE(waitForRouteUpdate(prefixMgrRouteUpdatesReader).has_value());
-  }
 
   // Verify 1c and 1d: PrefixManager -> Decision staticRouteupdate
   {
@@ -3116,7 +3087,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
 
   // Step 2 - inject 1 v6 supporting prefix into fibRouteUpdatesQueue
   routeUpdate.addRouteToUpdate(unicastEntryV6_2);
-  fibRouteUpdatesQueue.push(std::move(routeUpdate));
+  fibRouteUpdatesQueue.push(routeUpdate);
 
   // Verify 2a: PrefixManager -> Decision staticRouteUpdate
   {
@@ -3166,44 +3137,10 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
             folly::IPAddress::networkToString(v6Network_2)));
   }
 
-  // Verify 2d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
-  {
-    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
-    EXPECT_TRUE(update.has_value());
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-
-    const auto& route = updatedRoutes.back();
-
-    EXPECT_EQ(*route.dest(), toIpPrefix(v6Prefix_2));
-  }
-
-  // Verify 2f: PrefixMgr publish v6 route to prefixMgrRouteUpdateQueue despite
-  // of install_to_fib=false
-  {
-    // Publish v6 because install_to_fib = false and min_supporting_routes
-    // reached
-    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
-    EXPECT_TRUE(update.has_value());
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
-
-    const auto& route = updatedRoutes.back();
-
-    EXPECT_EQ(*route.dest(), toIpPrefix(v6Prefix_));
-
-    const auto& nhs = *route.nextHops();
-    EXPECT_THAT(nhs, testing::SizeIs(0));
-  }
-
   // Step 3 - withdraw 1 v4 and 1 v6 supporting prefix
   routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
   routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
-  fibRouteUpdatesQueue.push(std::move(routeUpdate));
+  fibRouteUpdatesQueue.push(routeUpdate);
 
   // Verify 3a PrefixManager -> Decision staticRouteupdate
   {
@@ -3253,22 +3190,6 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
         *prefixEntryV6.supporting_prefixes(),
         testing::UnorderedElementsAre(
             folly::IPAddress::networkToString(v6Network_2)));
-  }
-
-  // Verify 3d: PrefixMgr forward the route to prefixMgrRouteUpdateQueue
-  {
-    // both route withdrawn updates are sent to Bgp/plugin
-    auto update = waitForRouteUpdate(prefixMgrRouteUpdatesReader);
-    EXPECT_TRUE(update.has_value());
-
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete();
-    EXPECT_THAT(updatedRoutes, testing::SizeIs(0));
-    EXPECT_THAT(deletedRoutes, testing::SizeIs(2));
-    EXPECT_THAT(
-        deletedRoutes,
-        testing::UnorderedElementsAre(
-            toIpPrefix(v4Prefix_1), toIpPrefix(v6Prefix_1)));
   }
 }
 
@@ -3716,8 +3637,11 @@ class SingleProtocolRoutingTestFixture
     originatedPrefixV6.install_to_fib() = true;
 
     tConfig.originated_prefixes() = {originatedPrefixV4, originatedPrefixV6};
-
     tConfig.enable_ordered_adj_publication() = true;
+
+    // Enable BGP peering.
+    tConfig.enable_bgp_peering() = true;
+    tConfig.bgp_config() = thrift::BgpConfig();
 
     return tConfig;
   }
