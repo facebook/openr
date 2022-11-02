@@ -1085,9 +1085,11 @@ SpfSolver::addBestPaths(
     }
   }
 
+  auto entry =
+      *(prefixEntries.at(routeSelectionResult.bestNodeArea)); // copy intended
+  // We don't modify original prefixEntries (referenced from prefixState)
+  // because they reflect the prefix entries we received from others.
   if (routeSelectionResult.isBestNodeDrained) {
-    auto entry =
-        *(prefixEntries.at(routeSelectionResult.bestNodeArea)); // copy intended
     *entry.metrics()->drain_metric() = 1;
   }
 
@@ -1095,7 +1097,7 @@ SpfSolver::addBestPaths(
   return RibUnicastEntry(
       prefix,
       std::move(nextHops),
-      *(prefixEntries.at(routeSelectionResult.bestNodeArea)),
+      std::move(entry),
       routeSelectionResult.bestNodeArea.second,
       isBgp & (not enableBgpRouteProgramming_), // doNotInstall
       shortestMetric,
