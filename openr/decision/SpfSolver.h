@@ -188,7 +188,6 @@ class SpfSolver {
       folly::CIDRNetwork const& prefix,
       RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
-      bool const isBgp,
       thrift::PrefixForwardingType const& forwardingType,
       const std::string& area,
       const LinkState& linkState,
@@ -201,7 +200,6 @@ class SpfSolver {
       const folly::CIDRNetwork& prefix,
       RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
-      bool isBgp,
       thrift::PrefixForwardingType const& forwardingType,
       const std::string& area,
       const LinkState& linkState);
@@ -217,12 +215,6 @@ class SpfSolver {
       const std::optional<int64_t>& ucmpWeight,
       const bool localPrefixConsidered);
 
-  // Helper function to find the nodes for the nexthop for bgp route
-  RouteSelectionResult runBestPathSelectionBgp(
-      folly::CIDRNetwork const& prefix,
-      PrefixEntries const& prefixEntries,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
-
   /**
    * Performs best route selection from received route announcements of one
    * prefix.
@@ -231,7 +223,6 @@ class SpfSolver {
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       PrefixEntries& prefixEntries,
-      bool const hasBgp,
       std::unordered_map<std::string, LinkState> const& areaLinkStates);
 
   // helper to get min nexthop for a prefix, used in selectKsp2
@@ -256,22 +247,6 @@ class SpfSolver {
 
   bool isNodeDrained(
       const NodeAndArea& nodeArea,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
-
-  // [To be deprecated], filter before rather after route selection
-  // Helper to filter overloaded nodes for anycast addresses
-  RouteSelectionResult maybeFilterDrainedNodes(
-      RouteSelectionResult&& result,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
-
-  // [hard-drain]
-  RouteSelectionResult maybeFilterHardDrainedNodes(
-      RouteSelectionResult&& result,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
-
-  // [soft-drain]
-  RouteSelectionResult maybeFilterSoftDrainedNodes(
-      RouteSelectionResult&& result,
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 
   // Give source node-name and dstNodeNames, this function returns the set of

@@ -281,8 +281,8 @@ SpfSolver::createRouteForPrefix(
    * route selection procedure will find the best candidate(NodeAndArea) to run
    * Dijkstra(SPF) or K-Shortest Path Forwarding algorithm against.
    */
-  auto routeSelectionResult = selectBestRoutes(
-      myNodeName, prefix, prefixEntries, hasBGP, areaLinkStates);
+  auto routeSelectionResult =
+      selectBestRoutes(myNodeName, prefix, prefixEntries, areaLinkStates);
   if (not routeSelectionResult.success) {
     return std::nullopt;
   }
@@ -348,7 +348,6 @@ SpfSolver::createRouteForPrefix(
           prefix,
           routeSelectionResult,
           prefixEntries,
-          hasBGP,
           *areaRules.forwardingType(),
           area,
           linkState->second,
@@ -375,7 +374,6 @@ SpfSolver::createRouteForPrefix(
           prefix,
           routeSelectionResult,
           prefixEntries,
-          hasBGP,
           *areaRules.forwardingType(),
           area,
           linkState->second);
@@ -598,7 +596,6 @@ SpfSolver::selectBestRoutes(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     PrefixEntries& prefixEntries,
-    bool const isBgp,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) {
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   RouteSelectionResult ret;
@@ -611,8 +608,6 @@ SpfSolver::selectBestRoutes(
         filteredPrefixes, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
     ret.success = true;
-  } else if (isBgp) {
-    ret = runBestPathSelectionBgp(prefix, filteredPrefixes, areaLinkStates);
   } else {
     // If it is openr route, all nodes are considered as best nodes.
     // Except for drained
@@ -704,132 +699,12 @@ SpfSolver::isNodeDrained(
       linkState.getNodeMetricIncrement(node) != 0;
 }
 
-RouteSelectionResult
-SpfSolver::maybeFilterDrainedNodes(
-    RouteSelectionResult&& result,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  auto hardDrainedFiltered = maybeFilterHardDrainedNodes(
-      std::forward<RouteSelectionResult>(result), areaLinkStates);
-  return maybeFilterSoftDrainedNodes(
-      std::move(hardDrainedFiltered), areaLinkStates);
-}
-
-RouteSelectionResult
-SpfSolver::maybeFilterHardDrainedNodes(
-    RouteSelectionResult&& result,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  // Filter out all hard-drained nodes (node with overloaded bit set)
-  RouteSelectionResult filtered = folly::copy(result);
-  bool shouldUpdateBestNodeArea{false};
-  for (auto iter = filtered.allNodeAreas.cbegin();
-       iter != filtered.allNodeAreas.cend();) {
-    const auto& [node, area] = *iter;
-    if (areaLinkStates.at(area).isNodeOverloaded(node)) {
-      if (result.bestNodeArea == *iter) {
-        shouldUpdateBestNodeArea = true;
-      }
-      iter = filtered.allNodeAreas.erase(iter);
-    } else {
-      ++iter;
-    }
-  }
-
-  // Update the bestNodeArea to a valid key
-  if (not filtered.allNodeAreas.empty() and shouldUpdateBestNodeArea) {
-    filtered.bestNodeArea = *filtered.allNodeAreas.begin();
-  }
-
-  // [ATTN] if everything is hard drained, then they are all viable candidates
-  return filtered.allNodeAreas.empty() ? result : filtered;
-}
-
-RouteSelectionResult
-SpfSolver::maybeFilterSoftDrainedNodes(
-    RouteSelectionResult&& result,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  bool shouldUpdateBestNodeArea{false};
-
-  // Find the lowest node metric increment
-  const auto& [bestNode, bestArea] = *std::min_element(
-      result.allNodeAreas.cbegin(),
-      result.allNodeAreas.cend(),
-      [&areaLinkStates](const auto& a, const auto& b) {
-        const auto& [nodeA, areaA] = a;
-        const auto& [nodeB, areaB] = b;
-        return areaLinkStates.at(areaA).getNodeMetricIncrement(nodeA) <
-            areaLinkStates.at(areaB).getNodeMetricIncrement(nodeB);
-      });
-  const auto minNodeMetricInc =
-      areaLinkStates.at(bestArea).getNodeMetricIncrement(bestNode);
-
-  // Filter all nodes having higher node metric increment
-  for (auto iter = result.allNodeAreas.cbegin();
-       iter != result.allNodeAreas.cend();) {
-    const auto& [node, area] = *iter;
-    if (areaLinkStates.at(area).getNodeMetricIncrement(node) >
-        minNodeMetricInc) {
-      if (result.bestNodeArea == *iter) {
-        shouldUpdateBestNodeArea = true;
-      }
-      iter = result.allNodeAreas.erase(iter);
-    } else {
-      ++iter;
-    }
-  }
-
-  // Update the bestNodeArea to a valid key
-  if (shouldUpdateBestNodeArea) {
-    result.bestNodeArea = *result.allNodeAreas.begin();
-  }
-
-  return std::move(result);
-}
-
-RouteSelectionResult
-SpfSolver::runBestPathSelectionBgp(
-    folly::CIDRNetwork const& prefix,
-    PrefixEntries const& prefixEntries,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) {
-  RouteSelectionResult ret;
-  std::optional<thrift::MetricVector> bestVector;
-  for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-    switch (bestVector.has_value()
-                ? MetricVectorUtils::compareMetricVectors(
-                      can_throw(*prefixEntry->mv()), *bestVector)
-                : MetricVectorUtils::CompareResult::WINNER) {
-    case MetricVectorUtils::CompareResult::WINNER:
-      ret.allNodeAreas.clear();
-      FOLLY_FALLTHROUGH;
-    case MetricVectorUtils::CompareResult::TIE_WINNER:
-      bestVector = can_throw(*prefixEntry->mv());
-      ret.bestNodeArea = nodeAndArea;
-      FOLLY_FALLTHROUGH;
-    case MetricVectorUtils::CompareResult::TIE_LOOSER:
-      ret.allNodeAreas.emplace(nodeAndArea);
-      break;
-    case MetricVectorUtils::CompareResult::TIE:
-      XLOG(ERR) << "Tie ordering prefix entries. Skipping route for "
-                << folly::IPAddress::networkToString(prefix);
-      return ret;
-    case MetricVectorUtils::CompareResult::ERROR:
-      XLOG(ERR) << "Error ordering prefix entries. Skipping route for "
-                << folly::IPAddress::networkToString(prefix);
-      return ret;
-    default:
-      break;
-    }
-  }
-  ret.success = true;
-  return maybeFilterDrainedNodes(std::move(ret), areaLinkStates);
-}
-
 SpfSolver::SpfAreaResults
 SpfSolver::selectBestPathsSpf(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     RouteSelectionResult const& routeSelectionResult,
     PrefixEntries const& prefixEntries,
-    bool const isBgp,
     thrift::PrefixForwardingType const& forwardingType,
     const std::string& area,
     const LinkState& linkState,
@@ -905,7 +780,6 @@ SpfSolver::selectBestPathsKsp2(
     const folly::CIDRNetwork& prefix,
     RouteSelectionResult const& routeSelectionResult,
     PrefixEntries const& prefixEntries,
-    bool isBgp,
     thrift::PrefixForwardingType const& forwardingType,
     const std::string& area,
     const LinkState& linkState) {
