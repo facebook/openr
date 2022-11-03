@@ -673,11 +673,13 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
     auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(1, routeDb->unicastRoutes.size());
-    // check one nexthop
+    // check one nexthop to node 3
     const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
     EXPECT_EQ(1, ribEntry.nexthops.size());
     const auto nh = *ribEntry.nexthops.cbegin();
     EXPECT_EQ(createNextHopFromAdj(adj23, false, *adj23.metric()), nh);
+    // check that drain metric is not set, 3 is not drained
+    EXPECT_EQ(0, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
   }
 
   // 2] Soft Drain 3, now both 1 and 3 are drained; 2 should have two nexthop
@@ -691,9 +693,11 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
     auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(1, routeDb->unicastRoutes.size());
-    // check one nexthop
+    // check two nexthop (ecmp to both drained)
     const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
     EXPECT_EQ(2, ribEntry.nexthops.size());
+    // check that drain metric is set
+    EXPECT_EQ(1, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
   }
 
   // 3] soft Drain 1 harder (100), 2 will have 3 as next hop
@@ -707,11 +711,13 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
     auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(1, routeDb->unicastRoutes.size());
-    // check one nexthop
+    // check one nexthop to 3
     const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
     EXPECT_EQ(1, ribEntry.nexthops.size());
     const auto nh = *ribEntry.nexthops.cbegin();
     EXPECT_EQ(createNextHopFromAdj(adj23, false, *adj23.metric()), nh);
+    // check that drain metric is set
+    EXPECT_EQ(1, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
   }
 
   // 4] undrain 1, 3 is still softdrained. Will choose 1
@@ -730,6 +736,8 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
     EXPECT_EQ(1, ribEntry.nexthops.size());
     const auto nh = *ribEntry.nexthops.cbegin();
     EXPECT_EQ(createNextHopFromAdj(adj21, false, *adj21.metric()), nh);
+    // check that drain metric is not set
+    EXPECT_EQ(0, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
   }
 }
 
