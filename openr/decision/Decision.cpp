@@ -131,7 +131,6 @@ Decision::Decision(
       config->isV4Enabled(),
       config->isSegmentRoutingEnabled(),
       config->isAdjacencyLabelsEnabled(),
-      config->isBgpRouteProgrammingEnabled(),
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled(),
       config->isUcmpEnabled());

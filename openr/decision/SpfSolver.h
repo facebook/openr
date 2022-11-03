@@ -109,7 +109,6 @@ class SpfSolver {
       bool enableV4,
       bool enableNodeSegmentLabel,
       bool enableAdjacencyLabels,
-      bool enableBgpRouteProgramming = false,
       bool enableBestRouteSelection = false,
       bool v4OverV6Nexthop = false,
       bool enableUcmp = false);
@@ -209,7 +208,6 @@ class SpfSolver {
       const folly::CIDRNetwork& prefix,
       const RouteSelectionResult& routeSelectionResult,
       const PrefixEntries& prefixEntries,
-      const bool isBgp,
       std::unordered_set<thrift::NextHopThrift>&& nextHops,
       const openr::LinkStateMetric shortestMetric,
       const std::optional<int64_t>& ucmpWeight,
@@ -312,8 +310,6 @@ class SpfSolver {
   const bool enableNodeSegmentLabel_{true};
 
   const bool enableAdjacencyLabels_{true};
-
-  const bool enableBgpRouteProgramming_{false};
 
   const bool enableBestRouteSelection_{false};
 

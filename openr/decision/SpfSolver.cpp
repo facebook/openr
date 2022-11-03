@@ -79,7 +79,6 @@ SpfSolver::SpfSolver(
     bool enableV4,
     bool enableNodeSegmentLabel,
     bool enableAdjacencyLabels,
-    bool enableBgpRouteProgramming,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop,
     bool enableUcmp)
@@ -87,7 +86,6 @@ SpfSolver::SpfSolver(
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
       enableAdjacencyLabels_(enableAdjacencyLabels),
-      enableBgpRouteProgramming_(enableBgpRouteProgramming),
       enableBestRouteSelection_(enableBestRouteSelection),
       v4OverV6Nexthop_(v4OverV6Nexthop),
       enableUcmp_(enableUcmp) {
@@ -262,13 +260,6 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // TODO: the following logic to set hasBGP to true is ONLY used for UT.
-  bool hasBGP = false;
-  for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-    bool isBGP = prefixEntry->type().value() == thrift::PrefixType::BGP;
-    hasBGP |= isBGP;
-  }
-
   /*
    * [Best Route Selection]
    *
@@ -396,7 +387,6 @@ SpfSolver::createRouteForPrefix(
       prefix,
       routeSelectionResult,
       prefixEntries,
-      hasBGP,
       std::move(totalNextHops),
       shortestMetric,
       std::nullopt,
@@ -907,7 +897,6 @@ SpfSolver::addBestPaths(
     const folly::CIDRNetwork& prefix,
     const RouteSelectionResult& routeSelectionResult,
     const PrefixEntries& prefixEntries,
-    const bool isBgp,
     std::unordered_set<thrift::NextHopThrift>&& nextHops,
     const Metric shortestMetric,
     const std::optional<int64_t>& ucmpWeight,
@@ -973,7 +962,7 @@ SpfSolver::addBestPaths(
       std::move(nextHops),
       std::move(entry),
       routeSelectionResult.bestNodeArea.second,
-      isBgp & (not enableBgpRouteProgramming_), // doNotInstall
+      false, // doNotInstall
       shortestMetric,
       ucmpWeight,
       localPrefixConsidered);
