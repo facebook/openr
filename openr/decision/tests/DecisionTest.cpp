@@ -501,6 +501,129 @@ TEST(ShortestPathTest, UnreachableNodes) {
   }
 }
 
+/*
+ * 1 - 2 - 3, 1 and 3 both originating same prefix
+ * 3 originates higher/better metric than 1
+ * 0) nothing drained, we should choose 3 (baseline)
+ * Independant / separate scenarios
+ * 1) Softdrain 3, we should choose 1
+ * 2) HardDrain 3, we should choose 1
+ * 3) Set drain_metric at 3, we should choose 1
+ */
+TEST(SpfSolver, DrainedNodeLeastPreferred) {
+  auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj23}, 0);
+  auto adjacencyDb3 = createAdjDb("3", {adj32}, 0);
+
+  std::string nodeName("2");
+  SpfSolver spfSolver(
+      nodeName,
+      false /* disable v4 */,
+      true /* enable segment label */,
+      true /* enable adj labels */,
+      false /* disable LFA */,
+      true /* enableBestRouteSelection */);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  PrefixState prefixState;
+
+  linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
+  linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName);
+  linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+
+  // Originate same prefix, pp=100/300, sp=100/300, d=0;
+  const auto prefix = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::CONFIG, createMetrics(100, 100, 0));
+  auto prefixHighMetric = createPrefixEntryWithMetrics(
+      addr1, thrift::PrefixType::CONFIG, createMetrics(300, 300, 0));
+  const auto prefixDb1 = createPrefixDb("1", {prefix});
+  const auto prefixDb2 = createPrefixDb("2", {});
+  const auto prefixDb3 = createPrefixDb("3", {prefixHighMetric});
+
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+  EXPECT_TRUE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+
+  // 0) nothing drained, we should choose 3 (baseline)
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop to node 3
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj23, false, *adj23.metric()), nh);
+    // check that drain metric is not set, 3 is not drained
+    EXPECT_EQ(0, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
+  }
+
+  // 1) Softdrain 3, we should choose 1
+  adjacencyDb3.nodeMetricIncrementVal() = 100;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop to node 3
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj21, false, *adj21.metric()), nh);
+    // check that drain metric is not set, 1 is not drained
+    EXPECT_EQ(0, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
+  }
+
+  // 2) HardDrain 3, we should choose 1
+  adjacencyDb3.nodeMetricIncrementVal() = 0;
+  adjacencyDb3.isOverloaded() = true;
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop to node 1
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj21, false, *adj21.metric()), nh);
+    // check that drain metric is not set, 1 is not drained
+    EXPECT_EQ(0, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
+  }
+
+  // 3) Set drain_metric at 3, we should choose 1
+  adjacencyDb3.isOverloaded() = false;
+  *prefixHighMetric.metrics()->drain_metric() = 1;
+  updatePrefixDatabase(prefixState, createPrefixDb("3", {prefixHighMetric}));
+  {
+    auto res =
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName);
+    EXPECT_TRUE(res.topologyChanged);
+  }
+  {
+    auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
+    ASSERT_TRUE(routeDb.has_value());
+    EXPECT_EQ(1, routeDb->unicastRoutes.size());
+    // check one nexthop to node 1
+    const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
+    EXPECT_EQ(1, ribEntry.nexthops.size());
+    const auto nh = *ribEntry.nexthops.cbegin();
+    EXPECT_EQ(createNextHopFromAdj(adj21, false, *adj21.metric()), nh);
+    // check that drain metric is not set, 1 is not drained
+    EXPECT_EQ(0, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
+  }
+}
+
 //
 // R1 and R2 are adjacent, and R1 has this declared in its
 // adjacency database. However, R1 is missing the AdjDb from
