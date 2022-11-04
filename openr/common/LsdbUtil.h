@@ -335,44 +335,4 @@ std::set<NodeAndArea> selectRoutes(
 NodeAndArea selectBestNodeArea(
     std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName);
 
-/**
- * TODO: Deprecated and the support for best route selection based on metric
- * vector will soon be dropped in favor of new `PrefixMetrics`
- */
-namespace MetricVectorUtils {
-
-enum class CompareResult { WINNER, TIE_WINNER, TIE, TIE_LOOSER, LOOSER, ERROR };
-
-std::optional<const openr::thrift::MetricEntity> getMetricEntityByType(
-    const openr::thrift::MetricVector& mv, int64_t type);
-
-thrift::MetricEntity createMetricEntity(
-    int64_t type,
-    int64_t priority,
-    thrift::CompareType op,
-    bool isBestPathTieBreaker,
-    const std::vector<int64_t>& metric);
-
-CompareResult operator!(CompareResult mv);
-
-bool isDecisive(CompareResult const& result);
-
-bool isSorted(thrift::MetricVector const& mv);
-
-// sort a metric vector in decreasing order of priority
-void sortMetricVector(thrift::MetricVector const& mv);
-
-CompareResult compareMetrics(
-    std::vector<int64_t> const& l,
-    std::vector<int64_t> const& r,
-    bool tieBreaker);
-
-CompareResult resultForLoner(thrift::MetricEntity const& entity);
-
-void maybeUpdate(CompareResult& target, CompareResult update);
-
-CompareResult compareMetricVectors(
-    thrift::MetricVector const& l, thrift::MetricVector const& r);
-} // namespace MetricVectorUtils
-
 } // namespace openr

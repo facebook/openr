@@ -204,7 +204,6 @@ createPrefixDbWithKspfAlgo(
     p.forwardingAlgorithm() = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     if (prefixType == thrift::PrefixType::BGP and not prefix.has_value()) {
       p.type() = thrift::PrefixType::BGP;
-      p.mv() = thrift::MetricVector();
     }
   }
 
@@ -214,7 +213,6 @@ createPrefixDbWithKspfAlgo(
     entry.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
     entry.forwardingAlgorithm() =
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    entry.mv() = thrift::MetricVector();
     entry.type() = thrift::PrefixType::BGP;
     if (prependLabel.has_value()) {
       entry.prependLabel() = prependLabel.value();
@@ -1197,42 +1195,28 @@ TEST(BGPRedistribution, IgpMetric) {
       false /* enableV4 */,
       true /* enable segment label */,
       true /* enable adj labels */,
-      false /* enableOrderedFib */,
-      true /* enableBgpRouteProgramming */);
+      true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
+
   //
   // Create BGP prefix
   //
-  thrift::MetricVector metricVector;
-  int64_t numMetrics = 5;
-  metricVector.metrics()->resize(numMetrics);
-  for (int64_t i = 0; i < numMetrics; ++i) {
-    metricVector.metrics()[i].type() = i;
-    metricVector.metrics()[i].priority() = i;
-    metricVector.metrics()[i].op() = thrift::CompareType::WIN_IF_PRESENT;
-    metricVector.metrics()[i].isBestPathTieBreaker() = (i == numMetrics - 1);
-    *metricVector.metrics()[i].metric() = {i};
-  }
   const auto bgpPrefix2 = createPrefixEntry(
       addr1,
       thrift::PrefixType::BGP,
       data1,
       thrift::PrefixForwardingType::IP,
-      thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      metricVector);
-  // Make tie breaking metric different
-  *metricVector.metrics()->at(4).metric() = {100}; // Make it different
+      thrift::PrefixForwardingAlgorithm::SP_ECMP);
   const auto bgpPrefix3 = createPrefixEntry(
       addr1,
       thrift::PrefixType::BGP,
       data1,
       thrift::PrefixForwardingType::IP,
-      thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      metricVector);
+      thrift::PrefixForwardingAlgorithm::SP_ECMP);
 
   //
   // Setup adjacencies
@@ -6166,8 +6150,7 @@ TEST_F(DecisionTestFixture, Counters) {
       thrift::PrefixType::BGP,
       "data=10.2.0.0/16",
       thrift::PrefixForwardingType::IP,
-      thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      thrift::MetricVector{} /* empty metric vector */);
+      thrift::PrefixForwardingAlgorithm::SP_ECMP);
   auto bgpPrefixEntry2 = createPrefixEntry( // Missing metric vector
       toIpPrefix("10.3.0.0/16"),
       thrift::PrefixType::BGP,
@@ -6180,8 +6163,7 @@ TEST_F(DecisionTestFixture, Counters) {
       thrift::PrefixType::BGP,
       "data=10.3.0.0/16",
       thrift::PrefixForwardingType::SR_MPLS,
-      thrift::PrefixForwardingAlgorithm::SP_ECMP,
-      thrift::MetricVector{} /* empty metric vector */);
+      thrift::PrefixForwardingAlgorithm::SP_ECMP);
   std::unordered_map<std::string, thrift::Value> pubKvs = {
       {"adj:1", createAdjValue(serializer, "1", 1, {adj12, adj13}, false, 1)},
       {"adj:2", createAdjValue(serializer, "2", 1, {adj21, adj23}, false, 2)},
@@ -6313,8 +6295,7 @@ TEST_F(DecisionTestFixture, PrefixWithMixedTypeRoutes) {
         thrift::PrefixType::BGP,
         "data=10.1.0.0/16",
         thrift::PrefixForwardingType::IP,
-        thrift::PrefixForwardingAlgorithm::SP_ECMP,
-        thrift::MetricVector{} /* empty metric vector */);
+        thrift::PrefixForwardingAlgorithm::SP_ECMP);
     auto ribPrefixEntry = createPrefixEntry(
         toIpPrefix("10.1.0.0/16"),
         thrift::PrefixType::RIB,
