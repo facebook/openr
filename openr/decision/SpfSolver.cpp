@@ -699,31 +699,12 @@ SpfSolver::selectBestPathsSpf(
     const std::string& area,
     const LinkState& linkState,
     thrift::PrefixForwardingAlgorithm fwdingAlgo) {
+  // Prepare result for returning purpose
   SpfAreaResults result;
-  const bool isV4Prefix = prefix.first.isV4();
-  const bool perDestination =
-      forwardingType == thrift::PrefixForwardingType::SR_MPLS;
-
-  // Special case for programming imported next-hops during route origination.
-  // This case, programs the next-hops learned from external processes while
-  // importing route, along with the computed next-hops.
-  //
-  // TODO: This is one off the hack to unblock special routing needs. With
-  // complete support of multi-area setup, we can delete the following code
-  // block.
-  auto filteredBestNodeAreas = routeSelectionResult.allNodeAreas;
-  if (routeSelectionResult.hasNode(myNodeName) and perDestination) {
-    for (const auto& [nodeAndArea, prefixEntry] : prefixEntries) {
-      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel()) {
-        filteredBestNodeAreas.erase(nodeAndArea);
-        break;
-      }
-    }
-  }
 
   // Get next-hops
   const auto nextHopsWithMetric = getNextHopsWithMetric(
-      myNodeName, filteredBestNodeAreas, perDestination, linkState);
+      myNodeName, routeSelectionResult.allNodeAreas, false, linkState);
   result.bestMetric = nextHopsWithMetric.first;
   if (nextHopsWithMetric.second.empty()) {
     XLOG(DBG3) << "No route to prefix "
@@ -732,34 +713,19 @@ SpfSolver::selectBestPathsSpf(
     return result;
   }
 
-  // Get UCMP results for myNodeName. Will return nullopt if the UCMP
-  // feature is disabled, the route is not UCMP enabled, or an error
-  // occurs while resolving the UCMP weights.
-  auto maybeUcmpResult = getNodeUcmpResult(
-      myNodeName,
-      fwdingAlgo,
-      area,
-      linkState,
-      prefixEntries,
-      routeSelectionResult.allNodeAreas,
-      result.bestMetric);
-  if (maybeUcmpResult) {
-    result.ucmpWeight = maybeUcmpResult->weight();
-  }
-
   result.nextHops = getNextHopsThrift(
       myNodeName,
       routeSelectionResult.allNodeAreas,
-      isV4Prefix,
+      prefix.first.isV4(), /* isV4Prefix */
       v4OverV6Nexthop_,
-      perDestination,
+      false, /* perDestination */
       nextHopsWithMetric.first,
       nextHopsWithMetric.second,
       std::nullopt /* swapLabel */,
       area,
       linkState,
       prefixEntries,
-      maybeUcmpResult);
+      std::nullopt);
 
   return result;
 }
