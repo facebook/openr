@@ -3544,7 +3544,6 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
       "",
       thrift::PrefixForwardingType::SR_MPLS,
       thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP,
-      std::nullopt,
       std::make_optional<int64_t>(4));
 
   prefixDBFour.prefixEntries()->push_back(newPrefix);
@@ -6917,7 +6916,6 @@ TEST(DecisionTest, DISABLED_Ucmp) {
             thrift::PrefixForwardingAlgorithm::
                 SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
             std::nullopt,
-            std::nullopt,
             200 * 1e9)});
     EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb4_).empty());
     const auto prefixDb5_ = createPrefixDb(
@@ -6930,7 +6928,6 @@ TEST(DecisionTest, DISABLED_Ucmp) {
             thrift::PrefixForwardingAlgorithm::
                 SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
             std::nullopt,
-            std::nullopt,
             100 * 1e9)});
     EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb5_).empty());
     const auto prefixDb6_ = createPrefixDb(
@@ -6942,7 +6939,6 @@ TEST(DecisionTest, DISABLED_Ucmp) {
             thrift::PrefixForwardingType::IP,
             thrift::PrefixForwardingAlgorithm::
                 SP_UCMP_PREFIX_WEIGHT_PROPAGATION,
-            std::nullopt,
             std::nullopt,
             100 * 1e9)});
     EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb6_).empty());
@@ -7000,7 +6996,6 @@ TEST(DecisionTest, DISABLED_Ucmp) {
             {},
             thrift::PrefixForwardingType::IP,
             thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION,
-            std::nullopt,
             std::nullopt,
             100 * 1e9)});
     EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb6NoWeight).empty());

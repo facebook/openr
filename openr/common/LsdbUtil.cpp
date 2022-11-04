@@ -507,8 +507,6 @@ createPrefixDb(
   return prefixDb;
 }
 
-// TODO: refactor this as prefixEntry struct has been
-// completely refactored.
 // TODO: Create and return thrift::PrefixEntry as a
 // shared_ptr after adding support in BGPRIB/FIB/UT
 thrift::PrefixEntry
@@ -518,7 +516,6 @@ createPrefixEntry(
     const std::string& data,
     thrift::PrefixForwardingType forwardingType,
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
-    std::optional<thrift::MetricVector> mv,
     std::optional<int64_t> minNexthop,
     std::optional<int64_t> weight) {
   thrift::PrefixEntry prefixEntry;
@@ -529,7 +526,6 @@ createPrefixEntry(
   }
   prefixEntry.forwardingType() = forwardingType;
   prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
-  prefixEntry.mv().from_optional(mv);
   prefixEntry.minNexthop().from_optional(minNexthop);
   prefixEntry.weight().from_optional(weight);
   return prefixEntry;

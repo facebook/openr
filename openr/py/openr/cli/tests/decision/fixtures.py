@@ -554,7 +554,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
             "version": 1
           },
           "minNexthop": null,
-          "mv": null,
           "prefix": "fd00:5::/64",
           "prependLabel": null,
           "tags": [
@@ -598,7 +597,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
             "version": 1
           },
           "minNexthop": null,
-          "mv": null,
           "prefix": "fd00:4::/64",
           "prependLabel": null,
           "tags": [
@@ -642,7 +640,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
             "version": 1
           },
           "minNexthop": null,
-          "mv": null,
           "prefix": "fd00:7::/64",
           "prependLabel": null,
           "tags": [
@@ -678,7 +675,6 @@ OLD_PREFIXES_JSON = """\
           "version": 1
         },
         "minNexthop": null,
-        "mv": null,
         "prefix": "fd00:6::/64",
         "prependLabel": null,
         "tags": [
@@ -699,7 +695,6 @@ OLD_PREFIXES_JSON = """\
           "version": 1
         },
         "minNexthop": null,
-        "mv": null,
         "prefix": "fd00:7::/64",
         "prependLabel": null,
         "tags": [

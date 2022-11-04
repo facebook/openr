@@ -154,7 +154,6 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
             "version": 1
           },
           "minNexthop": 24,
-          "mv": null,
           "prefix": "::/0",
           "prependLabel": 65001,
           "tags": [
@@ -198,7 +197,6 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
             "version": 1
           },
           "minNexthop": 24,
-          "mv": null,
           "prefix": "0.0.0.0/0",
           "prependLabel": 60000,
           "tags": [

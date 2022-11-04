@@ -330,9 +330,6 @@ def prefix_entry_to_dict(prefix_entry):
                 else None,
                 "metrics": thrift_to_dict(prefix_entry.metrics),
                 "tags": list(prefix_entry.tags if prefix_entry.tags else []),
-                "mv": metric_vector_to_dict(prefix_entry.mv)
-                if prefix_entry.mv
-                else None,
             }
         )
 

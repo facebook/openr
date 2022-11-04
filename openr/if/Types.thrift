@@ -216,111 +216,6 @@ struct AdjacencyDatabase {
 } (cpp.minimize_padding)
 
 /**
- * @deprecated
- * Metric entity type
- */
-enum MetricEntityType {
-  LOCAL_PREFERENCE = 0,
-  LOCAL_ROUTE = 1,
-  AS_PATH_LEN = 2,
-  ORIGIN_CODE = 3,
-  EXTERNAL_ROUTE = 4,
-  CONFED_EXTERNAL_ROUTE = 5,
-  ROUTER_ID = 6,
-  CLUSTER_LIST_LEN = 7,
-  PEER_IP = 8,
-}
-
-/**
- * @deprecated
- * Metric entity priorities.
- * Large gaps are provided so that in future, we can place other fields
- * in between if needed
- */
-enum MetricEntityPriority {
-  LOCAL_PREFERENCE = 9000,
-  LOCAL_ROUTE = 8000,
-  AS_PATH_LEN = 7000,
-  ORIGIN_CODE = 6000,
-  EXTERNAL_ROUTE = 5000,
-  CONFED_EXTERNAL_ROUTE = 4000,
-  ROUTER_ID = 3000,
-  CLUSTER_LIST_LEN = 2000,
-  PEER_IP = 1000,
-}
-
-/**
- * How to compare two MetricEntity
- * @deprecated
- */
-enum CompareType {
-  /**
-   * If present only in one metric vector, route with this type will win
-   */
-  WIN_IF_PRESENT = 1,
-
-  /**
-   * If present only in one metric vector, route without this type will win
-   */
-  WIN_IF_NOT_PRESENT = 2,
-
-  /**
-   * If present only in one metric vector, this type will be ignored from
-   * comparision and fall through to next
-   */
-  IGNORE_IF_NOT_PRESENT = 3,
-}
-
-/**
- * @deprecated
- */
-struct MetricEntity {
-  /**
-   * Type identifying each entity. (Used only for identification)
-   */
-  1: i64 type;
-
-  /**
-   * Priority fields. Initially priorities are assigned as
-   * 10000, 9000, 8000, 7000 etc, this enables us to add any priorities
-   * in between two fields.
-   * Higher value is higher priority.
-   */
-  2: i64 priority;
-
-  /**
-   * Compare type defines how to handle cases of backward compatibility and
-   * scenario's where some fields are not populated
-   */
-  3: CompareType op;
-
-  /**
-   * All fields without this set will be used for multipath selection
-   * Field/fields with this set will be used for best path tie breaking only
-   */
-  4: bool isBestPathTieBreaker;
-
-  /**
-   * List of int64's. Always > win's. -ve numbers will represent < wins
-   */
-  5: list<i64> metric;
-} (cpp.minimize_padding)
-
-/**
- * Expected to be sorted on priority
- * @deprecated
- */
-struct MetricVector {
-  /**
-   * Only two metric vectors of same version will be compared.
-   * If we want to come up with new scheme for metric vector at a later date.
-   */
-  1: i64 version;
-
-  2: list<MetricEntity> metrics;
-}
-
-/**
  * PrefixMetrics - Structs represents the core set of metrics used in best
  * prefix selection (aka best path selection). Overall goal of metric is to
  * capture the preference of advertised route. The winning PrefixEntry will
@@ -408,6 +303,7 @@ struct PrefixEntry {
   2: Network.PrefixType type (deprecated);
 
   /**
+   * TODO: remove later when openr -> bgp route redistribution is gone
    * Optional additional metadata. Encoding depends on PrefixType
    */
   3: optional binary data (deprecated);
@@ -426,13 +322,6 @@ struct PrefixEntry {
    * forwarding on shortest paths
    */
   7: OpenrConfig.PrefixForwardingAlgorithm forwardingAlgorithm = OpenrConfig.PrefixForwardingAlgorithm.SP_ECMP;
-
-  /**
-   * TODO has: This is deprecated. Instead use `metrics` field, it is compact
-   * and concise.
-   * Metric vector for externally injected routes into openr
-   */
-  6: optional MetricVector mv (deprecated);
 
   /**
    * If the number of nexthops for this prefix is below certain threshold,
