@@ -942,7 +942,7 @@ std::pair<
 SpfSolver::getNextHopsWithMetric(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
-    bool perDestination,
+    bool perDestination, /* always false */
     const LinkState& linkState) {
   // build up next hop nodes that are along a shortest path to the prefix
   std::unordered_map<
@@ -1062,7 +1062,7 @@ SpfSolver::getNextHopsThrift(
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
     bool v4OverV6Nexthop,
-    bool perDestination,
+    bool perDestination, /* always false */
     const Metric minMetric,
     std::unordered_map<std::pair<std::string, std::string>, Metric>
         nextHopNodes,
@@ -1071,109 +1071,58 @@ SpfSolver::getNextHopsThrift(
     const LinkState& linkState,
     PrefixEntries const& prefixEntries,
     const std::optional<LinkState::NodeUcmpResult>& ucmpResults) const {
-  // Note: perDestination flag determines the next-hop search range by whether
-  // filtering those not-in dstNodeAreas or not.
-  // TODO: Reorg this function to make the logic cleaner, and cleanup unused
-  // code.
-
   CHECK(not nextHopNodes.empty());
 
   std::unordered_set<thrift::NextHopThrift> nextHops;
   for (const auto& link : linkState.linksFromNode(myNodeName)) {
-    for (const auto& [dstNode, dstArea] :
-         perDestination ? dstNodeAreas : std::set<NodeAndArea>{{"", ""}}) {
-      // Only consider destinations within the area
-      if (not dstArea.empty() and area != dstArea) {
-        continue;
+    const auto dstNode = std::string{""};
+
+    const auto neighborNode = link->getOtherNodeName(myNodeName);
+    const auto search =
+        nextHopNodes.find(std::make_pair(neighborNode, dstNode));
+
+    // TODO: evaluate this condtion
+    // Ignore overloaded links or nexthops
+    if (search == nextHopNodes.end() or not link->isUp()) {
+      continue;
+    }
+
+    // Ignore nexthops that are not shortest
+    Metric distOverLink = link->getMetricFromNode(myNodeName) + search->second;
+    if (distOverLink != minMetric) {
+      continue;
+    }
+
+    // Create associated mpls action if swapLabel is provided
+    std::optional<thrift::MplsAction> mplsAction;
+    if (swapLabel.has_value()) {
+      CHECK(not mplsAction.has_value());
+      bool isNextHopAlsoDst = dstNodeAreas.count({neighborNode, area});
+      mplsAction = createMplsAction(
+          isNextHopAlsoDst ? thrift::MplsActionCode::PHP
+                           : thrift::MplsActionCode::SWAP,
+          isNextHopAlsoDst ? std::nullopt : swapLabel);
+    }
+
+    // Get the UCMP weight for this next-hop if present
+    int32_t weight{0};
+    if (ucmpResults) {
+      auto nextHopLinkIt =
+          ucmpResults->nextHopLinks().find(link->getIfaceFromNode(myNodeName));
+      if (nextHopLinkIt != ucmpResults->nextHopLinks().end()) {
+        weight = static_cast<int32_t>(nextHopLinkIt->second.weight);
       }
+    }
 
-      const auto neighborNode = link->getOtherNodeName(myNodeName);
-      const auto search =
-          nextHopNodes.find(std::make_pair(neighborNode, dstNode));
-
-      // Ignore overloaded links or nexthops
-      if (search == nextHopNodes.end() or not link->isUp()) {
-        continue;
-      }
-
-      // Ignore link if other side of link is one of our destination and we
-      // are trying to send to dstNode via neighbor (who is also our
-      // destination)
-      if (not dstNode.empty() and dstNodeAreas.count({neighborNode, area}) and
-          neighborNode != dstNode) {
-        continue;
-      }
-
-      // Ignore nexthops that are not shortest
-      Metric distOverLink =
-          link->getMetricFromNode(myNodeName) + search->second;
-      if (distOverLink != minMetric) {
-        continue;
-      }
-
-      // Create associated mpls action if swapLabel is provided
-      std::optional<thrift::MplsAction> mplsAction;
-      if (swapLabel.has_value()) {
-        CHECK(not mplsAction.has_value());
-        bool isNextHopAlsoDst = dstNodeAreas.count({neighborNode, area});
-        mplsAction = createMplsAction(
-            isNextHopAlsoDst ? thrift::MplsActionCode::PHP
-                             : thrift::MplsActionCode::SWAP,
-            isNextHopAlsoDst ? std::nullopt : swapLabel);
-      }
-
-      // Create associated mpls action if dest node is not empty
-      if (not dstNode.empty()) {
-        std::vector<int32_t> pushLabels;
-
-        // Add destination prepend label if any.
-        auto& dstPrefixEntry = prefixEntries.at({dstNode, area});
-        if (dstPrefixEntry->prependLabel()) {
-          pushLabels.emplace_back(dstPrefixEntry->prependLabel().value());
-          if (not isMplsLabelValid(pushLabels.back())) {
-            continue;
-          }
-        }
-
-        // Add destination node label if it is not neighbor node
-        if (dstNode != neighborNode) {
-          pushLabels.emplace_back(
-              *linkState.getAdjacencyDatabases().at(dstNode).nodeLabel());
-          if (not isMplsLabelValid(pushLabels.back())) {
-            continue;
-          }
-        }
-
-        // Create PUSH mpls action if there are labels to push
-        if (not pushLabels.empty()) {
-          CHECK(not mplsAction.has_value());
-          mplsAction = createMplsAction(
-              thrift::MplsActionCode::PUSH,
-              std::nullopt,
-              std::move(pushLabels));
-        }
-      }
-
-      // Get the UCMP weight for this next-hop if present
-      int32_t weight{0};
-      if (ucmpResults) {
-        auto nextHopLinkIt = ucmpResults->nextHopLinks().find(
-            link->getIfaceFromNode(myNodeName));
-        if (nextHopLinkIt != ucmpResults->nextHopLinks().end()) {
-          weight = static_cast<int32_t>(nextHopLinkIt->second.weight);
-        }
-      }
-
-      nextHops.emplace(createNextHop(
-          isV4 and not v4OverV6Nexthop ? link->getNhV4FromNode(myNodeName)
-                                       : link->getNhV6FromNode(myNodeName),
-          link->getIfaceFromNode(myNodeName),
-          distOverLink,
-          mplsAction,
-          link->getArea(),
-          link->getOtherNodeName(myNodeName),
-          weight));
-    } // end for perDestination ...
+    nextHops.emplace(createNextHop(
+        isV4 and not v4OverV6Nexthop ? link->getNhV4FromNode(myNodeName)
+                                     : link->getNhV6FromNode(myNodeName),
+        link->getIfaceFromNode(myNodeName),
+        distOverLink,
+        mplsAction,
+        link->getArea(),
+        link->getOtherNodeName(myNodeName),
+        weight));
   } // end for linkState ...
   return nextHops;
 }
