@@ -152,13 +152,16 @@ LinkMonitor::LinkMonitor(
     advertiseRedistAddrs();
   });
 
-  // Create throttled adjacency advertiser
-  advertiseAdjacenciesThrottled_ = std::make_unique<AsyncThrottle>(
-      getEvb(), Constants::kAdjacencyThrottleTimeout, [this]() noexcept {
-        // will advertise to all areas but will not trigger a adj key update
-        // if nothing changed.
-        advertiseAdjacencies();
-      });
+  // Create throttled adjacency advertiser per area
+  for (const auto& it : areas_) {
+    const auto& area = it.first;
+    advertiseAdjacenciesThrottledPerArea_.emplace(
+        area,
+        std::make_unique<AsyncThrottle>(
+            getEvb(),
+            Constants::kAdjacencyThrottleTimeout,
+            [this, area]() noexcept { advertiseAdjacencies(area); }));
+  }
 
   // Create throttled interfaces and addresses advertiser
   advertiseIfaceAddrThrottled_ = std::make_unique<AsyncThrottle>(
@@ -425,7 +428,7 @@ LinkMonitor::neighborUpEvent(
   updateKvStorePeerNeighborUp(area, adjKey, tPeerSpec);
 
   // Advertise new adjancies in a throttled fashion
-  advertiseAdjacenciesThrottled_->operator()();
+  advertiseAdjacenciesThrottledPerArea_.at(area)->operator()();
 }
 
 void
@@ -558,7 +561,7 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
       auto& adj = it->second.adj_;
       adj.metric() = newRttMetric;
       adj.rtt() = rttUs;
-      advertiseAdjacenciesThrottled_->operator()();
+      advertiseAdjacenciesThrottledPerArea_.at(area)->operator()();
     }
   }
 }
@@ -688,9 +691,11 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
     return;
   }
 
+  auto& advertiseAdjPerAreaThrottle =
+      advertiseAdjacenciesThrottledPerArea_.at(area);
   // Cancel throttle timeout if scheduled
-  if (advertiseAdjacenciesThrottled_->isActive()) {
-    advertiseAdjacenciesThrottled_->cancel();
+  if (advertiseAdjPerAreaThrottle->isActive()) {
+    advertiseAdjPerAreaThrottle->cancel();
   }
 
   // Extract information from `adjacencies_`
@@ -1314,7 +1319,7 @@ LinkMonitor::semifuture_setInterfaceOverload(
           SYSLOG(INFO) << EventTag() << "Unsetting overload bit for interface "
                        << interfaceName;
         }
-        advertiseAdjacenciesThrottled_->operator()();
+        scheduleAdvertiseAdjAllArea();
         p.setValue();
       });
   return sf;
@@ -1370,7 +1375,7 @@ LinkMonitor::semifuture_setLinkMetric(
           SYSLOG(INFO) << "Removing metric override for interface "
                        << interfaceName;
         }
-        advertiseAdjacenciesThrottled_->operator()();
+        scheduleAdvertiseAdjAllArea();
         p.setValue();
       });
   return sf;
@@ -1439,7 +1444,7 @@ LinkMonitor::semifuture_setAdjacencyMetric(
       SYSLOG(INFO) << "Removing metric override for adjacency: [" << adjNodeName
                    << ":" << interfaceName << "]";
     }
-    advertiseAdjacenciesThrottled_->operator()();
+    scheduleAdvertiseAdjAllArea();
     p.setValue();
   });
   return sf;
@@ -1460,7 +1465,7 @@ LinkMonitor::semifuture_unsetNodeInterfaceMetricIncrement() {
     // reset the increment to 0
     state_.nodeMetricIncrementVal() = 0;
 
-    advertiseAdjacenciesThrottled_->operator()();
+    scheduleAdvertiseAdjAllArea();
     p.setValue();
   });
   return sf;
@@ -1498,7 +1503,7 @@ LinkMonitor::semifuture_setNodeInterfaceMetricIncrement(
     // set the state
     state_.nodeMetricIncrementVal() = metricIncrementVal;
 
-    advertiseAdjacenciesThrottled_->operator()();
+    scheduleAdvertiseAdjAllArea();
     p.setValue();
   });
   return sf;
@@ -1547,7 +1552,7 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
 
     state_.linkMetricIncrementMap()[interfaceName] = metricIncrementVal;
 
-    advertiseAdjacenciesThrottled_->operator()();
+    scheduleAdvertiseAdjAllArea();
     p.setValue();
   });
   return sf;
@@ -1578,7 +1583,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
                  << interfaceName;
     state_.linkMetricIncrementMap()->erase(interfaceName);
 
-    advertiseAdjacenciesThrottled_->operator()();
+    scheduleAdvertiseAdjAllArea();
     p.setValue();
   });
   return sf;
@@ -1817,6 +1822,13 @@ LinkMonitor::getStaticNodeSegmentLabel(
     return *areaConfig.getNodeSegmentLabelConfig()->node_segment_label();
   }
   return 0;
+}
+
+void
+LinkMonitor::scheduleAdvertiseAdjAllArea() {
+  for (const auto& [area, _] : areas_) {
+    advertiseAdjacenciesThrottledPerArea_.at(area)->operator()();
+  }
 }
 
 /// Total # of adjacencies stored across all areas.

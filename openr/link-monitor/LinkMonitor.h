@@ -237,7 +237,7 @@ class LinkMonitor final : public OpenrEventBase {
    */
   void advertiseAdjacencies(const std::string& area);
   void advertiseAdjacencies(); // Advertise my adjacencies_ in to all areas
-
+  void scheduleAdvertiseAdjAllArea();
   /*
    * [Spark/Fib] Advertise interfaces_ over interfaceUpdatesQueue_ to Spark/Fib
    *
@@ -393,7 +393,11 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Throttled versions of "advertise<>" functions. It batches
   // up multiple calls and send them in one go!
-  std::unique_ptr<AsyncThrottle> advertiseAdjacenciesThrottled_;
+
+  // Advertise Adj needs per area throttle as KvStore calls can interrupt
+  // and cause race conditions, some batched call may otherwise be lost
+  std::unordered_map<std::string /* area */, std::unique_ptr<AsyncThrottle>>
+      advertiseAdjacenciesThrottledPerArea_;
   std::unique_ptr<AsyncThrottle> advertiseIfaceAddrThrottled_;
 
   // Timer for processing interfaces which are in backoff states
