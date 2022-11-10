@@ -339,10 +339,8 @@ SpfSolver::createRouteForPrefix(
           prefix,
           routeSelectionResult,
           prefixEntries,
-          *areaRules.forwardingType(),
           area,
-          linkState->second,
-          *areaRules.forwardingAlgo());
+          linkState->second);
 
       // Only use next-hops in areas with the shortest IGP metric
       if (shortestMetric >= spfAreaResults.bestMetric) {
@@ -691,16 +689,23 @@ SpfSolver::selectBestPathsSpf(
     folly::CIDRNetwork const& prefix,
     RouteSelectionResult const& routeSelectionResult,
     PrefixEntries const& prefixEntries,
-    thrift::PrefixForwardingType const& forwardingType,
     const std::string& area,
-    const LinkState& linkState,
-    thrift::PrefixForwardingAlgorithm fwdingAlgo) {
-  // Prepare result for returning purpose
+    const LinkState& linkState) {
+  /*
+   * [Next hop Calculation]
+   *
+   * This step will calcuate the NH set with metric:
+   *
+   *  current node(myNodeName) ->
+   *  dst node(prefix originator selected inside `RouteSelectionResult`)
+   *
+   * NOTE: the returned result contains best metric along with NH set.
+   */
   SpfAreaResults result;
-
-  // Get next-hops
   const auto nextHopsWithMetric = getNextHopsWithMetric(
       myNodeName, routeSelectionResult.allNodeAreas, linkState);
+
+  // Populate the SPF result
   result.bestMetric = nextHopsWithMetric.first;
   if (nextHopsWithMetric.second.empty()) {
     XLOG(DBG3) << "No route to prefix "

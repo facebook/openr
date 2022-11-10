@@ -187,10 +187,8 @@ class SpfSolver {
       folly::CIDRNetwork const& prefix,
       RouteSelectionResult const& routeSelectionResult,
       PrefixEntries const& prefixEntries,
-      thrift::PrefixForwardingType const& forwardingType,
       const std::string& area,
-      const LinkState& linkState,
-      thrift::PrefixForwardingAlgorithm fwdingAlgo);
+      const LinkState& linkState);
 
   // Given prefixes and the nodes who announce it, get the kspf2 routes, aka,
   // shortest paths and second shortest paths.
