@@ -379,7 +379,6 @@ SpfSolver::createRouteForPrefix(
       prefixEntries,
       std::move(totalNextHops),
       shortestMetric,
-      std::nullopt,
       localPrefixConsidered);
 }
 
@@ -852,7 +851,6 @@ SpfSolver::addBestPaths(
     const PrefixEntries& prefixEntries,
     std::unordered_set<thrift::NextHopThrift>&& nextHops,
     const Metric shortestMetric,
-    const std::optional<int64_t>& ucmpWeight,
     const bool localPrefixConsidered) {
   // Check if next-hop list is empty
   if (nextHops.empty()) {
@@ -871,36 +869,6 @@ SpfSolver::addBestPaths(
     return std::nullopt;
   }
 
-  // Special case for programming imported next-hops during route origination.
-  // This case, programs the next-hops learned from external processes while
-  // importing route, along with the computed next-hops.
-  // TODO: This is one off the hack to unblock special routing needs. With
-  // complete support of multi-area setup, we won't need this any longer.
-  if (routeSelectionResult.hasNode(myNodeName)) {
-    std::optional<int32_t> prependLabel;
-    for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-      if (nodeAndArea.first == myNodeName and prefixEntry->prependLabel()) {
-        prependLabel = prefixEntry->prependLabel().value();
-        break;
-      }
-    }
-
-    // Self route must be advertised with prepend label
-    CHECK(prependLabel.has_value());
-
-    // Add static next-hops
-    auto routeIter = staticMplsRoutes_.find(prependLabel.value());
-    if (routeIter != staticMplsRoutes_.end()) {
-      for (const auto& nh : routeIter->second.nexthops) {
-        nextHops.emplace(
-            createNextHop(nh.address().value(), std::nullopt, 0, std::nullopt));
-      }
-    } else {
-      XLOG(ERR) << "Static nexthops do not exist for static mpls label "
-                << prependLabel.value();
-    }
-  }
-
   auto entry =
       *(prefixEntries.at(routeSelectionResult.bestNodeArea)); // copy intended
   // We don't modify original prefixEntries (referenced from prefixState)
@@ -915,9 +883,9 @@ SpfSolver::addBestPaths(
       std::move(nextHops),
       std::move(entry),
       routeSelectionResult.bestNodeArea.second,
-      false, // doNotInstall
+      false, /* doNotInstall */
       shortestMetric,
-      ucmpWeight,
+      std::nullopt, /* ucmp weight */
       localPrefixConsidered);
 }
 

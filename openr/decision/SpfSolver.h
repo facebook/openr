@@ -212,7 +212,6 @@ class SpfSolver {
       const PrefixEntries& prefixEntries,
       std::unordered_set<thrift::NextHopThrift>&& nextHops,
       const openr::LinkStateMetric shortestMetric,
-      const std::optional<int64_t>& ucmpWeight,
       const bool localPrefixConsidered);
 
   /**
