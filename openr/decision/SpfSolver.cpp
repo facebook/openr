@@ -16,9 +16,6 @@
 
 namespace fb303 = facebook::fb303;
 
-using apache::thrift::can_throw;
-using Metric = openr::LinkStateMetric;
-
 namespace openr {
 
 DecisionRouteUpdate
@@ -514,8 +511,7 @@ SpfSolver::buildRouteDb(
                         {{adjDb.thisNodeName().value(), area}},
                         false /* isV4 */,
                         v4OverV6Nexthop_,
-                        metricNhs.first,
-                        metricNhs.second,
+                        metricNhs,
                         topLabel,
                         area,
                         linkState))));
@@ -702,7 +698,7 @@ SpfSolver::selectBestPathsSpf(
    * NOTE: the returned result contains best metric along with NH set.
    */
   SpfAreaResults result;
-  const auto nextHopsWithMetric = getNextHopsWithMetric(
+  const BestNextHopMetrics nextHopsWithMetric = getNextHopsWithMetric(
       myNodeName, routeSelectionResult.allNodeAreas, linkState);
 
   // Populate the SPF result
@@ -719,8 +715,7 @@ SpfSolver::selectBestPathsSpf(
       routeSelectionResult.allNodeAreas,
       prefix.first.isV4(), /* isV4Prefix */
       v4OverV6Nexthop_,
-      nextHopsWithMetric.first,
-      nextHopsWithMetric.second,
+      nextHopsWithMetric,
       std::nullopt /* swapLabel */,
       area,
       linkState,
@@ -941,7 +936,7 @@ SpfSolver::addBestPaths(
  *
  * ATTN: the metric in pair.first is DIFFERENT from metric inside pair.second!
  */
-std::pair<Metric, std::unordered_map<std::string, Metric>>
+BestNextHopMetrics
 SpfSolver::getNextHopsWithMetric(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
@@ -1063,13 +1058,15 @@ SpfSolver::getNextHopsThrift(
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
     bool v4OverV6Nexthop,
-    const Metric minMetric,
-    std::unordered_map<std::string, Metric> nextHopNodes,
+    const BestNextHopMetrics& bestNextHopMetrics,
     std::optional<int32_t> swapLabel,
     const std::string& area,
     const LinkState& linkState,
     PrefixEntries const& prefixEntries,
     const std::optional<LinkState::NodeUcmpResult>& ucmpResults) const {
+  // Use reference to avoid copy
+  const auto& nextHopNodes = bestNextHopMetrics.second;
+  const auto& minMetric = bestNextHopMetrics.first;
   CHECK(not nextHopNodes.empty());
 
   std::unordered_set<thrift::NextHopThrift> nextHops;

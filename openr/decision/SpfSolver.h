@@ -21,6 +21,12 @@ namespace openr {
 using StaticMplsRoutes = std::unordered_map<int32_t, RibMplsEntry>;
 using StaticUnicastRoutes =
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>;
+using Metric = openr::LinkStateMetric;
+using BestNextHopMetrics = std::pair<
+    Metric /* minimum metric to destination */,
+    std::unordered_map<
+        std::string /* nextHopNodeName */,
+        Metric /* the distance from the nexthop to the dest */>>;
 
 /**
  * Captures the route selection result. Especially highlights
@@ -165,8 +171,7 @@ class SpfSolver {
       PrefixState const& prefixState,
       folly::CIDRNetwork const& prefix);
 
-  static std::pair<openr::LinkStateMetric, std::unordered_set<std::string>>
-  getMinCostNodes(
+  static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
       const LinkState::SpfResult& spfResult,
       const std::set<NodeAndArea>& dstNodeAreas);
 
@@ -247,13 +252,7 @@ class SpfSolver {
 
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops towards these set of dstNodeNames
-  std::pair<
-      openr::LinkStateMetric /* minimum metric to destination */,
-      std::unordered_map<
-          std::string /* nextHopNodeName */,
-          openr::
-              LinkStateMetric /* the distance from the nexthop to the dest */>>
-  getNextHopsWithMetric(
+  BestNextHopMetrics getNextHopsWithMetric(
       const std::string& srcNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
       const LinkState& linkState);
@@ -268,8 +267,7 @@ class SpfSolver {
       const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,
       bool v4OverV6Nexthop,
-      const openr::LinkStateMetric minMetric,
-      std::unordered_map<std::string, openr::LinkStateMetric> nextHopNodes,
+      const BestNextHopMetrics& bestNextHopMetrics,
       std::optional<int32_t> swapLabel,
       const std::string& area,
       const LinkState& linkState,
