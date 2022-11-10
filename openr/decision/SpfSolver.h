@@ -252,13 +252,12 @@ class SpfSolver {
   std::pair<
       openr::LinkStateMetric /* minimum metric to destination */,
       std::unordered_map<
-          std::pair<std::string /* nextHopNodeName */, std::string /* dest */>,
+          std::string /* nextHopNodeName */,
           openr::
               LinkStateMetric /* the distance from the nexthop to the dest */>>
   getNextHopsWithMetric(
       const std::string& srcNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
-      bool perDestination,
       const LinkState& linkState);
 
   // This function converts best nexthop nodes to best nexthop adjacencies
@@ -271,11 +270,8 @@ class SpfSolver {
       const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,
       bool v4OverV6Nexthop,
-      bool perDestination,
       const openr::LinkStateMetric minMetric,
-      std::unordered_map<
-          std::pair<std::string, std::string>,
-          openr::LinkStateMetric> nextHopNodes,
+      std::unordered_map<std::string, openr::LinkStateMetric> nextHopNodes,
       std::optional<int32_t> swapLabel,
       const std::string& area,
       const LinkState& linkState,

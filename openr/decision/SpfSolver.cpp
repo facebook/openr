@@ -490,10 +490,7 @@ SpfSolver::buildRouteDb(
 
         // Get best nexthop towards the node
         auto metricNhs = getNextHopsWithMetric(
-            myNodeName,
-            {{adjDb.thisNodeName().value(), area}},
-            false,
-            linkState);
+            myNodeName, {{adjDb.thisNodeName().value(), area}}, linkState);
         if (metricNhs.second.empty()) {
           XLOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
                         << " of node " << nodeName;
@@ -519,7 +516,6 @@ SpfSolver::buildRouteDb(
                         {{adjDb.thisNodeName().value(), area}},
                         false /* isV4 */,
                         v4OverV6Nexthop_,
-                        false /* perDestination */,
                         metricNhs.first,
                         metricNhs.second,
                         topLabel,
@@ -704,7 +700,7 @@ SpfSolver::selectBestPathsSpf(
 
   // Get next-hops
   const auto nextHopsWithMetric = getNextHopsWithMetric(
-      myNodeName, routeSelectionResult.allNodeAreas, false, linkState);
+      myNodeName, routeSelectionResult.allNodeAreas, linkState);
   result.bestMetric = nextHopsWithMetric.first;
   if (nextHopsWithMetric.second.empty()) {
     XLOG(DBG3) << "No route to prefix "
@@ -718,7 +714,6 @@ SpfSolver::selectBestPathsSpf(
       routeSelectionResult.allNodeAreas,
       prefix.first.isV4(), /* isV4Prefix */
       v4OverV6Nexthop_,
-      false, /* perDestination */
       nextHopsWithMetric.first,
       nextHopsWithMetric.second,
       std::nullopt /* swapLabel */,
@@ -934,19 +929,21 @@ SpfSolver::addBestPaths(
       localPrefixConsidered);
 }
 
-std::pair<
-    Metric /* min metric to destination */,
-    std::unordered_map<
-        std::pair<std::string /* nextHopNodeName */, std::string /* dstNode */>,
-        Metric /* the distance from the nexthop to the dest */>>
+/*
+ * This util function will return the pair of:
+ *  - min metric from SRC to DST node;
+ *  - a map of NH node and the shortest distance from NH -> DST node;
+ *
+ * ATTN: the metric in pair.first is DIFFERENT from metric inside pair.second!
+ */
+std::pair<Metric, std::unordered_map<std::string, Metric>>
 SpfSolver::getNextHopsWithMetric(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
-    bool perDestination, /* always false */
     const LinkState& linkState) {
   // build up next hop nodes that are along a shortest path to the prefix
   std::unordered_map<
-      std::pair<std::string /* nextHopNodeName */, std::string /* dstNode */>,
+      std::string /* nextHopNodeName */,
       Metric /* the distance from the nexthop to the dest */>
       nextHopNodes;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
@@ -972,9 +969,8 @@ SpfSolver::getNextHopsWithMetric(
 
   // Add neighbors with shortest path to the prefix
   for (const auto& dstNode : minCostNodes) {
-    const auto dstNodeRef = perDestination ? dstNode : "";
     for (const auto& nhName : spfResult.at(dstNode).nextHops()) {
-      nextHopNodes[std::make_pair(nhName, dstNodeRef)] = shortestMetric -
+      nextHopNodes[nhName] = shortestMetric -
           linkState.getMetricFromAToB(myNodeName, nhName).value();
     }
   }
@@ -1062,10 +1058,8 @@ SpfSolver::getNextHopsThrift(
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
     bool v4OverV6Nexthop,
-    bool perDestination, /* always false */
     const Metric minMetric,
-    std::unordered_map<std::pair<std::string, std::string>, Metric>
-        nextHopNodes,
+    std::unordered_map<std::string, Metric> nextHopNodes,
     std::optional<int32_t> swapLabel,
     const std::string& area,
     const LinkState& linkState,
@@ -1075,13 +1069,9 @@ SpfSolver::getNextHopsThrift(
 
   std::unordered_set<thrift::NextHopThrift> nextHops;
   for (const auto& link : linkState.linksFromNode(myNodeName)) {
-    const auto dstNode = std::string{""};
-
     const auto neighborNode = link->getOtherNodeName(myNodeName);
-    const auto search =
-        nextHopNodes.find(std::make_pair(neighborNode, dstNode));
+    const auto search = nextHopNodes.find(neighborNode);
 
-    // TODO: evaluate this condtion
     // Ignore overloaded links or nexthops
     if (search == nextHopNodes.end() or not link->isUp()) {
       continue;
@@ -1123,7 +1113,7 @@ SpfSolver::getNextHopsThrift(
         link->getArea(),
         link->getOtherNodeName(myNodeName),
         weight));
-  } // end for linkState ...
+  }
   return nextHops;
 }
 
