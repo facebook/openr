@@ -332,12 +332,7 @@ SpfSolver::createRouteForPrefix(
     case thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION:
     case thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION: {
       auto spfAreaResults = selectBestPathsSpf(
-          myNodeName,
-          prefix,
-          routeSelectionResult,
-          prefixEntries,
-          area,
-          linkState->second);
+          myNodeName, prefix, routeSelectionResult, area, linkState->second);
 
       // Only use next-hops in areas with the shortest IGP metric
       if (shortestMetric >= spfAreaResults.bestMetric) {
@@ -684,7 +679,6 @@ SpfSolver::selectBestPathsSpf(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     RouteSelectionResult const& routeSelectionResult,
-    PrefixEntries const& prefixEntries,
     const std::string& area,
     const LinkState& linkState) {
   /*
@@ -718,9 +712,7 @@ SpfSolver::selectBestPathsSpf(
       nextHopsWithMetric,
       std::nullopt /* swapLabel */,
       area,
-      linkState,
-      prefixEntries,
-      std::nullopt);
+      linkState);
 
   return result;
 }
@@ -1061,9 +1053,7 @@ SpfSolver::getNextHopsThrift(
     const BestNextHopMetrics& bestNextHopMetrics,
     std::optional<int32_t> swapLabel,
     const std::string& area,
-    const LinkState& linkState,
-    PrefixEntries const& prefixEntries,
-    const std::optional<LinkState::NodeUcmpResult>& ucmpResults) const {
+    const LinkState& linkState) const {
   // Use reference to avoid copy
   const auto& nextHopNodes = bestNextHopMetrics.second;
   const auto& minMetric = bestNextHopMetrics.first;
@@ -1096,16 +1086,6 @@ SpfSolver::getNextHopsThrift(
           isNextHopAlsoDst ? std::nullopt : swapLabel);
     }
 
-    // Get the UCMP weight for this next-hop if present
-    int32_t weight{0};
-    if (ucmpResults) {
-      auto nextHopLinkIt =
-          ucmpResults->nextHopLinks().find(link->getIfaceFromNode(myNodeName));
-      if (nextHopLinkIt != ucmpResults->nextHopLinks().end()) {
-        weight = static_cast<int32_t>(nextHopLinkIt->second.weight);
-      }
-    }
-
     nextHops.emplace(createNextHop(
         isV4 and not v4OverV6Nexthop ? link->getNhV4FromNode(myNodeName)
                                      : link->getNhV6FromNode(myNodeName),
@@ -1114,7 +1094,7 @@ SpfSolver::getNextHopsThrift(
         mplsAction,
         link->getArea(),
         link->getOtherNodeName(myNodeName),
-        weight));
+        0 /* ucmp weight */));
   }
   return nextHops;
 }

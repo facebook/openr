@@ -191,7 +191,6 @@ class SpfSolver {
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       RouteSelectionResult const& routeSelectionResult,
-      PrefixEntries const& prefixEntries,
       const std::string& area,
       const LinkState& linkState);
 
@@ -270,10 +269,7 @@ class SpfSolver {
       const BestNextHopMetrics& bestNextHopMetrics,
       std::optional<int32_t> swapLabel,
       const std::string& area,
-      const LinkState& linkState,
-      PrefixEntries const& prefixEntries = {},
-      const std::optional<LinkState::NodeUcmpResult>& ucmpResults =
-          std::nullopt) const;
+      const LinkState& linkState) const;
 
   std::optional<LinkState::NodeUcmpResult> getNodeUcmpResult(
       const std::string& myNodeName,
