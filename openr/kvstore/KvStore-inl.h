@@ -627,6 +627,8 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       "kvstore.thrift.secure_client", fb303::COUNT);
   fb303::fbData->addStatExportType(
+      "kvstore.thrift.plaintext_client.fallback", fb303::COUNT);
+  fb303::fbData->addStatExportType(
       "kvstore.thrift.plaintext_client", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
@@ -839,33 +841,47 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         nodeName);
 
     if (kvParams_.enable_secure_thrift_client) {
-      auto context = std::make_shared<folly::SSLContext>();
-      context->setVerificationOption(
-          folly::SSLContext::VerifyServerCertificate::IF_PRESENTED);
-      context->loadTrustedCertificates(kvParams_.x509_ca_path->c_str());
-      // Thrift's Rocket transport requires an ALPN
-      context->setAdvertisedNextProtocols({"rs"});
-      context->loadCertificate(kvParams_.x509_cert_path->c_str());
-      context->loadPrivateKey(kvParams_.x509_key_path->c_str());
-      folly::ssl::SSLCommonOptions::setClientOptions(*context);
-      // Explicitly enable TLS1.3 until it becomes the default
-      context->enableTLS13();
-      // Since we are suggesting support for rocket in ALPN,
-      // we should use RocketClientChannel to match what is negotiated
-      client = getOpenrCtrlSecureClient<
-          ClientType,
-          apache::thrift::RocketClientChannel>(
-          *(evb->getEvb()),
-          context,
-          folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
-          *peerSpec.ctrlPort(), /* port to establish TCP connection */
-          Constants::kServiceConnTimeout, /* client connection timeout */
-          Constants::kServiceProcTimeout, /* request processing timeout */
-          folly::AsyncSocket::anyAddress(), /* bindAddress */
-          maybeIpTos /* IP_TOS value for control plane */,
-          transportCallback.get() /* transport callback */);
-      fb303::fbData->addStatValue(
-          "kvstore.thrift.secure_client", 1, fb303::COUNT);
+      try {
+        auto context = std::make_shared<folly::SSLContext>();
+        context->setVerificationOption(
+            folly::SSLContext::VerifyServerCertificate::IF_PRESENTED);
+        context->loadTrustedCertificates(kvParams_.x509_ca_path->c_str());
+        // Thrift's Rocket transport requires an ALPN
+        context->setAdvertisedNextProtocols({"rs"});
+        context->loadCertificate(kvParams_.x509_cert_path->c_str());
+        context->loadPrivateKey(kvParams_.x509_key_path->c_str());
+        folly::ssl::SSLCommonOptions::setClientOptions(*context);
+        // Explicitly enable TLS1.3 until it becomes the default
+        context->enableTLS13();
+        // Since we are suggesting support for rocket in ALPN,
+        // we should use RocketClientChannel to match what is negotiated
+        client = getOpenrCtrlSecureClient<
+            ClientType,
+            apache::thrift::RocketClientChannel>(
+            *(evb->getEvb()),
+            context,
+            folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
+            *peerSpec.ctrlPort(), /* port to establish TCP connection */
+            Constants::kServiceConnTimeout, /* client connection timeout */
+            Constants::kServiceProcTimeout, /* request processing timeout */
+            folly::AsyncSocket::anyAddress(), /* bindAddress */
+            maybeIpTos /* IP_TOS value for control plane */,
+            transportCallback.get() /* transport callback */);
+        fb303::fbData->addStatValue(
+            "kvstore.thrift.secure_client", 1, fb303::COUNT);
+      } catch (const std::exception& ex) {
+        client = getOpenrCtrlPlainTextClient<ClientType>(
+            *(evb->getEvb()),
+            folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
+            *peerSpec.ctrlPort(), /* port to establish TCP connection */
+            Constants::kServiceConnTimeout, /* client connection timeout */
+            Constants::kServiceProcTimeout, /* request processing timeout */
+            folly::AsyncSocket::anyAddress(), /* bindAddress */
+            maybeIpTos /* IP_TOS value for control plane */);
+
+        fb303::fbData->addStatValue(
+            "kvstore.thrift.plaintext_client.fallback", 1, fb303::COUNT);
+      }
     } else {
       client = getOpenrCtrlPlainTextClient<ClientType>(
           *(evb->getEvb()),

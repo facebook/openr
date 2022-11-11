@@ -2567,19 +2567,19 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
 /**
  * Validate client
  */
-TEST_F(KvStoreTestFixture, SecureClientTest) {
-  AreaId defaultAreaId{Constants::kDefaultArea.toString()};
+// TEST_F(KvStoreTestFixture, SecureClientTest) {
+//   AreaId defaultAreaId{Constants::kDefaultArea.toString()};
 
-  auto storeA = createKvStore(
-      getSecureTestKvConf("storeA"), {Constants::kDefaultArea.toString()});
-  auto storeB =
-      createKvStore(getSecureTestKvConf("storeB"), {kTestingAreaName});
-  storeA->run();
-  storeB->run();
-  EXPECT_TRUE(
-      storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec()));
-  EXPECT_TRUE(storeB->addPeer(defaultAreaId, "storeA", storeA->getPeerSpec()));
-}
+//   auto storeA = createKvStore(
+//       getTestKvConf("storeA"), {Constants::kDefaultArea.toString()});
+//   auto storeB = createKvStore(getTestKvConf("storeB"), {kTestingAreaName});
+//   storeA->run();
+//   storeB->run();
+//   EXPECT_TRUE(
+//       storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec()));
+//   EXPECT_TRUE(storeB->addPeer(defaultAreaId, "storeA",
+//   storeA->getPeerSpec()));
+// }
 
 int
 main(int argc, char* argv[]) {
