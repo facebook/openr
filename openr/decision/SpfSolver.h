@@ -166,28 +166,42 @@ class SpfSolver {
   SpfSolver(SpfSolver const&) = delete;
   SpfSolver& operator=(SpfSolver const&) = delete;
 
-  std::optional<RibUnicastEntry> createRouteForPrefix(
-      const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
-      PrefixState const& prefixState,
-      folly::CIDRNetwork const& prefix);
-
-  static std::pair<Metric, std::unordered_set<std::string>> getMinCostNodes(
-      const LinkState::SpfResult& spfResult,
-      const std::set<NodeAndArea>& dstNodeAreas);
-
-  // Structure which holds the results of per area spf next-hop selection
-  // for a single prefix
+  /*
+   * Structure which holds the results of per area spf next-hop selection
+   * for a single prefix
+   */
   struct SpfAreaResults {
     // metric of the shortest path within the area
     LinkStateMetric bestMetric{0};
-    // ucmp weight resulting from the selected next-hops within the area
-    std::optional<int64_t> ucmpWeight{std::nullopt};
     // selected next-hops within the area
     std::unordered_set<thrift::NextHopThrift> nextHops;
   };
 
-  // Given prefixes and the nodes who announce it, get the ecmp next-hops.
+  /*
+   * [Route Selection]:
+   *
+   * Performs best route selection from received route announcements of the
+   * destination prefix.
+   *
+   * ATTN: there are various tie-breaking order for route selection. High level
+   * speaking, we will perform:
+   *  - 1st tie-breaker : drain_metric - prefer lower;
+   *  - 2nd tie-breaker: path_preference - prefer higher;
+   *  - 3rd tie-breaker: source_preference - prefer higher;
+   */
+  RouteSelectionResult selectBestRoutes(
+      std::string const& myNodeName,
+      folly::CIDRNetwork const& prefix,
+      PrefixEntries& prefixEntries,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates);
+
+  /*
+   * [Route Calculation]: shortest path forwarding
+   *
+   * Given the best route selection result, aka, the best node/nodes annoucing
+   * the prefix, this util function will use SPF algorithm to find the shortest
+   * paths(maybe ECMP) towards the destination prefix.
+   */
   SpfAreaResults selectBestPathsSpf(
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
@@ -195,8 +209,13 @@ class SpfSolver {
       const std::string& area,
       const LinkState& linkState);
 
-  // Given prefixes and the nodes who announce it, get the kspf2 routes, aka,
-  // shortest paths and second shortest paths.
+  /*
+   * [Route Calculation]: 2nd-shortest path forwarding
+   *
+   * Given the best route selection result, aka, the best node/nodes annoucing
+   * the prefix, this util function will use KSPF algorithm to find the second
+   * shortest paths(maybe ECMP) towards the destination prefix.
+   */
   std::unordered_set<thrift::NextHopThrift> selectBestPathsKsp2(
       const std::string& myNodeName,
       const folly::CIDRNetwork& prefix,
@@ -215,15 +234,11 @@ class SpfSolver {
       const openr::LinkStateMetric shortestMetric,
       const bool localPrefixConsidered);
 
-  /**
-   * Performs best route selection from received route announcements of one
-   * prefix.
-   */
-  RouteSelectionResult selectBestRoutes(
-      std::string const& myNodeName,
-      folly::CIDRNetwork const& prefix,
-      PrefixEntries& prefixEntries,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
+  std::optional<RibUnicastEntry> createRouteForPrefix(
+      const std::string& myNodeName,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      PrefixState const& prefixState,
+      folly::CIDRNetwork const& prefix);
 
   // helper to get min nexthop for a prefix, used in selectKsp2
   std::optional<int64_t> getMinNextHopThreshold(
