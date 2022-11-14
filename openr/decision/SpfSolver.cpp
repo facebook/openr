@@ -77,15 +77,13 @@ SpfSolver::SpfSolver(
     bool enableNodeSegmentLabel,
     bool enableAdjacencyLabels,
     bool enableBestRouteSelection,
-    bool v4OverV6Nexthop,
-    bool enableUcmp)
+    bool v4OverV6Nexthop)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
       enableAdjacencyLabels_(enableAdjacencyLabels),
       enableBestRouteSelection_(enableBestRouteSelection),
-      v4OverV6Nexthop_(v4OverV6Nexthop),
-      enableUcmp_(enableUcmp) {
+      v4OverV6Nexthop_(v4OverV6Nexthop) {
   // Initialize stat keys
   fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
   fb303::fbData->addStatExportType(
@@ -936,78 +934,6 @@ SpfSolver::getNextHopsWithMetric(
   }
 
   return std::make_pair(shortestMetric, nextHopNodes);
-}
-
-std::optional<LinkState::NodeUcmpResult>
-SpfSolver::getNodeUcmpResult(
-    const std::string& myNodeName,
-    thrift::PrefixForwardingAlgorithm fwdingAlgo,
-    const std::string& area,
-    const LinkState& linkState,
-    const PrefixEntries& prefixEntries,
-    const std::set<NodeAndArea>& bestPrefixEntriesKeys,
-    Metric bestMetric) const {
-  // Return nullopt if the UCMP is not globally enabled
-  if (not enableUcmp_) {
-    return std::nullopt;
-  }
-
-  // Return nullopt if the route is not UCMP enabled
-  if (fwdingAlgo !=
-          thrift::PrefixForwardingAlgorithm::
-              SP_UCMP_PREFIX_WEIGHT_PROPAGATION &&
-      fwdingAlgo !=
-          thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION) {
-    return std::nullopt;
-  }
-
-  // Walk the best routes and construct a dest node to weight map.
-  const auto& mySpfResult = linkState.getSpfResult(myNodeName);
-  std::unordered_map<std::string, int64_t> dstWeights;
-  for (const auto& [dstNode, dstArea] : bestPrefixEntriesKeys) {
-    auto& prefixEntry = prefixEntries.at({dstNode, dstArea});
-
-    // Ignore best routes from different areas
-    if (dstArea != area) {
-      continue;
-    }
-
-    // Find the SPF results for the route's destination. This should
-    // never fail, there should always be an available path to the
-    // node advertising the route.
-    auto dstSpfResultIt = mySpfResult.find(dstNode);
-    if (dstSpfResultIt == mySpfResult.end()) {
-      continue;
-    }
-
-    // Skip routes which do not have the best metric. These routes
-    // will not be used for next-hop resolution.
-    if (bestMetric != dstSpfResultIt->second.metric()) {
-      continue;
-    }
-
-    // Ignore routes that have no weight or a weight of zero.
-    if (not prefixEntry->weight() || 0 == *prefixEntry->weight()) {
-      return std::nullopt;
-    }
-
-    dstWeights.emplace(dstNode, *prefixEntry->weight());
-  }
-
-  // Resolve UCMP weights. This API returns the UCMP results
-  // for all nodes in the SPF graph.
-  auto ucmpResults = linkState.resolveUcmpWeights(
-      linkState.getSpfResult(myNodeName), dstWeights, fwdingAlgo);
-
-  // Find the UCMP results for the local node. This should never
-  // fail
-  auto myNodeResultIt = ucmpResults.find(myNodeName);
-  if (myNodeResultIt == ucmpResults.end()) {
-    LOG(ERROR) << "Could not find local node in UCMP results";
-    return std::nullopt;
-  }
-
-  return std::move(myNodeResultIt->second);
 }
 
 // TODO Let's use strong-types for the bools to detect any abusement at the

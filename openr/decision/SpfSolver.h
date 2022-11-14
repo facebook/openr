@@ -116,8 +116,7 @@ class SpfSolver {
       bool enableNodeSegmentLabel,
       bool enableAdjacencyLabels,
       bool enableBestRouteSelection = false,
-      bool v4OverV6Nexthop = false,
-      bool enableUcmp = false);
+      bool v4OverV6Nexthop = false);
   ~SpfSolver();
 
   //
@@ -270,15 +269,6 @@ class SpfSolver {
       const std::string& area,
       const LinkState& linkState) const;
 
-  std::optional<LinkState::NodeUcmpResult> getNodeUcmpResult(
-      const std::string& myNodeName,
-      thrift::PrefixForwardingAlgorithm fwdingAlgo,
-      const std::string& area,
-      const LinkState& linkState,
-      const PrefixEntries& prefixEntries,
-      const std::set<NodeAndArea>& bestPrefixEntriesKeys,
-      openr::LinkStateMetric bestMetric) const;
-
   // Collection to store static IP/MPLS routes
   StaticMplsRoutes staticMplsRoutes_;
   StaticUnicastRoutes staticUnicastRoutes_;
@@ -304,7 +294,5 @@ class SpfSolver {
   // prefixes with v6 nexthops to Fib module for programming. Else it will just
   // use v4 over v4 nexthop.
   const bool v4OverV6Nexthop_{false};
-
-  const bool enableUcmp_{false};
 };
 } // namespace openr
