@@ -269,9 +269,6 @@ SpfSolver::createRouteForPrefix(
    */
   auto routeSelectionResult =
       selectBestRoutes(myNodeName, prefix, prefixEntries, areaLinkStates);
-  if (not routeSelectionResult.success) {
-    return std::nullopt;
-  }
   if (routeSelectionResult.allNodeAreas.empty()) {
     XLOG(WARNING) << "No route to prefix "
                   << folly::IPAddress::networkToString(prefix);
@@ -579,7 +576,6 @@ SpfSolver::selectBestRoutes(
     ret.allNodeAreas = selectRoutes(
         filteredPrefixes, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
-    ret.success = true;
   } else {
     // If it is openr route, all nodes are considered as best nodes.
     // Except for drained
@@ -587,7 +583,6 @@ SpfSolver::selectBestRoutes(
       ret.allNodeAreas.emplace(nodeAndArea);
     }
     ret.bestNodeArea = *ret.allNodeAreas.begin();
-    ret.success = true;
   }
 
   if (isNodeDrained(ret.bestNodeArea, areaLinkStates)) {

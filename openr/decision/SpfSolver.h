@@ -34,9 +34,6 @@ using BestNextHopMetrics = std::pair<
  * - All selected entries `list<pair<Node, Area>>`
  */
 struct RouteSelectionResult {
-  // TODO: Remove once we move to metrics selection
-  bool success{false};
-
   // Representing the selected set of `<Node, Area>`.
   // NOTE: Using `std::set` helps ensuring uniqueness and ease code for electing
   // unique `<Node, Area>` in some-cases.
@@ -46,9 +43,14 @@ struct RouteSelectionResult {
   // redistribution across areas.
   NodeAndArea bestNodeArea;
 
+  /*
+   * This is the flag to indicate is the best node selected is DRAINED(soft or
+   * hard). The flag will be used to set the `drain_metric` inside
+   * `thrift::PrefixEntry`.
+   */
   bool isBestNodeDrained{false};
 
-  /**
+  /*
    * Function to check if provide node is one of the selected nodes.
    */
   bool
