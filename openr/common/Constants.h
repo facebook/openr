@@ -79,6 +79,11 @@ class Constants {
   // is not valid
   static constexpr int64_t kUndefinedVersion{0};
 
+  // Timeout for kvstore streaming in milliseconds
+  static constexpr int64_t kStreamTimeoutMs{100};
+  // Queue timeout for kvstore streaming in milliseconds
+  static constexpr int64_t kStreamQueueTimeoutMs{5000};
+
   //
   // PrefixAllocator specific
   //
