@@ -126,8 +126,7 @@ getOpenrCtrlSecureClient(
     std::chrono::milliseconds processingTimeout =
         Constants::kServiceProcTimeout,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
-    std::optional<int> maybeIpTos = std::nullopt,
-    folly::AsyncSSLSocket::ConnectCallback* callback = nullptr) {
+    std::optional<int> maybeIpTos = std::nullopt) {
   // NOTE: It is possible to have caching for socket. We're not doing it as
   // we expect clients to be persistent/sticky.
   std::unique_ptr<ClientType> client{nullptr};
@@ -141,7 +140,7 @@ getOpenrCtrlSecureClient(
 
     // Establish connection
     transport->connect(
-        callback,
+        nullptr,
         sa,
         connectTimeout.count(),
         detail::getSocketOptionMap(maybeIpTos),

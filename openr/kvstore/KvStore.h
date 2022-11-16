@@ -123,24 +123,6 @@ struct KvStoreParams {
 };
 
 /*
- * A callback that gets triggered with a given AsyncSocket on success
- * or an AsyncSocketException on error.
- */
-struct TransportConnectCallback : public folly::AsyncSocket::ConnectCallback {
-  TransportConnectCallback() = default;
-
-  virtual void
-  connectSuccess() noexcept override {
-    XLOG(INFO) << "secure connection success";
-  }
-
-  virtual void
-  connectErr(const folly::AsyncSocketException& ex) noexcept override {
-    XLOG(INFO) << "secure connection failure: " << folly::exceptionStr(ex);
-  }
-};
-
-/*
  * The KvStoreDb class represents a KV Store database and stores KV pairs in
  * an internal map. KV store DB instance is created for each area.
  *
@@ -504,9 +486,6 @@ class KvStoreDb {
 
     // exponetial backoff in case of retry after sync failure
     ExponentialBackoff<std::chrono::milliseconds> expBackoff;
-
-    // callback that gets triggered for result of connecting transport
-    std::unique_ptr<TransportConnectCallback> transportCallback{nullptr};
 
     // KvStorePeer now supports 2 types of clients:
     // 1. thrift::OpenrCtrlCppAsyncClient -> KvStore runs with Open/R;

@@ -813,7 +813,6 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
       areaTag(areaTag),
       peerSpec(ps),
       expBackoff(expBackoff),
-      transportCallback(std::make_unique<TransportConnectCallback>()),
       kvParams_(kvParams) {
   peerSpec.state() = thrift::KvStorePeerState::IDLE;
   CHECK(not this->nodeName.empty());
@@ -865,8 +864,7 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
             Constants::kServiceConnTimeout, /* client connection timeout */
             Constants::kServiceProcTimeout, /* request processing timeout */
             folly::AsyncSocket::anyAddress(), /* bindAddress */
-            maybeIpTos /* IP_TOS value for control plane */,
-            transportCallback.get() /* transport callback */);
+            maybeIpTos /* IP_TOS value for control plane */);
         fb303::fbData->addStatValue(
             "kvstore.thrift.secure_client", 1, fb303::COUNT);
       } catch (const std::exception& ex) {
