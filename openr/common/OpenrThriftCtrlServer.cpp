@@ -80,6 +80,8 @@ OpenrThriftCtrlServer::setUpThriftServer() {
   // Set workers join timeout.
   server->setWorkersJoinTimeout(std::chrono::seconds{
       *config_->getThriftServerConfig().workers_join_timeout()});
+  // set streaming expiration time.
+  server->setStreamExpireTime(FLAGS_stream_expire_time);
 
   // Setup TLS
   if (config_->isSecureThriftServerEnabled()) {

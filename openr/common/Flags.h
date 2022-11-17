@@ -34,3 +34,6 @@ DECLARE_string(tls_acceptable_peers);
 
 // file storing thrift::RibPolicy
 DECLARE_string(rib_policy_file);
+
+// streaming related property
+DECLARE_int32(stream_expire_time);

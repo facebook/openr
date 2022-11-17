@@ -63,3 +63,8 @@ DEFINE_string(
     rib_policy_file,
     "/dev/shm/rib_policy.txt",
     "File in which thrift::RibPolicy is stored across Open/R restarts");
+
+DEFINE_int32(
+    stream_expire_time,
+    0,
+    "Server side streaming expiration timeout in millisecond. If 0, then it's infinite.");
