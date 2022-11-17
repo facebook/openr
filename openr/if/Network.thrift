@@ -84,20 +84,6 @@ struct NextHopThrift {
   54: optional string neighborNodeName;
 } (cpp.minimize_padding)
 
-struct ClientAndNextHops {
-  1: required i32 clientId;
-  3: required list<NextHopThrift> nextHops;
-}
-
-struct RouteDetails {
-  1: IpPrefix dest;
-  2: string action;
-  4: list<ClientAndNextHops> nextHopMulti;
-  5: bool isConnected;
-  6: optional AdminDistance adminDistance;
-  7: list<NextHopThrift> nextHops;
-} (cpp.minimize_padding)
-
 struct MplsRoute {
   1: i32 topLabel;
   3: optional AdminDistance adminDistance;

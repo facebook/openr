@@ -111,10 +111,6 @@ service FibService extends fb303_core.BaseService {
     1: PlatformError error,
   );
 
-  list<Network.RouteDetails> getRouteTableDetails() throws (
-    1: PlatformError error,
-  );
-
   //
   // MPLS routes API
   // NOTE: FibAgent may throw `PlatformFibUpdateError` for Add and Sync
