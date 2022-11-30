@@ -136,24 +136,6 @@ def ip_nexthop_to_nexthop_thrift(
     return NextHopThrift(address=binary_address, weight=weight, metric=metric)
 
 
-def ip_nexthop_to_nexthop_thrift_py(
-    ip_addr: str, if_index: str, weight: int = 0, metric: int = 0
-) -> network_types.NextHopThrift:
-    """
-    :param ip_addr: Next hop IP address
-    :param if_index: Next hop interface index
-    :param weight: Next hop weigth
-    :param metric: Cost associated with next hop
-
-    :rtype: network_types.NextHopThrift (thrift-py)
-    """
-
-    binary_address = ip_str_to_addr_py(ip_addr, if_index)
-    return network_types.NextHopThrift(
-        address=binary_address, weight=weight, metric=metric
-    )
-
-
 def ip_to_unicast_route(ip_prefix: str, nexthops: List[NextHopThrift]) -> UnicastRoute:
     """
     :param ip_prefix: IP prefix
@@ -165,21 +147,6 @@ def ip_to_unicast_route(ip_prefix: str, nexthops: List[NextHopThrift]) -> Unicas
     return UnicastRoute(dest=ip_str_to_prefix(ip_prefix), nextHops=nexthops)
 
 
-def ip_to_unicast_route_py(
-    ip_prefix: str, nexthops: List[network_types.NextHopThrift]
-) -> network_types.UnicastRoute:
-    """
-    :param ip_prefix: IP prefix
-    :param nexthops: List of next hops
-
-    :rtype: network_types.UnicastRoute (thrift-py)
-    """
-
-    return network_types.UnicastRoute(
-        dest=ip_str_to_prefix_py(ip_prefix), nextHops=nexthops
-    )
-
-
 def mpls_to_mpls_route(label: int, nexthops: List[NextHopThrift]) -> MplsRoute:
     """
     :param label: MPLS label
@@ -188,18 +155,6 @@ def mpls_to_mpls_route(label: int, nexthops: List[NextHopThrift]) -> MplsRoute:
     :rtype: MplsRoute (thrift-python)
     """
     return MplsRoute(topLabel=label, nextHops=nexthops)
-
-
-def mpls_to_mpls_route_py(
-    label: int, nexthops: List[network_types.NextHopThrift]
-) -> network_types.MplsRoute:
-    """
-    :param label: MPLS label
-    :param nexthops: List of nexthops
-
-    :rtype: network_types.MplsRoute (thrift-py)
-    """
-    return network_types.MplsRoute(topLabel=label, nextHops=nexthops)
 
 
 def mpls_nexthop_to_nexthop_thrift(
@@ -232,40 +187,6 @@ def mpls_nexthop_to_nexthop_thrift(
     return NextHopThrift(
         address=binary_address, weight=weight, metric=metric, mplsAction=mpls_action
     )
-
-
-def mpls_nexthop_to_nexthop_thrift_py(
-    ip_addr: str,
-    if_index: str,
-    weight: int = 0,
-    metric: int = 0,
-    label: Optional[List[int]] = None,
-    action: network_types.MplsActionCode = network_types.MplsActionCode.PHP,
-) -> network_types.NextHopThrift:
-    """
-    :param label: label(s) for PUSH, SWAP action
-    :param action: label action PUSH, POP, SWAP
-    :param ip_addr: Next hop IP address
-    :param if_index: Next hop interface index
-    :param weight: Next hop weigth
-    :param metric: Cost associated with next hop
-
-    :rtype: network_types.NextHopThrift (thrift-py)
-    """
-
-    binary_address = ip_str_to_addr_py(ip_addr, if_index)
-    nexthop = network_types.NextHopThrift(
-        address=binary_address, weight=weight, metric=metric
-    )
-    mpls_action = network_types.MplsAction(action=action)
-    if action == network_types.MplsActionCode.SWAP:
-        # pyre-fixme[16]: `Optional` has no attribute `__getitem__`.
-        mpls_action.swapLabel = label[0]
-    elif action == network_types.MplsActionCode.PUSH:
-        mpls_action.pushLabels = label[:]
-
-    nexthop.mplsAction = mpls_action
-    return nexthop
 
 
 def routes_to_route_db(

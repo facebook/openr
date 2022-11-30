@@ -6,7 +6,7 @@
 
 
 import ssl
-from typing import Optional
+from typing import Any, Optional
 
 import bunch
 from openr.cli.utils.options import getDefaultOptions
@@ -157,7 +157,8 @@ def get_fib_agent_client(
     port: int,
     timeout_ms: int,
     client_id: int = FibClient.OPENR,
-) -> FibServiceClient.Sync:
+    client_class: Any = FibServiceClient,  # Allow service client overwrite
+) -> Any:  # return client_class.Sync
     """
     Get thrift-python sync client for talking to Fib thrift service
 
@@ -174,7 +175,7 @@ def get_fib_agent_client(
     ssl_context: Optional[SSLContext] = get_ssl_context(getDefaultOptions(host))
     try:
         client = get_sync_client(
-            FibServiceClient,
+            client_class,
             host=host,
             port=port,
             timeout=float(timeout_ms) / 1000.0,  # NOTE: Timeout expected is in seconds
@@ -188,7 +189,7 @@ def get_fib_agent_client(
         if ssl_context is not None:
             # cannot establish tls, fallback to plain text
             client = get_sync_client(
-                FibServiceClient,
+                client_class,
                 host=host,
                 port=port,
                 timeout=float(timeout_ms)
@@ -205,7 +206,7 @@ def get_fib_agent_client(
     # Assign so that we can refer to later on
     # Pyre does not allow us to assign a non-existing attribute to FibServiceClient
     # Therefore we need to explicitly ignore the error
-    client.client_id = client_id  # pyre-ignore
+    client.client_id = client_id
     return client
 
 
