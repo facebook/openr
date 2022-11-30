@@ -17,6 +17,7 @@ from openr.thrift.Network.thrift_types import (
     IpPrefix,
     MplsAction,
     MplsActionCode,
+    MplsRoute,
     NextHopThrift,
 )
 from openr.Types import ttypes as openr_types
@@ -153,12 +154,24 @@ def ip_to_unicast_route(
     )
 
 
-def mpls_to_mpls_route(
+def mpls_to_mpls_route(label: int, nexthops: List[NextHopThrift]) -> MplsRoute:
+    """
+    :param label: MPLS label
+    :param nexthops: List of nexthops
+
+    :rtype: MplsRoute (thrift-python)
+    """
+    return MplsRoute(topLabel=label, nextHops=nexthops)
+
+
+def mpls_to_mpls_route_py(
     label: int, nexthops: List[network_types.NextHopThrift]
 ) -> network_types.MplsRoute:
     """
     :param label: MPLS label
     :param nexthops: List of nexthops
+
+    :rtype: network_types.MplsRoute (thrift-py)
     """
     return network_types.MplsRoute(topLabel=label, nextHops=nexthops)
 
