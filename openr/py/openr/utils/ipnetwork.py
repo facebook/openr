@@ -108,12 +108,30 @@ def ip_str_to_prefix(prefix_str: str) -> network_types.IpPrefix:
 
 def ip_nexthop_to_nexthop_thrift(
     ip_addr: str, if_index: str, weight: int = 0, metric: int = 0
+) -> NextHopThrift:
+    """
+    :param ip_addr: Next hop IP address
+    :param if_index: Next hop interface index
+    :param weight: Next hop weigth
+    :param metric: Cost associated with next hop
+
+    :rtype: NextHopThrift (thrift-python)
+    """
+
+    binary_address = ip_str_to_addr(ip_addr, if_index)
+    return NextHopThrift(address=binary_address, weight=weight, metric=metric)
+
+
+def ip_nexthop_to_nexthop_thrift_py(
+    ip_addr: str, if_index: str, weight: int = 0, metric: int = 0
 ) -> network_types.NextHopThrift:
     """
     :param ip_addr: Next hop IP address
     :param if_index: Next hop interface index
     :param weight: Next hop weigth
     :param metric: Cost associated with next hop
+
+    :rtype: network_types.NextHopThrift (thrift-py)
     """
 
     binary_address = ip_str_to_addr_py(ip_addr, if_index)
