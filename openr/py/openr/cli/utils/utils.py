@@ -223,7 +223,7 @@ def parse_prefix_database(
 
     if prefix_filter:
         if isinstance(prefix_filter, str):
-            prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
+            prefix_filter = ipnetwork.ip_str_to_prefix_py(prefix_filter)
 
     if isinstance(prefix_db, kv_store_types.Value):
         prefix_db = deserialize_thrift_object(
@@ -1215,7 +1215,7 @@ def build_routes(
     Build list of UnicastRoute using prefixes and nexthops list
     """
 
-    prefixes_str = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+    prefixes_str = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
     nhs = build_nexthops(nexthops)
     return [
         network_types.UnicastRoute(

@@ -221,7 +221,7 @@ class FibAddRoutesCmd(FibAgentCmd):
 
 class FibDelRoutesCmd(FibAgentCmd):
     def _run(self, client: OpenrCtrl.Client, prefixes, *args, **kwargs):
-        prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes.split(",")]
+        prefixes = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes.split(",")]
         try:
             self.fib_agent_client.deleteUnicastRoutes(
                 self.fib_agent_client.client_id, prefixes

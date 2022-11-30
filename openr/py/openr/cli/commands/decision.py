@@ -790,7 +790,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmdPy):
         # Create filter
         route_filter = ctrl_types.ReceivedRouteFilter()
         if prefixes:
-            route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+            route_filter.prefixes = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
         if node:
             route_filter.nodeName = node
         if area:

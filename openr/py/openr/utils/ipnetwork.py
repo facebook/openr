@@ -93,11 +93,23 @@ def ip_str_to_addr_py(
     return binary_address
 
 
-def ip_str_to_prefix(prefix_str: str) -> network_types.IpPrefix:
+def ip_str_to_prefix(prefix_str: str) -> IpPrefix:
     """
     :param prefix_str: string representing a prefix (CIDR network)
 
-    :returns: thrift struct IpPrefix
+    :returns: thrift-python struct IpPrefix
+    :rtype: IpPrefix
+    """
+
+    ip_str, ip_len_str = prefix_str.split("/")
+    return IpPrefix(prefixAddress=ip_str_to_addr(ip_str), prefixLength=int(ip_len_str))
+
+
+def ip_str_to_prefix_py(prefix_str: str) -> network_types.IpPrefix:
+    """
+    :param prefix_str: string representing a prefix (CIDR network)
+
+    :returns: thrift-py struct IpPrefix
     :rtype: network_types.IpPrefix
     """
 
@@ -150,7 +162,7 @@ def ip_to_unicast_route(
     """
 
     return network_types.UnicastRoute(
-        dest=ip_str_to_prefix(ip_prefix), nextHops=nexthops
+        dest=ip_str_to_prefix_py(ip_prefix), nextHops=nexthops
     )
 
 

@@ -88,15 +88,15 @@ class UtilsTests(unittest.TestCase):
 
     def test_parse_prefix_database(self) -> None:
         bgp1 = openr_types.PrefixEntry(
-            prefix=ipnetwork.ip_str_to_prefix("1.0.0.0/8"),
+            prefix=ipnetwork.ip_str_to_prefix_py("1.0.0.0/8"),
             type=network_types.PrefixType.BGP,
         )
         bgp2 = openr_types.PrefixEntry(
-            prefix=ipnetwork.ip_str_to_prefix("2.0.0.0/8"),
+            prefix=ipnetwork.ip_str_to_prefix_py("2.0.0.0/8"),
             type=network_types.PrefixType.BGP,
         )
         loop1 = openr_types.PrefixEntry(
-            prefix=ipnetwork.ip_str_to_prefix("10.0.0.1/32"),
+            prefix=ipnetwork.ip_str_to_prefix_py("10.0.0.1/32"),
             type=network_types.PrefixType.LOOPBACK,
         )
         prefix_db = openr_types.PrefixDatabase(

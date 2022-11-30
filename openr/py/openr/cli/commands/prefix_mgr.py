@@ -43,7 +43,7 @@ def get_advertised_route_filter(
 ) -> ctrl_types.AdvertisedRouteFilter:
     route_filter = ctrl_types.AdvertisedRouteFilter()
     if prefixes:
-        route_filter.prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+        route_filter.prefixes = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
     if prefix_type:
         route_filter.prefixType = to_thrift_prefix_type(prefix_type)
     return route_filter
@@ -56,7 +56,7 @@ def to_thrift_prefixes(
 ) -> List[openr_types.PrefixEntry]:
     return [
         openr_types.PrefixEntry(
-            prefix=ipnetwork.ip_str_to_prefix(prefix),
+            prefix=ipnetwork.ip_str_to_prefix_py(prefix),
             type=prefix_type,
             forwardingType=forwarding_type,
         )
