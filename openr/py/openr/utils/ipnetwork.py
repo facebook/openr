@@ -12,7 +12,13 @@ from typing import List, Optional, Union
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
 from openr.thrift.Network import types as network_types_py3
-from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
+from openr.thrift.Network.thrift_types import (
+    BinaryAddress,
+    IpPrefix,
+    MplsAction,
+    MplsActionCode,
+    NextHopThrift,
+)
 from openr.Types import ttypes as openr_types
 
 
@@ -145,6 +151,38 @@ def mpls_nexthop_to_nexthop_thrift(
     weight: int = 0,
     metric: int = 0,
     label: Optional[List[int]] = None,
+    action: MplsActionCode = MplsActionCode.PHP,
+) -> NextHopThrift:
+    """
+    :param label: label(s) for PUSH, SWAP action
+    :param action: label action PUSH, POP, SWAP
+    :param ip_addr: Next hop IP address
+    :param if_index: Next hop interface index
+    :param weight: Next hop weigth
+    :param metric: Cost associated with next hop
+
+    :rtype: NextHopThrift (thrift-python)
+    """
+
+    binary_address = ip_str_to_addr(ip_addr, if_index)
+    mpls_action = MplsAction(action=action)
+    if action == MplsActionCode.SWAP:
+        # pyre-fixme[16]: `Optional` has no attribute `__getitem__`.
+        mpls_action = mpls_action(swapLabel=label[0])
+    elif action == MplsActionCode.PUSH:
+        mpls_action = mpls_action(pushLabels=label[:])
+
+    return NextHopThrift(
+        address=binary_address, weight=weight, metric=metric, mplsAction=mpls_action
+    )
+
+
+def mpls_nexthop_to_nexthop_thrift_py(
+    ip_addr: str,
+    if_index: str,
+    weight: int = 0,
+    metric: int = 0,
+    label: Optional[List[int]] = None,
     action: network_types.MplsActionCode = network_types.MplsActionCode.PHP,
 ) -> network_types.NextHopThrift:
     """
@@ -154,6 +192,8 @@ def mpls_nexthop_to_nexthop_thrift(
     :param if_index: Next hop interface index
     :param weight: Next hop weigth
     :param metric: Cost associated with next hop
+
+    :rtype: network_types.NextHopThrift (thrift-py)
     """
 
     binary_address = ip_str_to_addr_py(ip_addr, if_index)
