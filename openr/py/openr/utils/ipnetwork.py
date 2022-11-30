@@ -12,7 +12,7 @@ from typing import List, Optional, Union
 from openr.Network import ttypes as network_types
 from openr.OpenrConfig import ttypes as openr_config_types
 from openr.thrift.Network import types as network_types_py3
-from openr.thrift.Network.thrift_types import IpPrefix
+from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
 from openr.Types import ttypes as openr_types
 
 
@@ -38,13 +38,33 @@ def sprint_prefix(
     return f"{sprint_addr(prefix.prefixAddress.addr)}/{prefix.prefixLength}"
 
 
-def ip_str_to_addr(
+def ip_str_to_addr(addr_str: str, if_index: Optional[str] = None) -> BinaryAddress:
+    """
+    :param addr_str: ip address in string representation
+
+    :returns: thrift-python struct BinaryAddress
+    :rtype: BinaryAddress
+    """
+
+    # Try v4
+    try:
+        addr = socket.inet_pton(socket.AF_INET, addr_str)
+        return BinaryAddress(addr=addr, ifName=if_index)
+    except socket.error:
+        pass
+
+    # Try v6
+    addr = socket.inet_pton(socket.AF_INET6, addr_str)
+    return BinaryAddress(addr=addr, ifName=if_index)
+
+
+def ip_str_to_addr_py(
     addr_str: str, if_index: Optional[str] = None
 ) -> network_types.BinaryAddress:
     """
     :param addr_str: ip address in string representation
 
-    :returns: thrift struct BinaryAddress
+    :returns: thrift-py struct BinaryAddress
     :rtype: network_types.BinaryAddress
     """
 
@@ -76,7 +96,7 @@ def ip_str_to_prefix(prefix_str: str) -> network_types.IpPrefix:
 
     ip_str, ip_len_str = prefix_str.split("/")
     return network_types.IpPrefix(
-        prefixAddress=ip_str_to_addr(ip_str), prefixLength=int(ip_len_str)
+        prefixAddress=ip_str_to_addr_py(ip_str), prefixLength=int(ip_len_str)
     )
 
 
@@ -90,7 +110,7 @@ def ip_nexthop_to_nexthop_thrift(
     :param metric: Cost associated with next hop
     """
 
-    binary_address = ip_str_to_addr(ip_addr, if_index)
+    binary_address = ip_str_to_addr_py(ip_addr, if_index)
     return network_types.NextHopThrift(
         address=binary_address, weight=weight, metric=metric
     )
@@ -136,7 +156,7 @@ def mpls_nexthop_to_nexthop_thrift(
     :param metric: Cost associated with next hop
     """
 
-    binary_address = ip_str_to_addr(ip_addr, if_index)
+    binary_address = ip_str_to_addr_py(ip_addr, if_index)
     nexthop = network_types.NextHopThrift(
         address=binary_address, weight=weight, metric=metric
     )

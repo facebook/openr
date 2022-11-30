@@ -14,17 +14,17 @@ from openr.utils import ipnetwork
 
 
 class MockedBinaryAddresses(Enum):
-    bin_addr1_v4 = ipnetwork.ip_str_to_addr("192.168.21.2", "if_54_2_0")
-    bin_addr1_v6 = ipnetwork.ip_str_to_addr("2002::192.168.21.2", "if_54_2_0")
-    bin_addr2_v4 = ipnetwork.ip_str_to_addr("192.168.21.9", "if_54_2_1")
-    bin_addr2_v6 = ipnetwork.ip_str_to_addr("2002::192.168.21.9", "if_54_2_1")
-    bin_addr3_v6 = ipnetwork.ip_str_to_addr("fe80::4f9:99ff:fe8f:f1b3", "if_54_7_0")
-    bin_addr4_v6 = ipnetwork.ip_str_to_addr("fe80::3c13:ff:feda:9b6c", "if_54_7_1")
-    bin_addr5_noifname_v4 = ipnetwork.ip_str_to_addr("10.10.10.10")
-    bin_addr5_noifname_v6 = ipnetwork.ip_str_to_addr("2002::10.10.10.10")
-    bin_addr6_noifname_v4 = ipnetwork.ip_str_to_addr("1.1.1.1")
-    bin_addr6_noifname_v6 = ipnetwork.ip_str_to_addr("2002::1.1.1.1")
-    bin_addr7_noifname_v6 = ipnetwork.ip_str_to_addr("fe80::58:59ff:fef0:62e4")
+    bin_addr1_v4 = ipnetwork.ip_str_to_addr_py("192.168.21.2", "if_54_2_0")
+    bin_addr1_v6 = ipnetwork.ip_str_to_addr_py("2002::192.168.21.2", "if_54_2_0")
+    bin_addr2_v4 = ipnetwork.ip_str_to_addr_py("192.168.21.9", "if_54_2_1")
+    bin_addr2_v6 = ipnetwork.ip_str_to_addr_py("2002::192.168.21.9", "if_54_2_1")
+    bin_addr3_v6 = ipnetwork.ip_str_to_addr_py("fe80::4f9:99ff:fe8f:f1b3", "if_54_7_0")
+    bin_addr4_v6 = ipnetwork.ip_str_to_addr_py("fe80::3c13:ff:feda:9b6c", "if_54_7_1")
+    bin_addr5_noifname_v4 = ipnetwork.ip_str_to_addr_py("10.10.10.10")
+    bin_addr5_noifname_v6 = ipnetwork.ip_str_to_addr_py("2002::10.10.10.10")
+    bin_addr6_noifname_v4 = ipnetwork.ip_str_to_addr_py("1.1.1.1")
+    bin_addr6_noifname_v6 = ipnetwork.ip_str_to_addr_py("2002::1.1.1.1")
+    bin_addr7_noifname_v6 = ipnetwork.ip_str_to_addr_py("fe80::58:59ff:fef0:62e4")
 
 
 class NodeNames(Enum):

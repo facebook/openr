@@ -1201,7 +1201,7 @@ def build_nexthops(nexthops: List[str]) -> List[network_types.BinaryAddress]:
             addr, iface = nh_iface.split("%")
         else:
             addr = nh_iface
-        nexthop = ipnetwork.ip_str_to_addr(addr)
+        nexthop = ipnetwork.ip_str_to_addr_py(addr)
         nexthop.ifName = iface
         nhs.append(nexthop)
 
