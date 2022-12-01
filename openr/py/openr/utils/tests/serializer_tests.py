@@ -22,7 +22,7 @@ class TestSerialization(unittest.TestCase):
             random_string = "".join(random.choice(string.digits) for _ in range(10))
             thrift_obj.thisNodeName = random_string
             raw_msg = serializer.serialize_thrift_object(thrift_obj)
-            recovered_obj = serializer.deserialize_thrift_object(
+            recovered_obj = serializer.deserialize_thrift_py_object(
                 raw_msg, openr_types.PrefixDatabase
             )
             self.assertEqual(thrift_obj, recovered_obj)
@@ -34,7 +34,7 @@ class TestSerialization(unittest.TestCase):
             raw_msg = serializer.serialize_thrift_object(
                 thrift_obj, TJSONProtocolFactory
             )
-            recovered_obj = serializer.deserialize_thrift_object(
+            recovered_obj = serializer.deserialize_thrift_py_object(
                 raw_msg, openr_types.PrefixDatabase, TJSONProtocolFactory
             )
             self.assertEqual(thrift_obj, recovered_obj)
@@ -43,7 +43,7 @@ class TestSerialization(unittest.TestCase):
         thrift_obj = openr_types.PrefixDatabase()
         thrift_obj.thisNodeName = "some node"
         raw_msg = serializer.serialize_thrift_object(thrift_obj)
-        recovered_obj = serializer.deserialize_thrift_object(
+        recovered_obj = serializer.deserialize_thrift_py_object(
             raw_msg, openr_types.PrefixEntry
         )
         self.assertTrue(thrift_obj != recovered_obj)
@@ -54,6 +54,6 @@ class TestSerialization(unittest.TestCase):
         raw_msg = serializer.serialize_thrift_object(thrift_obj)
         # should raise exception due to inconsistency of protocol factor
         with self.assertRaises(Exception):
-            serializer.deserialize_thrift_object(
+            serializer.deserialize_thrift_py_object(
                 raw_msg, openr_types.PrefixDatabase, TJSONProtocolFactory
             )

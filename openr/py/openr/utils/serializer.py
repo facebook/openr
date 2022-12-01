@@ -85,13 +85,13 @@ def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
     return Serializer.serialize(proto_factory(), thrift_obj)
 
 
-def deserialize_thrift_object(
+def deserialize_thrift_py_object(
     raw_data, thrift_type, proto_factory=Consts.PROTO_FACTORY
 ):
-    """Deserialize thrift data from binary blob
+    """Deserialize thrift-py data from binary blob
 
-    :param raw_data string: the serialized thrift payload
-    :param thrift_type: the thrift type
+    :param raw_data string: the serialized thrift-py payload
+    :param thrift_type: the thrift-py type
     :param proto_factory: protocol factory, set default as Compact Protocol
 
     :return: instance of thrift_type

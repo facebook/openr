@@ -40,7 +40,7 @@ from openr.thrift.Network import thrift_types as network_types_python
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object, object_to_dict
+from openr.utils.serializer import deserialize_thrift_py_object, object_to_dict
 
 PrintAdvertisedTypes = Union[
     ctrl_types.AdvertisedRoute,
@@ -226,7 +226,7 @@ def parse_prefix_database(
             prefix_filter = ipnetwork.ip_str_to_prefix_py(prefix_filter)
 
     if isinstance(prefix_db, kv_store_types.Value):
-        prefix_db = deserialize_thrift_object(
+        prefix_db = deserialize_thrift_py_object(
             prefix_db.value, openr_types.PrefixDatabase
         )
 
@@ -326,7 +326,7 @@ def collate_prefix_keys(
         if key.startswith(Consts.PREFIX_DB_MARKER):
 
             node_name = key.split(":")[1]
-            prefix_db = deserialize_thrift_object(
+            prefix_db = deserialize_thrift_py_object(
                 value.value, openr_types.PrefixDatabase
             )
             if prefix_db.deletePrefix:
@@ -364,7 +364,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
     """convert PrefixDatabase from thrift instance to a dictionary"""
 
     if isinstance(prefix_db, kv_store_types.Value):
-        prefix_db = deserialize_thrift_object(
+        prefix_db = deserialize_thrift_py_object(
             prefix_db.value, openr_types.PrefixDatabase
         )
 
@@ -419,7 +419,9 @@ def build_global_adj_db(resp):
     for (key, value) in resp.keyVals.items():
         if not key.startswith(Consts.ADJ_DB_MARKER):
             continue
-        adj_db = deserialize_thrift_object(value.value, openr_types.AdjacencyDatabase)
+        adj_db = deserialize_thrift_py_object(
+            value.value, openr_types.AdjacencyDatabase
+        )
         update_global_adj_db(global_adj_db, adj_db)
 
     return global_adj_db
@@ -557,7 +559,7 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
         version = None
         if isinstance(adj_db, kv_store_types.Value):
             version = adj_db.version
-            adj_db = deserialize_thrift_object(
+            adj_db = deserialize_thrift_py_object(
                 adj_db.value, openr_types.AdjacencyDatabase
             )
         adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version)

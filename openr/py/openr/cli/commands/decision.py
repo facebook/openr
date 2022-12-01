@@ -20,7 +20,7 @@ from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object, serialize_json
+from openr.utils.serializer import deserialize_thrift_py_object, serialize_json
 
 
 class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
@@ -559,7 +559,7 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
         """Returns status code. 0 = success, 1 = failure"""
 
         # fetch the adj database for one particular node
-        kvstore_adj_db = deserialize_thrift_object(
+        kvstore_adj_db = deserialize_thrift_py_object(
             value.value, openr_types.AdjacencyDatabase
         )
         node_name = kvstore_adj_db.thisNodeName

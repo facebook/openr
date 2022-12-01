@@ -16,7 +16,7 @@ from openr.OpenrCtrl.ttypes import OpenrError
 from openr.Types import ttypes as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_object
+from openr.utils.serializer import deserialize_thrift_py_object
 
 
 class ConfigShowCmd(OpenrCtrlCmdPy):
@@ -82,7 +82,7 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        prefix_alloc = deserialize_thrift_object(
+        prefix_alloc = deserialize_thrift_py_object(
             prefix_alloc_blob, openr_types.AllocPrefix
         )
         self.print_config(prefix_alloc)
@@ -118,7 +118,7 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        lm_config = deserialize_thrift_object(
+        lm_config = deserialize_thrift_py_object(
             lm_config_blob, openr_types.LinkMonitorState
         )
         self.print_config(lm_config)
@@ -160,7 +160,7 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        prefix_mgr_config = deserialize_thrift_object(
+        prefix_mgr_config = deserialize_thrift_py_object(
             prefix_mgr_config_blob, openr_types.PrefixDatabase
         )
         self.print_config(prefix_mgr_config)

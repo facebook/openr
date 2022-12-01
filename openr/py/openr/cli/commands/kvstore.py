@@ -400,7 +400,7 @@ class KvKeyValsCmd(KvStoreCmdBase):
 
         prefix_type = key.split(":")[0] + ":"
         if prefix_type in options.keys():
-            return serializer.deserialize_thrift_object(
+            return serializer.deserialize_thrift_py_object(
                 value.value, options[prefix_type]
             )
         else:
@@ -492,7 +492,7 @@ class KvNodesCmd(KvStoreCmdBase):
         edges = set()
         graph = nx.Graph()
         for adj_value in adj_keys.keyVals.values():
-            adj_db = serializer.deserialize_thrift_object(
+            adj_db = serializer.deserialize_thrift_py_object(
                 adj_value.value, openr_types.AdjacencyDatabase
             )
             graph.add_node(adj_db.thisNodeName)
@@ -520,7 +520,7 @@ class KvNodesCmd(KvStoreCmdBase):
         def _parse_loopback_addrs(addrs, value):
             v4_addrs = addrs["v4"]
             v6_addrs = addrs["v6"]
-            prefix_db = serializer.deserialize_thrift_object(
+            prefix_db = serializer.deserialize_thrift_py_object(
                 value.value, openr_types.PrefixDatabase
             )
 
@@ -727,10 +727,10 @@ class KvCompareCmd(KvStoreCmdBase):
         """print db delta"""
 
         if key.startswith(Consts.PREFIX_DB_MARKER):
-            prefix_db = serializer.deserialize_thrift_object(
+            prefix_db = serializer.deserialize_thrift_py_object(
                 value.value, openr_types.PrefixDatabase
             )
-            other_prefix_db = serializer.deserialize_thrift_object(
+            other_prefix_db = serializer.deserialize_thrift_py_object(
                 other_val.value, openr_types.PrefixDatabase
             )
             other_prefix_set = {}
@@ -738,10 +738,10 @@ class KvCompareCmd(KvStoreCmdBase):
             lines = utils.sprint_prefixes_db_delta(other_prefix_set, prefix_db)
 
         elif key.startswith(Consts.ADJ_DB_MARKER):
-            adj_db = serializer.deserialize_thrift_object(
+            adj_db = serializer.deserialize_thrift_py_object(
                 value.value, openr_types.AdjacencyDatabase
             )
-            other_adj_db = serializer.deserialize_thrift_object(
+            other_adj_db = serializer.deserialize_thrift_py_object(
                 value.value, openr_types.AdjacencyDatabase
             )
             lines = utils.sprint_adj_db_delta(adj_db, other_adj_db)
@@ -1066,7 +1066,7 @@ class SnoopCmd(KvStoreCmdBase):
         global_prefix_db: Dict,
         global_publication_db: Dict,
     ):
-        prefix_db = serializer.deserialize_thrift_object(
+        prefix_db = serializer.deserialize_thrift_py_object(
             value.value,
             openr_types.PrefixDatabase,
         )
@@ -1096,7 +1096,7 @@ class SnoopCmd(KvStoreCmdBase):
         global_adj_db: Dict,
         global_publication_db: Dict,
     ):
-        new_adj_db = serializer.deserialize_thrift_object(
+        new_adj_db = serializer.deserialize_thrift_py_object(
             value.value, openr_types.AdjacencyDatabase
         )
         if delta:
