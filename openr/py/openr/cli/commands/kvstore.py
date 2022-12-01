@@ -228,7 +228,7 @@ class KvStoreCmdBase(OpenrCtrlCmdPy):
 
             data = {}
             for k, v in all_kv.items():
-                data[k] = utils.thrift_to_dict(v)
+                data[k] = utils.thrift_py_to_dict(v)
             print(utils.json_dumps(data))
             return
 

@@ -242,7 +242,7 @@ class LMCmdBase(OpenrCtrlCmdPy):
                 }
             )
 
-        return utils.thrift_to_dict(interface_info, _update)
+        return utils.thrift_py_to_dict(interface_info, _update)
 
     def interface_details_to_dict(self, interface_details):
         def _update(interface_details_dict, interface_details):
@@ -250,7 +250,7 @@ class LMCmdBase(OpenrCtrlCmdPy):
                 {"info": self.interface_info_to_dict(interface_details.info)}
             )
 
-        return utils.thrift_to_dict(interface_details, _update)
+        return utils.thrift_py_to_dict(interface_details, _update)
 
     def links_to_dict(self, links):
         def _update(links_dict, links):
@@ -264,7 +264,7 @@ class LMCmdBase(OpenrCtrlCmdPy):
             )
             del links_dict["thisNodeName"]
 
-        return utils.thrift_to_dict(links, _update)
+        return utils.thrift_py_to_dict(links, _update)
 
     def print_links_json(self, links):
         links_dict = {links.thisNodeName: self.links_to_dict(links)}

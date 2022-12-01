@@ -262,7 +262,31 @@ def print_prefixes_table(resp, nodes, prefix, client_type, iter_func) -> None:
 
 
 def thrift_to_dict(thrift_inst, update_func=None):
-    """convert thrift instance into a dict in strings
+    """convert thrift-py3/python instance into a dict in strings
+
+    :param thrift_inst: a thrift-python/thrift-py3 instance
+    :param update_func: transformation function to update dict value of
+                        thrift object. It is optional.
+
+    :return dict: dict with attributes as key, value in strings
+    """
+
+    if thrift_inst is None:
+        return None
+
+    # We cannot copy thrift_inst.__dict__ in thrift-py3/python
+    gen_dict = {}
+    for field_name, field_value in thrift_inst:
+        gen_dict[field_name] = field_value
+
+    if update_func is not None:
+        update_func(gen_dict, thrift_inst)
+
+    return gen_dict
+
+
+def thrift_py_to_dict(thrift_inst, update_func=None):
+    """convert thrift-py instance into a dict in strings
 
     :param thrift_inst: a thrift instance
     :param update_func: transformation function to update dict value of
@@ -328,12 +352,12 @@ def prefix_entry_to_dict(prefix_entry):
                 "data": str(prefix_entry.data)
                 if prefix_entry.data is not None
                 else None,
-                "metrics": thrift_to_dict(prefix_entry.metrics),
+                "metrics": thrift_py_to_dict(prefix_entry.metrics),
                 "tags": list(prefix_entry.tags if prefix_entry.tags else []),
             }
         )
 
-    return thrift_to_dict(prefix_entry, _update)
+    return thrift_py_to_dict(prefix_entry, _update)
 
 
 def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
@@ -349,7 +373,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
             {"prefixEntries": list(map(prefix_entry_to_dict, prefix_db.prefixEntries))}
         )
 
-    return thrift_to_dict(prefix_db, _update)
+    return thrift_py_to_dict(prefix_db, _update)
 
 
 def print_prefixes_json(resp, nodes, prefix, client_type, iter_func) -> None:
@@ -501,7 +525,7 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
                 }
             )
 
-        return thrift_to_dict(adj, _update)
+        return thrift_py_to_dict(adj, _update)
 
     adjacencies = list(map(adj_to_dict, adjacencies))
 
@@ -765,9 +789,9 @@ def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, A
             }
         )
         if nextHop.mplsAction:
-            next_hop_dict.update({"mplsAction": thrift_to_dict(nextHop.mplsAction)})
+            next_hop_dict.update({"mplsAction": thrift_py_to_dict(nextHop.mplsAction)})
 
-    return thrift_to_dict(nextHop, _update)
+    return thrift_py_to_dict(nextHop, _update)
 
 
 def unicast_route_to_dict(route):
@@ -781,7 +805,7 @@ def unicast_route_to_dict(route):
             }
         )
 
-    return thrift_to_dict(route, _update)
+    return thrift_py_to_dict(route, _update)
 
 
 def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
@@ -794,7 +818,7 @@ def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
             {"nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops]}
         )
 
-    return thrift_to_dict(route, _update)
+    return thrift_py_to_dict(route, _update)
 
 
 def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
