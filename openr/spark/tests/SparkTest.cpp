@@ -1065,39 +1065,48 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     const auto startTime = std::chrono::steady_clock::now();
 
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    // Calculate the elapsed time right after we received the initialization
+    // event to minimize the potential delay
+    const auto node2ElapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+
     ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
 
     // The initialization event is published when
     // minNeighborDiscoveryInterval elapses and far sooner than
     // maxNeighborDiscoveryInterval.
-    auto minNeighborDiscoveryInterval =
-        *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
-    auto maxNeighborDiscoveryInterval =
-        *config1->getSparkConfig().max_neighbor_discovery_interval_s() * 1000;
-
-    const auto node2ElapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime);
+    auto minNeighborDiscoveryInterval2 =
+        *config2->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
+    auto maxNeighborDiscoveryInterval2 =
+        *config2->getSparkConfig().max_neighbor_discovery_interval_s() * 1000;
 
     LOG(INFO) << "Elapsed time: " << node2ElapsedTime.count()
               << " milliseconds";
-    EXPECT_GE(node2ElapsedTime.count(), minNeighborDiscoveryInterval);
-    EXPECT_LE(node2ElapsedTime.count(), maxNeighborDiscoveryInterval);
+    EXPECT_GE(node2ElapsedTime.count(), minNeighborDiscoveryInterval2);
+    // introduce 1 ms buffer as the measurement might be slightly over the limit
+    EXPECT_LE(node2ElapsedTime.count(), maxNeighborDiscoveryInterval2 + 1);
 
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
-    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
-    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+    // Similarly, we need to measure the elapsed time here to minimize the
+    // measurement error
     const auto node1ElapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
 
+    ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
+
     // The initialization event is published when
     // maxNeighborDiscoveryInterval elapses, as active neighbors are
     // fewer than total neighbors.
+    auto maxNeighborDiscoveryInterval1 =
+        *config1->getSparkConfig().max_neighbor_discovery_interval_s() * 1000;
+
     LOG(INFO) << "Elapsed time: " << node1ElapsedTime.count()
               << " milliseconds";
-    EXPECT_GE(node1ElapsedTime.count(), maxNeighborDiscoveryInterval);
+    EXPECT_GE(node1ElapsedTime.count(), maxNeighborDiscoveryInterval1 + 1);
   }
 }
 
