@@ -73,13 +73,13 @@ def serialize_json(struct: Any) -> str:
     return json.dumps(object_to_dict(struct), indent=2, sort_keys=True)
 
 
-def serialize_thrift_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
-    """Serialize thrift data to binary blob
+def serialize_thrift_py_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
+    """Serialize thrift-py data to binary blob
 
-    :param thrift_obj: the thrift object
+    :param thrift_obj: the thrift-py object
     :param proto_factory: protocol factory, set default as Compact Protocol
 
-    :return: string the serialized thrift payload
+    :return: string the serialized thrift-py payload
     """
 
     return Serializer.serialize(proto_factory(), thrift_obj)
