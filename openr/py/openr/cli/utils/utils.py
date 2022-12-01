@@ -832,8 +832,29 @@ def sprint_adj_db_full(global_adj_db, adj_db, bidir) -> str:
     )
 
 
-def next_hop_thrift_to_dict(nextHop: network_types_py.NextHopThrift) -> Dict[str, Any]:
-    """convert nextHop from thrift instance into a dict in strings"""
+def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, Any]:
+    """convert nextHop from thrift-py3/thrift-python instance into a dict in strings"""
+    if nextHop is None:
+        return {}
+
+    def _update(next_hop_dict, nextHop):
+        next_hop_dict.update(
+            {
+                "address": ipnetwork.sprint_addr(nextHop.address.addr),
+                "nextHop": ipnetwork.sprint_addr(nextHop.address.addr),
+                "ifName": nextHop.address.ifName,
+            }
+        )
+        if nextHop.mplsAction:
+            next_hop_dict.update({"mplsAction": thrift_to_dict(nextHop.mplsAction)})
+
+    return thrift_to_dict(nextHop, _update)
+
+
+def next_hop_thrift_to_dict_py(
+    nextHop: network_types_py.NextHopThrift,
+) -> Dict[str, Any]:
+    """convert nextHop from thrift-py instance into a dict in strings"""
     if nextHop is None:
         return {}
 
@@ -852,7 +873,7 @@ def next_hop_thrift_to_dict(nextHop: network_types_py.NextHopThrift) -> Dict[str
 
 
 def unicast_route_to_dict(route):
-    """convert route from thrift instance into a dict in strings"""
+    """convert route from thrift-py3/thrift-python instance into a dict in strings"""
 
     def _update(route_dict, route):
         route_dict.update(
@@ -862,30 +883,69 @@ def unicast_route_to_dict(route):
             }
         )
 
-    return thrift_py_to_dict(route, _update)
+    return thrift_to_dict(route, _update)
 
 
-def mpls_route_to_dict(route: network_types_py.MplsRoute) -> Dict[str, Any]:
-    """
-    Convert MPLS route to json serializable dict object
-    """
+def unicast_route_to_dict_py(route):
+    """convert route from thrift-py instance into a dict in strings"""
 
-    def _update(route_dict, route: network_types_py.MplsRoute):
+    def _update(route_dict, route):
         route_dict.update(
-            {"nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops]}
+            {
+                "dest": ipnetwork.sprint_prefix(route.dest),
+                "nextHops": [next_hop_thrift_to_dict_py(nh) for nh in route.nextHops],
+            }
         )
 
     return thrift_py_to_dict(route, _update)
 
 
-def route_db_to_dict(route_db: openr_types_py.RouteDatabase) -> Dict[str, Any]:
+def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
     """
-    Convert route from thrift instance into a dict in strings
+    Convert MPLS route (thrift-py3/thrift-python) to json serializable dict object
+    """
+
+    def _update(route_dict, route: network_types.MplsRoute):
+        route_dict.update(
+            {"nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops]}
+        )
+
+    return thrift_to_dict(route, _update)
+
+
+def mpls_route_to_dict_py(route: network_types_py.MplsRoute) -> Dict[str, Any]:
+    """
+    Convert MPLS route (thrift-py) to json serializable dict object
+    """
+
+    def _update(route_dict, route: network_types_py.MplsRoute):
+        route_dict.update(
+            {"nextHops": [next_hop_thrift_to_dict_py(nh) for nh in route.nextHops]}
+        )
+
+    return thrift_py_to_dict(route, _update)
+
+
+def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
+    """
+    Convert route from thrift-py3/thrift-python instance into a dict in strings
     """
 
     ret = {
         "unicastRoutes": [unicast_route_to_dict(r) for r in route_db.unicastRoutes],
         "mplsRoutes": [mpls_route_to_dict(r) for r in route_db.mplsRoutes],
+    }
+    return ret
+
+
+def route_db_to_dict_py(route_db: openr_types_py.RouteDatabase) -> Dict[str, Any]:
+    """
+    Convert route from thrift-py instance into a dict in strings
+    """
+
+    ret = {
+        "unicastRoutes": [unicast_route_to_dict_py(r) for r in route_db.unicastRoutes],
+        "mplsRoutes": [mpls_route_to_dict_py(r) for r in route_db.mplsRoutes],
     }
     return ret
 

@@ -40,7 +40,7 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
             route_db_dict = {}
             for node in nodes:
                 route_db = client.getRouteDbComputed(node)
-                route_db_dict[node] = utils.route_db_to_dict(route_db)
+                route_db_dict[node] = utils.route_db_to_dict_py(route_db)
             utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
             for node in nodes:

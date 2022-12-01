@@ -89,7 +89,7 @@ class FibUnicastRoutesCmd(FibCmdBase):
         if json:
             routes = {
                 "unicastRoutes": [
-                    utils.unicast_route_to_dict(r) for r in unicast_route_list
+                    utils.unicast_route_to_dict_py(r) for r in unicast_route_list
                 ]
             }
             route_dict = {host_name: routes}
@@ -117,7 +117,7 @@ class FibMplsRoutesCmd(FibCmdBase):
 
         if json:
             routes = {
-                "mplsRoutes": [utils.mpls_route_to_dict(r) for r in mpls_route_list]
+                "mplsRoutes": [utils.mpls_route_to_dict_py(r) for r in mpls_route_list]
             }
             route_dict = {host_name: routes}
             utils.print_routes_json(route_dict)
