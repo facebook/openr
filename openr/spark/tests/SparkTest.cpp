@@ -1064,9 +1064,16 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     // Record current timestamp.
     const auto startTime = std::chrono::steady_clock::now();
 
-    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
     // Calculate the elapsed time right after we received the initialization
     // event to minimize the potential delay
+    const auto node1ElapsedTime =
+        std::chrono::duration_cast<std::chrono::milliseconds>(
+            std::chrono::steady_clock::now() - startTime);
+
+    ASSERT_TRUE(node2->waitForInitializationEvent() == true);
+    // Similarly, we need to measure the elapsed time here to minimize the
+    // measurement error
     const auto node2ElapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
@@ -1085,15 +1092,9 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     LOG(INFO) << "Elapsed time: " << node2ElapsedTime.count()
               << " milliseconds";
     EXPECT_GE(node2ElapsedTime.count(), minNeighborDiscoveryInterval2);
-    // introduce 1 ms buffer as the measurement might be slightly over the limit
-    EXPECT_LE(node2ElapsedTime.count(), maxNeighborDiscoveryInterval2 + 1);
-
-    ASSERT_TRUE(node1->waitForInitializationEvent() == true);
-    // Similarly, we need to measure the elapsed time here to minimize the
-    // measurement error
-    const auto node1ElapsedTime =
-        std::chrono::duration_cast<std::chrono::milliseconds>(
-            std::chrono::steady_clock::now() - startTime);
+    // introduce 50 ms buffer as the measurement might be slightly over the
+    // limit during context switching
+    EXPECT_LE(node2ElapsedTime.count(), maxNeighborDiscoveryInterval2 + 50);
 
     ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
@@ -1106,7 +1107,7 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
 
     LOG(INFO) << "Elapsed time: " << node1ElapsedTime.count()
               << " milliseconds";
-    EXPECT_GE(node1ElapsedTime.count(), maxNeighborDiscoveryInterval1 + 1);
+    EXPECT_LE(node1ElapsedTime.count(), maxNeighborDiscoveryInterval1 + 50);
   }
 }
 
