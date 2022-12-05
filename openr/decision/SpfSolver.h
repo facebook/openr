@@ -280,7 +280,6 @@ class SpfSolver {
       const std::string& myNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,
-      bool v4OverV6Nexthop,
       const BestNextHopMetrics& bestNextHopMetrics,
       std::optional<int32_t> swapLabel,
       const std::string& area,

@@ -499,7 +499,6 @@ SpfSolver::buildRouteDb(
                         myNodeName,
                         {{adjDb.thisNodeName().value(), area}},
                         false /* isV4 */,
-                        v4OverV6Nexthop_,
                         metricNhs,
                         topLabel,
                         area,
@@ -700,7 +699,6 @@ SpfSolver::selectBestPathsSpf(
       myNodeName,
       routeSelectionResult.allNodeAreas,
       prefix.first.isV4(), /* isV4Prefix */
-      v4OverV6Nexthop_,
       nextHopsWithMetric,
       std::nullopt /* swapLabel */,
       area,
@@ -931,14 +929,11 @@ SpfSolver::getNextHopsWithMetric(
   return std::make_pair(shortestMetric, nextHopNodes);
 }
 
-// TODO Let's use strong-types for the bools to detect any abusement at the
-// building time.
 std::unordered_set<thrift::NextHopThrift>
 SpfSolver::getNextHopsThrift(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
-    bool v4OverV6Nexthop,
     const BestNextHopMetrics& bestNextHopMetrics,
     std::optional<int32_t> swapLabel,
     const std::string& area,
@@ -976,8 +971,8 @@ SpfSolver::getNextHopsThrift(
     }
 
     nextHops.emplace(createNextHop(
-        isV4 and not v4OverV6Nexthop ? link->getNhV4FromNode(myNodeName)
-                                     : link->getNhV6FromNode(myNodeName),
+        isV4 and not v4OverV6Nexthop_ ? link->getNhV4FromNode(myNodeName)
+                                      : link->getNhV6FromNode(myNodeName),
         link->getIfaceFromNode(myNodeName),
         distOverLink,
         mplsAction,
