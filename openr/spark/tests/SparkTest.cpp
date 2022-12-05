@@ -100,6 +100,17 @@ class SparkFixture : public testing::Test {
   std::unique_ptr<std::thread> mockIoProviderThread_{nullptr};
 };
 
+void
+checkTotalNeighborCountWithTimeout(
+    std::shared_ptr<SparkWrapper>& peer, uint64_t neighborCount = 0) {
+  checkUntilTimeout(
+      [&peer, &neighborCount]() {
+        return peer->getTotalNeighborCount() == neighborCount;
+      },
+      std::chrono::milliseconds(5),
+      std::chrono::milliseconds(1));
+}
+
 /*
  * This is a test fixture to create two Spark instances for further testing.
  *
@@ -343,10 +354,11 @@ TEST_F(SparkConfigFixture, MinHeartbeatHoldTimerTest) {
         endTime - startTime - keepAliveTime, std::min(holdTime1, holdTime2));
 
     // Heartbeat timeout will lead us to stop tracking that neighbor.
-    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
-    ASSERT_TRUE(node2_->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2_->getActiveNeighborCount() == 0);
+
+    checkTotalNeighborCountWithTimeout(node1_);
+    checkTotalNeighborCountWithTimeout(node2_);
   }
 }
 
@@ -720,8 +732,9 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
         endTime - startTime <=
         std::chrono::seconds(grTime) + std::chrono::seconds(holdTime));
     // GR-timeout will lead us to stop tracking that neighbor.
-    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
+
+    checkTotalNeighborCountWithTimeout(node1_);
   }
 }
 
@@ -827,10 +840,11 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
             *node1_->getSparkConfig().graceful_restart_time_s()));
 
     // Heartbeat timeout will lead us to stop tracking that neighbor.
-    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
-    ASSERT_TRUE(node2_->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2_->getActiveNeighborCount() == 0);
+
+    checkTotalNeighborCountWithTimeout(node1_);
+    checkTotalNeighborCountWithTimeout(node2_);
   }
 }
 
@@ -1443,10 +1457,13 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     // eventually will lose adjacency as node1 never come back
     EXPECT_TRUE(node2->waitForEvents(NB_DOWN).has_value());
     EXPECT_TRUE(node3->waitForEvents(NB_DOWN).has_value());
-    ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
-    ASSERT_TRUE(node3->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node3->getActiveNeighborCount() == 0);
+
+    // total neighbor count would eventually be updated too, but not right at
+    // the time when we receive the NB_DOWN event
+    checkTotalNeighborCountWithTimeout(node2);
+    checkTotalNeighborCountWithTimeout(node3);
   }
 }
 

@@ -142,6 +142,53 @@ void generateTopo(
         apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores,
     ClusterTopology topo);
 
+struct CheckTimeoutException : public std::exception {
+ public:
+  explicit CheckTimeoutException(const std::string& msg) : msg_(msg) {}
+
+  inline const char*
+  what(void) const noexcept override {
+    return msg_.c_str();
+  }
+
+ private:
+  const std::string msg_;
+};
+
+/*
+ * helper function to check until timed out
+ * checkFn: check funtion that returns a boolean (true upon success)
+ * timeout (e.g 1000ms), retry indefinitely if set to 0
+ * retryInterval (e.g 100ms)
+ */
+template <typename CHECK_FN>
+void
+checkUntilTimeout(
+    CHECK_FN checkFn,
+    std::chrono::milliseconds timeout = std::chrono::milliseconds(0),
+    std::chrono::milliseconds retryInterval = std::chrono::milliseconds(100)) {
+  bool checkIndefinitely = timeout.count() == 0;
+  if (not checkIndefinitely) {
+    CHECK_GE(timeout.count(), retryInterval.count());
+  }
+
+  auto maxTimePoint = std::chrono::steady_clock::now() + timeout;
+  while (true) {
+    if (checkFn()) {
+      return;
+    }
+    bool isTimedOut =
+        !checkIndefinitely && std::chrono::steady_clock::now() > maxTimePoint;
+    if (isTimedOut) {
+      throw CheckTimeoutException(
+          fmt::format("timed out at {} ms!", timeout.count()));
+    }
+    /* sleep override */
+    std::this_thread::sleep_for(retryInterval);
+  }
+  return;
+}
+
 #if FOLLY_HAS_COROUTINES
 /*
  * Util function to validate if the given node has received all events
