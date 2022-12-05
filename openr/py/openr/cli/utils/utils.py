@@ -1923,6 +1923,28 @@ def get_routes_json(
 
 
 def get_routes(
+    route_db: openr_types.RouteDatabase,
+) -> Tuple[List[network_types.UnicastRoute], List[network_types.MplsRoute]]:
+    """
+    Find all routes for each prefix in routeDb
+
+    :param route_db: RouteDatabase
+    :return (
+        list of UnicastRoute of prefix & corresponding shortest nexthops
+        list of MplsRoute of prefix & corresponding shortest nexthops
+    )
+    """
+
+    unicast_routes, mpls_routes = None, None
+    unicast_routes = sorted(
+        route_db.unicastRoutes, key=lambda x: x.dest.prefixAddress.addr
+    )
+    mpls_routes = sorted(route_db.mplsRoutes, key=lambda x: x.topLabel)
+
+    return (unicast_routes, mpls_routes)
+
+
+def get_routes_py(
     route_db: openr_types_py.RouteDatabase,
 ) -> Tuple[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]]:
     """

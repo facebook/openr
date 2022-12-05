@@ -276,10 +276,10 @@ class FibValidateRoutesCmd(FibAgentCmd):
             # fetch link_db from link-monitor module
             lm_links = client.getInterfaces().interfaceDetails
 
-            (decision_unicast_routes, decision_mpls_routes) = utils.get_routes(
+            (decision_unicast_routes, decision_mpls_routes) = utils.get_routes_py(
                 decision_route_db
             )
-            (fib_unicast_routes, fib_mpls_routes) = utils.get_routes(fib_route_db)
+            (fib_unicast_routes, fib_mpls_routes) = utils.get_routes_py(fib_route_db)
 
             agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
                 self.fib_agent_client.client_id
