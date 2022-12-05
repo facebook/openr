@@ -7,8 +7,8 @@
 
 #include <folly/logging/xlog.h>
 
+#include <openr/common/Flags.h>
 #include <openr/common/OpenrThriftCtrlServer.h>
-
 namespace openr {
 
 OpenrThriftCtrlServer::OpenrThriftCtrlServer(
@@ -81,7 +81,8 @@ OpenrThriftCtrlServer::setUpThriftServer() {
   server->setWorkersJoinTimeout(std::chrono::seconds{
       *config_->getThriftServerConfig().workers_join_timeout()});
   // set streaming expiration time.
-  server->setStreamExpireTime(FLAGS_stream_expire_time);
+  server->setStreamExpireTime(
+      std::chrono::milliseconds{FLAGS_stream_expire_time});
 
   // Setup TLS
   if (config_->isSecureThriftServerEnabled()) {
