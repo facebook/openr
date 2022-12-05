@@ -699,27 +699,6 @@ OpenrCtrlHandler::semifuture_getDecisionAreaAdjacenciesFiltered(
   return decision_->getDecisionAreaAdjacenciesFiltered(std::move(*filter));
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::PrefixDbs>>
-OpenrCtrlHandler::semifuture_getDecisionPrefixDbs() {
-  auto filter = std::make_unique<thrift::ReceivedRouteFilter>();
-  filter->areaName() = *getSingleAreaOrThrow("getDecisionPrefixDbs");
-  return semifuture_getReceivedRoutesFiltered(std::move(filter))
-      .deferValue([](std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>&&
-                         routes) mutable {
-        auto res = std::make_unique<thrift::PrefixDbs>();
-        for (auto const& routeDetail : *routes) {
-          for (auto const& route : *routeDetail.routes()) {
-            (*res)[*route.key()->node()].prefixEntries()->push_back(
-                *route.route());
-          }
-        }
-        for (auto& [name, db] : *res) {
-          db.thisNodeName() = name;
-        }
-        return res;
-      });
-}
-
 //
 // Dispatcher APIs
 //

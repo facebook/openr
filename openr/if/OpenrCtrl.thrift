@@ -486,15 +486,6 @@ service OpenrCtrl extends KvStore.KvStoreService {
   ) throws (1: OpenrError error);
 
   /**
-   * Get global prefix databases. This represents prefixes of actives nodes
-   * only. While KvStore can represent dead node's information until their keys
-   * expires
-   *
-   * DEPRECATED. Prefer getReceivedRoutes APIs
-   */
-  Types.PrefixDbs getDecisionPrefixDbs() throws (1: OpenrError error);
-
-  /**
    * Long poll API to get KvStore
    * Will return true/false with our own KeyVal snapshot provided
    */

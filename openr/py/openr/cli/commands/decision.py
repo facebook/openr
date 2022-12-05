@@ -34,8 +34,6 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
         *args,
         **kwargs,
     ) -> None:
-        if "all" in nodes:
-            nodes = self._get_all_nodes(client)
         if json_opt:
             route_db_dict = {}
             for node in nodes:
@@ -46,17 +44,6 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
             for node in nodes:
                 route_db = client.getRouteDbComputed(node)
                 utils.print_route_db(route_db, prefixes, labels)
-
-    def _get_all_nodes(self, client: OpenrCtrl.Client) -> set:
-        """return all the nodes' name in the network"""
-
-        def _parse(nodes, adj_db):
-            nodes.add(adj_db.thisNodeName)
-
-        nodes = set()
-        adj_dbs = client.getDecisionPrefixDbs()
-        self.iter_dbs(nodes, adj_dbs, {"all"}, _parse)
-        return nodes
 
 
 class DecisionAdjCmd(OpenrCtrlCmdPy):
