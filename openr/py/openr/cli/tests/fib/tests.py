@@ -62,23 +62,17 @@ class CliFibTests(TestCase):
         """
 
         nexthop_addr = expected_nexthop.address
-
         nexthop_name = (
             addr_to_name[nexthop_addr.addr]
             if addr_to_name
             else ipnetwork.sprint_addr(nexthop_addr.addr)
         )
-
         ifname = (
             f"%{nexthop_addr.ifName}" if (nexthop_addr.ifName or addr_to_name) else ""
         )
-
         expected_nexthop_str = f"{nexthop_name}{ifname}"
 
         self.check_address(nexthop_line, expected_nexthop_str)
-
-        actual_weight = nexthop_line.split()[-1]
-        self.assertEqual(actual_weight, str(expected_nexthop.weight))
 
     def check_printed_routes(
         self,

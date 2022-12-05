@@ -1801,6 +1801,7 @@ def build_unicast_route(
         :param filter_for_networks: IP/Prefixes to filter.
         :param filter_exact_match: Indicate exact match or subnet match.
     """
+
     dest = ipnetwork.sprint_prefix(route.dest)
     if filter_for_networks:
         if filter_exact_match:
@@ -1813,7 +1814,7 @@ def build_unicast_route(
         nexthops = [
             (
                 f"{nexthops_to_neighbor_names[nh.address.addr]}%{nh.address.ifName} "
-                + f"weight {nh.weight if nh.weight != 0 else 1}"
+                + f"[weight {nh.weight if nh.weight != 0 else 1}/metric {nh.metric}]"
             )
             for nh in route.nextHops
         ]
