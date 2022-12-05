@@ -6,7 +6,7 @@
 
 # pyre-strict
 
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
@@ -32,9 +32,9 @@ class CliLmTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
-    def test_lm_links(self, mocked_openr_client: MagicMock) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_lm_links(self, mocked_openr_client: AsyncMock) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getInterfaces.return_value = LM_LINKS_OPENR_RIGHT_OK

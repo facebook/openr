@@ -8,7 +8,7 @@
 import asyncio
 import json
 import re
-from typing import Any, Callable, Dict, List, Optional, Set, Tuple
+from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 
 import bunch
 import click
@@ -172,13 +172,6 @@ class OpenrCtrlCmdPy:
         """
 
         return client.getRunningConfigThrift()
-
-    def fetch_lm_links(self, client: Any) -> Any:
-        """
-        Fetch a list of known interfaces via thrift call
-        """
-
-        return client.getInterfaces()
 
     def fetch_kvstore_peers(self, client: Any, area=None) -> Any:
         """
@@ -382,15 +375,6 @@ class OpenrCtrlCmd(OpenrCtrlCmdPy):
             keys=[prefix] if prefix else None,
         )
 
-    def fetch_initialization_events(
-        self, client: Any
-    ) -> Dict[InitializationEvent, int]:
-        """
-        Fetch Initialization events as a dictionary via thrift call
-        """
-
-        return client.getInitializationEvents()
-
     def fetch_keyvals(
         self,
         client: Any,
@@ -412,7 +396,7 @@ class OpenrCtrlCmd(OpenrCtrlCmdPy):
 
     def validate_init_event(
         self,
-        init_event_dict: Dict[InitializationEvent, int],
+        init_event_dict: Mapping[InitializationEvent, int],
         init_event: InitializationEvent,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """

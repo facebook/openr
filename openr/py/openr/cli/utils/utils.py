@@ -504,7 +504,12 @@ def build_global_prefix_db(resp):
 
 def dump_adj_db_full(
     global_adj_db, adj_db, bidir
-) -> Tuple[int, bool, List[openr_types_py.Adjacency], str]:
+) -> Tuple[
+    int,
+    bool,
+    Union[List[openr_types_py.Adjacency], Sequence[openr_types.Adjacency]],
+    str,
+]:
     """given an adjacency database, dump neighbors. Use the
         global adj database to validate bi-dir adjacencies
 
@@ -517,7 +522,9 @@ def dump_adj_db_full(
      list of adjacencies
     """
 
-    assert isinstance(adj_db, openr_types_py.AdjacencyDatabase)
+    assert isinstance(adj_db, openr_types.AdjacencyDatabase) or isinstance(
+        adj_db, openr_types_py.AdjacencyDatabase
+    )
     this_node_name = adj_db.thisNodeName
     area = adj_db.area if adj_db.area is not None else "N/A"
     node_metric_increment_val = (
@@ -582,7 +589,10 @@ def adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version) -> None:
                 }
             )
 
-        return thrift_py_to_dict(adj, _update)
+        if isinstance(adj, openr_types.Adjacency):
+            return thrift_to_dict(adj, _update)
+        else:
+            return thrift_py_to_dict(adj, _update)
 
     adjacencies = list(map(adj_to_dict, adjacencies))
 
@@ -617,6 +627,13 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
             adj_db = deserialize_thrift_py_object(
                 adj_db.value, openr_types_py.AdjacencyDatabase
             )
+        if isinstance(adj_db, kv_store_types.Value):
+            version = adj_db.version
+            if adj_db.value:
+                adj_db = deserialize(openr_types.AdjacencyDatabase, adj_db.value)
+            else:
+                adj_db = openr_types.AdjacencyDatabase()
+
         adj_db_to_dict(adjs_map, adj_dbs, adj_db, bidir, version)
 
     adjs_map = {}

@@ -7,8 +7,12 @@
 # pyre-strict
 
 
-from openr.Network.ttypes import BinaryAddress, IpPrefix
-from openr.Types.ttypes import DumpLinksReply, InterfaceDetails, InterfaceInfo
+from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
+from openr.thrift.Types.thrift_types import (
+    DumpLinksReply,
+    InterfaceDetails,
+    InterfaceInfo,
+)
 
 LM_LINKS_OPENR_RIGHT_OK = DumpLinksReply(
     thisNodeName="openr-right",

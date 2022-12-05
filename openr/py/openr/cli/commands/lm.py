@@ -11,26 +11,33 @@ from typing import Any, Dict, List, Optional, Sequence
 
 import click
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.KvStore import ttypes as kv_store_types
-from openr.OpenrCtrl import OpenrCtrl
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.thrift.KvStore.thrift_types import InitializationEvent
-from openr.Types import ttypes as openr_types
+from openr.thrift.OpenrCtrl.thrift_types import AdjacenciesFilter
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types.thrift_types import DumpLinksReply
 from openr.utils import ipnetwork, printing
 
 
-class LMCmdBase(OpenrCtrlCmdPy):
+class LMCmdBase(OpenrCtrlCmd):
     """
     Base class for LinkMonitor cmds. All of LinkMonitor cmd
     is spawn out of this.
     """
 
-    def toggle_node_overload_bit(
-        self, client: OpenrCtrl.Client, overload: bool, yes: bool = False
+    async def fetch_lm_links(self, client: OpenrCtrlCppClient.Async) -> Any:
+        """
+        Fetch a list of known interfaces via thrift call
+        """
+
+        return await client.getInterfaces()
+
+    async def toggle_node_overload_bit(
+        self, client: OpenrCtrlCppClient.Async, overload: bool, yes: bool = False
     ) -> None:
         """[Hard-Drain] Node level overload"""
 
-        links = self.fetch_lm_links(client)
+        links = await self.fetch_lm_links(client)
         host = links.thisNodeName
         print()
 
@@ -50,22 +57,22 @@ class LMCmdBase(OpenrCtrlCmdPy):
             return
 
         if overload:
-            client.setNodeOverload()
+            await client.setNodeOverload()
         else:
-            client.unsetNodeOverload()
+            await client.unsetNodeOverload()
 
         print("Successfully {}..\n".format(action))
 
-    def toggle_link_overload_bit(
+    async def toggle_link_overload_bit(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         overload: bool,
         interface: str,
         yes: bool = False,
     ) -> None:
         """[Hard-Drain] Link level overload"""
 
-        links = self.fetch_lm_links(client)
+        links = await self.fetch_lm_links(client)
         print()
 
         if interface not in links.interfaceDetails:
@@ -87,18 +94,18 @@ class LMCmdBase(OpenrCtrlCmdPy):
             return
 
         if overload:
-            client.setInterfaceOverload(interface)
+            await client.setInterfaceOverload(interface)
         else:
-            client.unsetInterfaceOverload(interface)
+            await client.unsetInterfaceOverload(interface)
 
         print("Successfully {} for the interface.\n".format(action))
 
-    def toggle_node_metric_inc(
-        self, client: OpenrCtrl.Client, metric_inc: int, yes: bool = False
+    async def toggle_node_metric_inc(
+        self, client: OpenrCtrlCppClient.Async, metric_inc: int, yes: bool = False
     ) -> None:
         """[Soft-Drain] Node level metric increment"""
 
-        links = self.fetch_lm_links(client)
+        links = await self.fetch_lm_links(client)
         host = links.thisNodeName
 
         # ATTN:
@@ -122,22 +129,22 @@ class LMCmdBase(OpenrCtrlCmdPy):
             sys.exit(0)
 
         if metric_inc:
-            client.setNodeInterfaceMetricIncrement(metric_inc)
+            await client.setNodeInterfaceMetricIncrement(metric_inc)
         else:
-            client.unsetNodeInterfaceMetricIncrement()
+            await client.unsetNodeInterfaceMetricIncrement()
 
         print(f"Successfully {action} for node {host}.\n")
 
-    def toggle_link_metric_inc(
+    async def toggle_link_metric_inc(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         metric_inc: int,
         yes: bool,
     ) -> None:
         """[Soft-Drain] Link level metric increment"""
 
-        links = self.fetch_lm_links(client)
+        links = await self.fetch_lm_links(client)
         host = links.thisNodeName
 
         # ATTN:
@@ -171,14 +178,14 @@ class LMCmdBase(OpenrCtrlCmdPy):
             sys.exit(0)
 
         if metric_inc:
-            client.setInterfaceMetricIncrement(interface, metric_inc)
+            await client.setInterfaceMetricIncrement(interface, metric_inc)
         else:
-            client.unsetInterfaceMetricIncrement(interface)
+            await client.unsetInterfaceMetricIncrement(interface)
 
         print(f"Successfully {action} for interface {interface} on node {host}.\n")
 
     def check_link_overriden(
-        self, links: openr_types.DumpLinksReply, interface: str, metric: int
+        self, links: DumpLinksReply, interface: str, metric: int
     ) -> Optional[bool]:
         """
         This function call will comapre the metricOverride in the following way:
@@ -190,15 +197,15 @@ class LMCmdBase(OpenrCtrlCmdPy):
             return None
         return metricOverride == metric
 
-    def toggle_link_metric(
+    async def toggle_link_metric(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         override: bool,
         interface: str,
         metric: int,
         yes: bool,
     ) -> None:
-        links = self.fetch_lm_links(client)
+        links = await self.fetch_lm_links(client)
         print()
 
         if interface not in links.interfaceDetails:
@@ -225,9 +232,9 @@ class LMCmdBase(OpenrCtrlCmdPy):
             return
 
         if override:
-            client.setInterfaceMetric(interface, metric)
+            await client.setInterfaceMetric(interface, metric)
         else:
-            client.unsetInterfaceMetric(interface)
+            await client.unsetInterfaceMetric(interface)
 
         print("Successfully {} for the interface.\n".format(action))
 
@@ -242,7 +249,7 @@ class LMCmdBase(OpenrCtrlCmdPy):
                 }
             )
 
-        return utils.thrift_py_to_dict(interface_info, _update)
+        return utils.thrift_to_dict(interface_info, _update)
 
     def interface_details_to_dict(self, interface_details):
         def _update(interface_details_dict, interface_details):
@@ -250,7 +257,7 @@ class LMCmdBase(OpenrCtrlCmdPy):
                 {"info": self.interface_info_to_dict(interface_details.info)}
             )
 
-        return utils.thrift_py_to_dict(interface_details, _update)
+        return utils.thrift_to_dict(interface_details, _update)
 
     def links_to_dict(self, links):
         def _update(links_dict, links):
@@ -264,7 +271,7 @@ class LMCmdBase(OpenrCtrlCmdPy):
             )
             del links_dict["thisNodeName"]
 
-        return utils.thrift_py_to_dict(links, _update)
+        return utils.thrift_to_dict(links, _update)
 
     def print_links_json(self, links):
         links_dict = {links.thisNodeName: self.links_to_dict(links)}
@@ -333,129 +340,129 @@ class LMCmdBase(OpenrCtrlCmdPy):
 
 
 class SetNodeOverloadCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         yes: bool = False,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_node_overload_bit(client, True, yes)
+        await self.toggle_node_overload_bit(client, True, yes)
 
 
 class UnsetNodeOverloadCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         yes: bool = False,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_node_overload_bit(client, False, yes)
+        await self.toggle_node_overload_bit(client, False, yes)
 
 
 class SetLinkOverloadCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_link_overload_bit(client, True, interface, yes)
+        await self.toggle_link_overload_bit(client, True, interface, yes)
 
 
 class UnsetLinkOverloadCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_link_overload_bit(client, False, interface, yes)
+        await self.toggle_link_overload_bit(client, False, interface, yes)
 
 
 class IncreaseNodeMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         metric: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_node_metric_inc(client, int(metric), yes)
+        await self.toggle_node_metric_inc(client, int(metric), yes)
 
 
 class ClearNodeMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_node_metric_inc(client, 0, yes)
+        await self.toggle_node_metric_inc(client, 0, yes)
 
 
 class IncreaseLinkMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         metric: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_link_metric_inc(client, interface, int(metric), yes)
+        await self.toggle_link_metric_inc(client, interface, int(metric), yes)
 
 
 class ClearLinkMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_link_metric_inc(client, interface, 0, yes)
+        await self.toggle_link_metric_inc(client, interface, 0, yes)
 
 
 # [TO BE DEPRECATED]
 class SetLinkMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         metric: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_link_metric(client, True, interface, int(metric), yes)
+        await self.toggle_link_metric(client, True, interface, int(metric), yes)
 
 
 class UnsetLinkMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         interface: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        self.toggle_link_metric(client, False, interface, 0, yes)
+        await self.toggle_link_metric(client, False, interface, 0, yes)
 
 
 class OverrideAdjMetricCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         node: str,
         interface: str,
         metric: str,
@@ -463,34 +470,34 @@ class OverrideAdjMetricCmd(LMCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        client.setAdjacencyMetric(interface, node, int(metric))
+        await client.setAdjacencyMetric(interface, node, int(metric))
 
 
 class ClearAdjMetricOverrideCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         node: str,
         interface: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        client.unsetAdjacencyMetric(interface, node)
+        await client.unsetAdjacencyMetric(interface, node)
 
 
 class LMAdjCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         nodes: set,
         json: bool,
         areas: Sequence[str] = (),
         *args,
         **kwargs,
     ) -> None:
-        area_filters = OpenrCtrl.AdjacenciesFilter(selectAreas=set(areas))
-        adj_dbs = client.getLinkMonitorAdjacenciesFiltered(area_filters)
+        area_filters = AdjacenciesFilter(selectAreas=set(areas))
+        adj_dbs = await client.getLinkMonitorAdjacenciesFiltered(area_filters)
 
         for adj_db in adj_dbs:
             if adj_db and adj_db.area and not json:
@@ -506,15 +513,15 @@ class LMAdjCmd(LMCmdBase):
 
 
 class LMLinksCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         only_suppressed: bool,
         json: bool,
         *args,
         **kwargs,
     ) -> None:
-        links = self.fetch_lm_links(client)
+        links = await self.fetch_lm_links(client)
         if only_suppressed:
             links.interfaceDetails = {
                 k: v for k, v in links.interfaceDetails.items() if v.linkFlapBackOffMs
@@ -550,9 +557,9 @@ class LMLinksCmd(LMCmdBase):
 
 
 class LMValidateCmd(LMCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> bool:
@@ -560,14 +567,14 @@ class LMValidateCmd(LMCmdBase):
         is_pass = True
 
         # Get Data
-        links = self.fetch_lm_links(client)
-        initialization_events = self.fetch_initialization_events_py(client)
-        openr_config = self.fetch_running_config_thrift(client)
+        links = await self.fetch_lm_links(client)
+        initialization_events = await client.getInitializationEvents()
+        openr_config = await self.fetch_running_config_thrift(client)
 
         # Run the validation checks
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
-            kv_store_types.InitializationEvent.LINK_DISCOVERED,
+            InitializationEvent.LINK_DISCOVERED,
         )
 
         is_pass = is_pass and init_is_pass
@@ -591,7 +598,7 @@ class LMValidateCmd(LMCmdBase):
         return is_pass
 
     def _validate_interface_regex(
-        self, links: openr_types.DumpLinksReply, areas: List[Any]
+        self, links: DumpLinksReply, areas: List[Any]
     ) -> Dict[str, Any]:
         """
         Checks if each interface passes the regexes of atleast one area
