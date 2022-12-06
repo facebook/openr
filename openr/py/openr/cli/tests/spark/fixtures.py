@@ -8,10 +8,10 @@
 
 from enum import Enum
 
-from openr.KvStore import ttypes as openr_kvstore_types
-from openr.Network.ttypes import BinaryAddress
-from openr.thrift.OpenrConfig.types import AreaConfig, OpenrConfig
-from openr.Types.ttypes import SparkNeighbor
+from openr.thrift.KvStore import thrift_types as openr_kvstore_types
+from openr.thrift.Network.thrift_types import BinaryAddress
+from openr.thrift.OpenrConfig.thrift_types import AreaConfig, OpenrConfig
+from openr.thrift.Types.thrift_types import SparkNeighbor
 from openr.utils.consts import Consts
 
 MOCKED_SPARK_NEIGHBORS = [

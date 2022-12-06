@@ -5,22 +5,21 @@
 # LICENSE file in the root directory of this source tree.
 
 import datetime
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Sequence, Tuple
 
 import click
 
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.KvStore import ttypes as kv_store_types
-from openr.OpenrCtrl import OpenrCtrl
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.thrift.KvStore.thrift_types import InitializationEvent
-from openr.Types import ttypes as openr_types
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types.thrift_types import SparkNeighbor
 from openr.utils import ipnetwork, printing, serializer
 
 
-class SparkBaseCmd(OpenrCtrlCmdPy):
+class SparkBaseCmd(OpenrCtrlCmd):
     def print_spark_neighbors_detailed(
-        self, neighbors: List[openr_types.SparkNeighbor]
+        self, neighbors: Sequence[SparkNeighbor]
     ) -> None:
         """
         Construct print lines of Spark neighbors in detailed fashion
@@ -69,7 +68,7 @@ class SparkBaseCmd(OpenrCtrlCmdPy):
 
         print("\n".join(rows))
 
-    def print_spark_neighbors(self, neighbors: List[openr_types.SparkNeighbor]) -> None:
+    def print_spark_neighbors(self, neighbors: Sequence[SparkNeighbor]) -> None:
         """
         Render neighbors without details
         """
@@ -99,23 +98,19 @@ class SparkBaseCmd(OpenrCtrlCmdPy):
             )
         print("\n", printing.render_horizontal_table(rows, column_labels))
 
-    def fetch_spark_neighbors(
-        self, client: OpenrCtrl.Client
-    ) -> List[openr_types.SparkNeighbor]:
-        """
-        Fetch the Spark neighbors thrift structure via thrift call
-        """
-
-        return client.getNeighbors()
-
 
 class NeighborCmd(SparkBaseCmd):
-    def _run(
-        self, client: OpenrCtrl.Client, json: bool, detailed: bool, *args, **kwargs
+    async def _run(
+        self,
+        client: OpenrCtrlCppClient.Async,
+        json: bool,
+        detailed: bool,
+        *args,
+        **kwargs,
     ) -> None:
 
         # Get data
-        neighbors = self.fetch_spark_neighbors(client)
+        neighbors = await client.getNeighbors()
 
         # Render
         if json:
@@ -123,9 +118,7 @@ class NeighborCmd(SparkBaseCmd):
         else:
             self.render(neighbors, detailed)
 
-    def render(
-        self, neighbors: List[openr_types.SparkNeighbor], detailed: bool
-    ) -> None:
+    def render(self, neighbors: Sequence[SparkNeighbor], detailed: bool) -> None:
         """
         Render the received Spark neighbor data
         """
@@ -137,23 +130,25 @@ class NeighborCmd(SparkBaseCmd):
 
 
 class ValidateCmd(SparkBaseCmd):
-    def _run(self, client: OpenrCtrl.Client, detail: bool, *args, **kwards) -> bool:
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, detail: bool, *args, **kwards
+    ) -> bool:
 
         is_pass = True
 
         # Get data
-        neighbors = self.fetch_spark_neighbors(client)
-        initialization_events = self.fetch_initialization_events_py(client)
-        openr_config = self.fetch_running_config_thrift(client)
+        neighbors = await client.getNeighbors()
+        initialization_events = await client.getInitializationEvents()
+        openr_config = await client.getRunningConfigThrift()
 
         # Validate spark details
         state_non_estab_neighbors = self._validate_neighbor_state(neighbors)
 
         is_pass = is_pass and (len(state_non_estab_neighbors) == 0)
 
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
-            kv_store_types.InitializationEvent.NEIGHBOR_DISCOVERED,
+            InitializationEvent.NEIGHBOR_DISCOVERED,
         )
 
         is_pass = is_pass and init_is_pass
@@ -179,8 +174,8 @@ class ValidateCmd(SparkBaseCmd):
         return is_pass
 
     def _validate_neighbor_state(
-        self, neighbors: List[openr_types.SparkNeighbor]
-    ) -> List[openr_types.SparkNeighbor]:
+        self, neighbors: Sequence[SparkNeighbor]
+    ) -> Sequence[SparkNeighbor]:
         """
         Returns a list of neighbors not in ESTABLISHED state.
         If there are none, the list returned is empty
@@ -194,8 +189,8 @@ class ValidateCmd(SparkBaseCmd):
         return non_estab_neighbors
 
     def _validate_neigbor_regex(
-        self, neighbors: List[openr_types.SparkNeighbor], areas: List[Any]
-    ) -> Tuple[List[openr_types.SparkNeighbor], Dict[str, List[str]]]:
+        self, neighbors: Sequence[SparkNeighbor], areas: Sequence[Any]
+    ) -> Tuple[Sequence[SparkNeighbor], Dict[str, List[str]]]:
         """
         Returns a list of all neighbors which don't pass the check
         and a dictionary of area_id : neighbor_regexes
@@ -224,7 +219,7 @@ class ValidateCmd(SparkBaseCmd):
 
     def _print_neighbor_info(
         self,
-        non_estab_neighbors: List[openr_types.SparkNeighbor],
+        non_estab_neighbors: Sequence[SparkNeighbor],
         total_neighbors: int,
         detail: bool,
     ) -> None:
@@ -259,7 +254,7 @@ class ValidateCmd(SparkBaseCmd):
 
     def _print_neighbor_regex_info(
         self,
-        invalid_neighbors: List[openr_types.SparkNeighbor],
+        invalid_neighbors: Sequence[SparkNeighbor],
         regexes: Dict[str, List[str]],
         detail: bool,
     ) -> None:
@@ -281,10 +276,10 @@ class ValidateCmd(SparkBaseCmd):
                 self.print_spark_neighbors(invalid_neighbors)
 
 
-class GracefulRestartCmd(OpenrCtrlCmdPy):
-    def _run(
+class GracefulRestartCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         yes: bool = False,
         *args,
         **kwargs,
@@ -294,5 +289,5 @@ class GracefulRestartCmd(OpenrCtrlCmdPy):
             print()
             return
 
-        client.floodRestartingMsg()
+        await client.floodRestartingMsg()
         print("Successfully forcing to send GR msgs.\n")

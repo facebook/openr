@@ -7,17 +7,24 @@
 import json
 from typing import Any, Dict, Optional
 
-from openr.Network import ttypes as network_types
+from openr.Network import ttypes as network_types_py
+from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
 from openr.utils.consts import Consts
 from openr.utils.ipnetwork import sprint_addr, sprint_prefix
+from thrift.python import types as thrift_python_types
 from thrift.util import Serializer
 
 
 TO_DICT_OVERRIDES = {
     # Convert IpPrefix to human readable format
-    network_types.IpPrefix: sprint_prefix,
+    network_types_py.IpPrefix: sprint_prefix,
+    IpPrefix: sprint_prefix,
     # Convert BinaryAddress to human readable format
-    network_types.BinaryAddress: lambda x: {
+    network_types_py.BinaryAddress: lambda x: {
+        "addr": sprint_addr(x.addr),
+        "ifName": x.ifName,
+    },
+    BinaryAddress: lambda x: {
         "addr": sprint_addr(x.addr),
         "ifName": x.ifName,
     },
@@ -35,15 +42,15 @@ def object_to_dict(data: Any, overrides: Optional[Dict] = TO_DICT_OVERRIDES) -> 
         return None
 
     # Sequence type
-    if type(data) in [list, tuple, range]:
+    if type(data) in [list, tuple, range, thrift_python_types.List]:
         return [object_to_dict(x, overrides) for x in data]
 
     # Set type
-    if type(data) in [set, frozenset]:
+    if type(data) in [set, frozenset, thrift_python_types.Set]:
         return sorted([object_to_dict(x, overrides) for x in data])
 
     # Map type
-    if isinstance(data, dict):
+    if type(data) in [dict, thrift_python_types.Map]:
         return {
             object_to_dict(x, overrides): object_to_dict(y, overrides)
             for x, y in data.items()
@@ -62,6 +69,10 @@ def object_to_dict(data: Any, overrides: Optional[Dict] = TO_DICT_OVERRIDES) -> 
         for class_type, override_fn in overrides.items():
             if isinstance(data, class_type):
                 return override_fn(data)
+
+    # thrift-python structs
+    if isinstance(data, thrift_python_types.Struct):
+        return {x: object_to_dict(y, overrides) for x, y in data}
 
     # data represents some class
     return {x: object_to_dict(y, overrides) for x, y in data.__dict__.items()}
