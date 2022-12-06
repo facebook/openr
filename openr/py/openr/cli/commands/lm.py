@@ -25,19 +25,12 @@ class LMCmdBase(OpenrCtrlCmd):
     is spawn out of this.
     """
 
-    async def fetch_lm_links(self, client: OpenrCtrlCppClient.Async) -> Any:
-        """
-        Fetch a list of known interfaces via thrift call
-        """
-
-        return await client.getInterfaces()
-
     async def toggle_node_overload_bit(
         self, client: OpenrCtrlCppClient.Async, overload: bool, yes: bool = False
     ) -> None:
         """[Hard-Drain] Node level overload"""
 
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         host = links.thisNodeName
         print()
 
@@ -72,7 +65,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Hard-Drain] Link level overload"""
 
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         print()
 
         if interface not in links.interfaceDetails:
@@ -105,7 +98,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Soft-Drain] Node level metric increment"""
 
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         host = links.thisNodeName
 
         # ATTN:
@@ -144,7 +137,7 @@ class LMCmdBase(OpenrCtrlCmd):
     ) -> None:
         """[Soft-Drain] Link level metric increment"""
 
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         host = links.thisNodeName
 
         # ATTN:
@@ -205,7 +198,7 @@ class LMCmdBase(OpenrCtrlCmd):
         metric: int,
         yes: bool,
     ) -> None:
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         print()
 
         if interface not in links.interfaceDetails:
@@ -521,11 +514,15 @@ class LMLinksCmd(LMCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         if only_suppressed:
-            links.interfaceDetails = {
-                k: v for k, v in links.interfaceDetails.items() if v.linkFlapBackOffMs
-            }
+            links = links(
+                interfaceDetails={
+                    k: v
+                    for k, v in links.interfaceDetails.items()
+                    if v.linkFlapBackOffMs
+                }
+            )
         if json:
             self.print_links_json(links)
         else:
@@ -567,7 +564,7 @@ class LMValidateCmd(LMCmdBase):
         is_pass = True
 
         # Get Data
-        links = await self.fetch_lm_links(client)
+        links = await client.getInterfaces()
         initialization_events = await client.getInitializationEvents()
         openr_config = await self.fetch_running_config_thrift(client)
 
