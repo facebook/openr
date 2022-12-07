@@ -364,9 +364,6 @@ def prefix_entry_to_dict(prefix_entry):
         prefix_entry_dict.update(
             {
                 "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
-                "data": str(prefix_entry.data)
-                if prefix_entry.data is not None
-                else None,
                 "metrics": thrift_to_dict(prefix_entry.metrics),
                 "tags": list(prefix_entry.tags if prefix_entry.tags else []),
             }
@@ -384,9 +381,6 @@ def prefix_entry_to_dict_py(prefix_entry):
         prefix_entry_dict.update(
             {
                 "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
-                "data": str(prefix_entry.data)
-                if prefix_entry.data is not None
-                else None,
                 "metrics": thrift_py_to_dict(prefix_entry.metrics),
                 "tags": list(prefix_entry.tags if prefix_entry.tags else []),
             }

@@ -521,9 +521,6 @@ createPrefixEntry(
   thrift::PrefixEntry prefixEntry;
   prefixEntry.prefix() = prefix;
   prefixEntry.type() = type;
-  if (not data.empty()) {
-    prefixEntry.data() = data;
-  }
   prefixEntry.forwardingType() = forwardingType;
   prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
   prefixEntry.minNexthop().from_optional(minNexthop);

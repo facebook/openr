@@ -303,18 +303,13 @@ struct PrefixEntry {
   2: Network.PrefixType type (deprecated);
 
   /**
-   * TODO: remove later when openr -> bgp route redistribution is gone
-   * Optional additional metadata. Encoding depends on PrefixType
-   */
-  3: optional binary data (deprecated);
-
-  /**
    * Default mode of forwarding for prefix is IP. If `forwardingType` is
    * set to SR_MPLS, then packet will be encapsulated via IP -> MPLS route will
    * be programmed at LERs and LSR (middle-hops) will perform label switching
    * while preserving the label until packet reaches destination
    */
   4: OpenrConfig.PrefixForwardingType forwardingType = OpenrConfig.PrefixForwardingType.IP;
+
   /**
    * Default forwarding (route computation) algorithm is shortest path ECMP.
    * Open/R implements 2-shortest path edge disjoint algorithm for forwarding.
@@ -430,15 +425,6 @@ struct StaticAllocation {
 typedef map<string, AdjacencyDatabase> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::AdjacencyDatabase>",
 ) AdjDbs
-
-/**
- * @deprecated - Map of node name to adjacency database. This is deprecated
- * in favor of `received-routes` and `advertised-routes` and should go away
- * once area migration is complete.
- */
-typedef map<string, PrefixDatabase> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::PrefixDatabase>",
-) PrefixDbs
 
 /**
  * Represents complete route database that is or should be programmed in

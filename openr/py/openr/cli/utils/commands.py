@@ -90,7 +90,7 @@ class OpenrCtrlCmdPy:
         parse prefix/adj databases
 
         @param: container - container to store the generated data and returns
-        @param: dbs - decision_types.PrefixDbs or decision_types.AdjDbs
+        @param: dbs - decision_types.AdjDbs
         @param: nodes - set: the set of nodes for parsing
         @param: parse_func - function: the parsing function
         """

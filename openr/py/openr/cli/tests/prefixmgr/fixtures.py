@@ -37,7 +37,6 @@ MOCKED_ADVERTISED_ROUTES = [
                         prefixLength=0,
                     ),
                     type=PrefixType.BGP,
-                    data=b"b''",
                     forwardingType=PrefixForwardingType.SR_MPLS,
                     forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     minNexthop=24,
@@ -69,7 +68,6 @@ MOCKED_ADVERTISED_ROUTES = [
                         prefixLength=0,
                     ),
                     type=PrefixType.BGP,
-                    data=b"b''",
                     forwardingType=PrefixForwardingType.SR_MPLS,
                     forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     minNexthop=24,
@@ -149,7 +147,6 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
             "64900",
             "65301"
           ],
-          "data": "b''",
           "forwardingAlgorithm": 0,
           "forwardingType": 1,
           "metrics": {
@@ -192,7 +189,6 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
             "64900",
             "65301"
           ],
-          "data": "b''",
           "forwardingAlgorithm": 0,
           "forwardingType": 1,
           "metrics": {

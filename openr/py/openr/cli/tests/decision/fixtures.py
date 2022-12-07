@@ -543,7 +543,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
         },
         "route": {
           "area_stack": [],
-          "data": null,
           "forwardingAlgorithm": 0,
           "forwardingType": 0,
           "metrics": {
@@ -586,7 +585,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
         },
         "route": {
           "area_stack": [],
-          "data": null,
           "forwardingAlgorithm": 0,
           "forwardingType": 0,
           "metrics": {
@@ -629,7 +627,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
         },
         "route": {
           "area_stack": [],
-          "data": null,
           "forwardingAlgorithm": 0,
           "forwardingType": 0,
           "metrics": {
@@ -665,7 +662,6 @@ OLD_PREFIXES_JSON = """\
     "prefixEntries": [
       {
         "area_stack": [],
-        "data": null,
         "forwardingAlgorithm": 0,
         "forwardingType": 0,
         "metrics": {
@@ -685,7 +681,6 @@ OLD_PREFIXES_JSON = """\
       },
       {
         "area_stack": [],
-        "data": null,
         "forwardingAlgorithm": 0,
         "forwardingType": 0,
         "metrics": {
