@@ -10,7 +10,7 @@ from typing import List, Optional
 import bunch
 import click
 from openr.cli.commands import prefix_mgr
-from openr.OpenrCtrl import ttypes as ctrl_types
+from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 
 
 class PrefixMgrCli:

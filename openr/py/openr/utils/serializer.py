@@ -70,6 +70,10 @@ def object_to_dict(data: Any, overrides: Optional[Dict] = TO_DICT_OVERRIDES) -> 
             if isinstance(data, class_type):
                 return override_fn(data)
 
+    # thrift-python enums
+    if isinstance(data, thrift_python_types.Enum):
+        return data.value
+
     # thrift-python structs
     if isinstance(data, thrift_python_types.Struct):
         return {x: object_to_dict(y, overrides) for x, y in data}

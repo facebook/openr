@@ -7,13 +7,13 @@
 # pyre-strict
 
 from typing import Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
 from openr.cli.clis import prefix_mgr
 from openr.cli.tests import helpers
-from openr.KvStore import ttypes as openr_kvstore_types
+from openr.thrift.KvStore import thrift_types as openr_kvstore_types
 
 from .fixtures import (
     ADVERTISED_ROUTES_OUTPUT,
@@ -44,13 +44,13 @@ class CliPrefixManagerTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
-    @patch(f"{BASE_CMD_MODULE}.PrefixMgrCmd._get_config_py")
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    @patch(f"{BASE_CMD_MODULE}.PrefixMgrCmd._get_config")
     def test_prefixmgr_advertised_routes(
-        self, mocked_openr_config: MagicMock, mocked_openr_client: MagicMock
+        self, mocked_openr_config: AsyncMock, mocked_openr_client: AsyncMock
     ) -> None:
         # Set mock data for testing
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getAdvertisedRoutesFiltered.return_value = (
@@ -93,11 +93,11 @@ class CliPrefixManagerTests(TestCase):
         self.assertEqual(0, invoked_return.exit_code)
         self.assertEqual(ADVERTISED_ROUTES_OUTPUT_JSON, invoked_return.stdout)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
     def test_prefixmgr_validate_init_event(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getInitializationEvents.return_value = (

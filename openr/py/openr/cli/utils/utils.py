@@ -38,11 +38,13 @@ from openr.OpenrConfig import ttypes as config_types_py
 from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types_py
 from openr.thrift.KvStore import thrift_types as kv_store_types
 from openr.thrift.Network import thrift_types as network_types
+from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 from openr.thrift.Types import thrift_types as openr_types
 from openr.Types import ttypes as openr_types_py
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
 from openr.utils.serializer import deserialize_thrift_py_object, object_to_dict
+from thrift.python import types as thrift_python_types
 from thrift.python.serializer import deserialize
 
 
@@ -50,8 +52,12 @@ PrintAdvertisedTypes = Union[
     ctrl_types_py.AdvertisedRoute,
     ctrl_types_py.ReceivedRoute,
     ctrl_types_py.NodeAndArea,
+    ctrl_types.AdvertisedRoute,
+    ctrl_types.ReceivedRoute,
+    ctrl_types.NodeAndArea,
     int,
     network_types_py.PrefixType,
+    network_types.PrefixType,
 ]
 
 
@@ -2009,7 +2015,12 @@ def is_color_output_supported() -> bool:
 
 def print_route_details(
     routes: Iterable[
-        Union[ctrl_types_py.AdvertisedRouteDetail, ctrl_types_py.ReceivedRouteDetail]
+        Union[
+            ctrl_types.AdvertisedRouteDetail,
+            ctrl_types.ReceivedRouteDetail,
+            ctrl_types_py.AdvertisedRouteDetail,
+            ctrl_types_py.ReceivedRouteDetail,
+        ]
     ],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
@@ -2055,7 +2066,7 @@ def print_route_details(
 
 
 def print_advertised_routes(
-    routes: List[ctrl_types_py.AdvertisedRoute],
+    routes: Sequence[ctrl_types.AdvertisedRoute],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str]],
     detailed: bool,
     tag_map: Optional[Dict[str, str]] = None,
@@ -2119,14 +2130,19 @@ def print_route_header(rows: List[str], detailed: bool) -> None:
             f"{'PP':<6} "
             f"{'D':<6} "
             f"{'MN':<6}"
-            f"{'PL':<6}"
+            "PL"
         )
         rows.append("")
 
 
 def print_route_helper(
     rows: List[str],
-    route: Union[ctrl_types_py.AdvertisedRoute, ctrl_types_py.ReceivedRoute],
+    route: Union[
+        ctrl_types.AdvertisedRoute,
+        ctrl_types.ReceivedRoute,
+        ctrl_types_py.AdvertisedRoute,
+        ctrl_types_py.ReceivedRoute,
+    ],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
     markers: str,
@@ -2150,12 +2166,18 @@ def print_route_helper(
     """
 
     key, metrics = key_to_str_fn(route.key), route.route.metrics
-    fwd_algo = config_types_py.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
-        route.route.forwardingAlgorithm
-    )
-    fwd_type = config_types_py.PrefixForwardingType._VALUES_TO_NAMES.get(
-        route.route.forwardingType
-    )
+    if isinstance(route, thrift_python_types.Struct):
+        # thrift-py3/thrift-python
+        fwd_algo = route.route.forwardingAlgorithm.name
+        fwd_type = route.route.forwardingType.name
+    else:
+        # thrift-py
+        fwd_algo = config_types_py.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
+            route.route.forwardingAlgorithm
+        )
+        fwd_type = config_types_py.PrefixForwardingType._VALUES_TO_NAMES.get(
+            route.route.forwardingType
+        )
     if detailed:
         rows.append(f"{markers} from {' '.join(key)}")
         rows.append(f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}")
@@ -2177,15 +2199,18 @@ def print_route_helper(
         )
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
         if (
-            isinstance(route, ctrl_types_py.AdvertisedRoute)
+            (
+                isinstance(route, ctrl_types.AdvertisedRoute)
+                or isinstance(route, ctrl_types_py.AdvertisedRoute)
+            )
             and hasattr(route, "hitPolicy")
             and route.hitPolicy
         ):
             rows.append(f"     Policy - {route.hitPolicy}")
         if (
-            isinstance(route, ctrl_types_py.AdvertisedRoute)
-            and route.igpCost is not None
-        ):
+            isinstance(route, ctrl_types.AdvertisedRoute)
+            or isinstance(route, ctrl_types_py.AdvertisedRoute)
+        ) and route.igpCost is not None:
             rows.append(f"     IGP Cost - {route.igpCost}")
     else:
         min_nexthop = (
@@ -2201,7 +2226,7 @@ def print_route_helper(
             f"{metrics.path_preference:<6} "
             f"{metrics.distance:<6} "
             f"{min_nexthop:<6}"
-            f"{prepend_label:<6}"
+            f"{prepend_label}"
         )
 
 

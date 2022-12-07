@@ -7,10 +7,14 @@
 # pyre-ignore-all-errors
 from typing import Dict
 
-from openr.KvStore import ttypes as openr_kvstore_types
-from openr.Network.ttypes import BinaryAddress, IpPrefix
-from openr.OpenrCtrl.ttypes import AdvertisedRoute, AdvertisedRouteDetail
-from openr.Types.ttypes import PrefixEntry, PrefixMetrics
+from openr.thrift.KvStore import thrift_types as openr_kvstore_types
+from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix, PrefixType
+from openr.thrift.OpenrConfig.thrift_types import (
+    PrefixForwardingAlgorithm,
+    PrefixForwardingType,
+)
+from openr.thrift.OpenrCtrl.thrift_types import AdvertisedRoute, AdvertisedRouteDetail
+from openr.thrift.Types.thrift_types import PrefixEntry, PrefixMetrics
 
 MOCKED_ADVERTISED_ROUTES = [
     AdvertisedRouteDetail(
@@ -20,11 +24,11 @@ MOCKED_ADVERTISED_ROUTES = [
             ),
             prefixLength=0,
         ),
-        bestKey=3,
-        bestKeys=[3],
+        bestKey=PrefixType.BGP,
+        bestKeys=[PrefixType.BGP],
         routes=[
             AdvertisedRoute(
-                key=3,
+                key=PrefixType.BGP,
                 route=PrefixEntry(
                     prefix=IpPrefix(
                         prefixAddress=BinaryAddress(
@@ -32,10 +36,10 @@ MOCKED_ADVERTISED_ROUTES = [
                         ),
                         prefixLength=0,
                     ),
-                    type=3,
+                    type=PrefixType.BGP,
                     data=b"b''",
-                    forwardingType=1,
-                    forwardingAlgorithm=0,
+                    forwardingType=PrefixForwardingType.SR_MPLS,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     minNexthop=24,
                     prependLabel=65001,
                     metrics=PrefixMetrics(
@@ -54,20 +58,20 @@ MOCKED_ADVERTISED_ROUTES = [
         prefix=IpPrefix(
             prefixAddress=BinaryAddress(addr=b"\x00\x00\x00\x00"), prefixLength=0
         ),
-        bestKey=3,
-        bestKeys=[3],
+        bestKey=PrefixType.BGP,
+        bestKeys=[PrefixType.BGP],
         routes=[
             AdvertisedRoute(
-                key=3,
+                key=PrefixType.BGP,
                 route=PrefixEntry(
                     prefix=IpPrefix(
                         prefixAddress=BinaryAddress(addr=b"\x00\x00\x00\x00"),
                         prefixLength=0,
                     ),
-                    type=3,
+                    type=PrefixType.BGP,
                     data=b"b''",
-                    forwardingType=1,
-                    forwardingAlgorithm=0,
+                    forwardingType=PrefixForwardingType.SR_MPLS,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     minNexthop=24,
                     prependLabel=60000,
                     metrics=PrefixMetrics(
@@ -89,13 +93,13 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
 Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
           MN - Min-Nexthops, PL - Prepend Label
 
-   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL    
+   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL
 
 > ::/0, 1/1
-*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24    65001 
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24    65001
 
 > 0.0.0.0/0, 1/1
-*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24    60000 
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24    60000
 
 """
 
@@ -110,6 +114,7 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
      Misc - prepend-label: 65001, weight: None
      Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
      Area Stack - 64984, 65333, 64900, 65301
+     IGP Cost - 0
 
 > 0.0.0.0/0, 1/1
 *@ from BGP
@@ -119,6 +124,7 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
      Misc - prepend-label: 60000, weight: None
      Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
      Area Stack - 64984, 65333, 64900, 65301
+     IGP Cost - 0
 
 """
 
@@ -134,7 +140,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
     "routes": [
       {
         "hitPolicy": null,
-        "igpCost": null,
+        "igpCost": 0,
         "key": 3,
         "route": {
           "area_stack": [
@@ -177,7 +183,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
     "routes": [
       {
         "hitPolicy": null,
-        "igpCost": null,
+        "igpCost": 0,
         "key": 3,
         "route": {
           "area_stack": [

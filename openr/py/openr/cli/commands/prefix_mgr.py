@@ -4,35 +4,29 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple
 
 from openr.cli.utils import utils
 
-from openr.cli.utils.commands import OpenrCtrlCmdPy
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.cli.utils.utils import (
     get_tag_to_name_map,
     print_advertised_routes,
     print_route_details,
     PrintAdvertisedTypes,
 )
-from openr.KvStore import ttypes as kv_store_types
-from openr.Network import ttypes as network_types
-from openr.OpenrConfig.ttypes import PrefixForwardingAlgorithm, PrefixForwardingType
-from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
 from openr.thrift.KvStore.thrift_types import InitializationEvent
-from openr.Types import ttypes as openr_types
+from openr.thrift.Network.thrift_types import PrefixType
+from openr.thrift.OpenrConfig.thrift_types import PrefixForwardingType
+from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types.thrift_types import OriginatedPrefixEntry, PrefixEntry
 from openr.utils import ipnetwork, serializer
 
 
 def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
     try:
-        return (
-            network_types.PrefixType._VALUES_TO_NAMES.get(
-                # pyre-ignore [6]: We are to loosely typed to clean this up sanely
-                key,
-                "N/A - Not in PrefixType enum",
-            ),
-        )
+        return (key.name if key in PrefixType else "N/A - Not in PrefixType enum",)
     except ValueError:
         pass  # Here we should have debug logging ...
     return ("N/A - ERROR",)
@@ -41,22 +35,22 @@ def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
 def get_advertised_route_filter(
     prefixes: List[str], prefix_type: Optional[str]
 ) -> ctrl_types.AdvertisedRouteFilter:
-    route_filter = ctrl_types.AdvertisedRouteFilter()
-    if prefixes:
-        route_filter.prefixes = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
-    if prefix_type:
-        route_filter.prefixType = to_thrift_prefix_type(prefix_type)
-    return route_filter
+    return ctrl_types.AdvertisedRouteFilter(
+        prefixes=[ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+        if prefixes
+        else None,
+        prefixType=to_thrift_prefix_type(prefix_type) if prefix_type else None,
+    )
 
 
 def to_thrift_prefixes(
     prefixes: List[str],
-    prefix_type: network_types.PrefixType,
+    prefix_type: PrefixType,
     forwarding_type: PrefixForwardingType = PrefixForwardingType.IP,
-) -> List[openr_types.PrefixEntry]:
+) -> List[PrefixEntry]:
     return [
-        openr_types.PrefixEntry(
-            prefix=ipnetwork.ip_str_to_prefix_py(prefix),
+        PrefixEntry(
+            prefix=ipnetwork.ip_str_to_prefix(prefix),
             type=prefix_type,
             forwardingType=forwarding_type,
         )
@@ -64,8 +58,8 @@ def to_thrift_prefixes(
     ]
 
 
-def to_thrift_prefix_type(prefix_type: str) -> network_types.PrefixType:
-    PREFIX_TYPE_TO_VALUES = network_types.PrefixType._NAMES_TO_VALUES
+def to_thrift_prefix_type(prefix_type: str) -> PrefixType:
+    PREFIX_TYPE_TO_VALUES = {e.name: e for e in PrefixType}
     if prefix_type.upper() not in PREFIX_TYPE_TO_VALUES:
         raise Exception(
             "Unknown type {}. Use any of {}".format(
@@ -77,7 +71,7 @@ def to_thrift_prefix_type(prefix_type: str) -> network_types.PrefixType:
 
 
 def to_thrift_forwarding_type(forwarding_type: str) -> PrefixForwardingType:
-    FORWARDING_TYPE_TO_VALUES = PrefixForwardingType._NAMES_TO_VALUES
+    FORWARDING_TYPE_TO_VALUES = {e.name: e for e in PrefixForwardingType}
     if forwarding_type not in FORWARDING_TYPE_TO_VALUES:
         raise Exception(
             "Unknown forwarding type {}. Use any of {}".format(
@@ -87,28 +81,28 @@ def to_thrift_forwarding_type(forwarding_type: str) -> PrefixForwardingType:
     return FORWARDING_TYPE_TO_VALUES[forwarding_type]
 
 
-class PrefixMgrCmd(OpenrCtrlCmdPy):
+class PrefixMgrCmd(OpenrCtrlCmd):
     pass
 
 
 class WithdrawCmd(PrefixMgrCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         prefix_type: str,
         *args,
         **kwargs,
     ) -> None:
         tprefixes = to_thrift_prefixes(prefixes, to_thrift_prefix_type(prefix_type))
-        client.withdrawPrefixes(tprefixes)
+        await client.withdrawPrefixes(tprefixes)
         print(f"Withdrew {len(prefixes)} prefixes")
 
 
 class AdvertiseCmd(PrefixMgrCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         prefix_type: str,
         forwarding_type: str,
@@ -120,14 +114,14 @@ class AdvertiseCmd(PrefixMgrCmd):
             to_thrift_prefix_type(prefix_type),
             to_thrift_forwarding_type(forwarding_type),
         )
-        client.advertisePrefixes(tprefixes)
+        await client.advertisePrefixes(tprefixes)
         print(f"Advertised {len(prefixes)} prefixes with type {prefix_type}")
 
 
 class SyncCmd(PrefixMgrCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         prefix_type: str,
         forwarding_type: str,
@@ -138,16 +132,14 @@ class SyncCmd(PrefixMgrCmd):
         tprefixes = to_thrift_prefixes(
             prefixes, tprefix_type, to_thrift_forwarding_type(forwarding_type)
         )
-        client.syncPrefixesByType(tprefix_type, tprefixes)
+        await client.syncPrefixesByType(tprefix_type, tprefixes)
         print(f"Synced {len(prefixes)} prefixes with type {prefix_type}")
 
 
 class AdvertisedRoutesCmd(PrefixMgrCmd):
-
-    # @override
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         prefix_type: Optional[str],
         json: bool,
@@ -157,17 +149,20 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
     ) -> None:
 
         # Get data
-        routes = self.fetch(client, prefixes, prefix_type)
+        routes = await self.fetch(client, prefixes, prefix_type)
 
         # Print json if
         if json:
             print(serializer.serialize_json(routes))
         else:
-            self.render(routes, detailed)
+            await self.render(routes, detailed)
 
-    def fetch(
-        self, client: OpenrCtrl.Client, prefixes: List[str], prefix_type: Optional[str]
-    ) -> List[ctrl_types.AdvertisedRouteDetail]:
+    async def fetch(
+        self,
+        client: OpenrCtrlCppClient.Async,
+        prefixes: List[str],
+        prefix_type: Optional[str],
+    ) -> Sequence[ctrl_types.AdvertisedRouteDetail]:
         """
         Fetch the requested data
         """
@@ -176,24 +171,24 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         route_filter = get_advertised_route_filter(prefixes, prefix_type)
 
         # Get routes
-        return client.getAdvertisedRoutesFiltered(route_filter)
+        return await client.getAdvertisedRoutesFiltered(route_filter)
 
-    def render(
-        self, routes: List[ctrl_types.AdvertisedRouteDetail], detailed: bool
+    async def render(
+        self, routes: Sequence[ctrl_types.AdvertisedRouteDetail], detailed: bool
     ) -> None:
         """
         Render advertised routes
         """
         tag_to_name = None
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
-            tag_to_name = get_tag_to_name_map(self._get_config_py())
+            tag_to_name = get_tag_to_name_map(await self._get_config())
         print_route_details(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
 class OriginatedRoutesCmd(PrefixMgrCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         detailed: bool,
         tag2name: bool,
         *args,
@@ -201,11 +196,11 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
     ) -> None:
 
         # Get data
-        self._render(client.getOriginatedPrefixes(), detailed, tag2name)
+        await self._render(await client.getOriginatedPrefixes(), detailed, tag2name)
 
-    def _render(
+    async def _render(
         self,
-        originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+        originated_prefixes: Sequence[OriginatedPrefixEntry],
         detailed: bool,
         tag2name: bool,
     ) -> None:
@@ -214,7 +209,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         """
         rows = [""]
 
-        tag_to_name = get_tag_to_name_map(self._get_config_py()) if tag2name else None
+        tag_to_name = (
+            get_tag_to_name_map(await self._get_config()) if tag2name else None
+        )
         if detailed:
             self._print_orig_routes_detailed(rows, originated_prefixes, tag_to_name)
         else:
@@ -225,7 +222,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
     def _print_orig_routes(
         self,
         rows: List[str],
-        originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+        originated_prefixes: Sequence[OriginatedPrefixEntry],
         tag_to_name: Optional[Dict[str, str]] = None,
     ):
         """
@@ -276,7 +273,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
     def _print_orig_routes_detailed(
         self,
         rows: List[str],
-        originated_prefixes: List[openr_types.OriginatedPrefixEntry],
+        originated_prefixes: Sequence[OriginatedPrefixEntry],
         tag_to_name: Optional[Dict[str, str]] = None,
     ) -> None:
         """
@@ -296,15 +293,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 
         for prefix_entry in originated_prefixes:
             rows.append(f"> {prefix_entry.prefix.prefix}")
-            fwd_algo = PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
-                prefix_entry.prefix.forwardingAlgorithm
-            )
-            fwd_type = PrefixForwardingType._VALUES_TO_NAMES.get(
-                prefix_entry.prefix.forwardingType
-            )
+            fwd_algo = prefix_entry.prefix.forwardingAlgorithm.name
+            fwd_type = prefix_entry.prefix.forwardingType.name
             rows.append(
-                # pyre-fixme[58]: `+` is not supported for operand types `str` and
-                #  `Optional[str]`.
                 f"     Forwarding - algorithm: {fwd_algo:>7} {'Type: ' + fwd_type:>23}"
             )
             rows.append(
@@ -335,11 +326,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 
 
 class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
-
-    # @override
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         route_filter_type: ctrl_types.RouteFilterType,
         prefixes: List[str],
         prefix_type: Optional[str],
@@ -350,21 +339,21 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
     ) -> None:
 
         # Get data
-        routes = self.fetch(client, route_filter_type, prefixes, prefix_type)
+        routes = await self.fetch(client, route_filter_type, prefixes, prefix_type)
 
         # Print json if
         if json:
             print(serializer.serialize_json(routes))
         else:
-            self.render(routes, detailed)
+            await self.render(routes, detailed)
 
-    def fetch(
+    async def fetch(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         route_filter_type: ctrl_types.RouteFilterType,
         prefixes: List[str],
         prefix_type: Optional[str],
-    ) -> List[ctrl_types.AdvertisedRoute]:
+    ) -> Sequence[ctrl_types.AdvertisedRoute]:
         """
         Fetch the requested data
         """
@@ -373,26 +362,26 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
         route_filter = get_advertised_route_filter(prefixes, prefix_type)
 
         # Get routes
-        return client.getAdvertisedRoutesWithOriginationPolicy(
+        return await client.getAdvertisedRoutesWithOriginationPolicy(
             route_filter_type, route_filter
         )
 
-    def render(self, routes: List[ctrl_types.AdvertisedRoute], detailed: bool) -> None:
+    async def render(
+        self, routes: Sequence[ctrl_types.AdvertisedRoute], detailed: bool
+    ) -> None:
         """
         Render advertised routes
         """
         tag_to_name = None
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
-            tag_to_name = get_tag_to_name_map(self._get_config_py())
+            tag_to_name = get_tag_to_name_map(await self._get_config())
         print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
 class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
-
-    # @override
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         area: str,
         route_filter_type: ctrl_types.RouteFilterType,
         prefixes: List[str],
@@ -404,22 +393,24 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
     ) -> None:
 
         # Get data
-        routes = self.fetch(client, area, route_filter_type, prefixes, prefix_type)
+        routes = await self.fetch(
+            client, area, route_filter_type, prefixes, prefix_type
+        )
 
         # Print json if
         if json:
             print(serializer.serialize_json(routes))
         else:
-            self.render(routes, detailed)
+            await self.render(routes, detailed)
 
-    def fetch(
+    async def fetch(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         area: str,
         route_filter_type: ctrl_types.RouteFilterType,
         prefixes: List[str],
         prefix_type: Optional[str],
-    ) -> List[ctrl_types.AdvertisedRoute]:
+    ) -> Sequence[ctrl_types.AdvertisedRoute]:
         """
         Fetch the requested data
         """
@@ -428,24 +419,26 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         route_filter = get_advertised_route_filter(prefixes, prefix_type)
 
         # Get routes
-        return client.getAreaAdvertisedRoutesFiltered(
+        return await client.getAreaAdvertisedRoutesFiltered(
             area, route_filter_type, route_filter
         )
 
-    def render(self, routes: List[ctrl_types.AdvertisedRoute], detailed: bool) -> None:
+    async def render(
+        self, routes: Sequence[ctrl_types.AdvertisedRoute], detailed: bool
+    ) -> None:
         """
         Render advertised routes
         """
         tag_to_name = None
         if self.cli_opts["advertised_routes_options"]["tag2name"]:
-            tag_to_name = get_tag_to_name_map(self._get_config_py())
+            tag_to_name = get_tag_to_name_map(await self._get_config())
         print_advertised_routes(routes, prefix_type_key_fn, detailed, tag_to_name)
 
 
 class ValidateCmd(PrefixMgrCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> bool:
@@ -453,12 +446,12 @@ class ValidateCmd(PrefixMgrCmd):
         is_pass = True
 
         # Get Data
-        initialization_events = self.fetch_initialization_events_py(client)
+        initialization_events = await client.getInitializationEvents()
 
         # Run Validation Checks
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
-            kv_store_types.InitializationEvent.PREFIX_DB_SYNCED,
+            InitializationEvent.PREFIX_DB_SYNCED,
         )
 
         is_pass = is_pass and init_is_pass
