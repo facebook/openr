@@ -122,17 +122,13 @@ class SpfSolver {
   ~SpfSolver();
 
   //
-  // util function to update IP/MPLS static route
+  // util function to update IP static route
   //
 
   void updateStaticUnicastRoutes(
       const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutesToUpdate,
       const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
-
-  void updateStaticMplsRoutes(
-      const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutesToUpdate,
-      const std::vector<int32_t>& mplsRoutesToDelete);
 
   // Build route database using given prefix and link states for a given
   // router, myNodeName

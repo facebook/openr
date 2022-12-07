@@ -140,33 +140,6 @@ SpfSolver::updateStaticUnicastRoutes(
   }
 }
 
-void
-SpfSolver::updateStaticMplsRoutes(
-    const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutesToUpdate,
-    const std::vector<int32_t>& mplsRoutesToDelete) {
-  // Process MPLS routes to add or update
-  XLOG_IF(INFO, mplsRoutesToUpdate.size())
-      << "Adding/Updating " << mplsRoutesToUpdate.size()
-      << " static mpls routes.";
-  for (const auto& [label, mplsRoute] : mplsRoutesToUpdate) {
-    staticMplsRoutes_.insert_or_assign(label, mplsRoute);
-
-    XLOG(DBG1) << "> " << label
-               << ", NextHopsCount = " << mplsRoute.nexthops.size();
-    for (auto const& nh : mplsRoute.nexthops) {
-      XLOG(DBG2) << " via " << toString(nh);
-    }
-  }
-
-  XLOG_IF(INFO, mplsRoutesToDelete.size())
-      << "Deleting " << mplsRoutesToDelete.size() << " static mpls routes.";
-  for (const auto& topLabel : mplsRoutesToDelete) {
-    staticMplsRoutes_.erase(topLabel);
-
-    XLOG(DBG1) << "> " << std::to_string(topLabel);
-  }
-}
-
 std::optional<RibUnicastEntry>
 SpfSolver::createRouteForPrefixOrGetStaticRoute(
     const std::string& myNodeName,
@@ -542,13 +515,6 @@ SpfSolver::buildRouteDb(
                 link->getOtherNodeName(myNodeName))}));
       }
     }
-  }
-
-  //
-  // Add MPLS static routes
-  //
-  for (const auto& [_, mplsEntry] : staticMplsRoutes_) {
-    routeDb.addMplsRoute(RibMplsEntry(mplsEntry));
   }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(

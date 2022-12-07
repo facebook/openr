@@ -832,34 +832,29 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
 void
 Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
-  // update static unicast routes
-  if (routeUpdate.unicastRoutesToUpdate.size() or
-      routeUpdate.unicastRoutesToDelete.size()) {
-    // store as local storage
-    spfSolver_->updateStaticUnicastRoutes(
-        routeUpdate.unicastRoutesToUpdate, routeUpdate.unicastRoutesToDelete);
+  /*
+   * ATTN: static route processing ONLY applies to unicast routes
+   */
+  CHECK(routeUpdate.mplsRoutesToUpdate.empty());
+  CHECK(routeUpdate.mplsRoutesToDelete.empty());
 
-    // Create set of changed prefixes
-    std::unordered_set<folly::CIDRNetwork> changedPrefixes{
-        routeUpdate.unicastRoutesToDelete.cbegin(),
-        routeUpdate.unicastRoutesToDelete.cend()};
-    for (const auto& [prefix, ribUnicastEntry] :
-         routeUpdate.unicastRoutesToUpdate) {
-      changedPrefixes.emplace(prefix);
-    }
+  // store as local storage
+  spfSolver_->updateStaticUnicastRoutes(
+      routeUpdate.unicastRoutesToUpdate, routeUpdate.unicastRoutesToDelete);
 
-    // only apply prefix updates, no full DB rebuild
-    pendingUpdates_.applyPrefixStateChange(
-        std::move(changedPrefixes), thrift::PrefixDatabase().perfEvents());
+  // Create set of changed prefixes
+  std::unordered_set<folly::CIDRNetwork> changedPrefixes{
+      routeUpdate.unicastRoutesToDelete.cbegin(),
+      routeUpdate.unicastRoutesToDelete.cend()};
+  for (const auto& [prefix, ribUnicastEntry] :
+       routeUpdate.unicastRoutesToUpdate) {
+    changedPrefixes.emplace(prefix);
   }
 
-  // update static MPLS routes
-  if (routeUpdate.mplsRoutesToUpdate.size() or
-      routeUpdate.mplsRoutesToDelete.size()) {
-    spfSolver_->updateStaticMplsRoutes(
-        routeUpdate.mplsRoutesToUpdate, routeUpdate.mplsRoutesToDelete);
-    pendingUpdates_.setNeedsFullRebuild(); // Mark for full DB rebuild
-  }
+  // only apply prefix updates, no full DB rebuild
+  pendingUpdates_.applyPrefixStateChange(
+      std::move(changedPrefixes), thrift::PrefixDatabase().perfEvents());
+
   rebuildRoutesDebounced_();
 
   auto prefixType = routeUpdate.prefixType;

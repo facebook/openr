@@ -4325,113 +4325,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   std::sort(routeDb.mplsRoutes()->begin(), routeDb.mplsRoutes()->end());
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
-
-  // construct new static mpls route add
-  thrift::RouteDatabaseDelta input;
-  thrift::NextHopThrift nh, nh1;
-  *nh.address() = toBinaryAddress(folly::IPAddressV6("::1"));
-  *nh1.address() = toBinaryAddress(folly::IPAddressV6("::2"));
-  nh.mplsAction() = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
-  nh1.mplsAction() = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
-  thrift::MplsRoute route;
-  route.topLabel() = 32011;
-  route.nextHops() = {nh};
-  input.mplsRoutesToUpdate()->push_back(route);
-
-  // record number of mplsRoute as reference
-  const auto mplsRouteCnt =
-      decision->getDecisionRouteDb("").get()->mplsRoutes()->size();
-
-  // Update 32011 and make sure only that is updated
-  sendStaticRoutesUpdate(input);
-  auto routesDelta = routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents.reset();
-  EXPECT_EQ(routesDelta.toThrift(), input);
-
-  // Update 32012 and make sure only that is updated
-  route.topLabel() = 32012;
-  input.mplsRoutesToUpdate() = {route};
-  sendStaticRoutesUpdate(input);
-  routesDelta = routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents.reset();
-  EXPECT_EQ(routesDelta.toThrift(), input);
-
-  auto mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes();
-  EXPECT_THAT(mplsRoutes, testing::SizeIs(mplsRouteCnt + 2));
-  EXPECT_THAT(
-      mplsRoutes,
-      testing::Contains(AllOf(
-          Truly([&](auto route) {
-            return route.topLabel() == 32011 or route.topLabel() == 32012;
-          }),
-          ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh)))));
-
-  // Test our consolidating logic, we first update 32011 then delete 32011
-  // making sure only delete for 32011 is emitted.
-  route.topLabel() = 32011;
-  route.nextHops() = {nh, nh1};
-  input.mplsRoutesToUpdate() = {route};
-  input.mplsRoutesToDelete()->clear();
-  sendStaticRoutesUpdate(input);
-
-  input.mplsRoutesToUpdate()->clear();
-  input.mplsRoutesToDelete() = {32011};
-  sendStaticRoutesUpdate(input);
-
-  routesDelta = routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents.reset();
-  EXPECT_EQ(routesDelta.mplsRoutesToDelete.at(0), 32011);
-  EXPECT_EQ(routesDelta.mplsRoutesToUpdate.size(), 0);
-
-  mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes();
-  EXPECT_THAT(mplsRoutes, testing::SizeIs(mplsRouteCnt + 1));
-  EXPECT_THAT(
-      mplsRoutes,
-      testing::Contains(AllOf(
-          Truly([&](auto route) { return route.topLabel() == 32012; }),
-          ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh)))));
-
-  // test our consolidating logic, we first delete 32012 then update 32012
-  // making sure only update for 32012 is emitted.
-  input.mplsRoutesToUpdate()->clear();
-  input.mplsRoutesToDelete() = {32012};
-  sendStaticRoutesUpdate(input);
-
-  route.topLabel() = 32012;
-  route.nextHops() = {nh, nh1};
-  input.mplsRoutesToUpdate() = {route};
-  input.mplsRoutesToDelete()->clear();
-  sendStaticRoutesUpdate(input);
-
-  routesDelta = routeUpdatesQueueReader.get().value();
-  routesDelta.perfEvents.reset();
-  EXPECT_EQ(1, routesDelta.mplsRoutesToUpdate.size());
-  ASSERT_EQ(1, routesDelta.mplsRoutesToUpdate.count(32012));
-  EXPECT_THAT(
-      routesDelta.mplsRoutesToUpdate.at(32012).nexthops,
-      testing::UnorderedElementsAre(nh, nh1));
-
-  mplsRoutes = *decision->getDecisionRouteDb("").get()->mplsRoutes();
-  EXPECT_THAT(mplsRoutes, testing::SizeIs(mplsRouteCnt + 1));
-  EXPECT_THAT(
-      mplsRoutes,
-      testing::Contains(AllOf(
-          Truly([&](auto route) { return route.topLabel() == 32012; }),
-          ResultOf(getMplsNextHops, testing::UnorderedElementsAre(nh, nh1)))));
-
-  routeDb = dumpRouteDb({"1"})["1"];
-  bool foundLabelRoute{false};
-  for (auto const& mplsRoute : *routeDb.mplsRoutes()) {
-    if (*mplsRoute.topLabel() != 32012) {
-      continue;
-    }
-
-    EXPECT_THAT(
-        *mplsRoute.nextHops(), testing::UnorderedElementsAreArray({nh, nh1}));
-    foundLabelRoute = true;
-    break;
-  }
-  EXPECT_TRUE(foundLabelRoute);
 }
 
 /**
@@ -4441,7 +4334,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
  * Types of information updated
  * - Adjacencies (with MPLS labels)
  * - Prefixes
- * - MPLS Static routes
  */
 TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   // Send adj publication
@@ -4453,19 +4345,6 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
           {},
           {}),
       false /*prefixPubExists*/);
-
-  // Send static MPLS routes
-  thrift::RouteDatabaseDelta staticRoutes;
-  {
-    thrift::NextHopThrift nh;
-    nh.address() = toBinaryAddress(folly::IPAddressV6("::1"));
-    nh.mplsAction() = createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
-    thrift::MplsRoute mplsRoute;
-    mplsRoute.topLabel() = 32011;
-    mplsRoute.nextHops() = {nh};
-    staticRoutes.mplsRoutesToUpdate()->push_back(mplsRoute);
-  }
-  sendStaticRoutesUpdate(staticRoutes);
 
   // Send prefix publication
   sendKvPublication(createThriftPublication(
@@ -4480,12 +4359,6 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
   EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
-  // self mpls route, node 2 mpls route and static MPLS route
-  auto mplsRoutesToUpdateCount = routeDbDelta.mplsRoutesToUpdate.size();
-  while (mplsRoutesToUpdateCount != 3) {
-    routeDbDelta = recvRouteUpdates();
-    mplsRoutesToUpdateCount += routeDbDelta.mplsRoutesToUpdate.size();
-  }
 }
 
 /*
