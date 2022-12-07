@@ -10,26 +10,28 @@ from typing import Optional, Tuple, Union
 import click
 import jsondiff
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.OpenrCtrl import OpenrCtrl
-from openr.OpenrCtrl.ttypes import OpenrError
-from openr.Types import ttypes as openr_types
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.thrift.OpenrCtrl.thrift_types import OpenrError
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types import thrift_types as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_py_object
+from thrift.python.serializer import deserialize
 
 
-class ConfigShowCmd(OpenrCtrlCmdPy):
-    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
-        resp = client.getRunningConfig()
+class ConfigShowCmd(OpenrCtrlCmd):
+    async def _run(self, client: OpenrCtrlCppClient.Async, *args, **kwargs):
+        resp = await client.getRunningConfig()
         config = json.loads(resp)
         utils.print_json(config)
 
 
-class ConfigDryRunCmd(OpenrCtrlCmdPy):
-    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs) -> int:
+class ConfigDryRunCmd(OpenrCtrlCmd):
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, file: str, *args, **kwargs
+    ) -> int:
         try:
-            file_conf = client.dryrunConfig(file)
+            file_conf = await client.dryrunConfig(file)
         except OpenrError as ex:
             click.echo(click.style("FAILED: {}".format(ex), fg="red"))
             return 1
@@ -39,12 +41,12 @@ class ConfigDryRunCmd(OpenrCtrlCmdPy):
         return 0
 
 
-class ConfigCompareCmd(OpenrCtrlCmdPy):
-    def _run(self, client: OpenrCtrl.Client, file: str, *args, **kwargs):
-        running_conf = client.getRunningConfig()
+class ConfigCompareCmd(OpenrCtrlCmd):
+    async def _run(self, client: OpenrCtrlCppClient.Async, file: str, *args, **kwargs):
+        running_conf = await client.getRunningConfig()
 
         try:
-            file_conf = client.dryrunConfig(file)
+            file_conf = await client.dryrunConfig(file)
         except OpenrError as ex:
             click.echo(click.style("FAILED: {}".format(ex), fg="red"))
             return
@@ -58,14 +60,14 @@ class ConfigCompareCmd(OpenrCtrlCmdPy):
             click.echo(click.style("SAME", fg="green"))
 
 
-class ConfigStoreCmdBase(OpenrCtrlCmdPy):
-    def getConfigWrapper(
-        self, client: OpenrCtrl.Client, config_key: str
+class ConfigStoreCmdBase(OpenrCtrlCmd):
+    async def getConfigWrapper(
+        self, client: OpenrCtrlCppClient.Async, config_key: str
     ) -> Tuple[Optional[bytes], Optional[str]]:
         blob = None
         exception_str = None
         try:
-            blob = client.getConfigKey(config_key)
+            blob = await client.getConfigKey(config_key)
         except OpenrError as ex:
             exception_str = "Exception getting key for {}: {}".format(config_key, ex)
 
@@ -73,8 +75,8 @@ class ConfigStoreCmdBase(OpenrCtrlCmdPy):
 
 
 class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
-        (prefix_alloc_blob, exception_str) = self.getConfigWrapper(
+    async def _run(self, client: OpenrCtrlCppClient.Async, *args, **kwargs):
+        (prefix_alloc_blob, exception_str) = await self.getConfigWrapper(
             client, Consts.PREFIX_ALLOC_KEY
         )
 
@@ -82,9 +84,7 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        prefix_alloc = deserialize_thrift_py_object(
-            prefix_alloc_blob, openr_types.AllocPrefix
-        )
+        prefix_alloc = deserialize(openr_types.AllocPrefix, prefix_alloc_blob)
         self.print_config(prefix_alloc)
 
     def print_config(self, prefix_alloc: openr_types.AllocPrefix) -> None:
@@ -105,12 +105,12 @@ class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
 
 
 class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
+    async def _run(self, client: OpenrCtrlCppClient.Async, *args, **kwargs) -> None:
         # After link-monitor thread starts, it will hold for
         # "adjHoldUntilTimePoint_" time before populate config information.
         # During this short time-period, Exception can be hit if dump cmd
         # kicks during this time period.
-        (lm_config_blob, exception_str) = self.getConfigWrapper(
+        (lm_config_blob, exception_str) = await self.getConfigWrapper(
             client, Consts.LINK_MONITOR_KEY
         )
 
@@ -118,9 +118,7 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        lm_config = deserialize_thrift_py_object(
-            lm_config_blob, openr_types.LinkMonitorState
-        )
+        lm_config = deserialize(openr_types.LinkMonitorState, lm_config_blob)
         self.print_config(lm_config)
 
     def print_config(self, lm_config: openr_types.LinkMonitorState):
@@ -151,8 +149,8 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
 
 
 class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, *args, **kwargs) -> None:
-        (prefix_mgr_config_blob, exception_str) = self.getConfigWrapper(
+    async def _run(self, client: OpenrCtrlCppClient.Async, *args, **kwargs) -> None:
+        (prefix_mgr_config_blob, exception_str) = await self.getConfigWrapper(
             client, Consts.PREFIX_MGR_KEY
         )
 
@@ -160,8 +158,8 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
             print(exception_str)
             return
 
-        prefix_mgr_config = deserialize_thrift_py_object(
-            prefix_mgr_config_blob, openr_types.PrefixDatabase
+        prefix_mgr_config = deserialize(
+            openr_types.PrefixDatabase, prefix_mgr_config_blob
         )
         self.print_config(prefix_mgr_config)
 
@@ -172,15 +170,17 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
 
 
 class ConfigEraseCmd(ConfigStoreCmdBase):
-    def _run(self, client: OpenrCtrl.Client, key: str, *args, **kwargs) -> None:
-        client.eraseConfigKey(key)
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, key: str, *args, **kwargs
+    ) -> None:
+        await client.eraseConfigKey(key)
         print("Key:{} erased".format(key))
 
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         key: str,
         value: Union[bytes, str],
         *args,
@@ -188,5 +188,5 @@ class ConfigStoreCmd(ConfigStoreCmdBase):
     ) -> None:
         if isinstance(value, str):
             value = value.encode()
-        client.setConfigKey(key, value)
+        await client.setConfigKey(key, value)
         print("Key:{}, value:{} stored".format(key, value))
