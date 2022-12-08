@@ -70,19 +70,21 @@ class VersionCmd(OpenrCtrlCmd):
 
 
 class OpenrValidateCmd(OpenrCtrlCmd):
-    async def _run(
+    # @override
+    def run(
         self,
-        client: OpenrCtrlCppClient.Async,
         suppress_error=False,
         json=False,
         *args,
         **kwargs,
-    ) -> None:
+    ) -> int:
 
-        spark_pass = spark.ValidateCmd(self.cli_opts).run(False)
+        spark_pass = spark.ValidateCmd(self.cli_opts).run(detail=False)
         lm_pass = lm.LMValidateCmd(self.cli_opts).run()
         kvstore_pass = kvstore.ValidateCmd(self.cli_opts).run()
-        fib_pass = fib.FibValidateRoutesCmd(self.cli_opts).run(suppress_error)
+        fib_pass = fib.FibValidateRoutesCmd(self.cli_opts).run(
+            suppress_error=suppress_error
+        )
         decision_pass = decision.DecisionValidateCmd(self.cli_opts).run(
             suppress=suppress_error
         )
@@ -98,3 +100,5 @@ class OpenrValidateCmd(OpenrCtrlCmd):
                 "Prefix Manager": prefixmgr_pass,
             }
             print(serializer.serialize_json(check_res))
+
+        return 0

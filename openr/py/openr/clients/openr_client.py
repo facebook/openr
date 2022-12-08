@@ -6,7 +6,7 @@
 
 
 import ssl
-from typing import Any, Optional
+from typing import Optional, Type
 
 import bunch
 from openr.cli.utils.options import getDefaultOptions
@@ -23,6 +23,7 @@ from thrift.py3.ssl import (
     SSLVerifyOption as SSLVerifyOptionPy3,
 )
 from thrift.python.client import ClientType, get_client, get_sync_client
+from thrift.python.client.client_wrapper import Client, TAsyncClient, TSyncClient
 from thrift.python.client.ssl import SSLContext, SSLVerifyOption
 from thrift.python.exceptions import TransportError
 from thrift.python.serializer import Protocol
@@ -157,8 +158,10 @@ def get_fib_agent_client(
     port: int,
     timeout_ms: int,
     client_id: int = FibClient.OPENR,
-    client_class: Any = FibServiceClient,  # Allow service client overwrite
-) -> Any:  # return client_class.Sync
+    client_class: Type[
+        Client[TAsyncClient, TSyncClient]
+    ] = FibServiceClient,  # Allow service client overwrite
+) -> TSyncClient:  # return client_class.Sync
     """
     Get thrift-python sync client for talking to Fib thrift service
 
@@ -179,7 +182,7 @@ def get_fib_agent_client(
             host=host,
             port=port,
             timeout=float(timeout_ms) / 1000.0,  # NOTE: Timeout expected is in seconds
-            client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+            client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
             protocol=Protocol.BINARY,
             ssl_context=ssl_context,
             ssl_timeout=float(timeout_ms)
@@ -194,7 +197,7 @@ def get_fib_agent_client(
                 port=port,
                 timeout=float(timeout_ms)
                 / 1000.0,  # NOTE: Timeout expected is in seconds
-                client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+                client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
                 protocol=Protocol.BINARY,
                 ssl_context=None,
                 ssl_timeout=float(timeout_ms)
@@ -213,7 +216,7 @@ def get_fib_agent_client(
 def get_openr_ctrl_cpp_client(
     host: str,
     options: Optional[bunch.Bunch] = None,
-    client_type=ClientType.THRIFT_HEADER_CLIENT_TYPE,
+    client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient.Async:
     """
     Utility function to get thrift-python async OpenrClient. We must eventually move all of our
@@ -264,7 +267,7 @@ def get_openr_ctrl_cpp_client(
 def get_openr_ctrl_cpp_client_py3(
     host: str,
     options: Optional[bunch.Bunch] = None,
-    client_type=ClientTypePy3.THRIFT_HEADER_CLIENT_TYPE,
+    client_type=ClientTypePy3.THRIFT_ROCKET_CLIENT_TYPE,
 ):
     """
     Once we fully migrate from thrift-py3 to thrift-python, we could remove this function

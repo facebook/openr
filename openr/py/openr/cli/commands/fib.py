@@ -55,10 +55,10 @@ class FibAgentCmd(FibCmdBase):
         super().__init__(cli_opts)
         try:
             self.fib_agent_client = get_fib_agent_client(
-                cli_opts.host,
-                cli_opts.fib_agent_port,
-                cli_opts.timeout,
-                cli_opts.client_id,
+                host=cli_opts.host,
+                port=cli_opts.fib_agent_port,
+                timeout_ms=cli_opts.timeout,
+                client_id=cli_opts.client_id,
             )
         except Exception as e:
             print("Failed to get communicate to Fib. {}".format(e))
@@ -176,14 +176,16 @@ class FibRoutesInstalledCmd(FibAgentCmd):
         )
 
         try:
-            routes = self.fib_agent_client.getRouteTableByClient(client_id)
+            routes = self.fib_agent_client.getRouteTableByClient(clientId=client_id)
         except Exception as e:
             print("Failed to get routes from Fib.")
             print("Exception: {}".format(e))
             return 1
 
         try:
-            mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(client_id)
+            mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(
+                clientId=client_id
+            )
         except Exception:
             pass
 
@@ -282,7 +284,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             (fib_unicast_routes, fib_mpls_routes) = utils.get_routes_py(fib_route_db)
 
             agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
-                self.fib_agent_client.client_id
+                clientId=self.fib_agent_client.client_id
             )
 
         except Exception as e:
@@ -325,7 +327,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
             # compare MPLS route database between Fib module and FibAgent
             try:
                 agent_mpls_routes = self.fib_agent_client.getMplsRouteTableByClient(
-                    self.fib_agent_client.client_id
+                    clientId=self.fib_agent_client.client_id
                 )
                 (ret, _) = utils.compare_route_db(
                     fib_mpls_routes,
