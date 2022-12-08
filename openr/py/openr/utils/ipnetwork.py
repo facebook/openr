@@ -66,6 +66,7 @@ def ip_str_to_addr(addr_str: str, if_index: Optional[str] = None) -> BinaryAddre
     return BinaryAddress(addr=addr, ifName=if_index)
 
 
+# to be deprecated
 def ip_str_to_addr_py(
     addr_str: str, if_index: Optional[str] = None
 ) -> network_types.BinaryAddress:
@@ -106,6 +107,7 @@ def ip_str_to_prefix(prefix_str: str) -> IpPrefix:
     return IpPrefix(prefixAddress=ip_str_to_addr(ip_str), prefixLength=int(ip_len_str))
 
 
+# to be deprecated
 def ip_str_to_prefix_py(prefix_str: str) -> network_types.IpPrefix:
     """
     :param prefix_str: string representing a prefix (CIDR network)

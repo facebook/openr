@@ -19,6 +19,8 @@ COMMANDS_GET_OPENR_CTRL_CPP_CLIENT = (
     f"{BASE_UTILS_COMMANDS_MODULE}.get_openr_ctrl_cpp_client"
 )
 KVSTORE_GET_OPENR_CTRL_CPP_CLIENT = f"{KVSTORE_MODULE}.get_openr_ctrl_cpp_client"
+
+# to be deprecated
 COMMANDS_GET_OPENR_CTRL_CLIENT_PY = (
     f"{BASE_UTILS_COMMANDS_MODULE}.get_openr_ctrl_client_py"
 )

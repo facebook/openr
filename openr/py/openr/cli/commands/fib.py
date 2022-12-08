@@ -206,7 +206,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
 class FibAddRoutesCmd(FibAgentCmd):
     def _run(self, client: OpenrCtrl.Client, prefixes, nexthops, *args, **kwargs):
-        routes = utils.build_routes(prefixes.split(","), nexthops.split(","))
+        routes = utils.build_routes_py(prefixes.split(","), nexthops.split(","))
 
         try:
             self.fib_agent_client.addUnicastRoutes(
@@ -239,7 +239,7 @@ class FibDelRoutesCmd(FibAgentCmd):
 
 class FibSyncRoutesCmd(FibAgentCmd):
     def _run(self, client: OpenrCtrl.Client, prefixes, nexthops, *args, **kwargs):
-        routes = utils.build_routes(prefixes.split(","), nexthops.split(","))
+        routes = utils.build_routes_py(prefixes.split(","), nexthops.split(","))
 
         try:
             self.fib_agent_client.syncFib(self.fib_agent_client.client_id, routes)

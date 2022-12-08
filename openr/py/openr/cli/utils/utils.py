@@ -372,6 +372,7 @@ def prefix_entry_to_dict(prefix_entry):
     return thrift_to_dict(prefix_entry, _update)
 
 
+# to be deprecated
 def prefix_entry_to_dict_py(prefix_entry):
     """convert prefixEntry from thrift-py instance into a dict in strings"""
 
@@ -406,6 +407,7 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
     return thrift_to_dict(prefix_db, _update)
 
 
+# to be deprecated
 def prefix_db_to_dict_py(prefix_db: Any) -> Dict[str, Any]:
     """convert PrefixDatabase from thrift-py instance to a dictionary"""
 
@@ -868,6 +870,7 @@ def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, A
     return thrift_to_dict(nextHop, _update)
 
 
+# to be deprecated
 def next_hop_thrift_to_dict_py(
     nextHop: network_types_py.NextHopThrift,
 ) -> Dict[str, Any]:
@@ -903,6 +906,7 @@ def unicast_route_to_dict(route):
     return thrift_to_dict(route, _update)
 
 
+# to be deprecated
 def unicast_route_to_dict_py(route):
     """convert route from thrift-py instance into a dict in strings"""
 
@@ -930,6 +934,7 @@ def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
     return thrift_to_dict(route, _update)
 
 
+# to be deprecated
 def mpls_route_to_dict_py(route: network_types_py.MplsRoute) -> Dict[str, Any]:
     """
     Convert MPLS route (thrift-py) to json serializable dict object
@@ -955,6 +960,7 @@ def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
     return ret
 
 
+# to be deprecated
 def route_db_to_dict_py(route_db: openr_types_py.RouteDatabase) -> Dict[str, Any]:
     """
     Convert route from thrift-py instance into a dict in strings
@@ -1344,9 +1350,32 @@ def dump_node_kvs(
     return pub
 
 
-def build_nexthops(nexthops: List[str]) -> List[network_types_py.BinaryAddress]:
+def build_nexthops(nexthops: List[str]) -> List[network_types.BinaryAddress]:
     """
-    Convert nexthops in list of string to list of binaryAddress
+    Convert nexthops in list of string to list of binaryAddress in thrift-python
+    """
+
+    nhs = []
+    for nh_iface in nexthops:
+        iface, addr = None, None
+        # Nexthop may or may not be link-local. Handle it here well
+        if "@" in nh_iface:
+            addr, iface = nh_iface.split("@")
+        elif "%" in nh_iface:
+            addr, iface = nh_iface.split("%")
+        else:
+            addr = nh_iface
+        nexthop = ipnetwork.ip_str_to_addr(addr)
+        nexthop = nexthop(ifName=iface)
+        nhs.append(nexthop)
+
+    return nhs
+
+
+# to be deprecated
+def build_nexthops_py(nexthops: List[str]) -> List[network_types_py.BinaryAddress]:
+    """
+    Convert nexthops in list of string to list of binaryAddress in thrift-py
     """
 
     nhs = []
@@ -1368,13 +1397,32 @@ def build_nexthops(nexthops: List[str]) -> List[network_types_py.BinaryAddress]:
 
 def build_routes(
     prefixes: List[str], nexthops: List[str]
+) -> List[network_types.UnicastRoute]:
+    """
+    Build list of UnicastRoute in thrift-python using prefixes and nexthops list
+    """
+
+    prefixes_str = [ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+    nhs = build_nexthops(nexthops)
+    return [
+        network_types.UnicastRoute(
+            dest=p,
+            nextHops=[network_types.NextHopThrift(address=nh) for nh in nhs],
+        )
+        for p in prefixes_str
+    ]
+
+
+# to be deprecated
+def build_routes_py(
+    prefixes: List[str], nexthops: List[str]
 ) -> List[network_types_py.UnicastRoute]:
     """
-    Build list of UnicastRoute using prefixes and nexthops list
+    Build list of UnicastRoute in thrift-py using prefixes and nexthops list
     """
 
     prefixes_str = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
-    nhs = build_nexthops(nexthops)
+    nhs = build_nexthops_py(nexthops)
     return [
         network_types_py.UnicastRoute(
             dest=p,
@@ -1944,6 +1992,7 @@ def get_routes(
     return (unicast_routes, mpls_routes)
 
 
+# to be deprecated
 def get_routes_py(
     route_db: openr_types_py.RouteDatabase,
 ) -> Tuple[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]]:

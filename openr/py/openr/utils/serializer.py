@@ -88,6 +88,7 @@ def serialize_json(struct: Any) -> str:
     return json.dumps(object_to_dict(struct), indent=2, sort_keys=True)
 
 
+# to be deprecated
 def serialize_thrift_py_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
     """Serialize thrift-py data to binary blob
 
@@ -100,6 +101,7 @@ def serialize_thrift_py_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
     return Serializer.serialize(proto_factory(), thrift_obj)
 
 
+# to be deprecated
 def deserialize_thrift_py_object(
     raw_data, thrift_type, proto_factory=Consts.PROTO_FACTORY
 ):

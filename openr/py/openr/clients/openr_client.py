@@ -102,6 +102,7 @@ class OpenrCtrlSecureClient(OpenrCtrlClient):
         OpenrCtrlClient.__init__(self, host, THeaderTransport.THeaderTransport(socket))
 
 
+# to be deprecated
 def get_openr_ctrl_client_py(
     host: str, options: Optional[bunch.Bunch] = None
 ) -> OpenrCtrl.Client:
@@ -264,6 +265,7 @@ def get_openr_ctrl_cpp_client(
     return client
 
 
+# to be deprecated
 def get_openr_ctrl_cpp_client_py3(
     host: str,
     options: Optional[bunch.Bunch] = None,

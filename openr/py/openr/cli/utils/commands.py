@@ -29,7 +29,7 @@ from openr.utils import printing
 from openr.utils.consts import Consts
 from thrift.python.client import ClientType
 
-
+# to be deprecated
 class OpenrCtrlCmdPy:
     """
     Command wrapping OpenrCtrl.Client
