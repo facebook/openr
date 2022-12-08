@@ -6,16 +6,16 @@
 
 # pyre-strict
 
-from typing import Dict, List, Optional
-from unittest.mock import MagicMock, patch
+import asyncio
+from typing import Dict, List, Optional, Sequence
+from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
 from openr.cli.clis import fib
 from openr.cli.tests import helpers
-
 from openr.cli.utils import utils
-from openr.Network import ttypes as network_types
+from openr.thrift.Network.thrift_types import NextHopThrift, UnicastRoute
 from openr.utils import ipnetwork
 
 from .fixtures import (
@@ -53,7 +53,7 @@ class CliFibTests(TestCase):
     def check_nexthop(
         self,
         nexthop_line: str,
-        expected_nexthop: network_types.NextHopThrift,
+        expected_nexthop: NextHopThrift,
         addr_to_name: Optional[Dict[bytes, str]] = None,
     ) -> None:
         """
@@ -77,20 +77,20 @@ class CliFibTests(TestCase):
     def check_printed_routes(
         self,
         stdout_lines: List[str],
-        expected_routes: List[network_types.UnicastRoute],
+        expected_routes: List[UnicastRoute],
         addr_to_name: Optional[Dict[bytes, str]] = None,
     ) -> None:
         """
         Checks if each address in the output is correct
         """
-        unicast_route_dict: Dict[str, List[network_types.NextHopThrift]] = {
+        unicast_route_dict: Dict[str, Sequence[NextHopThrift]] = {
             ipnetwork.sprint_prefix(route.dest): route.nextHops
             for route in expected_routes
         }
 
         def check_dest_line(
             dest_line: str,
-        ) -> Optional[List[network_types.NextHopThrift]]:
+        ) -> Optional[Sequence[NextHopThrift]]:
 
             is_valid_route = False
             next_hops = None
@@ -131,9 +131,9 @@ class CliFibTests(TestCase):
             else:
                 line_idx += 1
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
-    def test_fib_unicast_routes_simple(self, mocked_openr_client: MagicMock) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_fib_unicast_routes_simple(self, mocked_openr_client: AsyncMock) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
 
@@ -168,15 +168,17 @@ class CliFibTests(TestCase):
         stdout_lines = [line for line in stdout_lines if line != ""]
 
         # Get address to node name map
-        addr_to_name = utils.adjs_nexthop_to_neighbor_name(mocked_returned_connection)
+        addr_to_name = asyncio.run(
+            utils.adjs_nexthop_to_neighbor_name(mocked_returned_connection)
+        )
         self.check_printed_routes(stdout_lines, MOCKED_UNICAST_ROUTELIST, addr_to_name)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
     def test_fib_unicast_routes_multiple_routes(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
         # Checks with multiple routes
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
 
@@ -207,7 +209,9 @@ class CliFibTests(TestCase):
         stdout_lines = invoked_return.stdout.split("\n")
         stdout_lines = [line for line in stdout_lines if line != ""]
 
-        addr_to_name = utils.adjs_nexthop_to_neighbor_name(mocked_returned_connection)
+        addr_to_name = asyncio.run(
+            utils.adjs_nexthop_to_neighbor_name(mocked_returned_connection)
+        )
         self.check_printed_routes(
             stdout_lines, MOCKED_UNICAST_ROUTELIST_MULTIPLE, addr_to_name
         )

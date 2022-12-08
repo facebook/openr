@@ -39,6 +39,7 @@ from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types_py
 from openr.thrift.KvStore import thrift_types as kv_store_types
 from openr.thrift.Network import thrift_types as network_types
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types import thrift_types as openr_types
 from openr.Types import ttypes as openr_types_py
 from openr.utils import ipnetwork, printing
@@ -1434,7 +1435,10 @@ def build_routes_py(
 
 def get_route_as_dict_in_str(
     routes: Union[
-        List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
     ],
     route_type: str = "unicast",
 ) -> Dict[str, str]:
@@ -1471,10 +1475,21 @@ def get_route_as_dict_in_str(
 
 def get_route_as_dict(
     routes: Union[
-        List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
     ],
     route_type: str = "unicast",
-) -> Dict[str, Union[network_types_py.UnicastRoute, network_types_py.MplsRoute]]:
+) -> Dict[
+    str,
+    Union[
+        network_types_py.UnicastRoute,
+        network_types_py.MplsRoute,
+        network_types.UnicastRoute,
+        network_types.MplsRoute,
+    ],
+]:
     """
     Convert a routeDb into a dict representing routes:
     (K, V) = (UnicastRoute.dest/MplsRoute.topLabel, UnicastRoute/MplsRoute)
@@ -1496,8 +1511,18 @@ def get_route_as_dict(
 
 
 def routes_difference(
-    lhs: Union[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]],
-    rhs: Union[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]],
+    lhs: Union[
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
+    ],
+    rhs: Union[
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
+    ],
     route_type: str = "unicast",
 ) -> List[Union[network_types_py.UnicastRoute, network_types_py.MplsRoute]]:
     """
@@ -1521,8 +1546,18 @@ def routes_difference(
 
 
 def prefixes_with_different_nexthops(
-    lhs: Union[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]],
-    rhs: Union[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]],
+    lhs: Union[
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
+    ],
+    rhs: Union[
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
+    ],
     route_type: str,
 ) -> List[Tuple[str, str, str]]:
     """
@@ -1589,10 +1624,16 @@ def _only_unicast_routes(
 
 def compare_route_db(
     routes_a: Union[
-        List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
     ],
     routes_b: Union[
-        List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]
+        List[network_types_py.UnicastRoute],
+        List[network_types_py.MplsRoute],
+        List[network_types.UnicastRoute],
+        List[network_types.MplsRoute],
     ],
     route_type: str,
     sources: List[str],
@@ -2289,9 +2330,11 @@ def format_openr_tag(tag: str, tag_to_name_map: Dict[str, str]) -> str:
     return f"{tag_to_name_map.get(tag, '(NA)')}/{tag}"
 
 
-def adjs_nexthop_to_neighbor_name(client: OpenrCtrl.Client) -> Dict[bytes, str]:
-    adj_dbs = client.getDecisionAdjacenciesFiltered(
-        ctrl_types_py.AdjacenciesFilter(selectAreas=None)
+async def adjs_nexthop_to_neighbor_name(
+    client: OpenrCtrlCppClient.Async,
+) -> Dict[bytes, str]:
+    adj_dbs = await client.getDecisionAdjacenciesFiltered(
+        ctrl_types.AdjacenciesFilter(selectAreas=None)
     )
     ips_to_node_names: Dict[bytes, str] = {}
     for adj_db in adj_dbs:

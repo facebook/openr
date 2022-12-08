@@ -10,24 +10,21 @@ import datetime
 import ipaddress
 import time
 from builtins import object
-from typing import List, Optional, Sequence, Union
+from typing import List, Optional, Sequence
 
 import prettytable
 import pytz
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
-from openr.clients.openr_client import get_fib_agent_client, get_openr_ctrl_cpp_client
-from openr.Network import ttypes as network_types
-from openr.OpenrCtrl import OpenrCtrl
-from openr.OpenrCtrl.ttypes import StreamSubscriberType
+from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.clients.openr_client import get_fib_agent_client
 from openr.thrift.Network.thrift_types import IpPrefix
+from openr.thrift.OpenrCtrl.thrift_types import StreamSubscriberType
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types.thrift_types import RouteDatabase, RouteDatabaseDelta
 from openr.utils import ipnetwork, printing
-from thrift.python.client import ClientType
 
 
-class FibCmdBase(OpenrCtrlCmdPy):
+class FibCmdBase(OpenrCtrlCmd):
     """define Fib specific methods here"""
 
     def __init__(self, cli_opts):
@@ -71,25 +68,27 @@ class FibAgentCmd(FibCmdBase):
 
 
 class FibUnicastRoutesCmd(FibCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefix_or_ip: List[str],
         json: bool,
         hostnames: bool,
         *args,
         **kwargs,
     ) -> None:
-        unicast_route_list = client.getUnicastRoutesFiltered(prefix_or_ip)
+        unicast_route_list = await client.getUnicastRoutesFiltered(prefix_or_ip)
         nexthops_to_neighbor_names = {}
         if hostnames:
-            nexthops_to_neighbor_names = utils.adjs_nexthop_to_neighbor_name(client)
-        host_name = client.getMyNodeName()
+            nexthops_to_neighbor_names = await utils.adjs_nexthop_to_neighbor_name(
+                client
+            )
+        host_name = await client.getMyNodeName()
 
         if json:
             routes = {
                 "unicastRoutes": [
-                    utils.unicast_route_to_dict_py(r) for r in unicast_route_list
+                    utils.unicast_route_to_dict(r) for r in unicast_route_list
                 ]
             }
             route_dict = {host_name: routes}
@@ -103,21 +102,21 @@ class FibUnicastRoutesCmd(FibCmdBase):
 
 
 class FibMplsRoutesCmd(FibCmdBase):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         labels: List[int],
         json: bool,
         *args,
         **kwargs,
     ) -> None:
         int_label_filters = [int(label) for label in labels]
-        mpls_route_list = client.getMplsRoutesFiltered(int_label_filters)
-        host_name = client.getMyNodeName()
+        mpls_route_list = await client.getMplsRoutesFiltered(int_label_filters)
+        host_name = await client.getMyNodeName()
 
         if json:
             routes = {
-                "mplsRoutes": [utils.mpls_route_to_dict_py(r) for r in mpls_route_list]
+                "mplsRoutes": [utils.mpls_route_to_dict(r) for r in mpls_route_list]
             }
             route_dict = {host_name: routes}
             utils.print_routes_json(route_dict)
@@ -128,10 +127,14 @@ class FibMplsRoutesCmd(FibCmdBase):
 
 
 class FibCountersCmd(FibAgentCmd):
-    def _run(self, client: OpenrCtrl.Client, json_opt, *args, **kwargs) -> int:
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, json_opt, *args, **kwargs
+    ) -> int:
         try:
             self.print_counters(
-                self.fib_agent_client.getCounters(), client.getMyNodeName(), json_opt
+                self.fib_agent_client.getCounters(),
+                await client.getMyNodeName(),
+                json_opt,
             )
             return 0
         except Exception as e:
@@ -159,9 +162,9 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         labels: Optional[List[int]] = None,
         json_opt: bool = False,
@@ -205,8 +208,10 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
 
 class FibAddRoutesCmd(FibAgentCmd):
-    def _run(self, client: OpenrCtrl.Client, prefixes, nexthops, *args, **kwargs):
-        routes = utils.build_routes_py(prefixes.split(","), nexthops.split(","))
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, prefixes, nexthops, *args, **kwargs
+    ):
+        routes = utils.build_routes(prefixes.split(","), nexthops.split(","))
 
         try:
             self.fib_agent_client.addUnicastRoutes(
@@ -222,8 +227,8 @@ class FibAddRoutesCmd(FibAgentCmd):
 
 
 class FibDelRoutesCmd(FibAgentCmd):
-    def _run(self, client: OpenrCtrl.Client, prefixes, *args, **kwargs):
-        prefixes = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes.split(",")]
+    async def _run(self, client: OpenrCtrlCppClient.Async, prefixes, *args, **kwargs):
+        prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes.split(",")]
         try:
             self.fib_agent_client.deleteUnicastRoutes(
                 self.fib_agent_client.client_id, prefixes
@@ -238,8 +243,10 @@ class FibDelRoutesCmd(FibAgentCmd):
 
 
 class FibSyncRoutesCmd(FibAgentCmd):
-    def _run(self, client: OpenrCtrl.Client, prefixes, nexthops, *args, **kwargs):
-        routes = utils.build_routes_py(prefixes.split(","), nexthops.split(","))
+    async def _run(
+        self, client: OpenrCtrlCppClient.Async, prefixes, nexthops, *args, **kwargs
+    ):
+        routes = utils.build_routes(prefixes.split(","), nexthops.split(","))
 
         try:
             self.fib_agent_client.syncFib(self.fib_agent_client.client_id, routes)
@@ -253,9 +260,9 @@ class FibSyncRoutesCmd(FibAgentCmd):
 
 
 class FibValidateRoutesCmd(FibAgentCmd):
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         suppress_error=False,
         *args,
         **kwargs,
@@ -264,7 +271,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
         all_success = True
 
         # fetch openr config for comparison
-        openr_config = self.fetch_running_config_thrift(client)
+        openr_config = await client.getRunningConfigThrift()
 
         try:
             decision_route_db = None
@@ -272,16 +279,16 @@ class FibValidateRoutesCmd(FibAgentCmd):
             lm_links = None
 
             # fetch routes from decision module
-            decision_route_db = client.getRouteDbComputed("")
+            decision_route_db = await client.getRouteDbComputed("")
             # fetch routes from fib module
-            fib_route_db = client.getRouteDb()
+            fib_route_db = await client.getRouteDb()
             # fetch link_db from link-monitor module
-            lm_links = client.getInterfaces().interfaceDetails
+            lm_links = (await client.getInterfaces()).interfaceDetails
 
-            (decision_unicast_routes, decision_mpls_routes) = utils.get_routes_py(
+            (decision_unicast_routes, decision_mpls_routes) = utils.get_routes(
                 decision_route_db
             )
-            (fib_unicast_routes, fib_mpls_routes) = utils.get_routes_py(fib_route_db)
+            (fib_unicast_routes, fib_mpls_routes) = utils.get_routes(fib_route_db)
 
             agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
                 clientId=self.fib_agent_client.client_id
@@ -354,7 +361,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
 class FibSnoopCmd(FibCmdBase):
     def print_ip_prefixes_filtered(
         self,
-        ip_prefixes: Union[Sequence[IpPrefix], List[network_types.IpPrefix]],
+        ip_prefixes: Sequence[IpPrefix],
         prefixes_filter: Optional[List[str]] = None,
         element_prefix: str = ">",
         element_suffix: str = "",
@@ -394,7 +401,7 @@ class FibSnoopCmd(FibCmdBase):
 
     def print_mpls_labels(
         self,
-        labels: Union[List[int], Sequence[int]],
+        labels: Sequence[int],
         element_prefix: str = ">",
         element_suffix: str = "",
     ) -> None:
@@ -484,22 +491,6 @@ class FibSnoopCmd(FibCmdBase):
                 timestamp=True,
             )
 
-    # @override
-    def run(self, *args, **kwargs) -> int:
-        """
-        Override run method to create py3 client for streaming.
-        """
-
-        async def _wrapper() -> int:
-            client_type = ClientType.THRIFT_ROCKET_CLIENT_TYPE
-            async with get_openr_ctrl_cpp_client(
-                self.host, self.cli_opts, client_type=client_type
-            ) as client:
-                await self._run(client, *args, **kwargs)
-            return 0
-
-        return asyncio.run(_wrapper())
-
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -569,17 +560,6 @@ class StreamSummaryCmd(FibCmdBase):
             last_msg_time,
         ]
         return row
-
-    def run(self, *args, **kwargs) -> int:
-        async def _wrapper() -> int:
-            client_type = ClientType.THRIFT_ROCKET_CLIENT_TYPE
-            async with get_openr_ctrl_cpp_client(
-                self.host, self.cli_opts, client_type
-            ) as client:
-                await self._run(client, *args, **kwargs)
-            return 0
-
-        return asyncio.run(_wrapper())
 
     async def _run(
         self,
