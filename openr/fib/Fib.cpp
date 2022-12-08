@@ -8,7 +8,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/logging/xlog.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/LsdbUtil.h>
@@ -1081,11 +1081,8 @@ Fib::createFibClient(
   socket = newSocket.get();
 
   // Create channel and set timeout
-  auto channel = apache::thrift::HeaderClientChannel::newChannel(
-      std::move(newSocket),
-      apache::thrift::HeaderClientChannel::Options()
-          .setClientType(THRIFT_FRAMED_DEPRECATED)
-          .setProtocolId(apache::thrift::protocol::T_BINARY_PROTOCOL));
+  auto channel =
+      apache::thrift::RocketClientChannel::newChannel(std::move(newSocket));
   channel->setTimeout(Constants::kPlatformRoutesProcTimeout.count());
 
   // Reset client_

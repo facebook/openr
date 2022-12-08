@@ -13,7 +13,7 @@
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
+#include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 namespace openr {
 
@@ -50,20 +50,12 @@ getSocketOptionMap(std::optional<int> maybeIpTos) {
  *  - thrift::OpenrCtrlCppAsyncClient -> OpenrCtrlCpp service
  *  - thrift::KvStoreServicAsyncClient -> KvStoreService
  *
- * Underneath client support multiple channel. Here we recommend to use two
- * channels based on your need.
- *
- *  - apache::thrift::HeaderClientChannel => This is default and widely used
- * channel. It doesn't support streaming APIs. However it support transparent
- * compression for data exchanges. This can be efficient for retrieving large
- * amount, of data like routes, topology, KvStore key/vals etc.
- *
- *  - apache::thrift::RocketClientChannel => This is new channel. It supports
- * streaming APIs. Use this if you need stream APIs.
+ * Underneath client support multiple channel. Here we recommend to use
+ * apache::thrift::RocketClientChannel, which supports streaming APIs.
  */
 template <
     typename ClientType,
-    typename ClientChannel = apache::thrift::HeaderClientChannel>
+    typename ClientChannel = apache::thrift::RocketClientChannel>
 static std::unique_ptr<ClientType>
 getOpenrCtrlPlainTextClient(
     folly::EventBase& evb,
@@ -98,7 +90,7 @@ getOpenrCtrlPlainTextClient(
 
     // Enable compression for efficient transport when available. This will
     // incur CPU cost but it is insignificant for usual queries.
-    if (typeid(ClientChannel) == typeid(apache::thrift::HeaderClientChannel)) {
+    if (typeid(ClientChannel) == typeid(apache::thrift::RocketClientChannel)) {
       detail::setCompressionTransform(channel.get());
     }
 
@@ -114,7 +106,7 @@ getOpenrCtrlPlainTextClient(
  */
 template <
     typename ClientType,
-    typename ClientChannel = apache::thrift::HeaderClientChannel>
+    typename ClientChannel = apache::thrift::RocketClientChannel>
 static std::unique_ptr<ClientType>
 getOpenrCtrlSecureClient(
     folly::EventBase& evb,

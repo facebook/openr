@@ -11,9 +11,7 @@
 #include <gtest/gtest.h>
 #include <sodium.h>
 
-#include <thrift/lib/cpp/transport/THeader.h>
 #include <thrift/lib/cpp2/Thrift.h>
-#include <thrift/lib/cpp2/async/HeaderClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
