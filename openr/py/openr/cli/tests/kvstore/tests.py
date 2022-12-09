@@ -9,13 +9,14 @@ import copy
 import datetime
 import re
 from typing import Dict, List, Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
 from openr.cli.clis import kvstore
 from openr.cli.tests import helpers
-from openr.KvStore import ttypes as kvstore_types
+from openr.thrift.KvStore import thrift_types as kvstore_types
+from openr.thrift.OpenrConfig.thrift_types import OpenrConfig
 from openr.utils.printing import sprint_bytes
 
 BASE_MODULE = "openr.cli.clis.kvstore"
@@ -96,9 +97,7 @@ class CliKvStoreTests(TestCase):
                 expected_peer.peerAddr,
                 f"Expected address: {expected_peer.peerAddr}, got {actual_address}",
             )
-            expected_peer_state = kvstore_types.KvStorePeerState._VALUES_TO_NAMES[
-                expected_peer.state
-            ]
+            expected_peer_state = expected_peer.state.name
             self.assertEqual(
                 actual_state,
                 expected_peer_state,
@@ -246,9 +245,9 @@ class CliKvStoreTests(TestCase):
         # The last keyval is printed on the line before the next validation str
         return stdout_lines[key_start_idx:next_validation_str_idx]
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
-    def test_kvstore_peers(self, mocked_openr_client: MagicMock) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_kvstore_peers(self, mocked_openr_client: AsyncMock) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
@@ -291,16 +290,17 @@ class CliKvStoreTests(TestCase):
             f"Expected the check to {pass_str}, instead the check {validation_state}ed",
         )
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
     def test_kvstore_check_key_advertising_and_ttl_pass(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
             MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS
         )
+        mocked_returned_connection.getKvStorePeersArea.return_value = {}
 
         area1_publication = kvstore_types.Publication(
             keyVals={
@@ -355,16 +355,17 @@ class CliKvStoreTests(TestCase):
             True, pass_line_ttl_check
         )  # True implies we expect this check to pass
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
     def test_kvstore_check_key_advertising_fail(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
             MOCKED_THRIFT_CONFIG_ONE_AREA
         )
+        mocked_returned_connection.getKvStorePeersArea.return_value = {}
 
         # Check if the check fails if no prefix key is being advertised
         area1_publication_no_pref = kvstore_types.Publication(
@@ -448,15 +449,18 @@ class CliKvStoreTests(TestCase):
         self.assertEqual("FAIL", adj_key_advertisement_state)
         self.assertEqual("FAIL", pref_key_advertisement_state)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
     def test_kvstore_validate_peer_state_pass(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
             MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS
+        )
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.return_value = (
+            kvstore_types.Publication()
         )
 
         expected_peers_all_pass = {
@@ -505,15 +509,18 @@ class CliKvStoreTests(TestCase):
         invalid_peer_lines = stdout_lines[10:last_peer_idx]
         self._test_kvstore_peers_helper(invalid_peer_lines, invalid_peers)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
     def test_kvstore_validate_peer_state_fail(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
             MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS
+        )
+        mocked_returned_connection.getKvStoreKeyValsFilteredArea.return_value = (
+            kvstore_types.Publication()
         )
 
         # Testing when some of the peers will fail the check
@@ -562,14 +569,15 @@ class CliKvStoreTests(TestCase):
             invoked_return_all_fail.stdout, expected_peers_all_fail
         )
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
-    def test_kvstore_check_key_ttl_fail(self, mocked_openr_client: MagicMock) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_kvstore_check_key_ttl_fail(self, mocked_openr_client: AsyncMock) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
             MOCKED_THRIFT_CONFIG_MULTIPLE_AREAS
         )
+        mocked_returned_connection.getKvStorePeersArea.return_value = {}
 
         area1_publication = kvstore_types.Publication(
             keyVals={
@@ -625,17 +633,18 @@ class CliKvStoreTests(TestCase):
 
         self._test_keys_helper(keyval_lines, invalid_keys)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
     def test_kvstore_check_key_ttl_high_ttl(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
         # Check with a different configured ttl
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getRunningConfigThrift.return_value = (
             MOCKED_THRIFT_CONFIG_ONE_AREA_HIGH_TTL
         )
+        mocked_returned_connection.getKvStorePeersArea.return_value = {}
 
         area1_publication = kvstore_types.Publication(
             keyVals={
@@ -668,15 +677,16 @@ class CliKvStoreTests(TestCase):
         }
         self._test_keys_helper(keyval_lines, invalid_key)
 
-    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CLIENT_PY)
-    def test_kvstore_check_init_event(self, mocked_openr_client: MagicMock) -> None:
+    @patch(helpers.KVSTORE_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_kvstore_check_init_event(self, mocked_openr_client: AsyncMock) -> None:
         # Check with a different configured ttl
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         mocked_returned_connection.getInitializationEvents.return_value = (
             MOCKED_INIT_EVENTS_PASS
         )
+        mocked_returned_connection.getRunningConfigThrift.return_value = OpenrConfig()
 
         invoked_return = self.runner.invoke(
             kvstore.ValidateCli.validate,

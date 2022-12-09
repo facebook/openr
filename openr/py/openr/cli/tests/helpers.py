@@ -20,12 +20,6 @@ COMMANDS_GET_OPENR_CTRL_CPP_CLIENT = (
 )
 KVSTORE_GET_OPENR_CTRL_CPP_CLIENT = f"{KVSTORE_MODULE}.get_openr_ctrl_cpp_client"
 
-# to be deprecated
-COMMANDS_GET_OPENR_CTRL_CLIENT_PY = (
-    f"{BASE_UTILS_COMMANDS_MODULE}.get_openr_ctrl_client_py"
-)
-KVSTORE_GET_OPENR_CTRL_CLIENT_PY = f"{KVSTORE_MODULE}.get_openr_ctrl_client_py"
-
 
 def get_enter_thrift_magicmock(test_mocked_client: MagicMock) -> MagicMock:
     """We need to mock the context manager's enter with a common MagicMock

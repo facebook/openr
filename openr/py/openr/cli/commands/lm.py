@@ -566,7 +566,7 @@ class LMValidateCmd(LMCmdBase):
         # Get Data
         links = await client.getInterfaces()
         initialization_events = await client.getInitializationEvents()
-        openr_config = await self.fetch_running_config_thrift(client)
+        openr_config = await client.getRunningConfigThrift()
 
         # Run the validation checks
         init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
@@ -595,7 +595,7 @@ class LMValidateCmd(LMCmdBase):
         return is_pass
 
     def _validate_interface_regex(
-        self, links: DumpLinksReply, areas: List[Any]
+        self, links: DumpLinksReply, areas: Sequence[Any]
     ) -> Dict[str, Any]:
         """
         Checks if each interface passes the regexes of atleast one area

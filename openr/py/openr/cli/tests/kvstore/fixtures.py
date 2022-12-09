@@ -10,8 +10,13 @@
 from enum import Enum
 from typing import Dict
 
-from openr.KvStore import ttypes as kvstore_types
-from openr.thrift.OpenrConfig.types import AreaConfig, KvstoreConfig, OpenrConfig
+from openr.thrift.KvStore.thrift_types import (
+    InitializationEvent,
+    KvStorePeerState,
+    PeerSpec,
+    Value,
+)
+from openr.thrift.OpenrConfig.thrift_types import AreaConfig, KvstoreConfig, OpenrConfig
 
 
 class AreaId(Enum):
@@ -34,16 +39,16 @@ class MockedKeys(Enum):
 
 
 class MockedValidKeyVals(Enum):
-    VAL1 = kvstore_types.Value(ttl=3600000, ttlVersion=1)
-    VAL2 = kvstore_types.Value(ttl=3599990, ttlVersion=2)
-    VAL3 = kvstore_types.Value(ttl=3599989, ttlVersion=3)
-    VAL4 = kvstore_types.Value(ttl=3599982, ttlVersion=4)
-    VAL5 = kvstore_types.Value(ttl=3599810, ttlVersion=5)
-    VAL6 = kvstore_types.Value(ttl=9999999, ttlVersion=6)
+    VAL1 = Value(ttl=3600000, ttlVersion=1)
+    VAL2 = Value(ttl=3599990, ttlVersion=2)
+    VAL3 = Value(ttl=3599989, ttlVersion=3)
+    VAL4 = Value(ttl=3599982, ttlVersion=4)
+    VAL5 = Value(ttl=3599810, ttlVersion=5)
+    VAL6 = Value(ttl=9999999, ttlVersion=6)
 
 
 class MockedInvalidKeyVals(Enum):
-    VAL1 = kvstore_types.Value(
+    VAL1 = Value(
         version=1,
         originatorId=NodeNames.MOCKED_NODE1.value,
         value=None,
@@ -51,7 +56,7 @@ class MockedInvalidKeyVals(Enum):
         ttlVersion=1,
         hash=12345,
     )
-    VAL2 = kvstore_types.Value(
+    VAL2 = Value(
         version=2,
         originatorId=NodeNames.MOCKED_NODE2.value,
         value=None,
@@ -59,7 +64,7 @@ class MockedInvalidKeyVals(Enum):
         ttlVersion=2,
         hash=-23456,
     )
-    VAL3 = kvstore_types.Value(
+    VAL3 = Value(
         version=2,
         originatorId=NodeNames.MOCKED_NODE1.value,
         value=None,
@@ -92,60 +97,60 @@ MOCKED_THRIFT_CONFIG_ONE_AREA_HIGH_TTL = OpenrConfig(
 )
 
 MOCKED_KVSTORE_PEERS_TWO_PEERS = {
-    "node2": kvstore_types.PeerSpec(
+    "node2": PeerSpec(
         peerAddr="fe80::b81a:ceff:fe2b:d473%if_1_2_1",
         ctrlPort=2018,
-        state=kvstore_types.KvStorePeerState.INITIALIZED,
+        state=KvStorePeerState.INITIALIZED,
     ),
-    "node15": kvstore_types.PeerSpec(
+    "node15": PeerSpec(
         peerAddr="fe80::a433:47ff:feaa:fd8d%if_1_15_1",
         ctrlPort=2018,
-        state=kvstore_types.KvStorePeerState.INITIALIZED,
+        state=KvStorePeerState.INITIALIZED,
     ),
 }
 
 MOCKED_KVSTORE_PEERS_ONE_PEER = {
-    "node5": kvstore_types.PeerSpec(
+    "node5": PeerSpec(
         peerAddr="fe80::d81a:feff:fc4b:d213%if_1_5_1",
         ctrlPort=2018,
-        state=kvstore_types.KvStorePeerState.INITIALIZED,
+        state=KvStorePeerState.INITIALIZED,
     )
 }
 
 MOCKED_KVSTORE_PEERS_DIFF_STATES = {
-    "node6": kvstore_types.PeerSpec(
+    "node6": PeerSpec(
         peerAddr="fe80::d81a:feff:fc4b:d213%if_1_6_1",
         ctrlPort=1000,
-        state=kvstore_types.KvStorePeerState.INITIALIZED,
+        state=KvStorePeerState.INITIALIZED,
     ),
-    "node12": kvstore_types.PeerSpec(
+    "node12": PeerSpec(
         peerAddr="fe80::d81a:feff:fc4b:d213%if_1_12_1",
         ctrlPort=1000,
-        state=kvstore_types.KvStorePeerState.SYNCING,
+        state=KvStorePeerState.SYNCING,
     ),
-    "node18": kvstore_types.PeerSpec(
+    "node18": PeerSpec(
         peerAddr="fe80::d81a:feff:fc4b:d213%if_1_18_1",
         ctrlPort=1000,
-        state=kvstore_types.KvStorePeerState.IDLE,
+        state=KvStorePeerState.IDLE,
     ),
 }
 
 MOCKED_KVSTORE_PEERS_ONE_FAIL = {
-    "node20": kvstore_types.PeerSpec(
+    "node20": PeerSpec(
         peerAddr="fe80::d81a:feff:fc4b:d213%if_1_20_1",
         ctrlPort=1000,
-        state=kvstore_types.KvStorePeerState.IDLE,
+        state=KvStorePeerState.IDLE,
     ),
 }
 
-MOCKED_INIT_EVENTS_PASS: Dict[kvstore_types.InitializationEvent, int] = {
-    kvstore_types.InitializationEvent.KVSTORE_SYNCED: 9204,
+MOCKED_INIT_EVENTS_PASS: Dict[InitializationEvent, int] = {
+    InitializationEvent.KVSTORE_SYNCED: 9204,
 }
 
-MOCKED_INIT_EVENTS_WARNING: Dict[kvstore_types.InitializationEvent, int] = {
-    kvstore_types.InitializationEvent.KVSTORE_SYNCED: 170000,
+MOCKED_INIT_EVENTS_WARNING: Dict[InitializationEvent, int] = {
+    InitializationEvent.KVSTORE_SYNCED: 170000,
 }
 
-MOCKED_INIT_EVENTS_TIMEOUT: Dict[kvstore_types.InitializationEvent, int] = {
-    kvstore_types.InitializationEvent.KVSTORE_SYNCED: 300000,
+MOCKED_INIT_EVENTS_TIMEOUT: Dict[InitializationEvent, int] = {
+    InitializationEvent.KVSTORE_SYNCED: 300000,
 }

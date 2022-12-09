@@ -36,7 +36,7 @@ from openr.clients.openr_client import get_openr_ctrl_client_py
 from openr.KvStore import ttypes as kv_store_types_py
 from openr.Network import ttypes as network_types_py
 from openr.OpenrConfig import ttypes as config_types_py
-from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types_py
+from openr.OpenrCtrl import ttypes as ctrl_types_py
 from openr.thrift.KvStore import thrift_types as kv_store_types
 from openr.thrift.Network import thrift_types as network_types
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
@@ -268,53 +268,6 @@ def parse_prefix_database(
     )
 
 
-# to be deprecated
-def parse_prefix_database_py(
-    prefix_filter: Optional[Union[network_types_py.IpPrefix, str]],
-    client_type_filter: Optional[Union[network_types_py.PrefixType, str]],
-    prefix_dbs: Dict[str, openr_types_py.PrefixDatabase],
-    prefix_db: Any,
-) -> None:
-    """
-    Utility function to prase `prefix_db` with filter and populate prefix_dbs
-    accordingly
-    """
-    if client_type_filter:
-        _TYPES = network_types_py.PrefixType._NAMES_TO_VALUES
-        if isinstance(client_type_filter, str):
-            client_type_filter = _TYPES.get(client_type_filter.upper(), None)
-            if client_type_filter is None:
-                raise Exception(
-                    f"Unknown client type. Use one of {list(_TYPES.keys())}"
-                )
-
-    if prefix_filter:
-        if isinstance(prefix_filter, str):
-            prefix_filter = ipnetwork.ip_str_to_prefix_py(prefix_filter)
-
-    if isinstance(prefix_db, kv_store_types_py.Value):
-        prefix_db = deserialize_thrift_py_object(
-            prefix_db.value, openr_types_py.PrefixDatabase
-        )
-
-    if prefix_db.deletePrefix:
-        # In per prefix-key, deletePrefix flag is set to indicate prefix
-        # withdrawl
-        return
-
-    if prefix_db.thisNodeName not in prefix_dbs:
-        prefix_dbs[prefix_db.thisNodeName] = openr_types_py.PrefixDatabase(
-            f"{prefix_db.thisNodeName}", []
-        )
-
-    for prefix_entry in prefix_db.prefixEntries:
-        if prefix_filter and prefix_filter != prefix_entry.prefix:
-            continue
-        if client_type_filter and client_type_filter != prefix_entry.type:
-            continue
-        prefix_dbs[prefix_db.thisNodeName].prefixEntries.append(prefix_entry)
-
-
 def print_prefixes_table(resp, nodes, prefix, client_type, iter_func) -> None:
     """print prefixes"""
 
@@ -322,20 +275,6 @@ def print_prefixes_table(resp, nodes, prefix, client_type, iter_func) -> None:
     prefix_maps = {}
     iter_func(
         prefix_maps, resp, nodes, partial(parse_prefix_database, prefix, client_type)
-    )
-    for node_name, prefix_db in prefix_maps.items():
-        rows.append(["{}".format(node_name), sprint_prefixes_db_full(prefix_db)])
-    print(printing.render_vertical_table(rows))
-
-
-# to be deprecated
-def print_prefixes_table_py(resp, nodes, prefix, client_type, iter_func) -> None:
-    """print prefixes"""
-
-    rows = []
-    prefix_maps = {}
-    iter_func(
-        prefix_maps, resp, nodes, partial(parse_prefix_database_py, prefix, client_type)
     )
     for node_name, prefix_db in prefix_maps.items():
         rows.append(["{}".format(node_name), sprint_prefixes_db_full(prefix_db)])
@@ -366,6 +305,7 @@ def thrift_to_dict(thrift_inst, update_func=None):
     return gen_dict
 
 
+# to be deprecated
 def thrift_py_to_dict(thrift_inst, update_func=None):
     """convert thrift-py instance into a dict in strings
 
@@ -473,6 +413,9 @@ def prefix_entry_to_dict(prefix_entry):
                 "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
                 "metrics": thrift_to_dict(prefix_entry.metrics),
                 "tags": list(prefix_entry.tags if prefix_entry.tags else []),
+                "area_stack": list(
+                    prefix_entry.area_stack if prefix_entry.area_stack else []
+                ),
             }
         )
 
@@ -543,33 +486,7 @@ def print_prefixes_json(resp, nodes, prefix, client_type, iter_func) -> None:
         prefixes_map, resp, nodes, partial(parse_prefix_database, prefix, client_type)
     )
     for node_name, prefix_db in prefixes_map.items():
-        if isinstance(prefix_db, kv_store_types_py.Value) or isinstance(
-            prefix_db, openr_types_py.PrefixDatabase
-        ):
-            prefixes_map[node_name] = prefix_db_to_dict_py(prefix_db)
-        else:
-            prefixes_map[node_name] = prefix_db_to_dict(prefix_db)
-    print(json_dumps(prefixes_map))
-
-
-# to be deprecated
-def print_prefixes_json_py(resp, nodes, prefix, client_type, iter_func) -> None:
-    """print prefixes in json"""
-
-    prefixes_map = {}
-    iter_func(
-        prefixes_map,
-        resp,
-        nodes,
-        partial(parse_prefix_database_py, prefix, client_type),
-    )
-    for node_name, prefix_db in prefixes_map.items():
-        if isinstance(prefix_db, kv_store_types_py.Value) or isinstance(
-            prefix_db, openr_types_py.PrefixDatabase
-        ):
-            prefixes_map[node_name] = prefix_db_to_dict_py(prefix_db)
-        else:
-            prefixes_map[node_name] = prefix_db_to_dict(prefix_db)
+        prefixes_map[node_name] = prefix_db_to_dict(prefix_db)
     print(json_dumps(prefixes_map))
 
 
@@ -2190,11 +2107,6 @@ def get_routes_py(
 
 async def get_areas_list(client: OpenrCtrlCppClient.Async) -> Set[str]:
     return {a.area_id for a in (await client.getRunningConfigThrift()).areas}
-
-
-# to be deprecated
-def get_areas_list_py(client: OpenrCtrl.Client) -> Set[str]:
-    return {a.area_id for a in client.getRunningConfigThrift().areas}
 
 
 # This API is used by commands that need one and only one

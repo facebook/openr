@@ -157,51 +157,6 @@ class OpenrCtrlCmdPy:
 
         return params
 
-    def fetch_initialization_events_py(
-        self, client: Any
-    ) -> Dict[kv_store_types.InitializationEvent, int]:
-        """
-        Fetch Initialization events as a dictionary via thrift call
-        """
-
-        return client.getInitializationEvents()
-
-    def fetch_running_config_thrift(self, client: Any) -> Any:
-        """
-        Fetch the current running config via thrift call
-        """
-
-        return client.getRunningConfigThrift()
-
-    def fetch_kvstore_peers(self, client: Any, area=None) -> Any:
-        """
-        Fetch a dictionary of {peer name : peer spec} via thrift call
-        """
-
-        if area:
-            return client.getKvStorePeersArea(area)
-
-        return client.getKvStorePeers()
-
-    def fetch_keyvals_py(
-        self,
-        client: Any,
-        areas: Set[Any],
-        keyDumpParams: kv_store_types.KeyDumpParams,
-    ) -> Dict[str, kv_store_types.Publication]:
-        """
-        Fetch the keyval publication for each area specified in areas via thrift call
-        Returned as a dict {area : publication}
-        If keyDumpParams is specified, returns keyvals filtered accordingly
-        """
-
-        area_to_publication_dict = {}
-        for area in areas:
-            area_to_publication_dict[area] = client.getKvStoreKeyValsFilteredArea(
-                keyDumpParams, area
-            )
-        return area_to_publication_dict
-
     def validate_init_event_py(
         self,
         init_event_dict: Dict[kv_store_types.InitializationEvent, int],
@@ -377,25 +332,6 @@ class OpenrCtrlCmd(OpenrCtrlCmdPy):
             keyValHashes=keyval_hash,
             keys=[prefix] if prefix else None,
         )
-
-    def fetch_keyvals(
-        self,
-        client: Any,
-        areas: Set[Any],
-        keyDumpParams: KeyDumpParams,
-    ) -> Dict[str, Publication]:
-        """
-        Fetch the keyval publication for each area specified in areas via thrift call
-        Returned as a dict {area : publication}
-        If keyDumpParams is specified, returns keyvals filtered accordingly
-        """
-
-        area_to_publication_dict = {}
-        for area in areas:
-            area_to_publication_dict[area] = client.getKvStoreKeyValsFilteredArea(
-                keyDumpParams, area
-            )
-        return area_to_publication_dict
 
     def validate_init_event(
         self,
