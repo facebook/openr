@@ -605,7 +605,7 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
     ) -> Tuple[int, Set[str]]:
         """Returns status code. 0 = success, 1 = failure"""
 
-        prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
+        prefix_maps = utils.collate_prefix_keys_py(kvstore_keyvals)
         decision_prefix_nodes = set()
         for received_route_detail in decision_prefix_dbs:
             for route in received_route_detail.routes:

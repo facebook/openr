@@ -22,6 +22,7 @@ from typing import (
     Dict,
     Iterable,
     List,
+    Mapping,
     Optional,
     Sequence,
     Set,
@@ -329,10 +330,49 @@ def metric_vector_to_dict(metric_vector):
 
 
 def collate_prefix_keys(
+    kvstore_keyvals: Mapping[str, kv_store_types.Value],
+) -> Dict[str, openr_types.PrefixDatabase]:
+    """collate all the prefixes of node and return a map of
+    nodename - PrefixDatabase in thrift-python
+    """
+
+    prefix_maps = {}
+    for key, value in sorted(kvstore_keyvals.items()):
+        if key.startswith(Consts.PREFIX_DB_MARKER):
+
+            node_name = key.split(":")[1]
+            if value.value:
+                prefix_db = deserialize(openr_types.PrefixDatabase, value.value)
+            else:
+                prefix_db = openr_types.PrefixDatabase()
+
+            if prefix_db.deletePrefix:
+                continue
+
+            if node_name not in prefix_maps:
+                prefix_maps[node_name] = openr_types.PrefixDatabase(
+                    thisNodeName=f"{node_name}", prefixEntries=[]
+                )
+
+            # include prefix_db.prefixEntries in prefix_maps[node_name].prefixEntries
+            # notice that we cannot modify attributes of a thrift-python struct but replace the whole struct
+            # so we need to create prefix_entries and replace prefix_maps[node_name]
+            prefix_entries = prefix_maps[node_name].prefixEntries
+            for prefix_entry in prefix_db.prefixEntries:
+                prefix_entries.append(prefix_entry)
+            prefix_maps[node_name] = prefix_maps[node_name](
+                prefixEntries=prefix_entries
+            )
+
+    return prefix_maps
+
+
+# to be deprecated
+def collate_prefix_keys_py(
     kvstore_keyvals: kv_store_types_py.KeyVals,
 ) -> Dict[str, openr_types_py.PrefixDatabase]:
     """collate all the prefixes of node and return a map of
-    nodename - PrefixDatabase
+    nodename - PrefixDatabase in thrift-py
     """
 
     prefix_maps = {}

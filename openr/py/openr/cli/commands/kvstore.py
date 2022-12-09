@@ -154,7 +154,7 @@ class KvStoreCmdBase(OpenrCtrlCmdPy):
                 sys.exit(1)
             resp = client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
 
-        prefix_maps = utils.collate_prefix_keys(resp.keyVals)
+        prefix_maps = utils.collate_prefix_keys_py(resp.keyVals)
         for node, prefix_db in prefix_maps.items():
             node_dict[node] = self.get_node_ip(prefix_db)
 
