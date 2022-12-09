@@ -218,6 +218,58 @@ def alloc_prefix_to_loopback_ip_str(prefix) -> str:
 
 
 def parse_prefix_database(
+    prefix_filter: Optional[Union[network_types.IpPrefix, str]],
+    client_type_filter: Optional[Union[network_types.PrefixType, str]],
+    prefix_dbs: Dict[str, openr_types.PrefixDatabase],
+    prefix_db: Any,
+) -> None:
+    """
+    Utility function to prase `prefix_db` with filter and populate prefix_dbs
+    accordingly
+    """
+    if client_type_filter and isinstance(client_type_filter, str):
+        PREFIX_TYPE_TO_VALUES = {e.name: e for e in network_types.PrefixType}
+        client_type_filter = PREFIX_TYPE_TO_VALUES.get(client_type_filter.upper(), None)
+        if client_type_filter is None:
+            raise Exception(
+                f"Unknown client type. Use one of {list(PREFIX_TYPE_TO_VALUES.keys())}"
+            )
+
+    if prefix_filter:
+        if isinstance(prefix_filter, str):
+            prefix_filter = ipnetwork.ip_str_to_prefix(prefix_filter)
+
+    if isinstance(prefix_db, kv_store_types.Value):
+        if prefix_db.value:
+            prefix_db = deserialize(openr_types.PrefixDatabase, prefix_db.value)
+        else:
+            prefix_db = openr_types.PrefixDatabase()
+
+    if prefix_db.deletePrefix:
+        # In per prefix-key, deletePrefix flag is set to indicate prefix
+        # withdrawl
+        return
+
+    if prefix_db.thisNodeName not in prefix_dbs:
+        prefix_dbs[prefix_db.thisNodeName] = openr_types.PrefixDatabase(
+            thisNodeName=f"{prefix_db.thisNodeName}", prefixEntries=[]
+        )
+
+    # update prefixEntries, we cannot modify thrift-python attributes and hence we need to create prefix_entries and replace prefix_dbs[prefix_db.thisNodeName]
+    prefix_entries = list(prefix_dbs[prefix_db.thisNodeName].prefixEntries)
+    for prefix_entry in prefix_db.prefixEntries:
+        if prefix_filter and prefix_filter != prefix_entry.prefix:
+            continue
+        if client_type_filter and client_type_filter != prefix_entry.type:
+            continue
+        prefix_entries.append(prefix_entry)
+    prefix_dbs[prefix_db.thisNodeName] = prefix_dbs[prefix_db.thisNodeName](
+        prefixEntries=prefix_entries
+    )
+
+
+# to be deprecated
+def parse_prefix_database_py(
     prefix_filter: Optional[Union[network_types_py.IpPrefix, str]],
     client_type_filter: Optional[Union[network_types_py.PrefixType, str]],
     prefix_dbs: Dict[str, openr_types_py.PrefixDatabase],
@@ -270,6 +322,20 @@ def print_prefixes_table(resp, nodes, prefix, client_type, iter_func) -> None:
     prefix_maps = {}
     iter_func(
         prefix_maps, resp, nodes, partial(parse_prefix_database, prefix, client_type)
+    )
+    for node_name, prefix_db in prefix_maps.items():
+        rows.append(["{}".format(node_name), sprint_prefixes_db_full(prefix_db)])
+    print(printing.render_vertical_table(rows))
+
+
+# to be deprecated
+def print_prefixes_table_py(resp, nodes, prefix, client_type, iter_func) -> None:
+    """print prefixes"""
+
+    rows = []
+    prefix_maps = {}
+    iter_func(
+        prefix_maps, resp, nodes, partial(parse_prefix_database_py, prefix, client_type)
     )
     for node_name, prefix_db in prefix_maps.items():
         rows.append(["{}".format(node_name), sprint_prefixes_db_full(prefix_db)])
@@ -357,7 +423,7 @@ def collate_prefix_keys(
             # include prefix_db.prefixEntries in prefix_maps[node_name].prefixEntries
             # notice that we cannot modify attributes of a thrift-python struct but replace the whole struct
             # so we need to create prefix_entries and replace prefix_maps[node_name]
-            prefix_entries = prefix_maps[node_name].prefixEntries
+            prefix_entries = list(prefix_maps[node_name].prefixEntries)
             for prefix_entry in prefix_db.prefixEntries:
                 prefix_entries.append(prefix_entry)
             prefix_maps[node_name] = prefix_maps[node_name](
@@ -475,6 +541,27 @@ def print_prefixes_json(resp, nodes, prefix, client_type, iter_func) -> None:
     prefixes_map = {}
     iter_func(
         prefixes_map, resp, nodes, partial(parse_prefix_database, prefix, client_type)
+    )
+    for node_name, prefix_db in prefixes_map.items():
+        if isinstance(prefix_db, kv_store_types_py.Value) or isinstance(
+            prefix_db, openr_types_py.PrefixDatabase
+        ):
+            prefixes_map[node_name] = prefix_db_to_dict_py(prefix_db)
+        else:
+            prefixes_map[node_name] = prefix_db_to_dict(prefix_db)
+    print(json_dumps(prefixes_map))
+
+
+# to be deprecated
+def print_prefixes_json_py(resp, nodes, prefix, client_type, iter_func) -> None:
+    """print prefixes in json"""
+
+    prefixes_map = {}
+    iter_func(
+        prefixes_map,
+        resp,
+        nodes,
+        partial(parse_prefix_database_py, prefix, client_type),
     )
     for node_name, prefix_db in prefixes_map.items():
         if isinstance(prefix_db, kv_store_types_py.Value) or isinstance(
@@ -685,7 +772,9 @@ def adj_dbs_to_dict(resp, nodes, bidir, iter_func):
 
 
 def adj_dbs_to_area_dict(
-    resp: List[openr_types_py.AdjacencyDatabase],
+    resp: Union[
+        List[openr_types_py.AdjacencyDatabase], Sequence[openr_types.AdjacencyDatabase]
+    ],
     nodes: Set[str],
     bidir: bool,
 ):
@@ -1056,7 +1145,7 @@ def print_routes_json(
 
 
 def print_route_db(
-    route_db: openr_types_py.RouteDatabase,
+    route_db: openr_types.RouteDatabase,
     prefixes: Optional[List[str]] = None,
     labels: Optional[List[int]] = None,
 ) -> None:
@@ -1077,8 +1166,8 @@ def print_route_db(
 
 
 def find_adj_list_deltas(
-    old_adj_list: Optional[Sequence[openr_types_py.Adjacency]],
-    new_adj_list: Optional[Sequence[openr_types_py.Adjacency]],
+    old_adj_list: Optional[Sequence[openr_types.Adjacency]],
+    new_adj_list: Optional[Sequence[openr_types.Adjacency]],
     tags: Optional[Sequence[str]] = None,
 ) -> List:
     """given the old adj list and the new one for some node, return
@@ -1244,18 +1333,21 @@ def sprint_pub_update(global_publication_db, key, value) -> str:
 
 def update_global_prefix_db(
     global_prefix_db: Dict,
-    prefix_db: openr_types_py.PrefixDatabase,
+    prefix_db: Union[openr_types_py.PrefixDatabase, openr_types.PrefixDatabase],
     key: Optional[str] = None,
 ) -> None:
     """update the global prefix map with a single publication
 
     :param global_prefix_map map(node, set([str])): map of all prefixes
         in the network
-    :param prefix_db openr_types_py.PrefixDatabase: publication from single
+    :param prefix_db PrefixDatabase: publication from single
         node
     """
 
-    assert isinstance(prefix_db, openr_types_py.PrefixDatabase)
+    assert type(prefix_db) in [
+        openr_types_py.PrefixDatabase,
+        openr_types.PrefixDatabase,
+    ]
 
     prefix_set = set()
     for prefix_entry in prefix_db.prefixEntries:
@@ -1331,9 +1423,9 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
 
 def sprint_prefixes_db_delta(
     global_prefixes_db: Dict,
-    prefix_db: openr_types_py.PrefixDatabase,
+    prefix_db: Union[openr_types_py.PrefixDatabase, openr_types.PrefixDatabase],
     key: Optional[str] = None,
-):
+) -> List[str]:
     """given serialzied prefixes for a single node, output the delta
         between those prefixes and global prefixes snapshot
 
@@ -1342,7 +1434,7 @@ def sprint_prefixes_db_delta(
     per prefix key: prefix:<node name>:<area>:<[IP addr/prefix len]
 
     :global_prefixes_db map(node, set([str])): global prefixes
-    :prefix_db openr_types_py.PrefixDatabase: latest from kv store
+    :prefix_db PrefixDatabase: latest from kv store
 
     :return [str]: the array of prefix strings
     """
@@ -2096,7 +2188,12 @@ def get_routes_py(
     return (unicast_routes, mpls_routes)
 
 
-def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
+async def get_areas_list(client: OpenrCtrlCppClient.Async) -> Set[str]:
+    return {a.area_id for a in (await client.getRunningConfigThrift()).areas}
+
+
+# to be deprecated
+def get_areas_list_py(client: OpenrCtrl.Client) -> Set[str]:
     return {a.area_id for a in client.getRunningConfigThrift().areas}
 
 
@@ -2104,9 +2201,9 @@ def get_areas_list(client: OpenrCtrl.Client) -> Set[str]:
 # area ID. For older images that don't support area feature, this API will
 # return 'None'. If area ID is passed, API checks if it's valid and returns
 # the same ID
-def get_area_id(client: OpenrCtrl.Client, area: str) -> str:
+async def get_area_id(client: OpenrCtrlCppClient.Async, area: str) -> str:
     # if no area is provided, return area in case only one area is configured
-    areas = get_areas_list(client)
+    areas = await get_areas_list(client)
     if (area is None or area == "") and 1 == len(areas):
         (area,) = areas
         return area

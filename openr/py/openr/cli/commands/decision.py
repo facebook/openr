@@ -7,26 +7,27 @@
 import ipaddress
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Optional, Sequence, Set, Tuple
+from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
 
 import click
 from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmdPy
+from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.clients.openr_client import get_fib_agent_client
-from openr.KvStore import ttypes as kv_store_types
-from openr.Network import ttypes as network_types
-from openr.OpenrCtrl import OpenrCtrl, ttypes as ctrl_types
-from openr.thrift.KvStore.thrift_types import InitializationEvent
-from openr.Types import ttypes as openr_types
+from openr.thrift.KvStore import thrift_types as kv_store_types
+from openr.thrift.Network import thrift_types as network_types
+from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
+from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
+from openr.thrift.Types import thrift_types as openr_types
 from openr.utils import ipnetwork, printing
 from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_py_object, serialize_json
+from openr.utils.serializer import serialize_json
+from thrift.python.serializer import deserialize
 
 
-class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
-    def _run(
+class DecisionRoutesComputedCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         nodes: set,
         prefixes: Any,
         labels: Any,
@@ -37,19 +38,19 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmdPy):
         if json_opt:
             route_db_dict = {}
             for node in nodes:
-                route_db = client.getRouteDbComputed(node)
-                route_db_dict[node] = utils.route_db_to_dict_py(route_db)
+                route_db = await client.getRouteDbComputed(node)
+                route_db_dict[node] = utils.route_db_to_dict(route_db)
             utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
             for node in nodes:
-                route_db = client.getRouteDbComputed(node)
+                route_db = await client.getRouteDbComputed(node)
                 utils.print_route_db(route_db, prefixes, labels)
 
 
-class DecisionAdjCmd(OpenrCtrlCmdPy):
-    def _run(
+class DecisionAdjCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         nodes: set,
         areas: set,
         bidir: bool,
@@ -58,7 +59,7 @@ class DecisionAdjCmd(OpenrCtrlCmdPy):
         **kwargs,
     ) -> None:
 
-        adj_dbs = client.getDecisionAdjacenciesFiltered(
+        adj_dbs = await client.getDecisionAdjacenciesFiltered(
             ctrl_types.AdjacenciesFilter(selectAreas=areas)
         )
 
@@ -74,10 +75,10 @@ class DecisionAdjCmd(OpenrCtrlCmdPy):
                 utils.print_adjs_table(adjs_map, None, None)
 
 
-class PathCmd(OpenrCtrlCmdPy):
-    def _run(
+class PathCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         src: str,
         dst: str,
         max_hop: int,
@@ -86,25 +87,24 @@ class PathCmd(OpenrCtrlCmdPy):
         **kwargs,
     ) -> None:
         if not src or not dst:
-            host_id = client.getMyNodeName()
+            host_id = await client.getMyNodeName()
             src = src or host_id
             dst = dst or host_id
 
         # pyre-fixme[16]: `PathCmd` has no attribute `prefix_dbs`.
         self.prefix_dbs: Dict[str, openr_types.PrefixDatabase] = {}
-        area = utils.get_area_id(client, area)
+        area = await utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
 
-        params = kv_store_types.KeyDumpParams(Consts.PREFIX_DB_MARKER)
-        params.keys = [Consts.PREFIX_DB_MARKER]
+        params = kv_store_types.KeyDumpParams(keys=[Consts.PREFIX_DB_MARKER])
         if area is None:
-            pub = client.getKvStoreKeyValsFiltered(params)
+            pub = await client.getKvStoreKeyValsFiltered(params)
         else:
-            pub = client.getKvStoreKeyValsFilteredArea(params, area)
+            pub = await client.getKvStoreKeyValsFilteredArea(params, area)
         for value in pub.keyVals.values():
             utils.parse_prefix_database("", "", self.prefix_dbs, value)
 
-        paths = self.get_paths(client, src, dst, max_hop)
+        paths = await self.get_paths(client, src, dst, max_hop)
         self.print_paths(paths)
 
     def get_loopback_addr(self, node):
@@ -257,8 +257,8 @@ class PathCmd(OpenrCtrlCmdPy):
                 return [nh.address for nh in route.nextHops]
         return []
 
-    def get_paths(
-        self, client: OpenrCtrl.Client, src: str, dst: str, max_hop: int
+    async def get_paths(
+        self, client: OpenrCtrlCppClient.Async, src: str, dst: str, max_hop: int
     ) -> Any:
         """
         calc paths from src to dst using backtracking. can add memoization to
@@ -278,13 +278,13 @@ class PathCmd(OpenrCtrlCmdPy):
                 print("node name or ip address not valid.")
                 sys.exit(1)
 
-        adj_dbs = client.getDecisionAdjacencyDbs()
+        adj_dbs = await client.getDecisionAdjacencyDbs()
         if2node = self.get_if2node_map(adj_dbs)
         fib_routes = defaultdict(list)
 
         paths = []
 
-        def _backtracking(cur, path, hop, visited, in_fib):
+        async def _backtracking(cur, path, hop, visited, in_fib):
             """
             Depth-first search (DFS) for traversing graph and getting paths
             from src to dst with lowest metric in total.
@@ -303,7 +303,7 @@ class PathCmd(OpenrCtrlCmdPy):
             cur_lpm_len = self.get_lpm_len_from_node(cur, dst_addr)
             # get the next hop nodes
             next_hop_nodes = self.get_nexthop_nodes(
-                client.getRouteDbComputed(cur),
+                await client.getRouteDbComputed(cur),
                 dst_addr,
                 cur_lpm_len,
                 if2node,
@@ -335,7 +335,7 @@ class PathCmd(OpenrCtrlCmdPy):
                         is_nexthop_in_fib_path = True
 
                 # recursion - extend the path from next hop node
-                _backtracking(
+                await _backtracking(
                     next_hop_node_name,
                     path,
                     hop + 1,
@@ -348,7 +348,7 @@ class PathCmd(OpenrCtrlCmdPy):
         # initial call to begin the DFS to search paths
         visited_set = set()
         visited_set.add(src)
-        _backtracking(src, [], 1, visited_set, True)
+        await _backtracking(src, [], 1, visited_set, True)
         return paths
 
     def calculate_hop_metric(self, paths):
@@ -418,10 +418,10 @@ class PathCmd(OpenrCtrlCmdPy):
             print()
 
 
-class DecisionValidateCmd(OpenrCtrlCmdPy):
-    def _run(
+class DecisionValidateCmd(OpenrCtrlCmd):
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         json_opt: bool = False,
         suppress: bool = False,
         areas: Sequence[str] = (),
@@ -434,8 +434,8 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
         errors = 0
 
         # Validate Open/R Initialization Event
-        initialization_events = self.fetch_initialization_events_py(client)
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event_py(
+        initialization_events = await client.getInitializationEvents()
+        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
             initialization_events,
             kv_store_types.InitializationEvent.RIB_COMPUTED,
         )
@@ -443,7 +443,7 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
             init_is_pass,
             init_err_msg_str,
             init_dur_str,
-            InitializationEvent.RIB_COMPUTED,
+            kv_store_types.InitializationEvent.RIB_COMPUTED,
             "decision",
         )
 
@@ -453,16 +453,18 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
         # ATTN: validate cmd can run against specified area.
         # By default, it runs against ALL areas.
         if not areas:
-            areas_summary = client.getKvStoreAreaSummary(set())
+            areas_summary = await client.getKvStoreAreaSummary(set())
             areas = tuple(a.area for a in areas_summary)
 
         for area in sorted(areas):
             click.secho(
                 f"[Decision] Running validation checks on area: {area}", bold=True
             )
-            (decision_adj_dbs, decision_prefix_dbs, kvstore_keyvals) = self.get_dbs(
-                client, area
-            )
+            (
+                decision_adj_dbs,
+                decision_prefix_dbs,
+                kvstore_keyvals,
+            ) = await self.get_dbs(client, area)
 
             # set to be populated by:
             #   - self.print_db_delta_adj();
@@ -513,25 +515,28 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
 
         return errors
 
-    def get_dbs(
-        self, client: OpenrCtrl.Client, area: str
+    async def get_dbs(
+        self, client: OpenrCtrlCppClient.Async, area: str
     ) -> Tuple[
-        List[openr_types.AdjacencyDatabase], List[ctrl_types.ReceivedRouteDetail], Dict
+        Sequence[openr_types.AdjacencyDatabase],
+        Sequence[ctrl_types.ReceivedRouteDetail],
+        Mapping[str, kv_store_types.Value],
     ]:
         # get LSDB from Decision
-        adj_filter = ctrl_types.AdjacenciesFilter({area})
-        decision_adj_dbs = client.getDecisionAdjacenciesFiltered(adj_filter)
+        adj_filter = ctrl_types.AdjacenciesFilter(selectAreas={area})
+        decision_adj_dbs = await client.getDecisionAdjacenciesFiltered(adj_filter)
         route_filter = ctrl_types.ReceivedRouteFilter(areaName=area)
-        decision_prefix_dbs = client.getReceivedRoutesFiltered(route_filter)
+        decision_prefix_dbs = await client.getReceivedRoutesFiltered(route_filter)
 
-        area_id = utils.get_area_id(client, area)
+        area_id = await utils.get_area_id(client, area)
         # get LSDB from KvStore
-        params = kv_store_types.KeyDumpParams(Consts.ALL_DB_MARKER)
-        params.keys = [Consts.ALL_DB_MARKER]
+        params = kv_store_types.KeyDumpParams(keys=[Consts.ALL_DB_MARKER])
         if area_id is None:
-            kvstore_publication = client.getKvStoreKeyValsFiltered(params)
+            kvstore_publication = await client.getKvStoreKeyValsFiltered(params)
         else:
-            kvstore_publication = client.getKvStoreKeyValsFilteredArea(params, area_id)
+            kvstore_publication = await client.getKvStoreKeyValsFilteredArea(
+                params, area_id
+            )
 
         return (decision_adj_dbs, decision_prefix_dbs, kvstore_publication.keyVals)
 
@@ -546,9 +551,11 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
         """Returns status code. 0 = success, 1 = failure"""
 
         # fetch the adj database for one particular node
-        kvstore_adj_db = deserialize_thrift_py_object(
-            value.value, openr_types.AdjacencyDatabase
-        )
+        if value.value:
+            kvstore_adj_db = deserialize(openr_types.AdjacencyDatabase, value.value)
+        else:
+            kvstore_adj_db = openr_types.AdjacencyDatabase()
+
         node_name = kvstore_adj_db.thisNodeName
         kvstore_adj_node_names.add(node_name)
         if node_name not in {db.thisNodeName for db in decision_adj_dbs}:
@@ -598,14 +605,14 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
 
     def print_db_delta_prefix(
         self,
-        kvstore_keyvals: Dict,
+        kvstore_keyvals: Mapping[str, kv_store_types.Value],
         kvstore_prefix_node_names: Set,
         decision_prefix_dbs: Sequence[ctrl_types.ReceivedRouteDetail],
         json_opt: bool,
     ) -> Tuple[int, Set[str]]:
         """Returns status code. 0 = success, 1 = failure"""
 
-        prefix_maps = utils.collate_prefix_keys_py(kvstore_keyvals)
+        prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
         decision_prefix_nodes = set()
         for received_route_detail in decision_prefix_dbs:
             for route in received_route_detail.routes:
@@ -705,12 +712,12 @@ class DecisionValidateCmd(OpenrCtrlCmdPy):
         return return_code
 
 
-class DecisionRibPolicyCmd(OpenrCtrlCmdPy):
+class DecisionRibPolicyCmd(OpenrCtrlCmd):
     # @override
-    def _run(self, client: OpenrCtrl.Client, *args, **kwargs):
+    async def _run(self, client: OpenrCtrlCppClient.Async, *args, **kwargs):
         policy = None
         try:
-            policy = client.getRibPolicy()
+            policy = await client.getRibPolicy()
         except ctrl_types.OpenrError as e:
             print("Error: ", str(e), "\nSystem standard error: ", sys.stderr)
             return
@@ -742,11 +749,11 @@ class DecisionRibPolicyCmd(OpenrCtrlCmdPy):
                 print(f"        {neighbor}: {weight}")
 
 
-class ReceivedRoutesCmd(OpenrCtrlCmdPy):
+class ReceivedRoutesCmd(OpenrCtrlCmd):
     # @override
-    def _run(
+    async def _run(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         node: Optional[str],
         area: Optional[str],
@@ -756,39 +763,39 @@ class ReceivedRoutesCmd(OpenrCtrlCmdPy):
         *args,
         **kwargs,
     ) -> None:
-        routes = self.fetch(client, prefixes, node, area)
+        routes = await self.fetch(client, prefixes, node, area)
 
         if json_opt:
             print(serialize_json(routes))
         else:
-            self.render(routes, detailed, tag2name)
+            await self.render(routes, detailed, tag2name)
 
-    def fetch(
+    async def fetch(
         self,
-        client: OpenrCtrl.Client,
+        client: OpenrCtrlCppClient.Async,
         prefixes: List[str],
         node: Optional[str],
         area: Optional[str],
-    ) -> List[ctrl_types.ReceivedRouteDetail]:
+    ) -> Sequence[ctrl_types.ReceivedRouteDetail]:
         """
         Fetch the requested data
         """
 
         # Create filter
-        route_filter = ctrl_types.ReceivedRouteFilter()
-        if prefixes:
-            route_filter.prefixes = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
-        if node:
-            route_filter.nodeName = node
-        if area:
-            route_filter.areaName = area
+        route_filter = ctrl_types.ReceivedRouteFilter(
+            prefixes=[ipnetwork.ip_str_to_prefix(p) for p in prefixes]
+            if prefixes
+            else None,
+            nodeName=node,
+            areaName=area,
+        )
 
         # Get routes
-        return client.getReceivedRoutesFiltered(route_filter)
+        return await client.getReceivedRoutesFiltered(route_filter)
 
-    def render(
+    async def render(
         self,
-        routes: List[ctrl_types.ReceivedRouteDetail],
+        routes: Sequence[ctrl_types.ReceivedRouteDetail],
         detailed: bool,
         tag2name: bool,
     ) -> None:
@@ -802,7 +809,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmdPy):
             return (key.node, key.area)
 
         tag_to_name = (
-            utils.get_tag_to_name_map(self._get_config_py()) if tag2name else None
+            utils.get_tag_to_name_map(await self._get_config()) if tag2name else None
         )
 
         utils.print_route_details(routes, key_fn, detailed, tag_to_name)

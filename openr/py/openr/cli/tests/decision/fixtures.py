@@ -6,15 +6,23 @@
 
 # pyre-ignore-all-errors
 
-from openr.KvStore.ttypes import (
+from openr.thrift.KvStore.thrift_types import (
     InitializationEvent,
     KvStoreAreaSummary,
     Publication,
     Value,
 )
-from openr.Network.ttypes import BinaryAddress, IpPrefix
-from openr.OpenrCtrl.ttypes import NodeAndArea, ReceivedRoute, ReceivedRouteDetail
-from openr.Types.ttypes import (
+from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix, PrefixType
+from openr.thrift.OpenrConfig.thrift_types import (
+    PrefixForwardingAlgorithm,
+    PrefixForwardingType,
+)
+from openr.thrift.OpenrCtrl.thrift_types import (
+    NodeAndArea,
+    ReceivedRoute,
+    ReceivedRouteDetail,
+)
+from openr.thrift.Types.thrift_types import (
     Adjacency,
     AdjacencyDatabase,
     PerfEvent,
@@ -22,7 +30,6 @@ from openr.Types.ttypes import (
     PrefixEntry,
     PrefixMetrics,
 )
-
 
 ## Fixtures for testing decision validate
 
@@ -130,9 +137,9 @@ RECEIVED_ROUTES_DB_OK = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -164,9 +171,9 @@ RECEIVED_ROUTES_DB_OK = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -198,9 +205,9 @@ RECEIVED_ROUTES_DB_OK = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -232,9 +239,9 @@ RECEIVED_ROUTES_DB_OK = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -436,9 +443,9 @@ MOCKED_RECEIVED_ROUTES = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -470,9 +477,9 @@ MOCKED_RECEIVED_ROUTES = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -504,9 +511,9 @@ MOCKED_RECEIVED_ROUTES = [
                         ),
                         prefixLength=64,
                     ),
-                    type=1,
-                    forwardingType=0,
-                    forwardingAlgorithm=0,
+                    type=PrefixType.LOOPBACK,
+                    forwardingType=PrefixForwardingType.IP,
+                    forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,

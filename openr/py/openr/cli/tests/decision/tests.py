@@ -8,7 +8,7 @@
 
 from copy import deepcopy
 from typing import Optional
-from unittest.mock import MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
@@ -51,9 +51,9 @@ class CliDecisionTests(TestCase):
         )
         self.assertEqual(0, invoked_return.exit_code)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
-    def test_decision_validate_all_areas(self, mocked_openr_client: MagicMock) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_decision_validate_all_areas(self, mocked_openr_client: AsyncMock) -> None:
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         # Have some Areas Returned
@@ -113,7 +113,10 @@ class CliDecisionTests(TestCase):
 
         # Test Bad - Break timestamp on Decision ADJs
         decision_adj_bad = deepcopy(DECISION_ADJ_DBS_OK)
-        decision_adj_bad[0].adjacencies[0].timestamp = BAD_VALIDATE_TIMESTAMP
+        new_adjacencies = list(decision_adj_bad[0].adjacencies)
+        new_adjacencies[0] = new_adjacencies[0](timestamp=BAD_VALIDATE_TIMESTAMP)
+        decision_adj_bad[0] = decision_adj_bad[0](adjacencies=new_adjacencies)
+
         mocked_returned_connection.getDecisionAdjacenciesFiltered.return_value = (
             decision_adj_bad
         )
@@ -128,18 +131,17 @@ class CliDecisionTests(TestCase):
                 catch_exceptions=False,
             )
         self.assertEqual(3, invoked_return.exit_code)
-        print(invoked_return.stdout)
         # Print vertical table adds spaces which are difficult to catch so we remove them
         self.assertEqual(
             EXPECTED_VALIDATE_OUTPUT_BAD.replace(" ", ""),
             invoked_return.stdout.replace(" ", ""),
         )
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
     def test_decision_received_routes_json(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         # Retturn a List of ReceivedRouteDetail
@@ -154,11 +156,11 @@ class CliDecisionTests(TestCase):
         self.assertEqual(0, invoked_return.exit_code)
         self.assertEqual(EXPECTED_ROUTES_RECEIVED_JSON, invoked_return.stdout)
 
-    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CLIENT_PY)
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
     def test_decision_received_routes_json_no_data(
-        self, mocked_openr_client: MagicMock
+        self, mocked_openr_client: AsyncMock
     ) -> None:
-        mocked_returned_connection = helpers.get_enter_thrift_magicmock(
+        mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
         )
         # Retturn a List of ReceivedRouteDetail

@@ -338,13 +338,16 @@ class OpenrCtrlCmd(OpenrCtrlCmdPy):
         """
 
         async def _wrapper() -> int:
+            ret_val: Optional[int] = 0
             async with get_openr_ctrl_cpp_client(
                 self.host,
                 self.cli_opts,
                 client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
             ) as client:
-                await self._run(client, *args, **kwargs)
-            return 0
+                ret_val = await self._run(client, *args, **kwargs)
+            if ret_val is None:
+                ret_val = 0
+            return ret_val
 
         return asyncio.run(_wrapper())
 

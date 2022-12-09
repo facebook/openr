@@ -72,7 +72,7 @@ class KvStoreCmdBase(OpenrCtrlCmdPy):
         self.area_feature = True
 
         # get list of areas if area feature is supported.
-        self.areas = utils.get_areas_list(client)
+        self.areas = utils.get_areas_list_py(client)
         if hasattr(self.cli_opts, "area"):
             if self.cli_opts.area != "":
                 if self.cli_opts.area in self.areas:
@@ -303,11 +303,11 @@ class KvPrefixesCmd(KvStoreCmdBase):
         for _, val in resp.items():
             all_kv.keyVals.update(val.keyVals)
         if json:
-            utils.print_prefixes_json(
+            utils.print_prefixes_json_py(
                 all_kv, nodes, prefix, client_type, self.iter_publication
             )
         else:
-            utils.print_prefixes_table(
+            utils.print_prefixes_table_py(
                 all_kv, nodes, prefix, client_type, self.iter_publication
             )
 
