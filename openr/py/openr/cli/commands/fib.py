@@ -290,10 +290,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
             )
             (fib_unicast_routes, fib_mpls_routes) = utils.get_routes(fib_route_db)
 
-            agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
-                clientId=self.fib_agent_client.client_id
-            )
-
         except Exception as e:
             print("Failed to validate Fib routes.")
             print("Exception: {}".format(e))
@@ -321,6 +317,10 @@ class FibValidateRoutesCmd(FibAgentCmd):
 
         # ATTN: with dryrun=true. Fib module will skip programming routes
         if not openr_config.dryrun:
+            agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
+                clientId=self.fib_agent_client.client_id
+            )
+
             # compare UNICAST route database between Fib module and FibAgent
             (ret, _) = utils.compare_route_db(
                 fib_unicast_routes,
