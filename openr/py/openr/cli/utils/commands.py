@@ -12,25 +12,20 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 
 import bunch
 import click
-from openr.clients.openr_client import (
-    get_openr_ctrl_client_py,
-    get_openr_ctrl_cpp_client,
-)
-from openr.KvStore import ttypes as kv_store_types
+from openr.clients.openr_client import get_openr_ctrl_cpp_client
 from openr.thrift.KvStore.thrift_types import (
     InitializationEvent,
     InitializationEventTimeDuration,
     InitializationEventTimeLabels,
     KeyDumpParams,
-    Publication,
     Value,
 )
 from openr.utils import printing
 from openr.utils.consts import Consts
 from thrift.python.client import ClientType
 
-# to be deprecated
-class OpenrCtrlCmdPy:
+
+class OpenrCtrlCmd:
     """
     Command wrapping OpenrCtrl.Client
     """
@@ -53,12 +48,19 @@ class OpenrCtrlCmdPy:
         run method that invokes _run with client and arguments
         """
 
-        ret_val: Optional[int] = 0
-        with get_openr_ctrl_client_py(self.host, self.cli_opts) as client:
-            ret_val = self._run(client, *args, **kwargs)
+        async def _wrapper() -> int:
+            ret_val: Optional[int] = 0
+            async with get_openr_ctrl_cpp_client(
+                self.host,
+                self.cli_opts,
+                client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
+            ) as client:
+                ret_val = await self._run(client, *args, **kwargs)
             if ret_val is None:
                 ret_val = 0
-        return ret_val
+            return ret_val
+
+        return asyncio.run(_wrapper())
 
     def _run(self, client: Any, *args, **kwargs) -> Any:
         """
@@ -72,10 +74,10 @@ class OpenrCtrlCmdPy:
 
         raise NotImplementedError
 
-    def _get_config_py(self) -> Dict[str, Any]:
+    async def _get_config(self) -> Dict[str, Any]:
         if self._config is None:
-            with get_openr_ctrl_client_py(self.host, self.cli_opts) as client:
-                resp = client.getRunningConfig()
+            async with get_openr_ctrl_cpp_client(self.host, self.cli_opts) as client:
+                resp = await client.getRunningConfig()
                 self._config = json.loads(resp)
         return self._config
 
@@ -139,28 +141,30 @@ class OpenrCtrlCmdPy:
                     ).strip("\n")
                 )
 
-    # common function used by decision, kvstore module
-    def buildKvStoreKeyDumpParamsPy(
+    def buildKvStoreKeyDumpParams(
         self,
         prefix: str = Consts.ALL_DB_MARKER,
         originator_ids: Optional[Set[str]] = None,
-        keyval_hash: Optional[Dict[str, kv_store_types.Value]] = None,
-    ) -> kv_store_types.KeyDumpParams:
+        keyval_hash: Optional[Dict[str, Value]] = None,
+    ) -> KeyDumpParams:
         """
         Build KeyDumpParams based on input parameter list
+
+        In thrift-python, the objects are immutable, and hence
+        we should assign the attributes upon initialization
         """
-        params = kv_store_types.KeyDumpParams(prefix)
-        params.originatorIds = originator_ids if originator_ids else None
-        params.keyValHashes = keyval_hash if keyval_hash else None
-        if prefix:
-            params.keys = [prefix]
 
-        return params
+        return KeyDumpParams(
+            prefix=prefix,
+            originatorIds=originator_ids,
+            keyValHashes=keyval_hash,
+            keys=[prefix] if prefix else None,
+        )
 
-    def validate_init_event_py(
+    def validate_init_event(
         self,
-        init_event_dict: Dict[kv_store_types.InitializationEvent, int],
-        init_event: kv_store_types.InitializationEvent,
+        init_event_dict: Mapping[InitializationEvent, int],
+        init_event: InitializationEvent,
     ) -> Tuple[bool, Optional[str], Optional[str]]:
         """
         Returns True if the init_event specified is published within it's defined time limit
@@ -177,20 +181,15 @@ class OpenrCtrlCmdPy:
         # If the init_event is published, stores the duration as a stylized string
         dur_str = None
 
-        # TODO: (klu02) Update the client to thrift.py3 so we can use thrift.py3 types instead of legacy
-        init_event_name = kv_store_types.InitializationEvent._VALUES_TO_NAMES[
-            init_event
-        ]
-
         if init_event not in init_event_dict:
             is_pass = False
-            err_msg_str = f"{init_event_name} event is not published"
+            err_msg_str = f"{init_event.name} event is not published"
         else:
             warning_label = InitializationEventTimeLabels[
-                f"{init_event_name}_WARNING_MS"
+                f"{init_event.name}_WARNING_MS"
             ]
             timeout_label = InitializationEventTimeLabels[
-                f"{init_event_name}_TIMEOUT_MS"
+                f"{init_event.name}_TIMEOUT_MS"
             ]
 
             warning_time = InitializationEventTimeDuration[warning_label]
@@ -204,7 +203,7 @@ class OpenrCtrlCmdPy:
                 dur_str = click.style(str(init_event_dur), fg="yellow")
             else:
                 dur_str = click.style(str(init_event_dur), fg="red")
-                err_msg_str = f"{init_event_name} event duration exceeds acceptable time limit (>{timeout_time}ms)"
+                err_msg_str = f"{init_event.name} event duration exceeds acceptable time limit (>{timeout_time}ms)"
                 is_pass = False
 
         return is_pass, err_msg_str, dur_str
@@ -283,99 +282,3 @@ class OpenrCtrlCmdPy:
                 return False
 
         return True
-
-
-class OpenrCtrlCmd(OpenrCtrlCmdPy):
-    # @override
-    def run(self, *args, **kwargs) -> int:
-        """
-        run method that invokes _run with client and arguments
-        """
-
-        async def _wrapper() -> int:
-            ret_val: Optional[int] = 0
-            async with get_openr_ctrl_cpp_client(
-                self.host,
-                self.cli_opts,
-                client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
-            ) as client:
-                ret_val = await self._run(client, *args, **kwargs)
-            if ret_val is None:
-                ret_val = 0
-            return ret_val
-
-        return asyncio.run(_wrapper())
-
-    async def _get_config(self) -> Dict[str, Any]:
-        if self._config is None:
-            async with get_openr_ctrl_cpp_client(self.host, self.cli_opts) as client:
-                resp = await client.getRunningConfig()
-                self._config = json.loads(resp)
-        return self._config
-
-    def buildKvStoreKeyDumpParams(
-        self,
-        prefix: str = Consts.ALL_DB_MARKER,
-        originator_ids: Optional[Set[str]] = None,
-        keyval_hash: Optional[Dict[str, Value]] = None,
-    ) -> KeyDumpParams:
-        """
-        Build KeyDumpParams based on input parameter list
-
-        In thrift-python, the objects are immutable, and hence
-        we should assign the attributes upon initialization
-        """
-
-        return KeyDumpParams(
-            prefix=prefix,
-            originatorIds=originator_ids,
-            keyValHashes=keyval_hash,
-            keys=[prefix] if prefix else None,
-        )
-
-    def validate_init_event(
-        self,
-        init_event_dict: Mapping[InitializationEvent, int],
-        init_event: InitializationEvent,
-    ) -> Tuple[bool, Optional[str], Optional[str]]:
-        """
-        Returns True if the init_event specified is published within it's defined time limit
-        If init_event is published, returns the duration as a stylized string. If the checks fail,
-        returns False along with an error message.
-        """
-
-        # Keeps track of whether or not the checks pass
-        is_pass = True
-
-        # If the check fails, this will hold the error msg string
-        err_msg_str = None
-
-        # If the init_event is published, stores the duration as a stylized string
-        dur_str = None
-
-        if init_event not in init_event_dict:
-            is_pass = False
-            err_msg_str = f"{init_event.name} event is not published"
-        else:
-            warning_label = InitializationEventTimeLabels[
-                f"{init_event.name}_WARNING_MS"
-            ]
-            timeout_label = InitializationEventTimeLabels[
-                f"{init_event.name}_TIMEOUT_MS"
-            ]
-
-            warning_time = InitializationEventTimeDuration[warning_label]
-            timeout_time = InitializationEventTimeDuration[timeout_label]
-
-            init_event_dur = init_event_dict[init_event]
-
-            if init_event_dur < warning_time:
-                dur_str = click.style(str(init_event_dur), fg="green")
-            elif init_event_dur < timeout_time:
-                dur_str = click.style(str(init_event_dur), fg="yellow")
-            else:
-                dur_str = click.style(str(init_event_dur), fg="red")
-                err_msg_str = f"{init_event.name} event duration exceeds acceptable time limit (>{timeout_time}ms)"
-                is_pass = False
-
-        return is_pass, err_msg_str, dur_str
