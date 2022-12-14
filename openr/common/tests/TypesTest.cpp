@@ -54,6 +54,13 @@ TEST(TypesTest, fromStrTest) {
   EXPECT_TRUE(PrefixKey::fromStr(invalidStrWithBadPrefixV2, areaId).hasError());
 }
 
+TEST(TypesTest, RegexSetTest) {
+  EXPECT_NO_THROW(RegexSet{{"prefix:good"}});
+
+  EXPECT_THROW(
+      RegexSet{{"prefix:[addr_without_right_bracket"}}, RegexSetException);
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

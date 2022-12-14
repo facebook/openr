@@ -326,14 +326,29 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
         // KvStoreFilters contains `thrift::FilterOperator`
         // Default to thrift::FilterOperator::OR
 
-        const auto keyPrefixMatch =
-            KvStoreFilters(keyPrefixList, *keyDumpParams.originatorIds(), oper);
+        thrift::Publication thriftPub;
 
-        auto thriftPub = dumpAllWithFilters(
-            area,
-            kvStoreDb.getKeyValueMap(),
-            keyPrefixMatch,
-            *keyDumpParams.doNotPublishValue());
+        try {
+          const auto keyPrefixMatch = KvStoreFilters(
+              keyPrefixList, *keyDumpParams.originatorIds(), oper);
+          thriftPub = dumpAllWithFilters(
+              area,
+              kvStoreDb.getKeyValueMap(),
+              keyPrefixMatch,
+              *keyDumpParams.doNotPublishValue());
+        } catch (RegexSetException const& err) {
+          XLOG(ERR) << "Fail to create KvStoreFilters:"
+                    << folly::exceptionStr(err);
+          XLOG(ERR) << "Dump without filters";
+          const auto keyPrefixMatch =
+              KvStoreFilters({}, *keyDumpParams.originatorIds(), oper);
+          thriftPub = dumpAllWithFilters(
+              area,
+              kvStoreDb.getKeyValueMap(),
+              keyPrefixMatch,
+              *keyDumpParams.doNotPublishValue());
+        }
+
         if (keyDumpParams.keyValHashes().has_value()) {
           thriftPub = dumpDifference(
               area, *thriftPub.keyVals(), keyDumpParams.keyValHashes().value());

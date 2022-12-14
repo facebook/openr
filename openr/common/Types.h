@@ -21,6 +21,19 @@ namespace openr {
 
 BOOST_STRONG_TYPEDEF(std::string, AreaId);
 
+struct RegexSetException : public std::exception {
+ public:
+  explicit RegexSetException(const std::string& msg) : msg_(msg) {}
+
+  inline const char*
+  what(void) const noexcept override {
+    return msg_.c_str();
+  }
+
+ private:
+  const std::string msg_;
+};
+
 struct TtlCountdownQueueEntry {
   std::chrono::steady_clock::time_point expiryTime;
   std::string key;

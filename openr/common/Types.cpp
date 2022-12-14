@@ -24,15 +24,15 @@ RegexSet::RegexSet(std::vector<std::string> const& keyPrefixList) {
 
   for (auto const& keyPrefix : keyPrefixList) {
     if (regexSet_->Add(keyPrefix, &re2AddError) < 0) {
-      XLOG(FATAL) << fmt::format(
+      throw RegexSetException(fmt::format(
           "Failed to add prefixes to RE2 set: '{}', error: '{}'",
           keyPrefix,
-          re2AddError);
+          re2AddError));
       return;
     }
   }
   if (!regexSet_->Compile()) {
-    XLOG(FATAL) << "Failed to compile re2 set";
+    throw RegexSetException("Failed to compile re2 set");
   }
 }
 

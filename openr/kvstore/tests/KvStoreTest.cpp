@@ -210,6 +210,7 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   kvStore_->run();
 
   const std::string prefixRegex = "10\\.0\\.0\\.";
+  const std::string badPrefixRegex = "[10\\.0\\.0\\.";
   const std::string prefix1 = "10.0.0.96";
   const std::string prefix2 = "10.0.0.128";
   const std::string prefix3 = "192.10.0.0";
@@ -269,6 +270,28 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix2), 1);
   EXPECT_EQ(keysFromStore.count(prefix3), 0);
   EXPECT_EQ(keysFromStore.count(prefix4), 0);
+
+  // Check that all keys are retrieved when bad prefix "[10.0.0" (missing
+  // right bracket) is given.
+  try {
+    thrift::KeyDumpParams params;
+    params.keys() = {badPrefixRegex};
+    auto pub = *kvStore_->getKvStore()
+                    ->semifuture_dumpKvStoreKeys(
+                        std::move(params), {kTestingAreaName.t})
+                    .get()
+                    ->begin();
+    maybeKeysAfterInsert = *pub.keyVals();
+  } catch (const std::exception& ex) {
+    maybeKeysAfterInsert = std::nullopt;
+  }
+  EXPECT_TRUE(maybeKeysAfterInsert.has_value());
+  keysFromStore = maybeKeysAfterInsert.value();
+  EXPECT_EQ(keysFromStore.size(), 4);
+  EXPECT_EQ(keysFromStore.count(prefix1), 1);
+  EXPECT_EQ(keysFromStore.count(prefix2), 1);
+  EXPECT_EQ(keysFromStore.count(prefix3), 1);
+  EXPECT_EQ(keysFromStore.count(prefix4), 1);
 
   // Cleanup.
   kvStore_->stop();
