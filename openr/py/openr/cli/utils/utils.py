@@ -2082,29 +2082,6 @@ def get_routes(
     return (unicast_routes, mpls_routes)
 
 
-# to be deprecated
-def get_routes_py(
-    route_db: openr_types_py.RouteDatabase,
-) -> Tuple[List[network_types_py.UnicastRoute], List[network_types_py.MplsRoute]]:
-    """
-    Find all routes for each prefix in routeDb
-
-    :param route_db: RouteDatabase
-    :return (
-        list of UnicastRoute of prefix & corresponding shortest nexthops
-        list of MplsRoute of prefix & corresponding shortest nexthops
-    )
-    """
-
-    unicast_routes, mpls_routes = None, None
-    unicast_routes = sorted(
-        route_db.unicastRoutes, key=lambda x: x.dest.prefixAddress.addr
-    )
-    mpls_routes = sorted(route_db.mplsRoutes, key=lambda x: x.topLabel)
-
-    return (unicast_routes, mpls_routes)
-
-
 async def get_areas_list(client: OpenrCtrlCppClient.Async) -> Set[str]:
     return {a.area_id for a in (await client.getRunningConfigThrift()).areas}
 
