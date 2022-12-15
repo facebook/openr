@@ -1,14 +1,46 @@
 # Netlink C++ Interface
 
+## Netlink Overview
+
+---
+
+Linux `Netlink` is a messaging system for intra-kernel as well as kernel and
+user-space processes to program the Linux network forwarding stack. Networking
+utilities like `iproute2` and `iptables` use `Netlink` to program and gather
+networking information from the Linux Kernel. Introduced in RFC 3549, `Netlink`
+is a more flexible successor to `ioctl`. `ioctl` used system calls to program
+and poll the kernel for updates, however, `Netlink` is asynchronous and supports
+multicast communication: multiple user-space processes can listen to updates
+from the kernel. To program the kernel, a process can send a Netlink message(s)
+to the Linux socket and listen to responses.
+
 ## Introduction
 
 ---
 
+Each Netlink packet comprises of one or more Netlink messages. Each Netlink
+message has a header
+
+```sh
+struct nlmsghdr {
+    __u32 nlmsg_len;    /* Length of message including header */
+    __u16 nlmsg_type;   /* Type of message content */
+    __u16 nlmsg_flags;  /* Additional flags */
+    __u32 nlmsg_seq;    /* Sequence number */
+    __u32 nlmsg_pid;    /* Sender port ID */
+};
+```
+
 This library provides C++ APIs to interact with kernel for networking state via
 netlink protocol. The functionality is intentionally kept minimal to the needs
-of Open/R, but it can be extended. Below we describe the organization of code in
-this directory. Refer to inline code documentation in header files for more
-information.
+of Open/R, but it can be extended. In Open/R, we primarily use the
+`NETLINK_ROUTE` family to manage the links, addresses, neighbor and route
+entries. `nlmsghdr.nlmsg_type` reflects the type of the Netlink operation. Based
+on the type of the message, each message has an ancillary netlink header whose
+fields on dependent on the type of the operation. Each message can also have a
+bunch of attributes and sub-attributes (mainly used for multiple next-hops for
+ECMP/UCMP). Below we describe the organization of code in this directory. Refer
+to inline code documentation in header files for more information.
 
 ## Deep Dive
 
