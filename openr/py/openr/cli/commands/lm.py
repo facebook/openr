@@ -131,7 +131,7 @@ class LMCmdBase(OpenrCtrlCmd):
     async def toggle_link_metric_inc(
         self,
         client: OpenrCtrlCppClient.Async,
-        interface: str,
+        interfaces: List[str],
         metric_inc: int,
         yes: bool,
     ) -> None:
@@ -143,39 +143,61 @@ class LMCmdBase(OpenrCtrlCmd):
         # ATTN:
         #   - sys.exit(0) will NOT print out existing AdjacencyDatabase
         #   - return will print out existing AdjacencyDatabase
+
+        # Check input before executing anything
         if metric_inc < 0:
             print(f"Can't set negative link metric increment on: {host}")
             sys.exit(0)
 
-        if interface not in links.interfaceDetails:
-            print(f"No such interface: {interface} on node: {host}")
-            sys.exit(0)
+        for interface in interfaces:
+            if interface not in links.interfaceDetails:
+                print(f"No such interface: {interface} on node: {host}")
+                sys.exit(0)
 
-        if (
-            metric_inc
-            and links.interfaceDetails[interface].linkMetricIncrementVal == metric_inc
-        ):
-            print(f"Link metric increment already set with: {metric_inc}. No-op.\n")
-            return
+        intefaces_to_process = []
 
-        if (
-            not metric_inc
-            and links.interfaceDetails[interface].linkMetricIncrementVal == 0
-        ):
-            print(f"No link metric increment has been set on: {interface}. No-op.\n")
-            return
+        # Get Confirmation
+        for interface in interfaces:
+            if (
+                metric_inc
+                and links.interfaceDetails[interface].linkMetricIncrementVal
+                == metric_inc
+            ):
+                print(
+                    f"Link metric increment already set with: {metric_inc} for interface {interface}. No-op.\n"
+                )
+                continue
+
+            if (
+                not metric_inc
+                and links.interfaceDetails[interface].linkMetricIncrementVal == 0
+            ):
+                print(
+                    f"No link metric increment has been set on: {interface}. No-op.\n"
+                )
+                continue
+            intefaces_to_process.append(interface)
 
         action = "set link metric inc" if metric_inc else "unset link metric inc"
         question_str = "Are you sure to {} for link {} on node {} ?"
-        if not utils.yesno(question_str.format(action, interface, host), yes):
+        if not utils.yesno(
+            question_str.format(action, ",".join(intefaces_to_process), host), yes
+        ):
             sys.exit(0)
 
-        if metric_inc:
-            await client.setInterfaceMetricIncrement(interface, metric_inc)
-        else:
-            await client.unsetInterfaceMetricIncrement(interface)
+        # Fail stop. Weak guarantee. No-op are skip[ed].
+        # Fail to drain a link will cause the script to stop, without reverting the links that are
+        # already drained.
+        for interface in intefaces_to_process:
+            if metric_inc:
+                await client.setInterfaceMetricIncrement(interface, metric_inc)
+            else:
+                await client.unsetInterfaceMetricIncrement(interface)
+            print(f"Successfully {action} for interface {interface} on node {host}.\n")
 
-        print(f"Successfully {action} for interface {interface} on node {host}.\n")
+        print(
+            f"Success {len(intefaces_to_process)}, Skipped {len(interfaces) - len(intefaces_to_process)}"
+        )
 
     def check_link_overriden(
         self, links: DumpLinksReply, interface: str, metric: int
@@ -405,25 +427,25 @@ class IncreaseLinkMetricCmd(LMCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        interface: str,
+        interfaces: List[str],
         metric: str,
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        await self.toggle_link_metric_inc(client, interface, int(metric), yes)
+        await self.toggle_link_metric_inc(client, interfaces, int(metric), yes)
 
 
 class ClearLinkMetricCmd(LMCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        interface: str,
+        interfaces: List[str],
         yes: bool,
         *args,
         **kwargs,
     ) -> None:
-        await self.toggle_link_metric_inc(client, interface, 0, yes)
+        await self.toggle_link_metric_inc(client, interfaces, 0, yes)
 
 
 # [TO BE DEPRECATED]

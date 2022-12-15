@@ -202,7 +202,7 @@ class ClearNodeMetricCli:
 
 class IncreaseLinkMetricCli:
     @click.command()
-    @click.argument("interface")
+    @click.argument("interface", nargs=-1, required=True)
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
@@ -221,7 +221,7 @@ class IncreaseLinkMetricCli:
 
 class ClearLinkMetricCli:
     @click.command()
-    @click.argument("interface")
+    @click.argument("interface", nargs=-1, required=True)
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
     @click.pass_obj
     def clear_link_metric(cli_opts, interface, yes):  # noqa: B902
