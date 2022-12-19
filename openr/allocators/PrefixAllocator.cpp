@@ -94,7 +94,7 @@ PrefixAllocator::staticAllocation() {
   kvStoreClient_->subscribeKey(
       area_,
       Constants::kStaticPrefixAllocParamKey.toString(),
-      [&](std::string const& key, std::optional<thrift::Value> value) {
+      [&](std::string const& key, std::optional<thrift::Value> value) noexcept {
         CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
         if (value.has_value()) {
           processStaticPrefixAllocUpdate(value.value());
@@ -176,7 +176,7 @@ PrefixAllocator::dynamicAllocationLeafNode() {
   kvStoreClient_->subscribeKey(
       area_,
       Constants::kSeedPrefixAllocParamKey.toString(),
-      [&](std::string const& key, std::optional<thrift::Value> value) {
+      [&](std::string const& key, std::optional<thrift::Value> value) noexcept {
         CHECK_EQ(Constants::kSeedPrefixAllocParamKey.toString(), key);
         if (value.has_value()) {
           processAllocParamUpdate(value.value());
@@ -187,7 +187,7 @@ PrefixAllocator::dynamicAllocationLeafNode() {
   kvStoreClient_->subscribeKey(
       area_,
       Constants::kStaticPrefixAllocParamKey.toString(),
-      [&](std::string const& key, std::optional<thrift::Value> value) {
+      [&](std::string const& key, std::optional<thrift::Value> value) noexcept {
         CHECK_EQ(Constants::kStaticPrefixAllocParamKey.toString(), key);
         if (value.has_value()) {
           processNetworkAllocationsUpdate(value.value());
