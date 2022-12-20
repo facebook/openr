@@ -159,14 +159,13 @@ TEST_F(OpenrEventBaseTestFixture, SocketFdPollTest) {
   // create signalfd and register for polling. unblock baton on successful poll
   int testFd = eventfd(0 /* initial value */, 0 /* flags */);
   evb.getEvb()->runInEventBaseThreadAndWait([&]() {
-    evb.addSocketFd(
-        testFd, folly::EventHandler::READ, [&](uint32_t revents) noexcept {
-          EXPECT_TRUE(revents & folly::EventHandler::READ);
-          waitBaton.post();
-          uint64_t buf;
-          EXPECT_EQ(
-              sizeof(buf), read(testFd, static_cast<void*>(&buf), sizeof(buf)));
-        });
+    evb.addSocketFd(testFd, folly::EventHandler::READ, [&](uint32_t revents) {
+      EXPECT_TRUE(revents & folly::EventHandler::READ);
+      waitBaton.post();
+      uint64_t buf;
+      EXPECT_EQ(
+          sizeof(buf), read(testFd, static_cast<void*>(&buf), sizeof(buf)));
+    });
   });
 
   // Perform write

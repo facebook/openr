@@ -473,8 +473,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   kvStoreClient->subscribeKey(
       kTestingAreaName,
       keyStr,
-      [&](std::string const&,
-          std::optional<thrift::Value> val) mutable noexcept {
+      [&](std::string const&, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
         auto db = readThriftObjStr<thrift::PrefixDatabase>(
             val->value().value(), serializer);
@@ -2747,8 +2746,7 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
   kvStoreClient->subscribeKey(
       kTestingAreaName,
       keyStr,
-      [&](std::string const&,
-          std::optional<thrift::Value> val) mutable noexcept {
+      [&](std::string const&, std::optional<thrift::Value> val) mutable {
         ASSERT_TRUE(val.has_value());
         auto db = readThriftObjStr<thrift::PrefixDatabase>(
             val->value().value(), serializer);

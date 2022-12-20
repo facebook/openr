@@ -658,7 +658,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
     client1->subscribeKey(
         kTestingAreaName,
         "test_key1",
-        [&](std::string const& k, std::optional<thrift::Value> v) noexcept {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           // should be called when kvStore setKey() called for test_key1
           EXPECT_EQ("test_key1", k);
           EXPECT_EQ(1, *v.value().version());
@@ -669,7 +669,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
     client1->subscribeKey(
         kTestingAreaName,
         "test_key2",
-        [&](std::string const& k, std::optional<thrift::Value> v) noexcept {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           // should be called when setKet() called for test_key2
           EXPECT_EQ("test_key2", k);
           EXPECT_LT(0, *v.value().version());
@@ -718,7 +718,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
     auto keyValue = client2->subscribeKey(
         kTestingAreaName,
         "test_key_subs_cb",
-        [&](std::string const&, std::optional<thrift::Value>) noexcept {},
+        [&](std::string const&, std::optional<thrift::Value>) {},
         true);
     ASSERT_TRUE(keyValue.has_value());
     EXPECT_EQ("test_key_subs_cb_val", keyValue.value().value());
@@ -733,7 +733,7 @@ TEST(KvStoreClientInternal, SubscribeApiTest) {
     client2->subscribeKey(
         kTestingAreaName,
         "test_key_exp",
-        [&](std::string const& k, std::optional<thrift::Value> v) noexcept {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           if (!v.has_value()) {
             EXPECT_EQ("test_key_exp", k);
             keyExpKeyCbCnt++;
@@ -800,7 +800,7 @@ TEST(KvStoreClientInternal, SubscribeKeyFilterApiTest) {
     // using store->setKey should trigger the callback, key1CbCnt++
     client->subscribeKeyFilter(
         std::move(kvFilters),
-        [&](std::string const& k, std::optional<thrift::Value> v) noexcept {
+        [&](std::string const& k, std::optional<thrift::Value> v) {
           // cb will be triggered when setKey() is called for test_key1
           EXPECT_THAT(k, testing::StartsWith("test_"));
           EXPECT_EQ(1, *v.value().version());

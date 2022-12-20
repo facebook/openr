@@ -26,8 +26,7 @@ KvStoreAgent::KvStoreAgent(
   kvStoreClient_->subscribeKeyFilter(
       KvStoreFilters({keyPrefix}, {} /* originatorIds */),
       [this, nodeId](
-          const std::string& key,
-          const std::optional<thrift::Value>& value) noexcept {
+          const std::string& key, const std::optional<thrift::Value>& value) {
         if (0 == key.find(agentKeyPrefix) &&
             *value.value().originatorId() != nodeId && value.value().value()) {
           // Lets check out what some other node's value is
