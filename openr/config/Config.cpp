@@ -115,31 +115,6 @@ Config::createPrefixAllocationParams(
 }
 
 void
-Config::checkPrependLabelConfig(
-    const openr::thrift::AreaConfig& areaConf) const {
-  // Check label range values for prepend labels
-  if (areaConf.prepend_label_ranges().has_value()) {
-    const auto& v4LblRange = *areaConf.prepend_label_ranges()->v4();
-    if (not isLabelRangeValid(v4LblRange)) {
-      throw std::invalid_argument(fmt::format(
-          "v4: prepend label range [{}, {}] is invalid for area id {}",
-          *v4LblRange.start_label(),
-          *v4LblRange.end_label(),
-          *areaConf.area_id()));
-    }
-
-    const auto& v6LblRange = *areaConf.prepend_label_ranges()->v6();
-    if (not isLabelRangeValid(v6LblRange)) {
-      throw std::invalid_argument(fmt::format(
-          "v6: prepend label range [{}, {}] is invalid for area id {}",
-          *v6LblRange.start_label(),
-          *v6LblRange.end_label(),
-          *areaConf.area_id()));
-    }
-  }
-}
-
-void
 Config::checkAdjacencyLabelConfig(
     const openr::thrift::AreaConfig& areaConf) const {
   if (areaConf.sr_adj_label().has_value()) {
@@ -234,7 +209,6 @@ Config::populateAreaConfig() {
 
     checkNodeSegmentLabelConfig(areaConf);
     checkAdjacencyLabelConfig(areaConf);
-    checkPrependLabelConfig(areaConf);
   }
 }
 

@@ -165,9 +165,6 @@ toString(thrift::PrefixEntry const& entry, bool detailed) {
   if (entry.minNexthop()) {
     ss << ", NM: " << *entry.minNexthop();
   }
-  if (entry.prependLabel()) {
-    ss << ", PL: " << *entry.prependLabel();
-  }
   if (entry.weight()) {
     ss << ", W: " << *entry.weight();
   }
@@ -525,17 +522,6 @@ createPrefixEntry(
   prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
   prefixEntry.minNexthop().from_optional(minNexthop);
   prefixEntry.weight().from_optional(weight);
-  return prefixEntry;
-}
-
-// TODO: Audit which util functions in this file are only used in unit test.
-// Move functions only used in unit tests to be closer to unit tests, or create
-// a util_test.h/cpp to hold those ones.
-thrift::PrefixEntry
-createPrefixEntryWithPrependLabel(
-    thrift::IpPrefix prefix, std::optional<int32_t> prependLabel) {
-  auto prefixEntry = createPrefixEntry(prefix, thrift::PrefixType::BGP);
-  prefixEntry.prependLabel().from_optional(prependLabel);
   return prefixEntry;
 }
 

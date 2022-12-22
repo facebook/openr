@@ -195,7 +195,6 @@ createPrefixDbWithKspfAlgo(
     thrift::PrefixDatabase const& prefixDb,
     std::optional<thrift::PrefixType> prefixType = std::nullopt,
     std::optional<thrift::IpPrefix> prefix = std::nullopt,
-    std::optional<uint32_t> prependLabel = std::nullopt,
     bool v4Enabled = false) {
   thrift::PrefixDatabase newPrefixDb = prefixDb;
 
@@ -214,9 +213,6 @@ createPrefixDbWithKspfAlgo(
     entry.forwardingAlgorithm() =
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     entry.type() = thrift::PrefixType::BGP;
-    if (prependLabel.has_value()) {
-      entry.prependLabel() = prependLabel.value();
-    }
     newPrefixDb.prefixEntries()->push_back(entry);
   }
 
@@ -1884,7 +1880,6 @@ class SimpleRingMeshTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb1);
     updatePrefixDatabase(
@@ -1895,7 +1890,6 @@ class SimpleRingMeshTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb2);
     updatePrefixDatabase(
@@ -1906,7 +1900,6 @@ class SimpleRingMeshTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb3);
     updatePrefixDatabase(
@@ -1917,7 +1910,6 @@ class SimpleRingMeshTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb4);
   }
@@ -2083,7 +2075,6 @@ class SimpleRingTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb1);
     updatePrefixDatabase(
@@ -2094,7 +2085,6 @@ class SimpleRingTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb2);
     updatePrefixDatabase(
@@ -2105,7 +2095,6 @@ class SimpleRingTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb3);
     updatePrefixDatabase(
@@ -2116,7 +2105,6 @@ class SimpleRingTopologyFixture
                   prefixType,
                   createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
                                     : std::nullopt,
-                  std::nullopt,
                   v4Enabled)
             : pdb4);
   }
@@ -3168,31 +3156,26 @@ class ParallelAdjRingTopologyFixture
             .topologyChanged);
 
     // Prefix db's
-
     updatePrefixDatabase(
         prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  prefixDb1, prefixType, std::nullopt, std::nullopt, false)
-            : prefixDb1);
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(
+                        prefixDb1, prefixType, std::nullopt, false)
+                  : prefixDb1);
     updatePrefixDatabase(
         prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  prefixDb2, prefixType, std::nullopt, std::nullopt, false)
-            : prefixDb2);
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(
+                        prefixDb2, prefixType, std::nullopt, false)
+                  : prefixDb2);
     updatePrefixDatabase(
         prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  prefixDb3, prefixType, std::nullopt, std::nullopt, false)
-            : prefixDb3);
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(
+                        prefixDb3, prefixType, std::nullopt, false)
+                  : prefixDb3);
     updatePrefixDatabase(
         prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  prefixDb4, prefixType, std::nullopt, std::nullopt, false)
-            : prefixDb4);
+        useKsp2Ed ? createPrefixDbWithKspfAlgo(
+                        prefixDb4, prefixType, std::nullopt, false)
+                  : prefixDb4);
   }
 
   thrift::Adjacency adj12_1, adj12_2, adj12_3, adj13_1, adj21_1, adj21_2,

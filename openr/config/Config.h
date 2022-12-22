@@ -48,9 +48,6 @@ class AreaConfiguration {
     if (auto nodeLabel = area.area_sr_node_label()) {
       srNodeLabel_ = *nodeLabel;
     }
-    if (auto prependLabel = area.prepend_label_ranges()) {
-      srPrependLLabelRanges_ = *prependLabel;
-    }
     if (auto policyName = area.import_policy_name()) {
       importPolicyName_ = *policyName;
     }
@@ -64,11 +61,6 @@ class AreaConfiguration {
   std::optional<openr::thrift::SegmentRoutingNodeLabel>
   getNodeSegmentLabelConfig() const {
     return srNodeLabel_;
-  }
-
-  std::optional<openr::thrift::MplsLabelRanges>
-  getPrependLabelConfig() const {
-    return srPrependLLabelRanges_;
   }
 
   bool
@@ -95,9 +87,6 @@ class AreaConfiguration {
  private:
   const std::string areaId_;
   std::optional<openr::thrift::SegmentRoutingNodeLabel> srNodeLabel_{
-      std::nullopt};
-
-  std::optional<openr::thrift::MplsLabelRanges> srPrependLLabelRanges_{
       std::nullopt};
 
   std::optional<std::string> importPolicyName_{std::nullopt};
@@ -204,8 +193,6 @@ class Config {
   //
 
   void populateAreaConfig();
-
-  void checkPrependLabelConfig(const openr::thrift::AreaConfig& areaConf) const;
 
   void checkAdjacencyLabelConfig(
       const openr::thrift::AreaConfig& areaConf) const;

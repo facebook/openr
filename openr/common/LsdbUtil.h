@@ -187,10 +187,6 @@ thrift::PrefixEntry createPrefixEntry(
     std::optional<int64_t> minNexthop = std::nullopt,
     std::optional<int64_t> weight = std::nullopt);
 
-thrift::PrefixEntry createPrefixEntryWithPrependLabel(
-    thrift::IpPrefix prefix,
-    std::optional<int32_t> prependLabel = std::nullopt);
-
 thrift::PrefixMetrics createMetrics(int32_t pp, int32_t sp, int32_t d);
 
 thrift::PrefixEntry createPrefixEntryWithMetrics(
