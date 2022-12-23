@@ -23,7 +23,6 @@ namespace openr {
  * consumers of route updates,
  * - Decision produces routes updates, consumed by Fib;
  * - Fib produces programmed routes, consumed by PrefixManager/BgpSpeaker;
- * - BgpSpeaker produces static MPLS prepend label routes, consumed by Decision;
  * - PrefixManager produces static unicast routes, consumed by Decision.
  */
 struct DecisionRouteUpdate {

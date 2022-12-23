@@ -60,24 +60,6 @@ openr::thrift::SegmentRoutingConfig
 getSegmentRoutingConfig() {
   openr::thrift::SegmentRoutingConfig segment_routing_config;
   openr::thrift::SegmentRoutingAdjLabel adj_segment_label;
-  openr::thrift::MplsLabelRanges prepend_labels;
-
-  openr::thrift::LabelRange lrp4;
-  openr::thrift::LabelRange lrp6;
-
-  // prepend labels
-  lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-  lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-  lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-  lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-  prepend_labels.v4() = lrp4;
-  prepend_labels.v6() = lrp6;
-
-  lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-  lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-
-  lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-  lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
 
   // adj segment label range
   openr::thrift::LabelRange adj_label_range;
@@ -89,7 +71,6 @@ getSegmentRoutingConfig() {
 
   // segment routing config
   segment_routing_config.sr_adj_label() = adj_segment_label;
-  segment_routing_config.prepend_label_ranges() = prepend_labels;
 
   return segment_routing_config;
 }
@@ -312,36 +293,6 @@ TEST(ConfigTest, PopulateAreaConfig) {
     }
 
     EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
-  }
-
-  // area prepend label
-  {
-    auto confAreaPolicy = getBasicOpenrConfig();
-    openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
-
-    openr::thrift::MplsLabelRanges prepend_labels;
-    openr::thrift::LabelRange lrp4;
-    openr::thrift::LabelRange lrp6;
-
-    // prepend labels
-    lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-    lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-    lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-    lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-    prepend_labels.v4() = lrp4;
-    prepend_labels.v6() = lrp6;
-
-    lrp4.start_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.first;
-    lrp4.end_label() = openr::MplsConstants::kSrV4StaticMplsRouteRange.second;
-
-    lrp6.start_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.first;
-    lrp6.end_label() = openr::MplsConstants::kSrV6StaticMplsRouteRange.second;
-
-    areaConfig.prepend_label_ranges() = prepend_labels;
-
-    // valid prepend label config
-    confAreaPolicy.areas()->emplace_back(areaConfig);
-    EXPECT_NO_THROW((Config(confAreaPolicy)));
   }
 
   // area adjacency label

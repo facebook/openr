@@ -377,25 +377,6 @@ Config::checkLinkMonitorConfig() const {
 void
 Config::checkSegmentRoutingConfig() const {
   if (const auto& srConfig = config_.segment_routing_config()) {
-    // Check label range values for prepend labels
-    if (srConfig->prepend_label_ranges().has_value()) {
-      const auto& v4LblRange = *srConfig->prepend_label_ranges()->v4();
-      if (not isLabelRangeValid(v4LblRange)) {
-        throw std::invalid_argument(fmt::format(
-            "v4: prepend label range [{}, {}] is invalid",
-            *v4LblRange.start_label(),
-            *v4LblRange.end_label()));
-      }
-
-      const auto& v6LblRange = *srConfig->prepend_label_ranges()->v6();
-      if (not isLabelRangeValid(v6LblRange)) {
-        throw std::invalid_argument(fmt::format(
-            "v6: prepend label range [{}, {}] is invalid",
-            *v6LblRange.start_label(),
-            *v6LblRange.end_label()));
-      }
-    }
-
     if (srConfig->sr_adj_label().has_value()) {
       // Check adj segment labels if configured or if label range is valid
       if (srConfig->sr_adj_label()->sr_adj_label_type() ==

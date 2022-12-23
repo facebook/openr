@@ -743,9 +743,6 @@ SpfSolver::selectBestPathsKsp2(
   for (const auto& path : paths) {
     Metric cost = 0;
     std::list<int32_t> labels;
-    // if self node is one of it's ecmp, it means this prefix is anycast and
-    // we need to add prepend label which is static MPLS route the destination
-    // prepared.
     std::vector<std::string> invalidNodes;
     auto nextNodeName = myNodeName;
     for (auto& link : path) {
@@ -766,14 +763,6 @@ SpfSolver::selectBestPathsKsp2(
       continue;
     }
     labels.pop_back(); // Remove first node's label to respect PHP
-
-    // Add prepend label of last node in the path.
-    auto lastNodeInPath = nextNodeName;
-    auto& prefixEntry = prefixEntries.at({lastNodeInPath, area});
-    if (prefixEntry->prependLabel()) {
-      // add prepend label to bottom of the stack
-      labels.push_front(prefixEntry->prependLabel().value());
-    }
 
     // Create nexthop
     CHECK_GE(path.size(), 1);
