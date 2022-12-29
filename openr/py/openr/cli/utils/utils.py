@@ -185,7 +185,6 @@ def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False) -> str:
                 ipnetwork.sprint_prefix_forwarding_algorithm(
                     prefix_entry.forwardingAlgorithm
                 ),
-                str(prefix_entry.prependLabel) if prefix_entry.prependLabel else "",
             ]
         )
 
@@ -196,7 +195,6 @@ def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False) -> str:
             "Client Type",
             "Forwarding Type",
             "Forwarding Algorithm",
-            "Prepend Label",
         ],
     )
 
@@ -2147,7 +2145,7 @@ def print_route_details(
         [@*] source <key>
              forwarding algo=<fwd-algo> type=<fwd-type>
              metrics=<metrics>
-             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+             requirements=<min-nexthops> <tags?> <area-stack?>
 
 
     """
@@ -2195,7 +2193,7 @@ def print_advertised_routes(
         [@*] source <key>
              forwarding algo=<fwd-algo> type=<fwd-type>
              metrics=<metrics>
-             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+             requirements=<min-nexthops> <tags?> <area-stack?>
 
 
     """
@@ -2224,7 +2222,7 @@ def print_route_header(rows: List[str], detailed: bool) -> None:
     if not detailed:
         rows.append(
             "Acronyms: SP - Source Preference, PP - Path Preference, D - Distance\n"
-            "          MN - Min-Nexthops, PL - Prepend Label"
+            "          MN - Min-Nexthops"
         )
     rows.append("")
 
@@ -2239,8 +2237,7 @@ def print_route_header(rows: List[str], detailed: bool) -> None:
             f"{'SP':<6} "
             f"{'PP':<6} "
             f"{'D':<6} "
-            f"{'MN':<6}"
-            "PL"
+            "MN"
         )
         rows.append("")
 
@@ -2270,7 +2267,7 @@ def print_route_helper(
         [@*] source <key>
              forwarding algo=<fwd-algo> type=<fwd-type>
              metrics=<metrics>
-             requirements=<min-nexthops> <prepend-label> <tags?> <area-stack?>
+             requirements=<min-nexthops> <tags?> <area-stack?>
 
 
     """
@@ -2299,10 +2296,8 @@ def print_route_helper(
         )
         if route.route.minNexthop:
             rows.append(f"     Performance - min-nexthops: {route.route.minNexthop}")
-        if route.route.prependLabel or route.route.weight:
-            rows.append(
-                f"     Misc - prepend-label: {route.route.prependLabel}, weight: {route.route.weight}"
-            )
+        if route.route.weight:
+            rows.append(f"     Misc - weight: {route.route.weight}")
         tag_map = tag_map if tag_map is not None else {}
         rows.append(
             f"     Tags - {', '.join(sorted([format_openr_tag(t,tag_map) for t in route.route.tags]))}"
@@ -2326,17 +2321,13 @@ def print_route_helper(
         min_nexthop = (
             route.route.minNexthop if route.route.minNexthop is not None else "-"
         )
-        prepend_label = (
-            route.route.prependLabel if route.route.prependLabel is not None else "-"
-        )
         rows.append(
             f"{markers:<2} {' '.join(key)[:36]:<36} "
             f"{fwd_algo:<12} {fwd_type:<8} "
             f"{metrics.source_preference:<6} "
             f"{metrics.path_preference:<6} "
             f"{metrics.distance:<6} "
-            f"{min_nexthop:<6}"
-            f"{prepend_label}"
+            f"{min_nexthop}"
         )
 
 

@@ -328,7 +328,7 @@ struct PrefixEntry {
   /**
    * IP or MPLS next-hops of this prefix must have this label prepended
    */
-  9: optional i32 prependLabel;
+  9: optional i32 prependLabel (deprecated);
 
   /**
    * Metrics associated with this Prefix. Route advertisement from multiple

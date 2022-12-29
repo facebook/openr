@@ -111,12 +111,6 @@ helps to avoid funneling in the CLOS-Fabric networks when the capacity of one of
 the planes is reduced greatly compared to others because of maintenance or
 device failure.
 
-#### > `label-prepend`
-
-`optional[numeric]`, `non-transitive`, `mutable` The `MPLS` label to prepend for
-IP->MPLS routes when forwarding towards the node advertising this route. This is
-only compatible with forwarding type `SR_MPLS`
-
 ### Thrift Struct
 
 Refer to

@@ -199,7 +199,6 @@ generateDecisionRouteUpdateFromPrefixEntries(
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     prefixEntry.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
     prefixEntry.minNexthop() = 10;
-    prefixEntry.prependLabel() = 70000;
 
     auto unicastRoute = RibUnicastEntry(
         toIPNetwork(*prefixEntry.prefix()),

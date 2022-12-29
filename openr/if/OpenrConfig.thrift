@@ -412,18 +412,6 @@ struct LabelRange {
   2: i32 end_label;
 }
 
-struct MplsLabelRanges {
-  /**
-   * Label Range for V4 address family
-   */
-  1: LabelRange v4;
-
-  /**
-   * Label Range for V6 address family
-   */
-  2: LabelRange v6;
-}
-
 enum SegmentRoutingAdjLabelType {
   /**
    * Disable adjacency label allocation.
@@ -488,15 +476,8 @@ struct SegmentRoutingConfig {
    *      is DISABLE
    */
   2: optional SegmentRoutingAdjLabel sr_adj_label (deprecated);
-
-  /**
-   * Specifies the ranges for prepend labels
-   * for v4 and v6 address families.
-   * Relevant for routing scheme with alternative
-   * topology(non-CLOS)
-   */
-  3: optional MplsLabelRanges prepend_label_ranges;
 } (cpp.minimize_padding)
+
 /**
  * The area config specifies the area name, interfaces to perform discovery
  * on, neighbor names to peer with, and interface addresses to redistribute
@@ -586,14 +567,6 @@ struct AreaConfig {
    *      is DISABLE
    */
   9: optional SegmentRoutingAdjLabel sr_adj_label;
-
-  /**
-   * Specifies the ranges for prepend labels
-   * for v4 and v6 address families.
-   * Relevant for routing scheme with alternative
-   * topology(non-CLOS)
-   */
-  10: optional MplsLabelRanges prepend_label_ranges (deprecated);
 } (cpp.minimize_padding)
 
 /**

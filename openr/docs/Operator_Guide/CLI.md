@@ -677,21 +677,21 @@ $ breeze decision received-routes all
 
 Markers: * - One of the best entries, @ - The best entry
 Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
-          MN - Min-Nexthops, PL - Prepend Label
+          MN - Min-Nexthops
 
-   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL
+   Source                               FwdAlgo      FwdType  SP     PP     D      MN
 
 > fd00:5::/64, 1/1
-*@ openr-center area2                   SP_ECMP      IP       200    1000   0      -     -
+*@ openr-center area2                   SP_ECMP      IP       200    1000   0      -
 
 > fd00:4::/64, 1/1
-*@ openr-center area2                   SP_ECMP      IP       200    1000   0      -     -
+*@ openr-center area2                   SP_ECMP      IP       200    1000   0      -
 
 > fd00:6::/64, 1/1
-*@ openr-right area2                    SP_ECMP      IP       200    1000   0      -     -
+*@ openr-right area2                    SP_ECMP      IP       200    1000   0      -
 
 > fd00:7::/64, 1/1
-*@ openr-right area2                    SP_ECMP      IP       200    1000   0      -     -
+*@ openr-right area2                    SP_ECMP      IP       200    1000   0      -
 ```
 
 #### Path
@@ -920,15 +920,15 @@ $ breeze prefixmgr advertised-routes all
 
 Markers: * - One of the best entries, @ - The best entry
 Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
-          MN - Min-Nexthops, PL - Prepend Label
+          MN - Min-Nexthops
 
-   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL
+   Source                               FwdAlgo      FwdType  SP     PP     D      MN
 
 > 2803:6081:2874::/46, 1/1
-*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   2      24    65001
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   2      24
 
 > 2401:db00:106c:1d00::/56, 1/1
-*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   2      24    65001
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   2      24
 ```
 
 - Withdraw advertised routes

@@ -40,7 +40,6 @@ MOCKED_ADVERTISED_ROUTES = [
                     forwardingType=PrefixForwardingType.SR_MPLS,
                     forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     minNexthop=24,
-                    prependLabel=65001,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -71,7 +70,6 @@ MOCKED_ADVERTISED_ROUTES = [
                     forwardingType=PrefixForwardingType.SR_MPLS,
                     forwardingAlgorithm=PrefixForwardingAlgorithm.SP_ECMP,
                     minNexthop=24,
-                    prependLabel=60000,
                     metrics=PrefixMetrics(
                         version=1,
                         path_preference=1000,
@@ -89,15 +87,15 @@ MOCKED_ADVERTISED_ROUTES = [
 ADVERTISED_ROUTES_OUTPUT = """\
 Markers: * - Best entries (used for forwarding), @ - Entry used to advertise across area
 Acronyms: SP - Source Preference, PP - Path Preference, D - Distance
-          MN - Min-Nexthops, PL - Prepend Label
+          MN - Min-Nexthops
 
-   Source                               FwdAlgo      FwdType  SP     PP     D      MN    PL
+   Source                               FwdAlgo      FwdType  SP     PP     D      MN
 
 > ::/0, 1/1
-*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24    65001
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24
 
 > 0.0.0.0/0, 1/1
-*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24    60000
+*@ BGP                                  SP_ECMP      SR_MPLS  100    1000   4      24
 
 """
 
@@ -109,7 +107,6 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
      Forwarding - algorithm: SP_ECMP, type: SR_MPLS
      Metrics - path-preference: 1000, source-preference: 100, distance: 4, drained-path: 0
      Performance - min-nexthops: 24
-     Misc - prepend-label: 65001, weight: None
      Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
      Area Stack - 64984, 65333, 64900, 65301
      IGP Cost - 0
@@ -119,7 +116,6 @@ Markers: * - Best entries (used for forwarding), @ - Entry used to advertise acr
      Forwarding - algorithm: SP_ECMP, type: SR_MPLS
      Metrics - path-preference: 1000, source-preference: 100, distance: 4, drained-path: 0
      Performance - min-nexthops: 24
-     Misc - prepend-label: 60000, weight: None
      Tags - (NA)/65527:896, (NA)/65529:15990, (NA)/COMMODITY:EGRESS, TAG_NAME2/65520:822
      Area Stack - 64984, 65333, 64900, 65301
      IGP Cost - 0
@@ -158,7 +154,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           },
           "minNexthop": 24,
           "prefix": "::/0",
-          "prependLabel": 65001,
+          "prependLabel": null,
           "tags": [
             "65520:822",
             "65527:896",
@@ -200,7 +196,7 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           },
           "minNexthop": 24,
           "prefix": "0.0.0.0/0",
-          "prependLabel": 60000,
+          "prependLabel": null,
           "tags": [
             "65520:822",
             "65527:896",
