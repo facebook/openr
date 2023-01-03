@@ -65,7 +65,7 @@ class Constants {
   //
 
   // default interval for flooding topology dump
-  static constexpr std::chrono::seconds kFloodTopoDumpInterval{60};
+  static constexpr std::chrono::seconds kFloodTopoDumpInterval{300};
 
   // default thrift client keep alive interval to avoid idle timeout
   static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
