@@ -51,11 +51,6 @@ class LMCli:
             ClearLinkMetricCli().clear_link_metric,
             name="clear-link-metric-increase",
         )
-        # [TO BE DEPRECATED]
-        self.lm.add_command(SetLinkMetricCli().set_link_metric, name="set-link-metric")
-        self.lm.add_command(
-            UnsetLinkMetricCli().unset_link_metric, name="unset-link-metric"
-        )
         # [Metric Override]
         self.lm.add_command(
             OverrideAdjMetricCli().override_adj_metric, name="override-adj-metric"
@@ -235,44 +230,6 @@ class ClearLinkMetricCli:
         # show adj metric result
         nodes = parse_nodes(cli_opts, "")
         lm.LMAdjCmd(cli_opts).run(nodes, False)
-
-
-# [TO BE DEPRECATED]
-class SetLinkMetricCli:
-    @click.command()
-    @click.argument("interface")
-    @click.argument("metric")
-    @click.option("--yes", is_flag=True, help="Make command non-interactive")
-    @click.pass_context
-    def set_link_metric(ctx, interface, metric, yes):  # noqa: B902
-        """
-        Deprecated - Set custom metric value for a link.
-        """
-
-        click.secho(
-            "Command deprecated - Please use `breeze lm increase-link-metric`",
-            bold=True,
-            err=True,
-        )
-        ctx.exit(1)
-
-
-class UnsetLinkMetricCli:
-    @click.command()
-    @click.argument("interface")
-    @click.option("--yes", is_flag=True, help="Make command non-interactive")
-    @click.pass_context
-    def unset_link_metric(ctx, interface, yes):  # noqa: B902
-        """
-        Deprecated - Unset previously set custom metric value on the interface.
-        """
-
-        click.secho(
-            "Command deprecated - Please use `breeze lm clear-link-metric-increase`",
-            bold=True,
-            err=True,
-        )
-        ctx.exit(1)
 
 
 class OverrideAdjMetricCli:
