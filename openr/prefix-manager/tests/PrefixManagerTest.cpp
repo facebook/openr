@@ -2719,7 +2719,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   routeUpdate.addRouteToUpdate(unicastEntryV4);
   routeUpdate.addRouteToUpdate(unicastEntryV4_1);
   routeUpdate.addRouteToUpdate(unicastEntryV6_1);
-  fibRouteUpdatesQueue.push(std::move(routeUpdate));
+  fibRouteUpdatesQueue.push(routeUpdate);
 
   // Verify 1c and 1d: PrefixManager -> Decision staticRouteupdate
   {
@@ -3136,13 +3136,9 @@ TEST_P(
   EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
   EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
 
-  // Publish initial kvStoreSynced signal.
-  kvStoreWrapper->publishKvStoreSynced();
-  kvStoreWrapper->recvKvStoreSyncedSignal();
-
   // wait for kvstore sync throttle time and check no prefixes are advertised
   // into KvStore, waiting for full fib sync
-  /* sleep override */
+  // TODO: replace sleep override with scheduled callbacks
   std::this_thread::sleep_for(std::chrono::milliseconds(
       2 * Constants::kKvStoreSyncThrottleTimeout.count()));
   EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
@@ -3275,18 +3271,6 @@ TEST_F(
             prefixEntry9,
             Constants::kDefaultArea.toString()));
         fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
-      });
-
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(
-          scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
-      [&]() {
-        // No pprefixes advertised into KvStore.
-        EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
-
-        // Publish initial kvStoreSynced signal.
-        kvStoreWrapper->publishKvStoreSynced();
-        kvStoreWrapper->recvKvStoreSyncedSignal();
       });
 
   evb.scheduleTimeout(

@@ -63,6 +63,7 @@ PrefixManager::PrefixManager(
         << "[Initialization] PrefixManager should wait for VIP prefixes.";
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
   }
+
   if (config->getConfig().originated_prefixes()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for CONFIG prefixes.";
@@ -80,13 +81,24 @@ PrefixManager::PrefixManager(
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kKvStoreSyncThrottleTimeout, [this]() noexcept {
-        // With signal-based initialization sequence, the following conditions
-        // must be fulfilled before alternating states inside KvStore:
-        //  1) received KVSTORE_SYNCED event;
-        //  2) all prefixTypes have been processed/received;
-        //
-        // Otherwise, it will bail out.
-        if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
+        /*
+         * [Initialization]
+         *
+         * With signal-based initialization sequence, all PREFIX_TYPES must be
+         * processed/received before writing KvStore.
+         *
+         * Otherwise, it will bail out.
+         *
+         * Attention: RIB type updates indicates the following events
+         * accomplished:
+         *  - KVSTORE_SYNCED published by KvStore
+         *  - RIB_COMPUTED published by Decision
+         *  - FIB_SYNCED published by Fib
+         *
+         * PrefixManager received first RIB type updates from Fib module to mark
+         * ready to write to KvStore.
+         */
+        if (uninitializedPrefixTypes_.empty()) {
           syncKvStore();
         }
       });
@@ -226,17 +238,7 @@ PrefixManager::PrefixManager(
             // Process KvStore Thrift publication.
             processPublication(std::move(pub));
           },
-          [this](thrift::InitializationEvent&& event) {
-            CHECK(event == thrift::InitializationEvent::KVSTORE_SYNCED)
-                << fmt::format(
-                       "Unexpected initialization event: {}",
-                       apache::thrift::util::enumNameSafe(event));
-
-            XLOG(INFO)
-                << "[Initialization] All prefix keys are retrieved from KvStore.";
-            initialKvStoreSynced_ = true;
-            triggerInitialPrefixDbSync();
-          });
+          [this](thrift::InitializationEvent&& /* unused */) { return; });
     }
   });
 }
@@ -623,7 +625,7 @@ PrefixManager::deleteKvStoreKeyHelper(
 
 void
 PrefixManager::triggerInitialPrefixDbSync() {
-  if (uninitializedPrefixTypes_.empty() and initialKvStoreSynced_) {
+  if (uninitializedPrefixTypes_.empty()) {
     // Trigger initial syncKvStore(), after receiving prefixes of all expected
     // types and all inital prefix keys from KvStore.
     syncKvStore();

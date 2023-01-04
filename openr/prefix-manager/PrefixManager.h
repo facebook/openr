@@ -553,10 +553,6 @@ class PrefixManager final : public OpenrEventBase {
    */
   std::unordered_set<folly::CIDRNetwork> programmedPrefixes_;
 
-  // Boolean flag indicating if kvStoreSynced signal is received from KvStore in
-  // OpenR initialization procedure.
-  bool initialKvStoreSynced_{false};
-
   /*
    * Set of prefix types for which PrefixManager awaits in OpenR initialization
    * procedure. This would be populated based on config
