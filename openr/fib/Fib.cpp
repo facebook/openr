@@ -554,7 +554,7 @@ Fib::updateUnicastRoutes(
       XLOG(INFO) << "Skipping deletion of unicast routes in dryrun ... ";
     } else {
       try {
-        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), client_, thriftPort_);
         client_->sync_deleteUnicastRoutes(kFibId_, unicastRoutesToDelete);
       } catch (std::exception& e) {
         success = false;
@@ -585,7 +585,7 @@ Fib::updateUnicastRoutes(
       XLOG(INFO) << "Skipping add/update of unicast routes in dryrun ... ";
     } else {
       try {
-        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), client_, thriftPort_);
         client_->sync_addUnicastRoutes(kFibId_, unicastRoutesToUpdate);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
         success = false;
@@ -657,7 +657,7 @@ Fib::updateMplsRoutes(
       XLOG(INFO) << "Skipping deletion of mpls routes in dryrun ... ";
     } else {
       try {
-        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), client_, thriftPort_);
         client_->sync_deleteMplsRoutes(kFibId_, mplsRoutesToDelete);
       } catch (std::exception const& e) {
         success = false;
@@ -688,7 +688,7 @@ Fib::updateMplsRoutes(
       XLOG(INFO) << "Skipping add/update of mpls routes in dryrun ... ";
     } else {
       try {
-        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), client_, thriftPort_);
         client_->sync_addMplsRoutes(kFibId_, mplsRoutesToUpdate);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
         success = false;
@@ -844,7 +844,7 @@ Fib::syncRoutes() {
     } else {
       try {
         auto emptyRoutes = std::vector<thrift::UnicastRoute>{};
-        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), client_, thriftPort_);
         client_->sync_syncFib(kFibId_, emptyRoutes);
       } catch (std::exception const& e) {
         client_.reset();
@@ -865,7 +865,7 @@ Fib::syncRoutes() {
         << "flag should ONLY be set in dry_run mode";
 
     try {
-      createFibClient(*getEvb(), socket_, client_, thriftPort_);
+      createFibClient(*getEvb(), client_, thriftPort_);
       client_->sync_syncFib(kFibId_, unicastRoutes);
     } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
       logFibUpdateError(fibUpdateError);
@@ -893,7 +893,7 @@ Fib::syncRoutes() {
       XLOG(INFO) << "Skipping programming of mpls routes in dryrun ...";
     } else {
       try {
-        createFibClient(*getEvb(), socket_, client_, thriftPort_);
+        createFibClient(*getEvb(), client_, thriftPort_);
         client_->sync_syncMplsFib(kFibId_, mplsRoutes);
       } catch (thrift::PlatformFibUpdateError const& fibUpdateError) {
         logFibUpdateError(fibUpdateError);
@@ -1029,7 +1029,7 @@ Fib::keepAlive() noexcept {
   int64_t aliveSince{0};
   if (not dryrun_) {
     try {
-      createFibClient(*getEvb(), socket_, client_, thriftPort_);
+      createFibClient(*getEvb(), client_, thriftPort_);
       aliveSince = client_->sync_aliveSince();
     } catch (const std::exception& e) {
       fb303::fbData->addStatValue(
@@ -1055,21 +1055,16 @@ Fib::keepAlive() noexcept {
 void
 Fib::createFibClient(
     folly::EventBase& evb,
-    folly::AsyncSocket*& socket,
-    std::unique_ptr<thrift::FibServiceAsyncClient>& client,
+    std::unique_ptr<apache::thrift::Client<thrift::FibService>>& client,
     int32_t port) {
-  if (!client) {
-    socket = nullptr;
-  }
-  // Reset client if channel is not good
-  if (socket && (!socket->good() || socket->hangup())) {
-    client.reset();
-    socket = nullptr;
-  }
-
-  // Do not create new client if one exists already
   if (client) {
-    return;
+    auto channel = (apache::thrift::RocketClientChannel*)client->getChannel();
+    if (channel and channel->good()) {
+      // Do not create new client if one exists already with a good channel
+      return;
+    }
+    // Reset client if channel is not good
+    client.reset();
   }
 
   // Create socket to thrift server and set some connection parameters
@@ -1078,15 +1073,15 @@ Fib::createFibClient(
       Constants::kPlatformHost.toString(),
       port,
       Constants::kPlatformConnTimeout.count());
-  socket = newSocket.get();
 
   // Create channel and set timeout
   auto channel =
       apache::thrift::RocketClientChannel::newChannel(std::move(newSocket));
   channel->setTimeout(Constants::kPlatformRoutesProcTimeout.count());
 
-  // Reset client_
-  client = std::make_unique<thrift::FibServiceAsyncClient>(std::move(channel));
+  // Set client
+  client = std::make_unique<apache::thrift::Client<thrift::FibService>>(
+      std::move(channel));
 }
 
 void

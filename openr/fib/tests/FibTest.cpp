@@ -1956,6 +1956,19 @@ TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
   }
 }
 
+TEST(FibTest, createFibClientRetryTest) {
+  // Ensure that we could retry createFibClient without crashing
+  folly::EventBase evb;
+  std::unique_ptr<apache::thrift::Client<thrift::FibService>> client;
+
+  for (int i = 0; i < 10; ++i) {
+    // Retry creation 10 times
+    openr::Fib::createFibClient(evb, client, 1111);
+
+    evb.loop();
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

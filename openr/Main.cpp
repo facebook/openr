@@ -69,7 +69,6 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
   auto waitForFibStart = std::chrono::steady_clock::now();
   auto switchState = thrift::SwitchRunState::UNINITIALIZED;
   folly::EventBase evb;
-  folly::AsyncSocket* socket{nullptr};
   std::unique_ptr<openr::thrift::FibServiceAsyncClient> client;
 
   /*
@@ -79,7 +78,7 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
    */
   while (signalHandlerEvb.isRunning() and
          thrift::SwitchRunState::CONFIGURED != switchState) {
-    openr::Fib::createFibClient(evb, socket, client, port);
+    openr::Fib::createFibClient(evb, client, port);
     try {
       switchState = client->sync_getSwitchRunState();
     } catch (const std::exception& e) {

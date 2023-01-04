@@ -55,8 +55,7 @@ class Fib final : public OpenrEventBase {
    */
   static void createFibClient(
       folly::EventBase& evb,
-      folly::AsyncSocket*& socket,
-      std::unique_ptr<thrift::FibServiceAsyncClient>& client,
+      std::unique_ptr<apache::thrift::Client<thrift::FibService>>& client,
       int32_t port);
 
   /**
@@ -371,8 +370,7 @@ class Fib final : public OpenrEventBase {
 
   // Thrift client connection to switch FIB Agent using which we actually
   // manipulate routes.
-  folly::AsyncSocket* socket_{nullptr};
-  std::unique_ptr<thrift::FibServiceAsyncClient> client_{nullptr};
+  std::unique_ptr<apache::thrift::Client<thrift::FibService>> client_{nullptr};
 
   // State variables for RetryRoutes programming fiber.
   // - Stop signal to terminate retryRoutesFiber, sent only once
