@@ -378,13 +378,12 @@ struct FilterTransform {
    * valid operators: rewrite
    */
   26: optional i64 openrMinNexthop;
-  // TODO(T105546187): remove the knob
   /*
    * flag that indicates if prependLabel attribute is accepted. If not, the
    * attribute is reset.
    * Note: openrAcceptPrependLabel does not require operators.
    */
-  27: optional bool openrAcceptPrependLabel;
+  27: optional bool openrAcceptPrependLabel (deprecated);
   /*
    * flag that indicates if weight attribute is accepted. If not, the
    * attribute is reset.
