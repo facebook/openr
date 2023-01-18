@@ -588,9 +588,6 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   // wait until all aquamen got synced on kvstore
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
-  // make sure every openr has a prefix allocated
-  EXPECT_TRUE(openr1->getIpPrefix().has_value());
-
   // Wait for calling getCPUpercentage() twice for calculating the cpu% counter.
   // Check if counters contain the uptime, cpu and memory usage counters.
   auto counters1 = openr1->getCounters();

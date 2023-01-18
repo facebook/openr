@@ -23,7 +23,6 @@ namespace fs = std::experimental::filesystem;
 #include <sodium.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
-#include <openr/allocators/PrefixAllocator.h>
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Flags.h>
 #include <openr/common/OpenrThriftCtrlServer.h>
@@ -450,21 +449,9 @@ main(int argc, char** argv) {
 
   // Prefix Allocator to automatically allocate prefixes for nodes
   if (config->isPrefixAllocationEnabled()) {
-    startEventBase(
-        allThreads,
-        orderedEvbs,
-        watchdog,
-        "prefix_allocator",
-        std::make_unique<PrefixAllocator>(
-            AreaId{*config->getAreaIds().begin()},
-            config,
-            nlSock.get(),
-            kvStore,
-            configStore,
-            prefixUpdatesQueue,
-            logSampleQueue,
-            Constants::kPrefixAllocatorSyncInterval));
+    XLOG(ERR) << "PrefixAllocator is deprecated";
   }
+
   watchdog->addQueue(prefixUpdatesQueue, "prefixUpdatesQueue");
 
   // Start Spark

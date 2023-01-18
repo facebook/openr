@@ -9,12 +9,12 @@
 
 #include <fb303/BaseService.h>
 
-#include <openr/allocators/PrefixAllocator.h>
 #include <openr/config/Config.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/monitor/LogSample.h>
 #include <openr/monitor/Monitor.h>
@@ -149,7 +149,6 @@ class OpenrWrapper {
   std::unique_ptr<Monitor> monitor_;
   std::unique_ptr<Decision> decision_;
   std::unique_ptr<Fib> fib_;
-  std::unique_ptr<PrefixAllocator> prefixAllocator_;
   std::unique_ptr<PrefixManager> prefixManager_;
 
   // sub module communication queues

@@ -209,19 +209,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       fibRouteUpdatesQueue_,
       logSampleQueue_);
 
-  //
-  // create PrefixAllocator
-  //
-  prefixAllocator_ = std::make_unique<PrefixAllocator>(
-      kTestingAreaName,
-      config_,
-      nlSock_.get(),
-      kvStore_.get(),
-      configStore_.get(),
-      prefixUpdatesQueue_,
-      logSampleQueue_,
-      Constants::kPrefixAllocatorSyncInterval);
-
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(config_);
 }
@@ -256,15 +243,6 @@ OpenrWrapper<Serializer>::run() {
   });
   prefixManager_->waitUntilRunning();
   allThreads_.emplace_back(std::move(prefixManagerThread));
-
-  // Spawn a PrefixAllocator thread
-  std::thread prefixAllocatorThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " PrefixAllocator running.";
-    prefixAllocator_->run();
-    VLOG(1) << nodeId_ << " PrefixAllocator stopped.";
-  });
-  prefixAllocator_->waitUntilRunning();
-  allThreads_.emplace_back(std::move(prefixAllocatorThread));
 
   // start spark thread
   std::thread sparkThread([this]() {
@@ -355,8 +333,6 @@ OpenrWrapper<Serializer>::stop() {
   linkMonitor_->waitUntilStopped();
   spark_->stop();
   spark_->waitUntilStopped();
-  prefixAllocator_->stop();
-  prefixAllocator_->waitUntilStopped();
   prefixManager_->stop();
   prefixManager_->waitUntilStopped();
   monitor_->stop();
