@@ -208,7 +208,6 @@ install(TARGETS
 )
 
 add_library(openrlib
-  openr/allocators/PrefixAllocator.cpp
   openr/common/AsyncThrottle.cpp
   openr/common/BuildInfo.cpp
   openr/common/Constants.cpp
@@ -490,19 +489,6 @@ if(BUILD_TESTS)
       -lpthread
       -lcrypto
     DESTINATION sbin/tests/openr
-  )
-
-  add_openr_test(PrefixAllocatorTest prefix_allocator_test
-    SOURCES
-      openr/allocators/tests/PrefixAllocatorTest.cpp
-      openr/tests/mocks/NetlinkEventsInjector.cpp
-    DESTINATION sbin/tests/openr/allocators
-  )
-
-  add_openr_test(RangeAllocatorTest range_allocator_test
-    SOURCES
-      openr/allocators/tests/RangeAllocatorTest.cpp
-    DESTINATION sbin/tests/openr/allocators
   )
 
   add_openr_test(OpenrCtrlHandlerTest openr_ctrl_handler_test
