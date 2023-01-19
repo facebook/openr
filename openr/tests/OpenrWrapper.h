@@ -56,9 +56,6 @@ class OpenrWrapper {
     stop();
   }
 
-  // getter for allocated prefix
-  std::optional<thrift::IpPrefix> getIpPrefix();
-
   // checks if the given key exists in the kvstore
   bool checkKeyExists(std::string key);
 
@@ -93,12 +90,6 @@ class OpenrWrapper {
       const thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& prefixes);
 
-  /**
-   * check if a given prefix exists in routeDb
-   */
-  static bool checkPrefixExists(
-      const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb);
-
   /*
    * return all counters
    */
@@ -132,9 +123,6 @@ class OpenrWrapper {
 
   // mocked version of netlink system handler
   std::shared_ptr<NetlinkEventsInjector> nlEventsInjector_{nullptr};
-
-  // IpPrefix
-  folly::Synchronized<std::optional<thrift::IpPrefix>> ipPrefix_;
 
   // event loop to use with KvStoreClientInternal
   OpenrEventBase eventBase_;

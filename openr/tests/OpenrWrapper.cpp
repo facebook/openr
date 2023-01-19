@@ -127,19 +127,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
         // Parse PrefixDb
         auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
             value.value().value().value(), serializer_);
-        ipPrefix_.withWLock([&](auto& ipPrefix) {
-          bool received = false;
-          for (auto& prefix : *prefixDb.prefixEntries()) {
-            if (*prefix.type() == thrift::PrefixType::PREFIX_ALLOCATOR) {
-              received = true;
-              ipPrefix = *prefix.prefix();
-              break;
-            }
-          }
-          if (!received) {
-            ipPrefix = std::nullopt;
-          }
-        });
       },
       false);
 
@@ -354,75 +341,6 @@ OpenrWrapper<Serializer>::stop() {
 }
 
 template <class Serializer>
-std::optional<thrift::IpPrefix>
-OpenrWrapper<Serializer>::getIpPrefix() {
-  auto prefix = ipPrefix_.withRLock([&](auto& ipPrefix) { return ipPrefix; });
-  if (prefix.has_value()) {
-    return prefix;
-  }
-
-  std::optional<std::unordered_map<std::string, thrift::Value>> keys;
-  eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    const std::string keyPrefix = fmt::format("prefix:{}", nodeId_);
-    try {
-      thrift::KeyDumpParams params;
-      if (not keyPrefix.empty()) {
-        params.keys() = {keyPrefix};
-      }
-      auto maybeGetKey = kvStore_
-                             ->semifuture_dumpKvStoreKeys(
-                                 std::move(params), {kTestingAreaName})
-                             .getTry(Constants::kReadTimeout);
-      if (maybeGetKey.hasValue()) {
-        auto pub = *maybeGetKey.value()->begin();
-        keys = *pub.keyVals();
-      } else {
-        LOG(ERROR) << fmt::format(
-            "Failed to retrieve keys with prefix: {} from KvStore in area: {}. "
-            "Exception: {}",
-            keyPrefix,
-            kTestingAreaName.t,
-            folly::exceptionStr(maybeGetKey.exception()));
-        keys = std::nullopt;
-      }
-    } catch (const folly::FutureTimeout&) {
-      LOG(ERROR) << fmt::format(
-          "Timed out retrieving keys with prefix: {} from KvStore in area: {}",
-          keyPrefix,
-          kTestingAreaName.t);
-      keys = std::nullopt;
-    } catch (const std::exception& ex) {
-      LOG(ERROR) << fmt::format(
-          "Failed to dump keys with prefix: {} from KvStore in area: {}. "
-          "Exception: {}",
-          keyPrefix,
-          kTestingAreaName.t,
-          ex.what());
-      keys = std::nullopt;
-    }
-  });
-
-  ipPrefix_.withWLock([&](auto& ipPrefix) {
-    for (const auto& key : keys.value()) {
-      auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-          key.second.value().value(), serializer_);
-      if (*prefixDb.deletePrefix()) {
-        // Skip prefixes which are about to be deleted
-        continue;
-      }
-
-      for (auto& prefx : *prefixDb.prefixEntries()) {
-        if (*prefx.type() == thrift::PrefixType::PREFIX_ALLOCATOR) {
-          ipPrefix = *prefx.prefix();
-          break;
-        }
-      }
-    }
-  });
-  return ipPrefix_.copy();
-}
-
-template <class Serializer>
 bool
 OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
   std::optional<std::unordered_map<std::string, thrift::Value>> keys;
@@ -464,18 +382,6 @@ OpenrWrapper<Serializer>::withdrawPrefixEntries(
   PrefixEvent event(PrefixEventType::WITHDRAW_PREFIXES, type, prefixes);
   prefixUpdatesQueue_.push(std::move(event));
   return true;
-}
-
-template <class Serializer>
-bool
-OpenrWrapper<Serializer>::checkPrefixExists(
-    const thrift::IpPrefix& prefix, const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : *routeDb.unicastRoutes()) {
-    if (prefix == *route.dest()) {
-      return true;
-    }
-  }
-  return false;
 }
 
 template <class Serializer>
