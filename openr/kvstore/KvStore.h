@@ -179,6 +179,13 @@ class KvStoreDb {
     return ttlCountdownQueue_;
   }
 
+  /*
+   * [Util]
+   *
+   * This section contains the util function used by KvStoreDb to
+   * set/update/merge key-value pairs.
+   */
+
   // Extracts the counters
   std::map<std::string, int64_t> getCounters() const;
 
@@ -191,10 +198,18 @@ class KvStoreDb {
   // add new key-vals to kvstore_'s key-vals
   void setKeyVals(thrift::KeySetParams&& setParams);
 
-  // Merge received publication with local store and publish out the delta.
-  // If senderId is set, will build <key:value> map from kvStore_ and
-  // rcvdPublication.tobeUpdatedKeys and send back to senderId to update it
-  // @return: Number of KV updates applied
+  /*
+   * This is the util function to do the following:
+   *  1) Merge received publication with local store object, aka, "kvStore_" and
+   *     flood the delta to the peers.
+   *  2) Respond to `senderId` with requested `tobeUpdatedKeys`.
+   *
+   * @param: rcvdPublication => the thrift::Publication object received to
+   *                            merge with local store
+   * @param: senderId => if senderId is set, will send back to `senderId` with
+   *                     the k-v paris inside rcvdPublication.tobeUpdatedKeys
+   * @return: number of (k, v) updates against local "kvStore_"
+   */
   size_t mergePublication(
       thrift::Publication const& rcvdPublication,
       std::optional<std::string> senderId = std::nullopt);

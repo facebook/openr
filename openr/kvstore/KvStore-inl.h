@@ -634,7 +634,7 @@ KvStore<ClientType>::initGlobalCounters() {
   /*
    * [KvStore Thrift Sync]
    *
-   * Initialize counters for KvStore thrift I/P monitoring, which includes:
+   * Initialize counters for KvStore thrift I/O monitoring, which includes:
    *  1) success/failure stats for different types of messages;
    *  2) time elapsed for different types of messages;
    *  3) etc.
@@ -1811,13 +1811,13 @@ KvStoreDb<ClientType>::processThriftSuccess(
     return;
   }
 
+  auto numMissingKeys =
+      pub.tobeUpdatedKeys().has_value() ? pub.tobeUpdatedKeys()->size() : 0;
+  auto numReceivedKeys = pub.keyVals()->size();
+
   // ATTN: `peerName` is MANDATORY to fulfill the finialized
   //       full-sync with peers.
   const auto kvUpdateCnt = mergePublication(pub, peerName);
-  auto numMissingKeys = 0;
-  if (pub.tobeUpdatedKeys().has_value()) {
-    numMissingKeys = pub.tobeUpdatedKeys()->size();
-  }
 
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
@@ -1835,7 +1835,7 @@ KvStoreDb<ClientType>::processThriftSuccess(
              "[Thrift Sync] Full-sync response received from: {}", peerName)
       << fmt::format(
              " with {} key-vals and {} missing keys. ",
-             pub.keyVals()->size(),
+             numReceivedKeys,
              numMissingKeys)
       << fmt::format(
              "Incurred {} key-value updates. Processing time: {}ms",
@@ -2555,7 +2555,7 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
 template <class ClientType>
 size_t
 KvStoreDb<ClientType>::mergePublication(
-    const thrift::Publication& rcvdPublication,
+    thrift::Publication const& rcvdPublication,
     std::optional<std::string> senderId) {
   // Add counters
   fb303::fbData->addStatValue("kvstore.received_publications", 1, fb303::COUNT);
