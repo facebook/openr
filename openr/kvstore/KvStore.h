@@ -196,7 +196,8 @@ class KvStoreDb {
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
 
   // add new key-vals to kvstore_'s key-vals
-  void setKeyVals(thrift::KeySetParams&& setParams);
+  void setKeyVals(
+      thrift::KeySetParams&& setParams, bool isSelfOriginatedUpdate = true);
 
   /*
    * This is the util function to do the following:
@@ -206,12 +207,15 @@ class KvStoreDb {
    *
    * @param: rcvdPublication => the thrift::Publication object received to
    *                            merge with local store
+   * @param: isSelfOriginatedUpdate => mark if this publication is coming from
+   *                                   internal, aka, self-originated k-v pair.
    * @param: senderId => if senderId is set, will send back to `senderId` with
    *                     the k-v paris inside rcvdPublication.tobeUpdatedKeys
    * @return: number of (k, v) updates against local "kvStore_"
    */
   size_t mergePublication(
       thrift::Publication const& rcvdPublication,
+      bool isSelfOriginatedUpdate,
       std::optional<std::string> senderId = std::nullopt);
 
   /*

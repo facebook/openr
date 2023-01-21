@@ -499,6 +499,7 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   // check stat was updated
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(1, counters.at("kvstore.cmd_key_set.count"));
+  EXPECT_EQ(1, counters.at("kvstore.received_publications.count"));
 
   // check key was added correctly
   auto recVal = kvStore->getKey(kTestingAreaName, key);
@@ -540,6 +541,7 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   // check stat was updated
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(2, counters.at("kvstore.cmd_key_set.count"));
+  EXPECT_EQ(2, counters.at("kvstore.received_publications.count"));
 
   kvStore->stop();
 }

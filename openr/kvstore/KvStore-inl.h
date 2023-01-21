@@ -439,7 +439,7 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
                                              : ""));
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
-      kvStoreDb.setKeyVals(std::move(keySetParams));
+      kvStoreDb.setKeyVals(std::move(keySetParams), false /* remote update */);
       // ready to return
       p.setValue();
     } catch (thrift::KvStoreError const& e) {
@@ -1217,7 +1217,7 @@ KvStoreDb<ClientType>::setSelfOriginatedKey(
   std::unordered_map<std::string, thrift::Value> keyVals = {{key, thriftValue}};
   thrift::KeySetParams params;
   params.keyVals() = std::move(keyVals);
-  setKeyVals(std::move(params));
+  setKeyVals(std::move(params), true /* self-originated update */);
 
   // Add ttl backoff and trigger selfOriginatedKeyTtlTimer_
   scheduleTtlUpdates(key, false /* advertiseImmediately */);
@@ -1372,7 +1372,7 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
   // Advertise key-vals to KvStore
   thrift::KeySetParams params;
   params.keyVals() = std::move(keyVals);
-  setKeyVals(std::move(params));
+  setKeyVals(std::move(params), true /* self-originated update */);
 
   // clear out variable used for batching advertisements
   for (auto const& key : keysToClear) {
@@ -1461,7 +1461,7 @@ KvStoreDb<ClientType>::unsetPendingSelfOriginatedKeys() {
   // Send updates to KvStore
   thrift::KeySetParams params;
   params.keyVals() = std::move(keyVals);
-  setKeyVals(std::move(params));
+  setKeyVals(std::move(params), true /* self-originated update */);
 
   // Empty out keysToUnset_
   for (auto const& key : localKeysToUnset) {
@@ -1543,7 +1543,7 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
   if (not keyVals.empty()) {
     thrift::KeySetParams params;
     params.keyVals() = std::move(keyVals);
-    setKeyVals(std::move(params));
+    setKeyVals(std::move(params), true /* self-originated update */);
   }
 
   // Schedule next-timeout for processing/clearing backoffs
@@ -1556,7 +1556,8 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
 
 template <class ClientType>
 void
-KvStoreDb<ClientType>::setKeyVals(thrift::KeySetParams&& setParams) {
+KvStoreDb<ClientType>::setKeyVals(
+    thrift::KeySetParams&& setParams, bool isSelfOriginatedUpdate) {
   // Update statistics
   fb303::fbData->addStatValue("kvstore.cmd_key_set", 1, fb303::COUNT);
 
@@ -1572,7 +1573,7 @@ KvStoreDb<ClientType>::setKeyVals(thrift::KeySetParams&& setParams) {
   thrift::Publication rcvdPublication;
   rcvdPublication.keyVals() = std::move(*setParams.keyVals());
   rcvdPublication.nodeIds().move_from(setParams.nodeIds());
-  mergePublication(rcvdPublication);
+  mergePublication(rcvdPublication, isSelfOriginatedUpdate);
 }
 
 template <class ClientType>
@@ -1817,7 +1818,8 @@ KvStoreDb<ClientType>::processThriftSuccess(
 
   // ATTN: `peerName` is MANDATORY to fulfill the finialized
   //       full-sync with peers.
-  const auto kvUpdateCnt = mergePublication(pub, peerName);
+  const auto kvUpdateCnt = mergePublication(
+      pub, false /* remote update */, peerName /* request finalized sync */);
 
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
@@ -2556,19 +2558,26 @@ template <class ClientType>
 size_t
 KvStoreDb<ClientType>::mergePublication(
     thrift::Publication const& rcvdPublication,
+    bool isSelfOriginatedUpdate,
     std::optional<std::string> senderId) {
-  // Add counters
-  fb303::fbData->addStatValue("kvstore.received_publications", 1, fb303::COUNT);
-  fb303::fbData->addStatValue(
-      "kvstore.received_publications." + area_, 1, fb303::COUNT);
-  fb303::fbData->addStatValue(
-      "kvstore.received_key_vals",
-      rcvdPublication.keyVals()->size(),
-      fb303::SUM);
-  fb303::fbData->addStatValue(
-      "kvstore.received_key_vals." + area_,
-      rcvdPublication.keyVals()->size(),
-      fb303::SUM);
+  if (not isSelfOriginatedUpdate) {
+    /*
+     * NOTE: received* counters are ONLY used for publication received remotely.
+     * Update/publication for self-originated keys will be excluded.
+     */
+    fb303::fbData->addStatValue(
+        "kvstore.received_publications", 1, fb303::COUNT);
+    fb303::fbData->addStatValue(
+        "kvstore.received_publications." + area_, 1, fb303::COUNT);
+    fb303::fbData->addStatValue(
+        "kvstore.received_key_vals",
+        rcvdPublication.keyVals()->size(),
+        fb303::SUM);
+    fb303::fbData->addStatValue(
+        "kvstore.received_key_vals." + area_,
+        rcvdPublication.keyVals()->size(),
+        fb303::SUM);
+  }
 
   static const std::vector<std::string> kUpdatedKeys = {};
 

@@ -162,6 +162,9 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyTwice) {
  * Validate versioning for receiving multiple SetKeyValueRequests.
  */
 TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
+  // clean up counters before testing
+  fb303::fbData->resetAllData();
+
   // create and start kv store with kvRequestQueue enabled
   const std::string nodeId = "yelena";
   initKvStore(nodeId, kShortTtl);
@@ -182,6 +185,11 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
   auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
   EXPECT_EQ(1, kvStoreCache.size());
   EXPECT_EQ(version, *kvStoreCache.at(key).value.version());
+
+  // Make sure self-originated keys will NOT increase counter
+  auto counters = fb303::fbData->getCounters();
+  ASSERT_TRUE(counters.count("kvstore.received_publications.count"));
+  EXPECT_EQ(0, counters.at("kvstore.received_publications.count"));
 }
 
 /**
