@@ -771,12 +771,13 @@ KvStoreDb<ClientType>::getNextState(
                    * index 0 - IDLE
                    * PEER_ADD => SYNCING
                    * THRIFT_API_ERROR => IDLE
+                   * INCONSISTENCY_DETECTED => IDLE
                    */
                   {thrift::KvStorePeerState::SYNCING,
                    std::nullopt,
                    std::nullopt,
                    thrift::KvStorePeerState::IDLE,
-                   std::nullopt},
+                   thrift::KvStorePeerState::IDLE},
                   /*
                    * index 1 - SYNCING
                    * SYNC_RESP_RCVD => INITIALIZED
