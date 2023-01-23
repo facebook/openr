@@ -14,7 +14,6 @@
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStore.h>
-#include <openr/kvstore/KvStoreClientInternal.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/monitor/LogSample.h>
 #include <openr/monitor/Monitor.h>
@@ -55,9 +54,6 @@ class OpenrWrapper {
   ~OpenrWrapper() {
     stop();
   }
-
-  // checks if the given key exists in the kvstore
-  bool checkKeyExists(std::string key);
 
   // start openr
   void run();
@@ -131,7 +127,6 @@ class OpenrWrapper {
   std::shared_ptr<Config> config_;
   std::unique_ptr<PersistentStore> configStore_;
   std::unique_ptr<KvStore<thrift::OpenrCtrlCppAsyncClient>> kvStore_;
-  std::unique_ptr<KvStoreClientInternal> kvStoreClient_;
   std::unique_ptr<Spark> spark_;
   std::unique_ptr<LinkMonitor> linkMonitor_;
   std::unique_ptr<Monitor> monitor_;

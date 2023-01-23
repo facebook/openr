@@ -111,25 +111,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(kvStoreThread));
 
-  // kvstore client
-  kvStoreClient_ = std::make_unique<KvStoreClientInternal>(
-      &eventBase_, nodeId_, kvStore_.get());
-
-  // Subscribe our own prefixDb
-  kvStoreClient_->subscribeKey(
-      kTestingAreaName,
-      fmt::format("prefix:{}", nodeId_),
-      [&](const std::string& /* key */,
-          std::optional<thrift::Value> value) noexcept {
-        if (!value.has_value()) {
-          return;
-        }
-        // Parse PrefixDb
-        auto prefixDb = readThriftObjStr<thrift::PrefixDatabase>(
-            value.value().value().value(), serializer_);
-      },
-      false);
-
   //
   // create spark
   //
@@ -338,17 +319,6 @@ OpenrWrapper<Serializer>::stop() {
   nlEventsInjector_.reset();
   nlSock_.reset();
   LOG(INFO) << "OpenR with nodeId: " << nodeId_ << " stopped";
-}
-
-template <class Serializer>
-bool
-OpenrWrapper<Serializer>::checkKeyExists(std::string key) {
-  std::optional<std::unordered_map<std::string, thrift::Value>> keys;
-  eventBase_.getEvb()->runInEventBaseThreadAndWait([&]() {
-    keys = kvStoreClient_->dumpAllWithPrefix(
-        kTestingAreaName, fmt::format("prefix:{}", nodeId_));
-  });
-  return keys.has_value();
 }
 
 template <class Serializer>

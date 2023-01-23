@@ -236,7 +236,6 @@ add_library(openrlib
   openr/dispatcher/DispatcherQueue.cpp
   openr/kvstore/Dual.cpp
   openr/fib/Fib.cpp
-  openr/kvstore/KvStoreClientInternal.cpp
   openr/kvstore/KvStorePublisher.cpp
   openr/kvstore/KvStoreUtil.cpp
   openr/kvstore/KvStoreWrapper.cpp
@@ -603,12 +602,6 @@ if(BUILD_TESTS)
   add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
     SOURCES
       openr/kvstore/tests/KvStoreSelfOriginatedKeyTest.cpp
-    DESTINATION sbin/tests/openr/kvstore
-  )
-
-  add_openr_test(KvStoreClientInternalTest kvstore_client_internal_test
-    SOURCES
-      openr/kvstore/tests/KvStoreClientInternalTest.cpp
     DESTINATION sbin/tests/openr/kvstore
   )
 
