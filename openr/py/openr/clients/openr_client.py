@@ -11,17 +11,11 @@ from typing import Optional, Type
 import bunch
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
-from openr.thrift.OpenrCtrlCpp.clients import OpenrCtrlCpp as OpenrCtrlCppClientPy3
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Platform.thrift_clients import FibService as FibServiceClient
 from openr.thrift.Platform.thrift_types import FibClient
 from openr.utils import consts
 from thrift.protocol import THeaderProtocol
-from thrift.py3.client import ClientType as ClientTypePy3, get_client as get_client_py3
-from thrift.py3.ssl import (
-    SSLContext as SSLContextPy3,
-    SSLVerifyOption as SSLVerifyOptionPy3,
-)
 from thrift.python.client import ClientType, get_client, get_sync_client
 from thrift.python.client.client_wrapper import Client, TAsyncClient, TSyncClient
 from thrift.python.client.ssl import SSLContext, SSLVerifyOption
@@ -263,45 +257,3 @@ def get_openr_ctrl_cpp_client(
             raise e
 
     return client
-
-
-# to be deprecated
-def get_openr_ctrl_cpp_client_py3(
-    host: str,
-    options: Optional[bunch.Bunch] = None,
-    client_type=ClientTypePy3.THRIFT_ROCKET_CLIENT_TYPE,
-):
-    """
-    Once we fully migrate from thrift-py3 to thrift-python, we could remove this function
-    """
-
-    options = options if options else getDefaultOptions(host)
-
-    ssl_context: Optional[SSLContextPy3] = None
-    # Create ssl context if specified
-    if options.ssl:
-        # Translate ssl verification option
-        ssl_verify_opt = SSLVerifyOptionPy3.NO_VERIFY
-        if options.cert_reqs == ssl.CERT_OPTIONAL:
-            ssl_verify_opt = SSLVerifyOptionPy3.VERIFY_REQ_CLIENT_CERT
-        if options.cert_reqs == ssl.CERT_REQUIRED:
-            ssl_verify_opt = SSLVerifyOptionPy3.VERIFY
-
-        # Create ssl context
-        ssl_context = SSLContextPy3()
-        ssl_context.set_verify_option(ssl_verify_opt)
-        ssl_context.load_cert_chain(
-            certfile=options.cert_file, keyfile=options.key_file
-        )
-        ssl_context.load_verify_locations(cafile=options.ca_file)
-
-    # Create and return client
-    return get_client_py3(
-        OpenrCtrlCppClientPy3,
-        host=host,
-        port=options.openr_ctrl_port,
-        timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
-        client_type=client_type,
-        ssl_context=ssl_context,
-        ssl_timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
-    )
