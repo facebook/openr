@@ -199,22 +199,6 @@ def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False) -> str:
     )
 
 
-def alloc_prefix_to_loopback_ip_str(prefix) -> str:
-    """
-    :param prefix: IpPrefix representing an allocation prefix (CIDR network)
-
-    :returns: Loopback IP corresponding to allocation prefix
-    :rtype: string
-    """
-
-    ip_addr = prefix.prefixAddress.addr
-    print(ip_addr)
-    if prefix.prefixLength != 128:
-        ip_addr = ip_addr[:-1] + chr(ord(ip_addr[-1]) | 1)
-    print(ip_addr)
-    return ipnetwork.sprint_addr(ip_addr)
-
-
 def parse_prefix_database(
     prefix_filter: Optional[Union[network_types.IpPrefix, str]],
     client_type_filter: Optional[Union[network_types.PrefixType, str]],
@@ -322,15 +306,6 @@ def thrift_py_to_dict(thrift_inst, update_func=None):
         update_func(gen_dict, thrift_inst)
 
     return gen_dict
-
-
-def metric_vector_to_dict(metric_vector):
-    def _update(metric_vector_dict, metric_vector):
-        metric_vector_dict.update(
-            {"metrics": [thrift_to_dict(m) for m in metric_vector.metrics]}
-        )
-
-    return thrift_to_dict(metric_vector, _update)
 
 
 def collate_prefix_keys(
@@ -915,28 +890,6 @@ def next_hop_thrift_to_dict(nextHop: network_types.NextHopThrift) -> Dict[str, A
     return thrift_to_dict(nextHop, _update)
 
 
-# to be deprecated
-def next_hop_thrift_to_dict_py(
-    nextHop: network_types_py.NextHopThrift,
-) -> Dict[str, Any]:
-    """convert nextHop from thrift-py instance into a dict in strings"""
-    if nextHop is None:
-        return {}
-
-    def _update(next_hop_dict, nextHop):
-        next_hop_dict.update(
-            {
-                "address": ipnetwork.sprint_addr(nextHop.address.addr),
-                "nextHop": ipnetwork.sprint_addr(nextHop.address.addr),
-                "ifName": nextHop.address.ifName,
-            }
-        )
-        if nextHop.mplsAction:
-            next_hop_dict.update({"mplsAction": thrift_py_to_dict(nextHop.mplsAction)})
-
-    return thrift_py_to_dict(nextHop, _update)
-
-
 def unicast_route_to_dict(route):
     """convert route from thrift-py3/thrift-python instance into a dict in strings"""
 
@@ -949,21 +902,6 @@ def unicast_route_to_dict(route):
         )
 
     return thrift_to_dict(route, _update)
-
-
-# to be deprecated
-def unicast_route_to_dict_py(route):
-    """convert route from thrift-py instance into a dict in strings"""
-
-    def _update(route_dict, route):
-        route_dict.update(
-            {
-                "dest": ipnetwork.sprint_prefix(route.dest),
-                "nextHops": [next_hop_thrift_to_dict_py(nh) for nh in route.nextHops],
-            }
-        )
-
-    return thrift_py_to_dict(route, _update)
 
 
 def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
@@ -979,20 +917,6 @@ def mpls_route_to_dict(route: network_types.MplsRoute) -> Dict[str, Any]:
     return thrift_to_dict(route, _update)
 
 
-# to be deprecated
-def mpls_route_to_dict_py(route: network_types_py.MplsRoute) -> Dict[str, Any]:
-    """
-    Convert MPLS route (thrift-py) to json serializable dict object
-    """
-
-    def _update(route_dict, route: network_types_py.MplsRoute):
-        route_dict.update(
-            {"nextHops": [next_hop_thrift_to_dict_py(nh) for nh in route.nextHops]}
-        )
-
-    return thrift_py_to_dict(route, _update)
-
-
 def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
     """
     Convert route from thrift-py3/thrift-python instance into a dict in strings
@@ -1001,19 +925,6 @@ def route_db_to_dict(route_db: openr_types.RouteDatabase) -> Dict[str, Any]:
     ret = {
         "unicastRoutes": [unicast_route_to_dict(r) for r in route_db.unicastRoutes],
         "mplsRoutes": [mpls_route_to_dict(r) for r in route_db.mplsRoutes],
-    }
-    return ret
-
-
-# to be deprecated
-def route_db_to_dict_py(route_db: openr_types_py.RouteDatabase) -> Dict[str, Any]:
-    """
-    Convert route from thrift-py instance into a dict in strings
-    """
-
-    ret = {
-        "unicastRoutes": [unicast_route_to_dict_py(r) for r in route_db.unicastRoutes],
-        "mplsRoutes": [mpls_route_to_dict_py(r) for r in route_db.mplsRoutes],
     }
     return ret
 

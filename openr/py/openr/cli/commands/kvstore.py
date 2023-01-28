@@ -142,11 +142,6 @@ class KvStoreCmdBase(OpenrCtrlCmd):
             if prefix_entry.type == network_types.PrefixType.LOOPBACK:
                 return ipnetwork.sprint_addr(prefix_entry.prefix.prefixAddress.addr)
 
-        # Next look for PREFIX_ALLOCATOR prefix if any
-        for prefix_entry in prefix_db.prefixEntries:
-            if prefix_entry.type == network_types.PrefixType.PREFIX_ALLOCATOR:
-                return utils.alloc_prefix_to_loopback_ip_str(prefix_entry.prefix)
-
         # Else return None
         return None
 
