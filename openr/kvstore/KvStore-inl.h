@@ -866,8 +866,6 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         context->loadCertificate(kvParams_.x509_cert_path->c_str());
         context->loadPrivateKey(kvParams_.x509_key_path->c_str());
         folly::ssl::SSLCommonOptions::setClientOptions(*context);
-        // Explicitly enable TLS1.3 until it becomes the default
-        context->enableTLS13();
         // Since we are suggesting support for rocket in ALPN,
         // we should use RocketClientChannel to match what is negotiated
         client = getOpenrCtrlSecureClient<
