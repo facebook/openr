@@ -198,7 +198,7 @@ struct KvStoreNoMergeReasonStats {
   uint32_t numberOfNoMatchedKeys{0};
   // the ttl of the incoming kv is invalid
   std::vector<int64_t> listInvalidTtls{};
-  // the incoming kv has an older version
+  // the incoming kv has an invalid or old version
   std::vector<int64_t> listOldVersions{};
   // the kv does not need to be merged
   uint32_t numberOfNoNeedToUpdates{0};
@@ -217,9 +217,13 @@ struct KvStoreMergeStats {
 };
 
 /*
- * Static method to precess the key-values publication, attempt to merge it
- in
- * the existing map, and return a publication made out of the updated values.
+ * This is the util method to merge the key-values publication to the existing
+ * `kvStore` map, and return a publication made out of the updated values.
+ *
+ * High level speaking, we will perform:
+ *  - 1st tie-breaker : version - prefer lower;
+ *  - 2nd tie-breaker: originatorId - prefer higher;
+ *  - 3rd tie-breaker: value(if exists) - prefer higher;
  *
  * @param kvStore - key-value map with current key-values in KVStore
  * @param keyVals - key-value map with key-values to merge in
@@ -228,8 +232,8 @@ struct KvStoreMergeStats {
  *
  * @return: a tuple of
  *  - key-value map obtained by merging data; publication made out of
- *    the updated values
- *  - the statistics
+ *    the updated values.
+ *  - the statistics about reasons keys are NOT merged.
  */
 std::pair<thrift::KeyVals, KvStoreNoMergeReasonStats> mergeKeyValues(
     std::unordered_map<std::string, thrift::Value>& kvStore,
