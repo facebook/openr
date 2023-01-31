@@ -2559,6 +2559,24 @@ KvStoreDb<ClientType>::mergePublication(
     thrift::Publication const& rcvdPublication,
     bool isSelfOriginatedUpdate,
     std::optional<std::string> senderId) {
+  // keyVals is NOT an optional field. Use & to avoid copy.
+  const auto& keyVals = *rcvdPublication.keyVals();
+  const auto tobeUpdatedKeys = rcvdPublication.tobeUpdatedKeys();
+  const auto nodeIds = rcvdPublication.nodeIds();
+
+  /*
+   * [Loop Prevention]
+   *
+   * KvStoreDb will add itself to the "visited" path to prevent looping.
+   *
+   */
+  if (nodeIds.has_value() and
+      std::find(nodeIds->cbegin(), nodeIds->cend(), kvParams_.nodeId) !=
+          nodeIds->cend()) {
+    fb303::fbData->addStatValue("kvstore.looped_publications", 1, fb303::COUNT);
+    return 0;
+  }
+
   if (not isSelfOriginatedUpdate) {
     /*
      * NOTE: received* counters are ONLY used for publication received remotely.
@@ -2569,55 +2587,73 @@ KvStoreDb<ClientType>::mergePublication(
     fb303::fbData->addStatValue(
         "kvstore.received_publications." + area_, 1, fb303::COUNT);
     fb303::fbData->addStatValue(
-        "kvstore.received_key_vals",
-        rcvdPublication.keyVals()->size(),
-        fb303::SUM);
+        "kvstore.received_key_vals", keyVals.size(), fb303::SUM);
     fb303::fbData->addStatValue(
-        "kvstore.received_key_vals." + area_,
-        rcvdPublication.keyVals()->size(),
-        fb303::SUM);
+        "kvstore.received_key_vals." + area_, keyVals.size(), fb303::SUM);
   }
 
-  static const std::vector<std::string> kUpdatedKeys = {};
-
-  std::unordered_set<std::string> keysTobeUpdated;
-  for (auto const& key : rcvdPublication.tobeUpdatedKeys()
-           ? rcvdPublication.tobeUpdatedKeys().value()
-           : kUpdatedKeys) {
-    keysTobeUpdated.insert(key);
-  }
+  /*
+   * [3-way Sync]
+   *
+   * https://openr.readthedocs.io/Protocol_Guide/KvStore.html#finalized-full-sync-part-of-3-way-sync
+   *
+   * Prepare keys to send back to sender if both conditions are met:
+   *  1) senderId is non-empty. This happens ONLY during full-sync.
+   *  2) received publication(from peer) has non-empty `tobeUpdatedKeys`.
+   *     This will happen with two cases:
+   *
+   *     i) peer does NOT have this key
+   *     ii) peer's version is lower.
+   */
+  std::unordered_set<std::string> keysToSendBack{};
   if (senderId.has_value()) {
-    XLOG(DBG3) << "[" << kvParams_.nodeId << "]: Received publication from "
-               << senderId.value();
+    XLOG(DBG3)
+        << AreaTag()
+        << fmt::format(
+               "Received publication from {} with: {} keyVals, {} tobeUpdatedKeys",
+               senderId.value(),
+               keyVals.size(),
+               tobeUpdatedKeys.has_value() ? tobeUpdatedKeys->size() : 0);
+
+    // retrieve keys from peer's request
+    if (tobeUpdatedKeys.has_value()) {
+      for (const auto& key : *tobeUpdatedKeys) {
+        keysToSendBack.insert(key);
+      }
+    }
+
+    // merge with pending keys due to peer NOT in INITIALIZED state
     auto peerIt = thriftPeers_.find(senderId.value());
     if (peerIt != thriftPeers_.end()) {
-      keysTobeUpdated.merge(peerIt->second.pendingKeysDuringInitialization);
+      keysToSendBack.merge(peerIt->second.pendingKeysDuringInitialization);
       peerIt->second.pendingKeysDuringInitialization.clear();
     }
   }
-  const bool needFinalizeFullSync =
-      senderId.has_value() and not keysTobeUpdated.empty();
 
-  // This can happen when KvStore is emitting expired-key updates
-  if (rcvdPublication.keyVals()->empty() and not needFinalizeFullSync) {
+  /*
+   * ATTN: This can happen when KvStore is emitting expired-key updates
+   *
+   * When KvStore is emitting expiredKeys, expiredKeys will NOT be flooded as
+   * delta to peers to prevent endless bouncing back of key add/expiration.
+   */
+  if (keyVals.empty() and keysToSendBack.empty()) {
     return 0;
   }
 
-  // Check for loop
-  const auto nodeIds = rcvdPublication.nodeIds();
-  if (nodeIds.has_value() and
-      std::find(nodeIds->cbegin(), nodeIds->cend(), kvParams_.nodeId) !=
-          nodeIds->cend()) {
-    fb303::fbData->addStatValue("kvstore.looped_publications", 1, fb303::COUNT);
-    return 0;
-  }
-
+  /*
+   * [Merge with Local Store]
+   *
+   *  - `rcvdPublication.keyVals` will be merged with local kvStore_
+   *  - delta will be generated with the form of `thrift::Publication`
+   *  - delta will be flooded to peers
+   *
+   * ATTN: sender is used for version inconsistency detection.
+   */
   auto sender = senderId.has_value()
       ? senderId
       : (nodeIds.has_value() ? std::optional(nodeIds->back()) : std::nullopt);
-  // Generate delta with local KvStore
-  auto [mergedKeyVals, stats] = mergeKeyValues(
-      kvStore_, *rcvdPublication.keyVals(), kvParams_.filters, sender);
+  auto [mergedKeyVals, stats] =
+      mergeKeyValues(kvStore_, keyVals, kvParams_.filters, sender);
   if (stats.inconsistencyDetetectedWithOriginator) {
     // inconsistency detected: Received a TTL update from originator
     // but key version are mismatched
@@ -2631,8 +2667,10 @@ KvStoreDb<ClientType>::mergePublication(
     }
   }
 
+  /*
+   * Prepare thrift::Publication structure with updated key-value pairs
+   */
   thrift::Publication deltaPublication;
-
   deltaPublication.keyVals() = std::move(mergedKeyVals);
   deltaPublication.area() = area_;
 
@@ -2642,8 +2680,9 @@ KvStoreDb<ClientType>::mergePublication(
   fb303::fbData->addStatValue(
       "kvstore.updated_key_vals." + area_, kvUpdateCnt, fb303::SUM);
 
-  // Populate nodeIds and our nodeId_ to the end
-  if (rcvdPublication.nodeIds().has_value()) {
+  // Populate nodeIds. ATTN: nodeId of itself will be appended later
+  // inside `floodPublication`
+  if (nodeIds.has_value()) {
     deltaPublication.nodeIds().copy_from(rcvdPublication.nodeIds());
   }
 
@@ -2661,8 +2700,8 @@ KvStoreDb<ClientType>::mergePublication(
 
   // response to senderId with tobeUpdatedKeys + Vals
   // (last step in 3-way full-sync)
-  if (needFinalizeFullSync) {
-    finalizeFullSync(keysTobeUpdated, *senderId);
+  if (not keysToSendBack.empty()) {
+    finalizeFullSync(keysToSendBack, senderId.value());
   }
 
   return kvUpdateCnt;

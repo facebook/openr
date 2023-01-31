@@ -557,7 +557,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   auto kvStore = createKvStore(getTestKvConf("node1"));
   kvStore->run();
 
-  /** Verify redundant publications **/
+  /** Verify NO redundant publications **/
   // Set key in KvStore with loop
   const std::vector<std::string> nodeIds{"node2", "node3", "node1", "node4"};
   kvStore->setKey(kTestingAreaName, "test-key", thrift::Value(), nodeIds);
@@ -638,9 +638,9 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
   EXPECT_EQ(4, counters.at("kvstore.cmd_key_set.count"));
   ASSERT_EQ(1, counters.count("kvstore.received_key_vals.sum"));
-  EXPECT_EQ(4, counters.at("kvstore.received_key_vals.sum"));
+  EXPECT_EQ(3, counters.at("kvstore.received_key_vals.sum"));
   ASSERT_EQ(1, counters.count("kvstore.received_key_vals." + area + ".sum"));
-  EXPECT_EQ(4, counters.at("kvstore.received_key_vals." + area + ".sum"));
+  EXPECT_EQ(3, counters.at("kvstore.received_key_vals." + area + ".sum"));
 
   // Verify the key and the number of key
   ASSERT_TRUE(kvStore->getKey(kTestingAreaName, "test-key2").has_value());
@@ -658,10 +658,10 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_EQ(1, counters.count("kvstore.looped_publications.count"));
   EXPECT_EQ(1, counters.at("kvstore.looped_publications.count"));
   ASSERT_EQ(1, counters.count("kvstore.received_publications.count"));
-  EXPECT_EQ(4, counters.at("kvstore.received_publications.count"));
+  EXPECT_EQ(3, counters.at("kvstore.received_publications.count"));
   ASSERT_EQ(
       1, counters.count("kvstore.received_publications." + area + ".count"));
-  EXPECT_EQ(4, counters.at("kvstore.received_publications." + area + ".count"));
+  EXPECT_EQ(3, counters.at("kvstore.received_publications." + area + ".count"));
 
   // Verify redundant publication counter
   ASSERT_EQ(1, counters.count("kvstore.received_redundant_publications.count"));
