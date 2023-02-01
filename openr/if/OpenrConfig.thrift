@@ -874,6 +874,13 @@ struct OpenrConfig {
   104: optional BgpRouteTranslationConfig bgp_translation_config;
 
   /**
+   * Enable FSDB subscription to detect a neighbor down event, in case
+   * such event is undetectable through interface change
+   * Current use case: detecting LAG down
+   */
+  105: bool enable_neighbor_monitor = false;
+
+  /**
    * ATTN: All of the temp config knobs serving for gradual rollout purpose use
    * id range of 200 - 300
    */
