@@ -221,7 +221,7 @@ struct KvStoreMergeStats {
  * `kvStore` map, and return a publication made out of the updated values.
  *
  * High level speaking, we will perform:
- *  - 1st tie-breaker : version - prefer lower;
+ *  - 1st tie-breaker : version - prefer higher;
  *  - 2nd tie-breaker: originatorId - prefer higher;
  *  - 3rd tie-breaker: value(if exists) - prefer higher;
  *

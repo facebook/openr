@@ -191,11 +191,6 @@ mergeKeyValues(
     auto kvStoreIt = kvStore.find(key);
     if (kvStoreIt != kvStore.end()) {
       myVersion = *kvStoreIt->second.version();
-    } else {
-      XLOG(DBG4) << fmt::format(
-          "(mergeKeyValues) first time seeing key: {} with version: {}",
-          key,
-          newVersion);
     }
 
     // kvStore will try to detect version inconsistency and force a full-sync
@@ -212,7 +207,25 @@ mergeKeyValues(
     bool updateAllNeeded{false};
     bool updateTtlNeeded{false};
 
-    if (value.value().has_value()) {
+    if (util::isTtlUpdate(value)) {
+      /*
+       * No value field. This is ttl refreshing coming from local store(aka,
+       * self-originated key) or ttl updates coming from remote node.
+       *
+       * TODO: add failure handling for ttl update to detect inconsistency
+       */
+      if (kvStoreIt != kvStore.end() and
+          *value.version() == *kvStoreIt->second.version() and
+          *value.originatorId() == *kvStoreIt->second.originatorId() and
+          *value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+        XLOG(DBG4) << fmt::format(
+            "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
+            key,
+            *value.ttlVersion(),
+            *kvStoreIt->second.ttlVersion());
+        updateTtlNeeded = true;
+      }
+    } else {
       if (newVersion > myVersion) {
         /*
          * [1st tie-breaker] version - prefer higher
@@ -223,15 +236,27 @@ mergeKeyValues(
          * ATTN: for newVersion < myVersion case, util::isValidVersionAndLog()
          * has already guarded against that case. :)
          */
+        XLOG(DBG4) << fmt::format(
+            "(mergeKeyValues) Update key: {} with higher version: {}, old one: {}",
+            key,
+            newVersion,
+            myVersion);
+
         updateAllNeeded = true;
       } else if (*value.originatorId() > *kvStoreIt->second.originatorId()) {
         /*
          * [2nd tie-breaker] originatorId - prefer higher
          */
+        XLOG(INFO) << fmt::format(
+            "(mergeKeyValues) Update key: {} with higher originatorId: {}, old one: {}",
+            key,
+            *value.originatorId(),
+            *kvStoreIt->second.originatorId());
+
         updateAllNeeded = true;
       } else if (*value.originatorId() == *kvStoreIt->second.originatorId()) {
         /*
-         * [3rd tie-breaker](if exists) value - prefer higher
+         * [3rd tie-breaker] value - prefer higher
          *
          * This can occur after kvstore restarts or simply reconnects after
          * disconnection. We let one of the two values win if they differ(
@@ -242,32 +267,36 @@ mergeKeyValues(
         int rc = (*value.value()).compare(*kvStoreIt->second.value());
         if (rc > 0) {
           // versions and orginatorIds are same but value is higher
-          XLOG(DBG3) << fmt::format(
-              "Previous incarnation reflected back for key {}", key);
+          XLOG(DBG4) << fmt::format(
+              "(mergeKeyValues) Update key: {} with higher value", key);
+
           updateAllNeeded = true;
         } else if (rc == 0) {
-          // versions, orginatorIds, value are all same
-          // retain higher ttlVersion
+          /*
+           * [4th tie-breaker] ttlVersion - prefer higher
+           */
           if (*value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+            XLOG(DBG4) << fmt::format(
+                "(mergeKeyValues) Update key: {} with higher ttlVersion: {}, old one: {}",
+                key,
+                *value.ttlVersion(),
+                *kvStoreIt->second.ttlVersion());
+
             updateTtlNeeded = true;
           }
+        } else {
+          /*
+           * regarding to rc < 0 case, value in local store wins the
+           * tie-breaking and no update is generated.
+           */
         }
+      } else {
         /*
-         * regarding to rc < 0 case, value in local store wins the tie-breaking
-         * and no update is generated.
+         * regarding to value.originatorId < kvStoreIt->second.originatorId
+         * case, value in local store wins the tie-breaking and no update is
+         * generated.
          */
       }
-    }
-
-    /*
-     * No value field. This is ttl refreshing coming from local store(aka,
-     * self-originated key) or ttl updates coming from remote node.
-     */
-    if (not value.value().has_value() and kvStoreIt != kvStore.end() and
-        *value.version() == *kvStoreIt->second.version() and
-        *value.originatorId() == *kvStoreIt->second.originatorId() and
-        *value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
-      updateTtlNeeded = true;
     }
 
     if (!updateAllNeeded and !updateTtlNeeded) {
@@ -334,7 +363,7 @@ mergeKeyValues(
     kvUpdates.emplace(key, value);
   }
 
-  XLOG(DBG4) << fmt::format(
+  XLOG(DBG3) << fmt::format(
       "(mergeKeyValues) updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
       kvUpdates.size(),
       stats.updateStats.valUpdateCnt,
