@@ -27,6 +27,7 @@ class ConfigShowCmd(OpenrCtrlCmd):
 
 
 class ConfigDryRunCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, file: str, *args, **kwargs
     ) -> int:
@@ -42,6 +43,7 @@ class ConfigDryRunCmd(OpenrCtrlCmd):
 
 
 class ConfigCompareCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(self, client: OpenrCtrlCppClient.Async, file: str, *args, **kwargs):
         running_conf = await client.getRunningConfig()
 
@@ -170,6 +172,7 @@ class ConfigPrefixManagerCmd(ConfigStoreCmdBase):
 
 
 class ConfigEraseCmd(ConfigStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, key: str, *args, **kwargs
     ) -> None:
@@ -178,6 +181,7 @@ class ConfigEraseCmd(ConfigStoreCmdBase):
 
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,

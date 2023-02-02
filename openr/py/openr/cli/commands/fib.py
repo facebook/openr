@@ -68,6 +68,7 @@ class FibAgentCmd(FibCmdBase):
 
 
 class FibUnicastRoutesCmd(FibCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -102,6 +103,7 @@ class FibUnicastRoutesCmd(FibCmdBase):
 
 
 class FibMplsRoutesCmd(FibCmdBase):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -127,6 +129,7 @@ class FibMplsRoutesCmd(FibCmdBase):
 
 
 class FibCountersCmd(FibAgentCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, json_opt, *args, **kwargs
     ) -> int:
@@ -162,6 +165,7 @@ class FibCountersCmd(FibAgentCmd):
 
 
 class FibRoutesInstalledCmd(FibAgentCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -208,6 +212,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
 
 
 class FibAddRoutesCmd(FibAgentCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, prefixes, nexthops, *args, **kwargs
     ):
@@ -227,6 +232,7 @@ class FibAddRoutesCmd(FibAgentCmd):
 
 
 class FibDelRoutesCmd(FibAgentCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(self, client: OpenrCtrlCppClient.Async, prefixes, *args, **kwargs):
         prefixes = [ipnetwork.ip_str_to_prefix(p) for p in prefixes.split(",")]
         try:
@@ -243,6 +249,7 @@ class FibDelRoutesCmd(FibAgentCmd):
 
 
 class FibSyncRoutesCmd(FibAgentCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, prefixes, nexthops, *args, **kwargs
     ):
@@ -260,6 +267,7 @@ class FibSyncRoutesCmd(FibAgentCmd):
 
 
 class FibValidateRoutesCmd(FibAgentCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -491,6 +499,7 @@ class FibSnoopCmd(FibCmdBase):
                 timestamp=True,
             )
 
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
