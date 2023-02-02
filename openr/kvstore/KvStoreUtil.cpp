@@ -77,21 +77,18 @@ isTtlUpdate(const thrift::Value& value) {
   return !value.value().has_value();
 }
 
-bool
-isInconsistent(const thrift::Value& value, const int64_t myVersion) {
-  return (isTtlUpdate(value) and value.version() != myVersion);
-}
-
 /*
- * Inconsistency is detected when:
- * There is a TTL update but version is not the same.
+ * Inconsistency is detected with 3 following cases:
+ * 1. received ttl update with a missing k-v pair
+ * 2. received ttl update with a different version
+ * 3. received ttl update with a different originatorId
  *
- * We would trigger resync only if:
- * 1. There is inconsistency
+ * When to trigger:
+ * 1. There is inconsistency detected.
  * AND
  * 2. Sender is the originator.
  *
- * How we trigger:
+ * How to trigger:
  * Setting `inconsistencyDetetectedWithOriginator` to true
  *
  * What would happen:
@@ -99,34 +96,72 @@ isInconsistent(const thrift::Value& value, const int64_t myVersion) {
  * 2. Trigger originator to bump its key version if needed.
  *
  * Example:
- * A-B-C. if A is the originator of the key,
- * and C receives an inconsistent update from B.
- * C will not ask to resync with B.
+ * A-B-C.
+ *
+ * If A is the originator of the key, and C receives an inconsistent update
+ * from B for A's inconsistency, C will not ask to resync with B.
  */
 bool
 isResyncNeeded(
-    const int64_t myVersion,
+    const thrift::KeyVals& kvStore,
     const std::string& key,
-    const thrift::Value& value,
-    std::optional<std::string> const& sender,
-    KvStoreMergeStats& stats) {
-  if (isInconsistent(value, myVersion)) {
-    const std::string& originator = *value.originatorId();
-    auto senderName = sender.value_or("");
-    XLOG(ERR) << fmt::format(
-        "(mergeKeyValues) Received ttl update from {}. key: {}, received version: {}, Local version: {}, originator: {}",
-        senderName,
-        key,
-        myVersion,
-        *value.version(),
-        originator);
-    if (senderName == originator) {
-      stats.noMergeStats.inconsistencyDetetectedWithOriginator = true;
-      return true;
-    }
+    const thrift::Value& value) {
+  /*
+   * ATTENTION: DO NOT CHANGE THE IF-ELSE CONDITION ORDER SINCE THE
+   * TIE-BREAKING PROCEDURE HAS PRIORITY.
+   */
+  bool inconsistencyDetected{false};
+  int64_t myVersion{openr::Constants::kUndefinedVersion};
+  auto kvStoreIt = kvStore.find(key);
+  if (kvStoreIt != kvStore.end()) {
+    myVersion = *kvStoreIt->second.version();
   }
-  return false;
+
+  if (kvStoreIt == kvStore.end()) {
+    /*
+     * Case 1: received ttl update with a missing k-v pair
+     */
+    XLOG(ERR) << "(mergeKeyValues) Detected ttl update from a non-existing "
+              << fmt::format(
+                     "key: {}, version: {}, originator: {}, ttlVersion: {}",
+                     key,
+                     *value.version(),
+                     *value.originatorId(),
+                     *value.ttlVersion());
+
+    inconsistencyDetected = true;
+  } else if (*value.version() != myVersion) {
+    /*
+     * Case 2: received ttl update with a different version
+     */
+    XLOG(ERR)
+        << "(mergeKeyValues) Detected version inconsistency with ttl update. "
+        << fmt::format(
+               "key: {}, version: {}, originator: {} with local version: {}",
+               key,
+               *value.version(),
+               *value.originatorId(),
+               myVersion);
+
+    inconsistencyDetected = true;
+  } else if (*value.originatorId() != *kvStoreIt->second.originatorId()) {
+    /*
+     * Case 3: received ttl update with a different originatorId
+     */
+    XLOG(ERR)
+        << "(mergeKeyValues) Detected originatorId inconsistency with ttl update. "
+        << fmt::format(
+               "key: {}, version: {}, originator: {} with local originatorId: {}",
+               key,
+               *value.version(),
+               *value.originatorId(),
+               *kvStoreIt->second.originatorId());
+
+    inconsistencyDetected = true;
+  }
+  return inconsistencyDetected;
 }
+
 } // namespace util
 
 bool
@@ -187,21 +222,12 @@ mergeKeyValues(
 
     // initialize `myVersion` to a default value in case this is a new key
     int64_t myVersion{openr::Constants::kUndefinedVersion};
-    int64_t newVersion = *value.version();
+    const auto& newVersion = *value.version();
+    const auto& newTtlVersion = *value.ttlVersion();
+    const auto& originatorId = *value.originatorId();
     auto kvStoreIt = kvStore.find(key);
     if (kvStoreIt != kvStore.end()) {
       myVersion = *kvStoreIt->second.version();
-    }
-
-    // kvStore will try to detect version inconsistency and force a full-sync
-    if (util::isResyncNeeded(myVersion, key, value, sender, stats)) {
-      return std::make_pair(
-          std::move(kvUpdates), std::move(stats.noMergeStats));
-    }
-
-    if (not util::isValidVersionAndLog(myVersion, key, value, stats)) {
-      // skip if the version is invalid or old
-      continue;
     }
 
     bool updateAllNeeded{false};
@@ -212,21 +238,38 @@ mergeKeyValues(
        * No value field. This is ttl refreshing coming from local store(aka,
        * self-originated key) or ttl updates coming from remote node.
        *
-       * TODO: add failure handling for ttl update to detect inconsistency
+       * NOTE: kvStore will try to detect possible inconsistencies and force a
+       * full-sync if it is adjacency peer.
        */
-      if (kvStoreIt != kvStore.end() and
-          *value.version() == *kvStoreIt->second.version() and
-          *value.originatorId() == *kvStoreIt->second.originatorId() and
-          *value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+      if (util::isResyncNeeded(kvStore, key, value)) {
+        auto senderId = sender.value_or("");
+        if (senderId == originatorId) {
+          stats.noMergeStats.inconsistencyDetetectedWithOriginator = true;
+          return std::make_pair(
+              std::move(kvUpdates), std::move(stats.noMergeStats));
+        }
+      } else if (newTtlVersion > *kvStoreIt->second.ttlVersion()) {
+        /*
+         * Case 4: key exists, same version, same originatorId.
+         */
         XLOG(DBG4) << fmt::format(
             "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
             key,
             *value.ttlVersion(),
             *kvStoreIt->second.ttlVersion());
+
         updateTtlNeeded = true;
       }
     } else {
-      if (newVersion > myVersion) {
+      if (not util::isValidVersionAndLog(myVersion, key, value, stats)) {
+        /*
+         * skip if the version is invalid or old
+         *
+         * Attention: this condition does NOT apply to ttl. It can happen with
+         * version inconsistency with ttl update.
+         */
+        continue;
+      } else if (newVersion > myVersion) {
         /*
          * [1st tie-breaker] version - prefer higher
          *
