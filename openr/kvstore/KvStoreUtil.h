@@ -60,12 +60,6 @@ class KvStoreFilters {
   thrift::FilterOperator filterOperator_;
 };
 
-/**
- * Util method to retrieve KvStoreFilters from config
- */
-std::optional<openr::KvStoreFilters> getKvStoreFilters(
-    const thrift::KvStoreConfig& kvStoreConfig);
-
 // helper for deserialization
 template <typename ThriftType>
 static ThriftType parseThriftValue(thrift::Value const& value);

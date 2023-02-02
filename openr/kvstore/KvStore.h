@@ -98,7 +98,6 @@ struct KvStoreParams {
       std::string nodeId,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      std::optional<KvStoreFilters> filter,
       // Kvstore flooding rate
       std::optional<thrift::KvStoreFloodRate> floodrate,
       // TTL decrement factor
@@ -112,7 +111,6 @@ struct KvStoreParams {
       : nodeId(nodeId),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         logSampleQueue(logSampleQueue),
-        filters(std::move(filter)),
         floodRate(std::move(floodrate)),
         ttlDecr(ttldecr),
         keyTtl(keyTtl),

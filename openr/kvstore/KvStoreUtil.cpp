@@ -174,31 +174,6 @@ isValidVersion(const int64_t myVersion, const thrift::Value& incomingVal) {
   return (incomingVal.version() > 0) and (incomingVal.version() >= myVersion);
 }
 
-std::optional<openr::KvStoreFilters>
-getKvStoreFilters(const thrift::KvStoreConfig& kvStoreConfig) {
-  std::optional<openr::KvStoreFilters> kvFilters{std::nullopt};
-  // Add key prefixes to allow if set as leaf node
-  if (kvStoreConfig.set_leaf_node().value_or(false)) {
-    std::vector<std::string> keyPrefixFilters;
-    if (auto v = kvStoreConfig.key_prefix_filters()) {
-      keyPrefixFilters = *v;
-    }
-    keyPrefixFilters.push_back(openr::Constants::kPrefixAllocMarker.toString());
-    keyPrefixFilters.push_back(
-        openr::Constants::kNodeLabelRangePrefix.toString());
-
-    // save nodeIds in the set
-    std::set<std::string> originatorIdFilters{};
-    for (const auto& id :
-         kvStoreConfig.key_originator_id_filters().value_or({})) {
-      originatorIdFilters.insert(id);
-    }
-    originatorIdFilters.insert(*kvStoreConfig.node_name());
-    kvFilters = openr::KvStoreFilters(keyPrefixFilters, originatorIdFilters);
-  }
-  return kvFilters;
-}
-
 std::pair<thrift::KeyVals, KvStoreNoMergeReasonStats>
 mergeKeyValues(
     thrift::KeyVals& kvStore,

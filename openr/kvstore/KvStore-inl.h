@@ -31,7 +31,6 @@ KvStore<ClientType>::KvStore(
           *kvStoreConfig.node_name(),
           kvStoreUpdatesQueue,
           logSampleQueue,
-          getKvStoreFilters(kvStoreConfig),
           kvStoreConfig.flood_rate().to_optional(),
           std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms()),
           std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms()),

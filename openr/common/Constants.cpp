@@ -12,10 +12,8 @@ namespace openr {
 constexpr folly::StringPiece Constants::kAdjDbMarker;
 constexpr folly::StringPiece Constants::kDefaultArea;
 constexpr folly::StringPiece Constants::kEventLogCategory;
-constexpr folly::StringPiece Constants::kNodeLabelRangePrefix;
 constexpr folly::StringPiece Constants::kOpenrCtrlSessionContext;
 constexpr folly::StringPiece Constants::kPlatformHost;
-constexpr folly::StringPiece Constants::kPrefixAllocMarker;
 constexpr folly::StringPiece Constants::kPrefixDbMarker;
 constexpr folly::StringPiece Constants::kPrefixNameSeparator;
 constexpr folly::StringPiece Constants::kSeedPrefixAllocLenSeparator;
