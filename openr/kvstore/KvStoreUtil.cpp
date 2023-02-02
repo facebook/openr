@@ -224,7 +224,8 @@ mergeKeyValues(
     int64_t myVersion{openr::Constants::kUndefinedVersion};
     const auto& newVersion = *value.version();
     const auto& newTtlVersion = *value.ttlVersion();
-    const auto& originatorId = *value.originatorId();
+    const auto& newTtl = *value.ttl();
+    const auto& newOriginatorId = *value.originatorId();
     auto kvStoreIt = kvStore.find(key);
     if (kvStoreIt != kvStore.end()) {
       myVersion = *kvStoreIt->second.version();
@@ -243,7 +244,7 @@ mergeKeyValues(
        */
       if (util::isResyncNeeded(kvStore, key, value)) {
         auto senderId = sender.value_or("");
-        if (senderId == originatorId) {
+        if (senderId == newOriginatorId) {
           stats.noMergeStats.inconsistencyDetetectedWithOriginator = true;
           return std::make_pair(
               std::move(kvUpdates), std::move(stats.noMergeStats));
@@ -255,7 +256,7 @@ mergeKeyValues(
         XLOG(DBG4) << fmt::format(
             "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
             key,
-            *value.ttlVersion(),
+            newTtlVersion,
             *kvStoreIt->second.ttlVersion());
 
         updateTtlNeeded = true;
@@ -286,18 +287,18 @@ mergeKeyValues(
             myVersion);
 
         updateAllNeeded = true;
-      } else if (*value.originatorId() > *kvStoreIt->second.originatorId()) {
+      } else if (newOriginatorId > *kvStoreIt->second.originatorId()) {
         /*
          * [2nd tie-breaker] originatorId - prefer higher
          */
         XLOG(INFO) << fmt::format(
             "(mergeKeyValues) Update key: {} with higher originatorId: {}, old one: {}",
             key,
-            *value.originatorId(),
+            newOriginatorId,
             *kvStoreIt->second.originatorId());
 
         updateAllNeeded = true;
-      } else if (*value.originatorId() == *kvStoreIt->second.originatorId()) {
+      } else if (newOriginatorId == *kvStoreIt->second.originatorId()) {
         /*
          * [3rd tie-breaker] value - prefer higher
          *
@@ -318,11 +319,11 @@ mergeKeyValues(
           /*
            * [4th tie-breaker] ttlVersion - prefer higher
            */
-          if (*value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+          if (newTtlVersion > *kvStoreIt->second.ttlVersion()) {
             XLOG(DBG4) << fmt::format(
                 "(mergeKeyValues) Update key: {} with higher ttlVersion: {}, old one: {}",
                 key,
-                *value.ttlVersion(),
+                newTtlVersion,
                 *kvStoreIt->second.ttlVersion());
 
             updateTtlNeeded = true;
@@ -358,21 +359,21 @@ mergeKeyValues(
         newVersion,
         (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId()
                                     : "null"),
-        *value.originatorId(),
+        newOriginatorId,
         (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttlVersion() : 0),
-        *value.ttlVersion(),
+        newTtlVersion,
         (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttl() : 0),
-        *value.ttl());
+        newTtl);
 
     if (updateAllNeeded) {
       ++stats.updateStats.valUpdateCnt;
       FB_LOG_EVERY_MS(INFO, 500) << fmt::format(
           "Updating key: {}, Originator: {}, Version: {}, TtlVersion: {}, Ttl: {}",
           key,
-          *value.originatorId(),
+          newOriginatorId,
           newVersion,
-          *value.ttlVersion(),
-          *value.ttl());
+          newTtlVersion,
+          newTtl);
 
       CHECK(value.value().has_value());
       // grab the new value (this will copy, intended)
@@ -389,8 +390,8 @@ mergeKeyValues(
       }
       // update hash if it's not there
       if (not kvStoreIt->second.hash().has_value()) {
-        kvStoreIt->second.hash() = generateHash(
-            *value.version(), *value.originatorId(), value.value());
+        kvStoreIt->second.hash() =
+            generateHash(newVersion, newOriginatorId, value.value());
       }
     } else if (updateTtlNeeded) {
       ++stats.updateStats.ttlUpdateCnt;
@@ -398,8 +399,8 @@ mergeKeyValues(
       CHECK(kvStoreIt != kvStore.end());
 
       // update TTL only, nothing else
-      kvStoreIt->second.ttl() = *value.ttl();
-      kvStoreIt->second.ttlVersion() = *value.ttlVersion();
+      kvStoreIt->second.ttl() = newTtl;
+      kvStoreIt->second.ttlVersion() = newTtlVersion;
     }
 
     // announce the update
