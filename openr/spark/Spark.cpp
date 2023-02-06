@@ -288,6 +288,7 @@ Spark::SparkNeighbor::shouldResetAdjacency(
 Spark::Spark(
     messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
     messaging::RQueue<thrift::InitializationEvent> initializationEventQueue,
+    messaging::RQueue<AddressEvent> addrEventQueue,
     messaging::ReplicateQueue<NeighborInitEvent>& neighborUpdatesQueue,
     std::shared_ptr<IoProvider> ioProvider,
     std::shared_ptr<const Config> config,
@@ -427,6 +428,20 @@ Spark::Spark(
           processInitializationEvent(std::move(maybeEvent).value());
         }
       });
+
+  // Listen to NeighborMonitor if enabled
+  if (config_->isNeighborMonitorEnabled()) {
+    addFiberTask([q = std::move(addrEventQueue), this]() mutable noexcept {
+      while (true) {
+        auto maybeEvent = q.get();
+        if (maybeEvent.hasError()) {
+          XLOG(INFO) << "Terminating neighbor events processing fiber";
+          break;
+        }
+        processAddressEvent(std::move(maybeEvent).value());
+      }
+    });
+  }
 
   // Initialize UDP socket for neighbor discovery
   prepareSocket();
@@ -2067,6 +2082,33 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
 
   // logging for initialization stage duration computation
   logInitializationEvent("Spark", thrift::InitializationEvent::INITIALIZED);
+}
+
+void
+Spark::processAddressEvent(AddressEvent&& event) {
+  // Process Address Event reported by neighborMonitor(FSDB)
+  // [ATTN] We assume the only event received is neighbor_resolvable
+
+  const auto& v6 = event.v6Addr;
+  const auto& ifName = event.ifName;
+  auto it = sparkNeighbors_.find(ifName);
+
+  // Find the unresolvable sparkNeighbor by comparing interface name
+  // and V6 address
+  if (it != sparkNeighbors_.end()) {
+    auto& ifNeighbors = it->second;
+    for (const auto& [name, neighbor] : ifNeighbors) {
+      if (neighbor.transportAddressV6 == v6) {
+        XLOG(INFO) << fmt::format(
+            "Bringing down neighbor {} on {} due to unreachability",
+            name,
+            ifName);
+        neighborDownWrapper(neighbor, ifName, name);
+        eraseSparkNeighbor(ifNeighbors, name);
+        return;
+      }
+    }
+  }
 }
 
 void

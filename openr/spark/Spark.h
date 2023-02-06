@@ -51,6 +51,7 @@ class Spark final : public OpenrEventBase {
       // consumer Queue
       messaging::RQueue<InterfaceDatabase> interfaceUpdatesQueue,
       messaging::RQueue<thrift::InitializationEvent> initializationEventQueue,
+      messaging::RQueue<AddressEvent> addrEventQueue,
       // producer Queue
       messaging::ReplicateQueue<NeighborInitEvent>& nbrUpdatesQueue,
       // raw ptr of modules
@@ -393,6 +394,9 @@ class Spark final : public OpenrEventBase {
   // process timeout for negotiate stage
   void processNegotiateTimeout(
       std::string const& ifName, std::string const& neighborName);
+
+  // process Address Event from NeighborMonitor
+  void processAddressEvent(AddressEvent&& event);
 
   // Util function for state transition
   static thrift::SparkNeighState getNextState(

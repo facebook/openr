@@ -26,6 +26,7 @@ SparkWrapper::SparkWrapper(
       ? std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
             initializationEventQueue_.getReader(),
+            addrEventQueue_.getReader(),
             neighborUpdatesQueue_,
             std::move(ioProvider),
             config,
@@ -34,6 +35,7 @@ SparkWrapper::SparkWrapper(
       : std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
             initializationEventQueue_.getReader(),
+            addrEventQueue_.getReader(),
             neighborUpdatesQueue_,
             std::move(ioProvider),
             config,
@@ -66,6 +68,7 @@ void
 SparkWrapper::stop() {
   interfaceUpdatesQueue_.close();
   initializationEventQueue_.close();
+  addrEventQueue_.close();
   spark_->stop();
   spark_->waitUntilStopped();
   thread_->join();
@@ -79,6 +82,12 @@ SparkWrapper::updateInterfaceDb(const InterfaceDatabase& ifDb) {
 void
 SparkWrapper::sendPrefixDbSyncedSignal() {
   initializationEventQueue_.push(thrift::InitializationEvent::PREFIX_DB_SYNCED);
+}
+
+void
+SparkWrapper::sendNeighborDownEvent(
+    const std::string& ifName, const thrift::BinaryAddress& v6Addr) {
+  addrEventQueue_.push(AddressEvent{false, v6Addr, ifName});
 }
 
 std::optional<NeighborEvents>

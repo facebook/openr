@@ -625,6 +625,24 @@ TEST_F(SimpleSparkFixture, UnidirectionTest) {
 }
 
 //
+// Spark will tear down neighbor immediately upon receiving a neighbor down
+// from external source (fsdb)
+//
+TEST_F(SimpleSparkFixture, ExternalNeighborDown) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  LOG(INFO) << "send neighbor down event";
+  node1_->sendNeighborDownEvent(iface1, toBinaryAddress(ip2V6.first));
+  // wait for node1_ send neighbor down
+  {
+    EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency DOWN towards {}", nodeName1_, nodeName2_);
+  }
+}
+
+//
 // Start 2 Spark instances and wait them forming adj. Then
 // restart one of them within GR window, make sure we get neighbor
 // "RESTARTED" event due to graceful restart window.

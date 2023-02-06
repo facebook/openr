@@ -315,6 +315,10 @@ main(int argc, char** argv) {
   auto linkMonitorNetlinkEventsQueueReader =
       netlinkEventsQueue.getReader("linkMonitor");
 
+  // NeighborMonitor -> Spark
+  ReplicateQueue<AddressEvent> addrEventsQueue;
+  auto sparkAddrEventsQueueReader = addrEventsQueue.getReader("spark");
+
   // Anyone -> Monitor
   ReplicateQueue<LogSample> logSampleQueue;
 
@@ -463,6 +467,7 @@ main(int argc, char** argv) {
       std::make_unique<Spark>(
           std::move(sparkInterfaceUpdatesQueueReader),
           std::move(sparkInitializationEventsQueueReader),
+          std::move(sparkAddrEventsQueueReader),
           neighborUpdatesQueue,
           std::make_shared<IoProvider>(),
           config));
@@ -608,6 +613,7 @@ main(int argc, char** argv) {
   netlinkEventsQueue.close();
   prefixMgrRouteUpdatesQueue.close();
   logSampleQueue.close();
+  addrEventsQueue.close();
   if (config->isKvStoreDispatcherEnabled()) {
     kvStorePublicationsDispatcherQueue->close();
   }

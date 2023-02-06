@@ -120,6 +120,7 @@ getBasicOpenrConfig(
 
   config.enable_rib_policy() = true;
   config.assume_drained() = false;
+  config.enable_neighbor_monitor() = true;
 
   /*
    * [OVERRIDE] thrift::LinkMonitorConfig

@@ -76,6 +76,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   tConfig.persistent_config_store_path() =
       fmt::format("/tmp/{}_openr_config_store.bin", nodeId_);
 
+  // spark
+  tConfig.enable_neighbor_monitor() = true;
+
   config_ = std::make_shared<Config>(tConfig);
 
   // create MockNetlinkProtocolSocket
@@ -117,6 +120,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   spark_ = std::make_unique<Spark>(
       interfaceUpdatesQueue_.getReader(),
       initializationEventQueue_.getReader(),
+      addrEventQueue_.getReader(),
       neighborUpdatesQueue_,
       ioProvider_,
       config_);
@@ -283,6 +287,7 @@ OpenrWrapper<Serializer>::stop() {
   prefixUpdatesQueue_.close();
   kvStoreUpdatesQueue_.close();
   initializationEventQueue_.close();
+  addrEventQueue_.close();
   staticRoutesQueue_.close();
   prefixMgrRoutesQueue_.close();
   fibRouteUpdatesQueue_.close();

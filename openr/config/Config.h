@@ -289,6 +289,14 @@ class Config {
   }
 
   //
+  // neighbor-monitor
+  //
+  bool
+  isNeighborMonitorEnabled() const {
+    return *config_.enable_neighbor_monitor();
+  }
+
+  //
   // dispatcher
   //
   bool

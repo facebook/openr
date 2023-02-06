@@ -52,6 +52,10 @@ class SparkWrapper {
   // send ADJ_DB_SYNC signal to Spark
   void sendPrefixDbSyncedSignal();
 
+  // send neighbor down event to Spark
+  void sendNeighborDownEvent(
+      const std::string& ifName, const thrift::BinaryAddress& v6Addr);
+
   // receive spark neighbor event
   std::optional<NeighborEvents> recvNeighborEvent(
       std::optional<std::chrono::milliseconds> timeout = std::nullopt);
@@ -112,6 +116,9 @@ class SparkWrapper {
   // Queue to receive interface update from PrefixManager
   messaging::ReplicateQueue<thrift::InitializationEvent>
       initializationEventQueue_;
+
+  // Queue to receive neighbor update from NeighborMonitor
+  messaging::ReplicateQueue<AddressEvent> addrEventQueue_;
 
   // Spark owned by this wrapper.
   std::shared_ptr<Spark> spark_{nullptr};

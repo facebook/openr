@@ -188,6 +188,21 @@ enum class PrefixEventType {
 };
 
 /**
+ * Event for indicating that a IPv6 addr's resolvabllity to Spark, with
+ * the interface information. Only used for inter module communication
+ */
+struct AddressEvent {
+  // Whether is address is resolvable (can be reached directly).
+  bool resolvable = false;
+
+  // The IPv6 Address of intrest.
+  thrift::BinaryAddress v6Addr;
+
+  // The interface name that this address belong to.
+  std::string ifName;
+};
+
+/**
  * Prefix entry with their destination areas and nexthops
  * if dstAreas become empty, entry should be withdrawn.
  */
