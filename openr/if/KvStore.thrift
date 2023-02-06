@@ -69,6 +69,10 @@ enum InitializationEvent {
    * ErrorCode: failures happen during initial KvStore sync process.
    */
   KVSTORE_SYNC_ERROR = 12,
+  /**
+   * Non-blocking: Initial Vlan state received from FSDB.
+   */
+  FSDB_SUBSCRIBED = 13,
 }
 
 exception KvStoreError {
