@@ -86,7 +86,6 @@ class PrefixMgrCmd(OpenrCtrlCmd):
 
 
 class WithdrawCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -101,7 +100,6 @@ class WithdrawCmd(PrefixMgrCmd):
 
 
 class AdvertiseCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -121,7 +119,6 @@ class AdvertiseCmd(PrefixMgrCmd):
 
 
 class SyncCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -140,7 +137,6 @@ class SyncCmd(PrefixMgrCmd):
 
 
 class AdvertisedRoutesCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -190,7 +186,6 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
 
 
 class OriginatedRoutesCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -331,7 +326,6 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 
 
 class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -385,7 +379,6 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
 
 
 class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,

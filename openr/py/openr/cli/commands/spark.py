@@ -100,7 +100,6 @@ class SparkBaseCmd(OpenrCtrlCmd):
 
 
 class NeighborCmd(SparkBaseCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -131,7 +130,6 @@ class NeighborCmd(SparkBaseCmd):
 
 
 class ValidateCmd(SparkBaseCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, detail: bool, *args, **kwards
     ) -> bool:
@@ -279,7 +277,6 @@ class ValidateCmd(SparkBaseCmd):
 
 
 class GracefulRestartCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,

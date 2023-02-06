@@ -14,7 +14,6 @@ from thrift.python.exceptions import ApplicationError
 
 
 class FiltersCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, json: bool, *args, **kwargs
     ) -> None:
@@ -59,7 +58,6 @@ class FiltersCmd(OpenrCtrlCmd):
 
 
 class QueuesCmd(OpenrCtrlCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self, client: OpenrCtrlCppClient.Async, json: bool, *args, **kwargs
     ) -> None:

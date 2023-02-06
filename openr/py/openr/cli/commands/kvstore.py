@@ -314,7 +314,6 @@ class KvStoreWithInitAreaCmdBase(KvStoreCmdBase):
 
 
 class KvPrefixesCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -374,7 +373,6 @@ class PrefixesCmd(KvPrefixesCmd):
 
 
 class KvKeysCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -420,7 +418,6 @@ class KeysCmd(KvKeysCmd):
 
 
 class KvKeyValsCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -633,7 +630,6 @@ class NodesCmd(KvNodesCmd):
 
 
 class Areas(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -651,7 +647,6 @@ class Areas(KvStoreWithInitAreaCmdBase):
 
 
 class KvShowAdjNodeCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -701,7 +696,6 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
 
 
 class KvCompareCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -835,7 +829,6 @@ class PeersCmd(KvStoreWithInitAreaCmdBase):
 
 
 class EraseKeyCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -872,7 +865,6 @@ class EraseKeyCmd(KvStoreWithInitAreaCmdBase):
 
 
 class SetKeyCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -930,7 +922,6 @@ class SetKeyCmd(KvStoreWithInitAreaCmdBase):
 
 
 class KvSignatureCmd(KvStoreWithInitAreaCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -954,7 +945,6 @@ class KvSignatureCmd(KvStoreWithInitAreaCmdBase):
 
 
 class SnoopCmd(KvStoreCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -1279,7 +1269,6 @@ class SummaryCmd(KvStoreWithInitAreaCmdBase):
                 self._get_summary_stats_template(s.area), await client.getCounters()
             )
 
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,

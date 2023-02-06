@@ -42,7 +42,6 @@ class MonitorCmd(OpenrCtrlCmd):
 
 
 class CountersCmd(MonitorCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -85,7 +84,6 @@ class CountersCmd(MonitorCmd):
 
 
 class LogCmd(MonitorCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,

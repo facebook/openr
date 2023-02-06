@@ -355,7 +355,6 @@ class LMCmdBase(OpenrCtrlCmd):
 
 
 class SetNodeOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -367,7 +366,6 @@ class SetNodeOverloadCmd(LMCmdBase):
 
 
 class UnsetNodeOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -379,7 +377,6 @@ class UnsetNodeOverloadCmd(LMCmdBase):
 
 
 class SetLinkOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -392,7 +389,6 @@ class SetLinkOverloadCmd(LMCmdBase):
 
 
 class UnsetLinkOverloadCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -405,7 +401,6 @@ class UnsetLinkOverloadCmd(LMCmdBase):
 
 
 class IncreaseNodeMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -418,7 +413,6 @@ class IncreaseNodeMetricCmd(LMCmdBase):
 
 
 class ClearNodeMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -430,7 +424,6 @@ class ClearNodeMetricCmd(LMCmdBase):
 
 
 class IncreaseLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -444,7 +437,6 @@ class IncreaseLinkMetricCmd(LMCmdBase):
 
 
 class ClearLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -458,7 +450,6 @@ class ClearLinkMetricCmd(LMCmdBase):
 
 # [TO BE DEPRECATED]
 class SetLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -472,7 +463,6 @@ class SetLinkMetricCmd(LMCmdBase):
 
 
 class UnsetLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -485,7 +475,6 @@ class UnsetLinkMetricCmd(LMCmdBase):
 
 
 class OverrideAdjMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -500,7 +489,6 @@ class OverrideAdjMetricCmd(LMCmdBase):
 
 
 class ClearAdjMetricOverrideCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -514,7 +502,6 @@ class ClearAdjMetricOverrideCmd(LMCmdBase):
 
 
 class LMAdjCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -541,7 +528,6 @@ class LMAdjCmd(LMCmdBase):
 
 
 class LMLinksCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
