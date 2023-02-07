@@ -1299,7 +1299,7 @@ def dump_node_kvs(
     pub = None
 
     with get_openr_ctrl_client_py(host, cli_opts) as client:
-        keyDumpParams = kv_store_types_py.KeyDumpParams(Consts.ALL_DB_MARKER)
+        keyDumpParams = kv_store_types_py.KeyDumpParams()
         keyDumpParams.keys = [Consts.ALL_DB_MARKER]
         if area is None:
             pub = client.getKvStoreKeyValsFiltered(keyDumpParams)

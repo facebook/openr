@@ -400,14 +400,15 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
-      std::set<std::string> originator{};
       std::vector<std::string> keyPrefixList{};
       if (keyDumpParams.keys().has_value()) {
         keyPrefixList = *keyDumpParams.keys();
       } else {
+        // TODO: prefix field is deprecated
         folly::split(",", *keyDumpParams.prefix(), keyPrefixList, true);
       }
-      KvStoreFilters kvFilters{keyPrefixList, originator};
+      KvStoreFilters kvFilters{
+          keyPrefixList, std::set<std::string>{} /* originatorId list */};
       auto thriftPub =
           dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
       updatePublicationTtl(
@@ -1686,19 +1687,9 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
 
     // build KeyDumpParam
     thrift::KeyDumpParams params;
-    if (kvParams_.filters.has_value()) {
-      std::string keyPrefix =
-          folly::join(",", kvParams_.filters.value().getKeyPrefixes());
-      /* prefix is for backward compatibility */
-      params.prefix() = keyPrefix;
-      if (not keyPrefix.empty()) {
-        params.keys() = kvParams_.filters.value().getKeyPrefixes();
-      }
-      params.originatorIds() = kvParams_.filters.value().getOriginatorIdList();
-    }
     KvStoreFilters kvFilters(
-        std::vector<std::string>{}, /* keyPrefixList */
-        std::set<std::string>{} /* originator */);
+        std::vector<std::string>{}, /* keyPrefix list */
+        std::set<std::string>{} /* originatorId list */);
     // ATTN: dump hashes instead of full key-val pairs with values
     auto thriftPub = dumpHashWithFilters(area_, kvStore_, kvFilters);
     params.keyValHashes() = *thriftPub.keyVals();

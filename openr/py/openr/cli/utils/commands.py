@@ -155,7 +155,6 @@ class OpenrCtrlCmd:
         """
 
         return KeyDumpParams(
-            prefix=prefix,
             originatorIds=originator_ids,
             keyValHashes=keyval_hash,
             keys=[prefix] if prefix else None,
