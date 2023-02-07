@@ -2087,7 +2087,7 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
 void
 Spark::processAddressEvent(AddressEvent&& event) {
   // Process Address Event reported by neighborMonitor(FSDB)
-  // [ATTN] We assume the only event received is neighbor_resolvable
+  // [ATTN] We assume the only event received is neighbor_unresolvable
 
   const auto& v6 = event.v6Addr;
   const auto& ifName = event.ifName;
