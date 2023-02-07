@@ -38,6 +38,7 @@ namespace fs = std::experimental::filesystem;
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/Monitor.h>
+#include <openr/neighbor-monitor/NeighborMonitor.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/plugin/Plugin.h>
@@ -457,6 +458,17 @@ main(int argc, char** argv) {
   }
 
   watchdog->addQueue(prefixUpdatesQueue, "prefixUpdatesQueue");
+
+  // Start NeighborMonitor
+  if (config->isNeighborMonitorEnabled()) {
+    startEventBase(
+        allThreads,
+        orderedEvbs,
+        watchdog,
+        "neighbor-monitor",
+        std::make_unique<NeighborMonitor>(addrEventsQueue));
+    watchdog->addQueue(addrEventsQueue, "addrEventsQueue");
+  }
 
   // Start Spark
   auto spark = startEventBase(
