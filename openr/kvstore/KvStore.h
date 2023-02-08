@@ -95,29 +95,23 @@ struct KvStoreParams {
   std::optional<std::string> x509_ca_path{std::nullopt};
 
   KvStoreParams(
-      std::string nodeId,
+      const thrift::KvStoreConfig& kvStoreConfig,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      messaging::ReplicateQueue<LogSample>& logSampleQueue,
-      // Kvstore flooding rate
-      std::optional<thrift::KvStoreFloodRate> floodrate,
-      // TTL decrement factor
-      std::chrono::milliseconds ttldecr,
-      // TTL for self-originated keys
-      std::chrono::milliseconds keyTtl,
-      bool enable_secure_thrift_client,
-      std::optional<std::string> x509_cert_path,
-      std::optional<std::string> x509_key_path,
-      std::optional<std::string> x509_ca_path)
-      : nodeId(nodeId),
+      messaging::ReplicateQueue<LogSample>& logSampleQueue)
+      : nodeId(*kvStoreConfig.node_name()),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         logSampleQueue(logSampleQueue),
-        floodRate(std::move(floodrate)),
-        ttlDecr(ttldecr),
-        keyTtl(keyTtl),
-        enable_secure_thrift_client(enable_secure_thrift_client),
-        x509_cert_path(x509_cert_path),
-        x509_key_path(x509_key_path),
-        x509_ca_path(x509_ca_path) {}
+        floodRate(kvStoreConfig.flood_rate().to_optional()), /* Kvstore flooding
+                                                                rate */
+        ttlDecr(std::chrono::milliseconds(
+            *kvStoreConfig.ttl_decrement_ms())), /* TTL decrement factor */
+        keyTtl(std::chrono::milliseconds(
+            *kvStoreConfig.key_ttl_ms())), /*TTL for self-originated keys */
+        enable_secure_thrift_client(
+            *kvStoreConfig.enable_secure_thrift_client()),
+        x509_cert_path(kvStoreConfig.x509_cert_path().to_optional()),
+        x509_key_path(kvStoreConfig.x509_key_path().to_optional()),
+        x509_ca_path(kvStoreConfig.x509_ca_path().to_optional()) {}
 };
 
 /*

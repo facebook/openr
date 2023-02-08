@@ -27,17 +27,7 @@ KvStore<ClientType>::KvStore(
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     const std::unordered_set<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig)
-    : kvParams_(
-          *kvStoreConfig.node_name(),
-          kvStoreUpdatesQueue,
-          logSampleQueue,
-          kvStoreConfig.flood_rate().to_optional(),
-          std::chrono::milliseconds(*kvStoreConfig.ttl_decrement_ms()),
-          std::chrono::milliseconds(*kvStoreConfig.key_ttl_ms()),
-          *kvStoreConfig.enable_secure_thrift_client(),
-          kvStoreConfig.x509_cert_path().to_optional(),
-          kvStoreConfig.x509_key_path().to_optional(),
-          kvStoreConfig.x509_ca_path().to_optional()) {
+    : kvParams_(kvStoreConfig, kvStoreUpdatesQueue, logSampleQueue) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
