@@ -96,21 +96,16 @@ class KvStoreHarness {
 
   void
   genKeyVals(
-      const std::vector<std::string>& keys,
-      std::vector<std::pair<std::string, thrift::Value>>& keyVals,
-      size_t n) {
+      std::vector<std::pair<std::string, thrift::Value>>& keyVals, size_t n) {
     keyVals.clear();
     keyVals.reserve(n);
     for (uint32_t i = 0; i < n; i++) {
-      auto key = keys[i];
+      auto key = genRandomStr(kSizeOfKey);
       auto value = genRandomStr(kSizeOfValue);
       auto thriftVal = createThriftValue(
           getVersion() /* version */,
           kNodeId /* originatorId */,
-          value /* value */,
-          Constants::kTtlInfinity /* ttl */,
-          0 /* ttl version */,
-          0 /* hash */);
+          value /* value */);
       // Update hash
       thriftVal.hash() = generateHash(
           *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
@@ -143,20 +138,17 @@ BM_KvStoreMergeKeyValues(
   auto kvStoreHarness = std::make_unique<KvStoreHarness>();
 
   for (uint32_t i = 0; i < iters; i++) {
-    std::unordered_map<std::string, thrift::Value> kvStore;
-    std::unordered_map<std::string, thrift::Value> update;
-    // Insert (key, value)s into kvStore
+    thrift::KeyVals kvStore;
+    thrift::KeyVals update;
 
+    // Insert (key, value)s into kvStore
     for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
       auto key = genRandomStr(kSizeOfKey);
       auto value = genRandomStr(kSizeOfValue);
       auto thriftValue = createThriftValue(
-          kvStoreHarness->getVersion(),
-          kNodeId,
-          value,
-          3600, /* ttl */
-          0 /* ttl version */,
-          0 /* hash */);
+          kvStoreHarness->getVersion(), /* version */
+          kNodeId, /* originatorId */
+          value /* value */);
 
       kvStore.emplace(
           std::piecewise_construct,
@@ -165,12 +157,9 @@ BM_KvStoreMergeKeyValues(
 
       if (idx < numOfUpdateKeys) {
         auto updateThriftValue = createThriftValue(
-            kvStoreHarness->getVersion() + 1,
-            kNodeId, /* node id */
-            value,
-            3600, /* ttl */
-            0 /* ttl version */,
-            0 /* hash */);
+            kvStoreHarness->getVersion() + 1, /* version */
+            kNodeId, /* originatorId */
+            value /* value */);
         update.emplace(
             std::piecewise_construct,
             std::forward_as_tuple(key),
@@ -178,19 +167,21 @@ BM_KvStoreMergeKeyValues(
       }
     }
 
-    if (i == 0) { // collect mem usage ONLY with the first iteration for
-                  // profiling purpose
+    // collect mem usage ONLY with the first iteration for profiling purpose
+    if (i == 0) {
       kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
     }
+
     suspender.dismiss(); // Start measuring benchmark time
-    // Merge update with kvStore
     mergeKeyValues(kvStore, update);
-    // Stop measuring benchmark time
-    suspender.rehire();
+    suspender.rehire(); // Stop measuring benchmark time
+
     if (i == 0) {
       kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
     }
   }
+
+  kvStoreHarness->clear();
 }
 
 /**
@@ -204,39 +195,36 @@ BM_KvStoreDumpAll(
     folly::UserCounters& counters, uint32_t iters, size_t numOfKeysInStore) {
   auto suspender = folly::BenchmarkSuspender();
   auto kvStoreHarness = std::make_unique<KvStoreHarness>();
-  auto kvStore = kvStoreHarness->createKvStore(kNodeId);
+  KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* kvStore{
+      nullptr};
+
+  kvStore = kvStoreHarness->createKvStore(kNodeId);
   kvStore->run();
 
-  for (uint32_t idx = 0; idx < numOfKeysInStore; idx++) {
-    auto key = genRandomStr(kSizeOfKey);
-    auto value = genRandomStr(kSizeOfValue);
-    auto thriftVal = createThriftValue(
-        1 /* version */,
-        kNodeId,
-        value /* value */,
-        Constants::kTtlInfinity /* ttl */,
-        0 /* ttl version */,
-        0 /* hash */);
-    thriftVal.hash() = generateHash(
-        *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
-
-    // Adding key to kvStore
-    kvStore->setKey(kTestingAreaName, key, thriftVal);
-  }
-
   for (uint32_t i = 0; i < iters; i++) {
-    if (i == 0) { // collect mem usage ONLY with the first iteration for
-                  // profiling purpose
+    std::vector<std::pair<std::string, thrift::Value>> keyVals;
+
+    if (i == 0) {
+      // collect mem usage ONLY with the first iteration for profiling purpose
       kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
     }
+
+    // Do NOT account key generation + injection as part benchmark timing
+    kvStoreHarness->genKeyVals(keyVals, numOfKeysInStore);
+    for (const auto& [key, thriftVal] : keyVals) {
+      kvStore->setKey(kTestingAreaName, key, thriftVal);
+    }
+
     suspender.dismiss(); // Start measuring benchmark time
     kvStore->dumpAll(kTestingAreaName);
-    // Stop measuring benchmark time
-    suspender.rehire();
+    suspender.rehire(); // Stop measuring benchmark time
+
     if (i == 0) {
       kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
     }
   }
+
+  kvStoreHarness->clear();
 }
 
 /**
@@ -248,46 +236,38 @@ static void
 BM_KvStoreValueUpdate(
     folly::UserCounters& counters, uint32_t iters, size_t numOfUpdateKeys) {
   auto kvStoreHarness = std::make_unique<KvStoreHarness>();
-  KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* kvStore =
-      nullptr;
-  std::vector<std::string> keys;
+  auto suspender = folly::BenchmarkSuspender();
+  KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>* kvStore{
+      nullptr};
   std::vector<std::pair<std::string, thrift::Value>> keyVals;
 
-  BENCHMARK_SUSPEND {
-    kvStore = kvStoreHarness->createKvStore(kNodeId);
-    XCHECK_NE(kvStore, nullptr);
-    kvStore->run();
-    // Generate random fixed keys beforehand for updating
-    keys.reserve(numOfUpdateKeys);
-    for (uint32_t idx = 0; idx < numOfUpdateKeys; idx++) {
-      keys.emplace_back(genRandomStr(kSizeOfKey));
-    }
-  }
+  kvStore = kvStoreHarness->createKvStore(kNodeId);
+  XCHECK_NE(kvStore, nullptr);
+  kvStore->run();
 
   for (size_t i = 0; i < iters; i++) {
-    BENCHMARK_SUSPEND {
-      kvStoreHarness->genKeyVals(keys, keyVals, numOfUpdateKeys);
-      if (i == 0) {
-        kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
-      }
+    kvStoreHarness->genKeyVals(keyVals, numOfUpdateKeys);
+    if (i == 0) {
+      kvStoreHarness->recordMemory(counters, kMemoryBeforeOperationMB);
     }
 
+    /*
+     * Core function to run benchmarking against
+     */
+    suspender.dismiss(); // Start measuring benchmark time
     kvStore->setKeys(kTestingAreaName, keyVals);
     // Receive publication from kvStore for new key-update
     auto pub = kvStore->recvPublication();
     CHECK_EQ(numOfUpdateKeys, pub.keyVals()->size());
+    suspender.rehire(); // Stop measuring benchmark time
 
-    BENCHMARK_SUSPEND {
-      if (i == 0) {
-        kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
-      }
-      kvStoreHarness->incrementVersion();
+    if (i == 0) {
+      kvStoreHarness->recordMemory(counters, kMemoryAfterOperationMB);
     }
+    kvStoreHarness->incrementVersion();
   }
 
-  BENCHMARK_SUSPEND {
-    kvStoreHarness->clear();
-  }
+  kvStoreHarness->clear();
 }
 
 // The first integer parameter is number of keyVals already in store
