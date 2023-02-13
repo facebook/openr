@@ -192,6 +192,51 @@ getThreadBytesImpl(bool isAllocated) {
   }
   return bytes;
 }
-
 } // namespace memory
+
+std::string
+toString(const thrift::KeyDumpParams& filter) {
+  std::stringstream result;
+  result << "originatorIds: ";
+  for (auto i : *filter.originatorIds()) {
+    result << i << " ";
+  }
+  result << std::endl;
+  result << "ignore ttl: " << *filter.ignoreTtl() << std::endl;
+  if (filter.keys().has_value()) {
+    result << "keys: ";
+    for (auto i : *filter.keys()) {
+      result << i << " ";
+    }
+  }
+  if (filter.senderId().has_value()) {
+    result << "senderId: " << *filter.senderId();
+  }
+  return result.str();
+}
+
+std::string
+toString(const thrift::KeySetParams& param) {
+  std::stringstream result;
+  for (auto [k, v] : *param.keyVals()) {
+    result << "key: " << k;
+    result << " version: " << *v.version()
+           << " originatorId: " << *v.originatorId() << " ttl: " << *v.ttl()
+           << " ttlVersion: " << *v.ttlVersion();
+  }
+  if (param.senderId().has_value()) {
+    result << " senderId: " << *param.senderId();
+  }
+  return result.str();
+}
+
+std::string
+toString(const std::vector<std::string>& input) {
+  std::stringstream result;
+  for (const auto& item : input) {
+    result << item;
+    result << " ";
+  }
+  return result.str();
+}
 } // namespace openr

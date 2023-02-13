@@ -727,10 +727,12 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
-  thrift::KeyGetParams params;
-  *params.keys() = std::move(*filterKeys);
+  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*filterKeys.get());
 
-  CHECK(kvStore_);
+  thrift::KeyGetParams params;
+  params.keys() = std::move(*filterKeys);
+
+  CHECK(kvStore_) << "no kvstore initialized";
   return kvStore_->semifuture_getKvStoreKeyVals(
       std::move(*area), std::move(params));
 }
@@ -746,7 +748,11 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  CHECK(kvStore_);
+  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*filter.get())
+             << "; area: " << *area;
+
+  CHECK(kvStore_) << "kvstore not initialized";
+
   return kvStore_->semifuture_dumpKvStoreKeys(std::move(*filter), {*area})
       .deferValue(
           [](std::unique_ptr<std::vector<thrift::Publication>>&& pubs) mutable {
@@ -767,7 +773,11 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*filter.get())
+             << "; area: " << *area;
+
   CHECK(kvStore_);
+
   return kvStore_->semifuture_dumpKvStoreHashes(
       std::move(*area), std::move(*filter));
 }
@@ -776,7 +786,11 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*setParams.get())
+             << "; area: " << *area;
+
   CHECK(kvStore_);
+
   return kvStore_->semifuture_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
 }

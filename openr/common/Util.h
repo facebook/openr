@@ -177,4 +177,10 @@ namespace memory {
 uint64_t getThreadBytesImpl(bool isAllocated);
 } // namespace memory
 
+std::string toString(const thrift::KeyDumpParams& filter);
+
+std::string toString(const thrift::KeySetParams& param);
+
+std::string toString(const std::vector<std::string>& input);
+
 } // namespace openr

@@ -1119,6 +1119,35 @@ TEST(UtilTest, logInitializationEvent) {
       "initialization.KVSTORE_SYNCED.duration_ms"));
 }
 
+TEST(UtilTest, ToStringTest) {
+  {
+    auto param = std::make_unique<thrift::KeySetParams>();
+    param->senderId() = "node1";
+    openr::thrift::KeyVals kvs{
+        {"key1", createThriftValue(1, "orig1", "data1")}};
+    param->keyVals() = kvs;
+    auto res = toString(*param.get());
+    EXPECT_EQ(
+        res,
+        "key: key1 version: 1 originatorId: orig1 ttl: -2147483648 ttlVersion: 0 senderId: node1");
+  }
+  {
+    auto param = std::make_unique<thrift::KeyDumpParams>();
+    param->senderId() = "node1";
+    param->originatorIds() = {"o1", "o2", "o3"};
+    param->keys() = {"k1", "k2", "k3"};
+    auto res = toString(*param.get());
+    EXPECT_EQ(
+        res,
+        "originatorIds: o1 o2 o3 \nignore ttl: 1\nkeys: k1 k2 k3 senderId: node1");
+  }
+  {
+    std::vector<std::string> input{"hello", "world", "facebook"};
+    const auto result = toString(input);
+    EXPECT_EQ(result, "hello world facebook ");
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
