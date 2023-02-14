@@ -286,7 +286,6 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
                         p = std::move(p),
                         selectAreas = std::move(selectAreas),
                         keyDumpParams = std::move(keyDumpParams)]() mutable {
-    // Empty senderID means local call.
     XLOG(DBG3) << fmt::format(
         "Dump all keys requested for {}, by sender: {}",
         (selectAreas.empty()
@@ -380,7 +379,6 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
                         p = std::move(p),
                         keyDumpParams = std::move(keyDumpParams),
                         area]() mutable {
-    // Empty senderID means local call.
     XLOG(DBG3) << fmt::format(
         "Dump all hashes requested for AREA: {}, by sender: {}",
         area,
@@ -421,12 +419,14 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
                         p = std::move(p),
                         keySetParams = std::move(keySetParams),
                         area]() mutable {
-    // Empty senderID means local call.
     XLOG(DBG3) << fmt::format(
-        "Set key requested for AREA: {}, by sender: {}",
+        "Set key requested for AREA: {}, by sender: {}, at time: {}",
         area,
         (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                             : ""));
+                                             : ""),
+        (keySetParams.timestamp_ms().has_value()
+             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+             : ""));
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
       kvStoreDb.setKeyVals(std::move(keySetParams), false /* remote update */);
@@ -2265,6 +2265,11 @@ KvStoreDb<ClientType>::finalizeFullSync(
       "kvstore.thrift.num_finalized_sync", 1, fb303::COUNT);
 
   auto startTime = std::chrono::steady_clock::now();
+
+  params.timestamp_ms() = std::chrono::duration_cast<std::chrono::milliseconds>(
+                              startTime.time_since_epoch())
+                              .count();
+
   auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
   std::move(sf)
       .via(evb_->getEvb())
