@@ -6019,7 +6019,7 @@ TEST_F(DecisionTestFixture, Counters) {
       "data=10.3.0.0/16",
       thrift::PrefixForwardingType::SR_MPLS,
       thrift::PrefixForwardingAlgorithm::SP_ECMP);
-  std::unordered_map<std::string, thrift::Value> pubKvs = {
+  thrift::KeyVals pubKvs = {
       {"adj:1", createAdjValue(serializer, "1", 1, {adj12, adj13}, false, 1)},
       {"adj:2", createAdjValue(serializer, "2", 1, {adj21, adj23}, false, 2)},
       {"adj:3",

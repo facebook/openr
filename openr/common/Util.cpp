@@ -152,7 +152,7 @@ createThriftValueWithoutBinaryValue(const thrift::Value& val) {
 
 thrift::Publication
 createThriftPublication(
-    const std::unordered_map<std::string, thrift::Value>& kv,
+    const thrift::KeyVals& kv,
     const std::vector<std::string>& expiredKeys,
     const std::optional<std::vector<std::string>>& nodeIds,
     const std::optional<std::vector<std::string>>& keysToUpdate,

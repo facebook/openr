@@ -230,7 +230,7 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   // 1. Dump keys with no matches.
   // 2. Set keys manully. 2 include prefix, 2 do not.
   // 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
-  std::optional<std::unordered_map<std::string, thrift::Value>> maybeKeyMap;
+  std::optional<thrift::KeyVals> maybeKeyMap;
   try {
     thrift::KeyDumpParams params;
     params.keys() = {prefixRegex};
@@ -260,8 +260,7 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   kvStore_->setKey(kTestingAreaName, prefix4, thriftVal);
 
   // Check that keys retrieved are those with prefix "10.0.0".
-  std::optional<std::unordered_map<std::string, thrift::Value>>
-      maybeKeysAfterInsert;
+  std::optional<thrift::KeyVals> maybeKeysAfterInsert;
   try {
     thrift::KeyDumpParams params;
     params.keys() = {prefixRegex};
@@ -743,7 +742,7 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
       ComparisonResult::TIED, openr::compareValues(thriftVal, recVal.value()));
 
   // check only this key exists in kvstore
-  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  thrift::KeyVals expectedKeyVals;
   expectedKeyVals[key] = thriftVal;
   auto allKeyVals = kvStore->dumpAll(kTestingAreaName);
   EXPECT_EQ(1, allKeyVals.size());
@@ -1372,7 +1371,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   }
 
   // Submit initial value set into all peerStores
-  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  thrift::KeyVals expectedKeyVals;
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
   for (auto& store : peerStores) {
     auto key = fmt::format("test-key-{}", store->getNodeId());
@@ -1710,7 +1709,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // Submit initial value set into all peerStores
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
 
-  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
+  thrift::KeyVals expectedKeyVals;
   int index = 0;
   for (auto& store : peerStores) {
     auto key = fmt::format("{}-test-key-{}", index % 2, store->getNodeId());
@@ -1786,10 +1785,10 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   auto myStore = createKvStore(getTestKvConf("test-node"));
   myStore->run();
 
-  std::unordered_map<std::string, thrift::Value> expectedKeyVals;
-  std::unordered_map<std::string, thrift::Value> peerKeyVals;
-  std::unordered_map<std::string, thrift::Value> diffKeyVals;
-  const std::unordered_map<std::string, thrift::Value> emptyKeyVals;
+  thrift::KeyVals expectedKeyVals;
+  thrift::KeyVals peerKeyVals;
+  thrift::KeyVals diffKeyVals;
+  const thrift::KeyVals emptyKeyVals;
   for (int i = 0; i < 3; ++i) {
     const auto key = fmt::format("test-key-{}", i);
     auto thriftVal = createThriftValue(
@@ -2334,8 +2333,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
       getTestKvConf("storeB"), {*pod.area_id(), *plane.area_id()});
   auto storeC = createKvStore(getTestKvConf("storeC"), {*plane.area_id()});
 
-  std::unordered_map<std::string, thrift::Value> expectedKeyValsPod{};
-  std::unordered_map<std::string, thrift::Value> expectedKeyValsPlane{};
+  thrift::KeyVals expectedKeyValsPod{};
+  thrift::KeyVals expectedKeyValsPlane{};
 
   size_t keyVal0Size, keyVal1Size, keyVal2Size, keyVal3Size;
 

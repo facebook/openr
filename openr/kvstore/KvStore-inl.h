@@ -1203,7 +1203,7 @@ KvStoreDb<ClientType>::setSelfOriginatedKey(
   selfOriginatedKeyVals_[key] = std::move(selfOriginatedVal);
 
   // Advertise key to KvStore
-  std::unordered_map<std::string, thrift::Value> keyVals = {{key, thriftValue}};
+  thrift::KeyVals keyVals = {{key, thriftValue}};
   thrift::KeySetParams params;
   params.keyVals() = std::move(keyVals);
   setKeyVals(std::move(params), true /* self-originated update */);
@@ -1325,7 +1325,7 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
   }
 
   // Build set of keys to advertise
-  std::unordered_map<std::string, thrift::Value> keyVals{};
+  thrift::KeyVals keyVals{};
   // Build keys to be cleaned from local storage
   std::vector<std::string> keysToClear;
 
@@ -1419,7 +1419,7 @@ KvStoreDb<ClientType>::unsetPendingSelfOriginatedKeys() {
   }
 
   // Build set of keys to update KvStore
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  thrift::KeyVals keyVals;
   // Build keys to be cleaned from local storage. Do not remove from
   // keysToUnset_ directly while iterating.
   std::vector<std::string> localKeysToUnset;
@@ -1489,7 +1489,7 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
   auto timeout = Constants::kMaxTtlUpdateInterval;
 
   // all key-vals to advertise ttl updates for
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  thrift::KeyVals keyVals;
 
   for (auto& [key, val] : selfOriginatedKeyVals_) {
     auto& thriftValue = val.value;

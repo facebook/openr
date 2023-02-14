@@ -107,12 +107,12 @@ class KvStoreBenchmarkTestFixture {
    * @return: a subset of keys that exist in ttlCountdownQueue
    */
 
-  std::unordered_map<std::string, thrift::Value>
+  thrift::KeyVals
   setCountdownQueueEntry(
       uint32_t numOfEntries,
       uint32_t numOfReturnEntries,
       TtlCountdownQueue& ttlCountdownQueue) {
-    std::unordered_map<std::string, thrift::Value> keyValsForReturn;
+    thrift::KeyVals keyValsForReturn;
     thrift::Publication thriftPub;
     for (uint32_t i = 0; i < numOfEntries; ++i) {
       auto keyValPair =
@@ -436,8 +436,8 @@ BM_KvStoreDumpDifference(
 
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
-    std::unordered_map<std::string, thrift::Value> myKeyVals;
-    std::unordered_map<std::string, thrift::Value> comparedKeyVals;
+    thrift::KeyVals myKeyVals;
+    thrift::KeyVals comparedKeyVals;
     for (int cnt = 0; cnt < numOfMyKeyVals; ++cnt) {
       const auto& [key, thriftVal] =
           genRandomKvStoreKeyVal(kKeyLen, kValLen, 1);
@@ -553,7 +553,7 @@ BM_KvStoreDumpAllWithFilters(
   // TODO: Move the common code to KvStoreBenchmarkTestFixture
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
-    std::unordered_map<std::string, thrift::Value> keyVals;
+    thrift::KeyVals keyVals;
     std::unordered_set<std::string> prefixSet;
     std::vector<std::string> keyPrefixList;
     thrift::KeyDumpParams keyDumpParams;
@@ -627,7 +627,7 @@ BM_KvStoreDumpHashWithFilters(
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
 
-    std::unordered_map<std::string, thrift::Value> keyVals;
+    thrift::KeyVals keyVals;
     std::unordered_set<std::string> prefixSet; // avoid replicate keys
     std::vector<std::string> keyPrefixList; // key set that's fed into filter
     thrift::KeyDumpParams keyDumpParams;

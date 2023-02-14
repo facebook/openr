@@ -62,9 +62,9 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 // validate mergeKeyValues
 //
 TEST(KvStoreUtil, mergeKeyValuesTest) {
-  std::unordered_map<std::string, thrift::Value> oldStore;
-  std::unordered_map<std::string, thrift::Value> myStore;
-  std::unordered_map<std::string, thrift::Value> newStore;
+  thrift::KeyVals oldStore;
+  thrift::KeyVals myStore;
+  thrift::KeyVals newStore;
 
   std::string key{"key"};
 
@@ -196,7 +196,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
 
   // bogus ttl value (see it should get ignored)
   {
-    std::unordered_map<std::string, thrift::Value> emptyStore;
+    thrift::KeyVals emptyStore;
     newKvIt->second = thriftValue;
     newKvIt->second.ttl() = -100;
     auto keyVals = mergeKeyValues(emptyStore, newStore).first;
@@ -206,7 +206,7 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
 
   // update with version=0 (see it should get ignored)
   {
-    std::unordered_map<std::string, thrift::Value> emptyStore;
+    thrift::KeyVals emptyStore;
     newKvIt->second = thriftValue;
     newKvIt->second.version() = 0;
     auto keyVals = mergeKeyValues(emptyStore, newStore).first;

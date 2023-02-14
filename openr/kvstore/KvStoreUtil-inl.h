@@ -29,8 +29,7 @@ parseThriftValue(thrift::Value const& value) {
 // static
 template <typename ThriftType>
 std::unordered_map<std::string, ThriftType>
-parseThriftValues(
-    std::unordered_map<std::string, thrift::Value> const& keyVals) {
+parseThriftValues(thrift::KeyVals const& keyVals) {
   std::unordered_map<std::string, ThriftType> result;
   for (auto const& [key, val] : keyVals) {
     result.emplace(key, parseThriftValue<ThriftType>(val));
@@ -103,7 +102,7 @@ printKeyValInArea(
 // static method to dump KvStore key-val over multiple instances
 template <typename ClientType>
 std::pair<
-    std::optional<std::unordered_map<std::string /* key */, thrift::Value>>,
+    std::optional<thrift::KeyVals>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
@@ -117,11 +116,11 @@ dumpAllWithThriftClientFromMultiple(
         bindAddr /* folly::AsyncSocket::anyAddress()*/) {
   folly::EventBase evb;
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
-  std::unordered_map<std::string, thrift::Value> merged;
+  thrift::KeyVals merged;
   std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
-  *params.prefix() = keyPrefix;
+  params.prefix() = keyPrefix;
   if (not keyPrefix.empty()) {
     params.keys() = {keyPrefix};
   }
@@ -239,14 +238,14 @@ dumpAllWithThriftClientFromMultiple(
 
 // static method to dump KvStore key-val over multiple instances
 template <typename ClientType>
-std::unordered_map<std::string /* key */, thrift::Value>
+thrift::KeyVals
 dumpAllWithThriftClientFromMultiple(
     folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& keyPrefix) {
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
-  std::unordered_map<std::string, thrift::Value> merged;
+  thrift::KeyVals merged;
 
   thrift::KeyDumpParams params;
   if (not keyPrefix.empty()) {

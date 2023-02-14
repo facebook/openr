@@ -109,7 +109,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     }
 
     // Expected global Key-Value database
-    std::unordered_map<std::string, thrift::Value> expectedGlobalKeyVals;
+    thrift::KeyVals expectedGlobalKeyVals;
 
     // For each `key`, generate a `value` and submit it to the first
     // store. After submission of all keys, make sure all KvStore are in

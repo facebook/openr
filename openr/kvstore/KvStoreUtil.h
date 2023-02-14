@@ -71,7 +71,7 @@ static ThriftType parseThriftValue(thrift::Value const& value);
  */
 template <typename ThriftType>
 static std::unordered_map<std::string, ThriftType> parseThriftValues(
-    std::unordered_map<std::string, thrift::Value> const& keyVals);
+    const thrift::KeyVals& keyVals);
 
 /**
  * Similar to the above but parses the values according to the ThriftType
@@ -136,7 +136,7 @@ dumpAllWithPrefixMultipleAndParse(
  */
 template <typename ClientType>
 static std::pair<
-    std::optional<std::unordered_map<std::string, thrift::Value>>,
+    std::optional<thrift::KeyVals>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
@@ -149,8 +149,7 @@ dumpAllWithThriftClientFromMultiple(
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
 template <typename ClientType>
-static std::unordered_map<std::string, thrift::Value>
-dumpAllWithThriftClientFromMultiple(
+static thrift::KeyVals dumpAllWithThriftClientFromMultiple(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& prefix);
@@ -230,8 +229,8 @@ struct KvStoreMergeStats {
  *  - the statistics about reasons keys are NOT merged.
  */
 std::pair<thrift::KeyVals, KvStoreNoMergeReasonStats> mergeKeyValues(
-    std::unordered_map<std::string, thrift::Value>& kvStore,
-    std::unordered_map<std::string, thrift::Value> const& keyVals,
+    thrift::KeyVals& kvStore,
+    const thrift::KeyVals& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt,
     std::optional<std::string> const& senderName = std::nullopt);
 
@@ -257,13 +256,13 @@ ComparisonResult compareValues(
 // Dump the keys on which hashes differ from given keyVals
 thrift::Publication dumpDifference(
     const std::string& area,
-    std::unordered_map<std::string, thrift::Value> const& myKeyVal,
-    std::unordered_map<std::string, thrift::Value> const& reqKeyVal);
+    const thrift::KeyVals& myKeyVal,
+    const thrift::KeyVals& reqKeyVal);
 
 // Dump the entries of my KV store whose keys match the filter
 thrift::Publication dumpAllWithFilters(
     const std::string& area,
-    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const thrift::KeyVals& kvStore,
     const KvStoreFilters& kvFilters,
     bool doNotPublishValue = false);
 
@@ -271,7 +270,7 @@ thrift::Publication dumpAllWithFilters(
 // If prefix is the empty sting, the full hash store is dumped
 thrift::Publication dumpHashWithFilters(
     const std::string& area,
-    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const thrift::KeyVals& kvStore,
     const KvStoreFilters& kvFilters);
 
 // Update Time to expire filed in Publication

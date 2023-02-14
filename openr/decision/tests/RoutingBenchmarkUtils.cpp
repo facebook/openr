@@ -56,16 +56,14 @@ sendRecvInitialUpdate(
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_INIT_UPDATE");
 
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  thrift::KeyVals keyVals;
   apache::thrift::CompactSerializer serializer;
   for (auto& [key, adjDb] : adjDbs) {
     adjDb.perfEvents() = perfEvents;
     keyVals.emplace(
         key,
         createThriftValue(
-            1,
-            *adjDb.thisNodeName(),
-            writeThriftObjStr(std::move(adjDb), serializer)));
+            1, *adjDb.thisNodeName(), writeThriftObjStr(adjDb, serializer)));
   }
   for (auto& [key, prefixDb] : prefixDbs) {
     prefixDb.perfEvents() = perfEvents;
@@ -74,7 +72,7 @@ sendRecvInitialUpdate(
         createThriftValue(
             1,
             *prefixDb.thisNodeName(),
-            writeThriftObjStr(std::move(prefixDb), serializer)));
+            writeThriftObjStr(prefixDb, serializer)));
   }
 
   thrift::Publication pub;
@@ -567,7 +565,7 @@ updateRandomGridPrefixes(
 
   // Generate one pub for all update prefixes
   // For each node, generate `numOfUpdatePrefixes` keyVals
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  thrift::KeyVals keyVals;
   for (int row = 0; row < n; ++row) {
     for (int col = 0; col < n; ++col) {
       auto nodeName = fmt::format("{}", row * n + col);
@@ -607,7 +605,7 @@ generatePrefixUpdatePublication(
     thrift::Publication& initialPub) {
   PrefixGenerator prefixGenerator;
   apache::thrift::CompactSerializer serializer;
-  std::unordered_map<std::string, thrift::Value> keyVals;
+  thrift::KeyVals keyVals;
   for (auto& [_, names] : listOfNodenames) {
     for (auto& nodeName : names) {
       auto prefixEntries =

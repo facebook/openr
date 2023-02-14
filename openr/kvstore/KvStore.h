@@ -162,7 +162,7 @@ class KvStoreDb {
     return selfOriginatedKeyVals_;
   }
 
-  std::unordered_map<std::string, thrift::Value> const&
+  thrift::KeyVals const&
   getKeyValueMap() const {
     return kvStore_;
   }
@@ -531,7 +531,7 @@ class KvStoreDb {
   bool initialSyncCompleted_{false};
 
   // store keys mapped to (version, originatoId, value)
-  std::unordered_map<std::string, thrift::Value> kvStore_{};
+  thrift::KeyVals kvStore_{};
 
   // TTL count down queue
   TtlCountdownQueue ttlCountdownQueue_;

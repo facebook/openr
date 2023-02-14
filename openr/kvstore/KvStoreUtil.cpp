@@ -539,8 +539,8 @@ KvStoreFilters::str() const {
 thrift::Publication
 dumpDifference(
     const std::string& area,
-    std::unordered_map<std::string, thrift::Value> const& myKeyVal,
-    std::unordered_map<std::string, thrift::Value> const& reqKeyVal) {
+    const thrift::KeyVals& myKeyVal,
+    const thrift::KeyVals& reqKeyVal) {
   thrift::Publication thriftPub;
   thriftPub.area() = area;
 
@@ -583,7 +583,7 @@ dumpDifference(
 thrift::Publication
 dumpAllWithFilters(
     const std::string& area,
-    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const thrift::KeyVals& kvStore,
     const KvStoreFilters& kvFilters,
     bool doNotPublishValue) {
   thrift::Publication thriftPub;
@@ -608,7 +608,7 @@ dumpAllWithFilters(
 thrift::Publication
 dumpHashWithFilters(
     const std::string& area,
-    const std::unordered_map<std::string, thrift::Value>& kvStore,
+    const thrift::KeyVals& kvStore,
     const KvStoreFilters& kvFilters) {
   thrift::Publication thriftPub;
   thriftPub.area() = area;
