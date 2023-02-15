@@ -2639,7 +2639,7 @@ KvStoreDb<ClientType>::mergePublication(
       : (nodeIds.has_value() ? std::optional(nodeIds->back()) : std::nullopt);
   auto [mergedKeyVals, stats] =
       mergeKeyValues(kvStore_, keyVals, kvParams_.filters, sender);
-  if (stats.inconsistencyDetetectedWithOriginator) {
+  if (*stats.inconsistencyDetetectedWithOriginator()) {
     // inconsistency detected: Received a TTL update from originator
     // but key version are mismatched
     // Transition to IDLE to resync

@@ -171,45 +171,6 @@ static void printKeyValInArea(
     const thrift::Value& val);
 
 /*
- * The struct KvStoreNoMergeReasonStats contains the statistics of reasons why
- * the incoming kvs are not merged
- */
-
-enum KvStoreNoMergeReason {
-  NO_MATCHED_KEY,
-  INVALID_TTL,
-  OLD_VERSION,
-  NO_NEED_TO_UPDATE
-};
-
-struct KvStoreNoMergeReasonStats {
-  // per-key reasons
-  std::unordered_map<std::string, KvStoreNoMergeReason> noMergeReasons{};
-
-  // per-reason stats
-  // the incoming key does not match the filtered keys
-  uint32_t numberOfNoMatchedKeys{0};
-  // the ttl of the incoming kv is invalid
-  std::vector<int64_t> listInvalidTtls{};
-  // the incoming kv has an invalid or old version
-  std::vector<int64_t> listOldVersions{};
-  // the kv does not need to be merged
-  uint32_t numberOfNoNeedToUpdates{0};
-  // detected that sender is stale and need to full sync
-  bool inconsistencyDetetectedWithOriginator{false};
-};
-
-struct KvStoreUpdateStats {
-  uint32_t ttlUpdateCnt{0};
-  uint32_t valUpdateCnt{0};
-};
-
-struct KvStoreMergeStats {
-  KvStoreUpdateStats updateStats;
-  KvStoreNoMergeReasonStats noMergeStats;
-};
-
-/*
  * This is the util method to merge the key-values publication to the existing
  * `kvStore` map, and return a publication made out of the updated values.
  *
@@ -228,7 +189,7 @@ struct KvStoreMergeStats {
  *    the updated values.
  *  - the statistics about reasons keys are NOT merged.
  */
-std::pair<thrift::KeyVals, KvStoreNoMergeReasonStats> mergeKeyValues(
+std::pair<thrift::KeyVals, thrift::KvStoreNoMergeReasonStats> mergeKeyValues(
     thrift::KeyVals& kvStore,
     const thrift::KeyVals& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt,

@@ -146,6 +146,49 @@ typedef map<string, Value> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::Value>",
 ) KeyVals
 
+/*
+ * The struct KvStoreNoMergeReasonStats contains the statistics of reasons why
+ * the incoming kvs are not merged
+ */
+enum KvStoreNoMergeReason {
+  UNKNOWN = 0,
+  NO_MATCHED_KEY = 1,
+  INVALID_TTL = 2,
+  OLD_VERSION = 3,
+  NO_NEED_TO_UPDATE = 4,
+}
+
+struct KvStoreUpdateStats {
+  1: i64 ttlUpdateCnt = 0;
+  2: i64 valUpdateCnt = 0;
+}
+
+typedef map<string, KvStoreNoMergeReason> (
+  cpp.type = "std::unordered_map<std::string, openr::thrift::KvStoreNoMergeReason>",
+) NoMergeMap
+
+struct KvStoreNoMergeReasonStats {
+  // per-key reasons
+  1: NoMergeMap noMergeReasons;
+
+  // per-reason stats
+  // the incoming key does not match the filtered keys
+  2: i64 numberOfNoMatchedKeys = 0;
+  // the ttl of the incoming kv is invalid
+  3: list<i64> listInvalidTtls;
+  // the incoming kv has an invalid or old version
+  4: list<i64> listOldVersions;
+  // the kv does not need to be merged
+  5: i64 numberOfNoNeedToUpdates = 0;
+  // detected that sender is stale and need to full sync
+  6: bool inconsistencyDetetectedWithOriginator = false;
+}
+
+struct KvStoreMergeStats {
+  KvStoreUpdateStats updateStats;
+  KvStoreNoMergeReasonStats noMergeStats;
+}
+
 /**
  * Logical operator enum for querying
  */
