@@ -230,10 +230,11 @@ class Constants {
   static constexpr folly::StringPiece kLocalRouteNexthopV4{"0.0.0.0"};
   static constexpr folly::StringPiece kLocalRouteNexthopV6{"::"};
 
-  // OpenR ports
-
   // Openr Ctrl thrift server port
   static constexpr int32_t kOpenrCtrlPort{2018};
+
+  // Thrift server's queue timeout
+  static constexpr std::chrono::milliseconds kThriftServerQueueTimeout{1000};
 
   //
   // See https://github.com/facebook/openr/blob/master/openr/docs/Versions.md
