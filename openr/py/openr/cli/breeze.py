@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import click
+from fastcli.click import inject_fastcli
 from openr.cli.clis import (
     config,
     decision,
@@ -20,6 +21,8 @@ from openr.cli.clis import (
     tech_support,
 )
 from openr.cli.utils.options import breeze_option, OPTIONS, str2cert
+from thrift.Thrift import TApplicationException
+from thrift.transport.TTransport import TTransportException
 
 
 # Plugin module is optional
@@ -96,9 +99,18 @@ def get_breeze_cli():
 def main() -> None:
     """entry point for breeze"""
 
-    # let the magic begin
-    cli = get_breeze_cli()
-    cli()
+    # attach CLI commands
+    main_cli = get_breeze_cli()
+    inject_fastcli(main_cli)
+
+    try:
+        main_cli()
+    except TApplicationException as e:
+        raise SystemExit("Thrift Application Exception: {}".format(str(e)))
+    except TTransportException as e:
+        raise SystemExit("Failed connecting to host: {}".format(str(e)))
+    except Exception as e:
+        raise SystemExit("Failed with exception: {}".format(str(e)))
 
 
 if __name__ == "__main__":
