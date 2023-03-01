@@ -16,6 +16,13 @@
 
 namespace openr {
 
+enum class MergeType {
+  UPDATE_ALL_NEEDED = 0,
+  UPDATE_TTL_NEEDED = 1,
+  RESYNC_NEEDED = 2,
+  NO_UPDATE_NEEDED = 3,
+};
+
 class KvStoreFilters {
  public:
   // takes the list of comma separated key prefixes to match,
@@ -264,6 +271,25 @@ bool isValidTtl(int64_t val);
  */
 bool isValidVersion(
     const int64_t existingVersion, const thrift::Value& incomingVal);
+
+/*
+ * Check if what kind of merge type are we going to perform
+ * check `MergeType` to see what types there are
+ *
+ * @param key - key to be merged
+ * @param value - incoming thrift::Value
+ * @param kvStore - existing key-value map
+ * @param sender - the sender who sends the value
+ * @param stats - record all the result and stats of this operation
+ *
+ * @return: MergeType - enum of the merging type
+ */
+MergeType getMergeType(
+    const std::string& key,
+    const thrift::Value& value,
+    const thrift::KeyVals& kvStore,
+    std::optional<std::string> const& sender,
+    thrift::KvStoreMergeStats& stats);
 
 } // namespace openr
 

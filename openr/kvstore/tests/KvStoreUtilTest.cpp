@@ -505,6 +505,167 @@ TEST(KvStoreUtil, IsValidVersionTest) {
   }
 }
 
+TEST(KvStoreUtil, GetMergeTypeTest) {
+  // Resync is needed
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    thrift::KeyVals kvStore;
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderA";
+    EXPECT_EQ(
+        MergeType::RESYNC_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // ttl only and ttl version is greater
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.ttlVersion() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.ttlVersion() = 4;
+    EXPECT_EQ(
+        MergeType::UPDATE_TTL_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // version is lower -> no update needed
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    value.version() = 4;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    EXPECT_EQ(
+        MergeType::NO_UPDATE_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // version is valid for update
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    value.version() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 4;
+    EXPECT_EQ(
+        MergeType::UPDATE_ALL_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // 2nd tie breaking
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    value.version() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    value.originatorId() = "senderB";
+    EXPECT_EQ(
+        MergeType::UPDATE_ALL_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // 2nd tie breaking
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderB";
+    value.value() = "value";
+    value.version() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    value.originatorId() = "senderA";
+    EXPECT_EQ(
+        MergeType::NO_UPDATE_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // 3rd tie breaking
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    value.version() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    value.originatorId() = "senderA";
+    value.value() = "valueA";
+    EXPECT_EQ(
+        MergeType::UPDATE_ALL_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // 3rd tie breaking
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    value.version() = 1;
+    value.ttlVersion() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    value.originatorId() = "senderA";
+    value.ttlVersion() = 2;
+    EXPECT_EQ(
+        MergeType::UPDATE_TTL_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // 3rd tie breaking
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    value.version() = 1;
+    value.ttlVersion() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    value.originatorId() = "senderA";
+    value.ttlVersion() = 1;
+    EXPECT_EQ(
+        MergeType::NO_UPDATE_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+  // 3rd tie breaking
+  {
+    std::string key = "myKey";
+    thrift::Value value;
+    value.originatorId() = "senderA";
+    value.value() = "valueA";
+    value.version() = 1;
+    thrift::KeyVals kvStore{{key, value}};
+    thrift::KvStoreMergeStats stats;
+    std::optional<std::string> sender = "senderB";
+    value.version() = 1;
+    value.originatorId() = "senderA";
+    value.value() = "value";
+    EXPECT_EQ(
+        MergeType::NO_UPDATE_NEEDED,
+        getMergeType(key, value, kvStore, sender, stats));
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

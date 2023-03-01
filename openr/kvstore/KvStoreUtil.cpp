@@ -162,7 +162,145 @@ isResyncNeeded(
   return inconsistencyDetected;
 }
 
+int64_t
+getExistingVersion(const std::string& key, const thrift::KeyVals& kvStore) {
+  auto kvStoreIt = kvStore.find(key);
+  if (kvStoreIt != kvStore.end()) {
+    return *kvStoreIt->second.version();
+  }
+  return openr::Constants::kUndefinedVersion;
+}
 } // namespace util
+
+MergeType
+getMergeType(
+    const std::string& key,
+    const thrift::Value& value,
+    const thrift::KeyVals& kvStore,
+    std::optional<std::string> const& sender,
+    thrift::KvStoreMergeStats& stats) {
+  int64_t myVersion = util::getExistingVersion(key, kvStore);
+  auto kvStoreIt = kvStore.find(key);
+
+  if (util::isTtlUpdate(value)) {
+    /*
+     * No value field. This is ttl refreshing coming from local store(aka,
+     * self-originated key) or ttl updates coming from remote node.
+     *
+     * NOTE: kvStore will try to detect possible inconsistencies and force a
+     * full-sync if it is adjacency peer.
+     */
+    if (util::isResyncNeeded(kvStore, key, value)) {
+      auto senderId = sender.value_or("");
+      if (senderId == *value.originatorId()) {
+        stats.noMergeStats()->inconsistencyDetetectedWithOriginator() = true;
+        return MergeType::RESYNC_NEEDED;
+      }
+    } else if (*value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+      /*
+       * Case 4: key exists, same version, same originatorId.
+       */
+      XLOG(DBG4) << fmt::format(
+          "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
+          key,
+          *value.ttlVersion(),
+          *kvStoreIt->second.ttlVersion());
+
+      return MergeType::UPDATE_TTL_NEEDED;
+    }
+  } else {
+    if (not util::isValidVersionAndLog(myVersion, key, value, stats)) {
+      /*
+       * skip if the version is invalid or old
+       *
+       * Attention: this condition does NOT apply to ttl. It can happen with
+       * version inconsistency with ttl update.
+       */
+      return MergeType::NO_UPDATE_NEEDED;
+    } else if (*value.version() > myVersion) {
+      /*
+       * [1st tie-breaker] version - prefer higher
+       *
+       * i) coming key version is higher
+       * ii) first time seeing this key(myVersion =0)
+       *
+       * ATTN: for newVersion < myVersion case, util::isValidVersionAndLog()
+       * has already guarded against that case. :)
+       */
+      XLOG(DBG4) << fmt::format(
+          "(mergeKeyValues) Update key: {} with higher version: {}, old one: {}",
+          key,
+          *value.version(),
+          myVersion);
+
+      return MergeType::UPDATE_ALL_NEEDED;
+    } else if (*value.originatorId() > *kvStoreIt->second.originatorId()) {
+      /*
+       * [2nd tie-breaker] originatorId - prefer higher
+       */
+      XLOG(INFO) << fmt::format(
+          "(mergeKeyValues) Update key: {} with higher originatorId: {}, old one: {}",
+          key,
+          *value.originatorId(),
+          *kvStoreIt->second.originatorId());
+
+      return MergeType::UPDATE_ALL_NEEDED;
+    } else if (*value.originatorId() == *kvStoreIt->second.originatorId()) {
+      /*
+       * [3rd tie-breaker] value - prefer higher
+       *
+       * This can occur after kvstore restarts or simply reconnects after
+       * disconnection. We let one of the two values win if they differ(
+       * higher in this case but can be lower as long as it's deterministic).
+       * Otherwise, local store can have new value while other stores have
+       * old value and they never sync.
+       */
+
+      int rc = value.value().has_value() ? 1 : -1;
+      if (kvStoreIt->second.value().has_value() and value.value().has_value()) {
+        rc = (*value.value()).compare(*kvStoreIt->second.value());
+      } else {
+        XLOG(WARNING) << fmt::format(
+            "Either incoming value is empty or kvstore does not have value for key [{}]",
+            key);
+      }
+      if (rc > 0) {
+        // versions and orginatorIds are same but value is higher
+        XLOG(DBG4) << fmt::format(
+            "(mergeKeyValues) Update key: {} with higher value", key);
+
+        return MergeType::UPDATE_ALL_NEEDED;
+      } else if (rc == 0) {
+        /*
+         * [4th tie-breaker] ttlVersion - prefer higher
+         */
+        if (*value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+          XLOG(DBG4) << fmt::format(
+              "(mergeKeyValues) Update key: {} with higher ttlVersion: {}, old one: {}",
+              key,
+              *value.ttlVersion(),
+              *kvStoreIt->second.ttlVersion());
+
+          return MergeType::UPDATE_TTL_NEEDED;
+        }
+      } else {
+        /*
+         * regarding to rc < 0 case, value in local store wins the
+         * tie-breaking and no update is generated.
+         */
+        return MergeType::NO_UPDATE_NEEDED;
+      }
+    } else {
+      /*
+       * regarding to value.originatorId < kvStoreIt->second.originatorId
+       * case, value in local store wins the tie-breaking and no update is
+       * generated.
+       */
+      return MergeType::NO_UPDATE_NEEDED;
+    }
+  }
+  return MergeType::NO_UPDATE_NEEDED;
+}
 
 bool
 isValidTtl(int64_t val) {
@@ -195,142 +333,29 @@ mergeKeyValues(
       continue;
     }
 
-    // initialize `myVersion` to a default value in case this is a new key
-    int64_t myVersion{openr::Constants::kUndefinedVersion};
     const auto& newVersion = *value.version();
     const auto& newTtlVersion = *value.ttlVersion();
     const auto& newTtl = *value.ttl();
     const auto& newOriginatorId = *value.originatorId();
-    auto kvStoreIt = kvStore.find(key);
-    if (kvStoreIt != kvStore.end()) {
-      myVersion = *kvStoreIt->second.version();
-    }
 
-    bool updateAllNeeded{false};
-    bool updateTtlNeeded{false};
+    const MergeType mergeType =
+        getMergeType(key, value, kvStore, sender, stats);
 
-    if (util::isTtlUpdate(value)) {
-      /*
-       * No value field. This is ttl refreshing coming from local store(aka,
-       * self-originated key) or ttl updates coming from remote node.
-       *
-       * NOTE: kvStore will try to detect possible inconsistencies and force a
-       * full-sync if it is adjacency peer.
-       */
-      if (util::isResyncNeeded(kvStore, key, value)) {
-        auto senderId = sender.value_or("");
-        if (senderId == newOriginatorId) {
-          stats.noMergeStats()->inconsistencyDetetectedWithOriginator() = true;
-          return std::make_pair(
-              std::move(kvUpdates), std::move(*stats.noMergeStats()));
-        }
-      } else if (newTtlVersion > *kvStoreIt->second.ttlVersion()) {
-        /*
-         * Case 4: key exists, same version, same originatorId.
-         */
-        XLOG(DBG4) << fmt::format(
-            "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
-            key,
-            newTtlVersion,
-            *kvStoreIt->second.ttlVersion());
-
-        updateTtlNeeded = true;
-      }
-    } else {
-      if (not util::isValidVersionAndLog(myVersion, key, value, stats)) {
-        /*
-         * skip if the version is invalid or old
-         *
-         * Attention: this condition does NOT apply to ttl. It can happen with
-         * version inconsistency with ttl update.
-         */
-        continue;
-      } else if (newVersion > myVersion) {
-        /*
-         * [1st tie-breaker] version - prefer higher
-         *
-         * i) coming key version is higher
-         * ii) first time seeing this key(myVersion =0)
-         *
-         * ATTN: for newVersion < myVersion case, util::isValidVersionAndLog()
-         * has already guarded against that case. :)
-         */
-        XLOG(DBG4) << fmt::format(
-            "(mergeKeyValues) Update key: {} with higher version: {}, old one: {}",
-            key,
-            newVersion,
-            myVersion);
-
-        updateAllNeeded = true;
-      } else if (newOriginatorId > *kvStoreIt->second.originatorId()) {
-        /*
-         * [2nd tie-breaker] originatorId - prefer higher
-         */
-        XLOG(INFO) << fmt::format(
-            "(mergeKeyValues) Update key: {} with higher originatorId: {}, old one: {}",
-            key,
-            newOriginatorId,
-            *kvStoreIt->second.originatorId());
-
-        updateAllNeeded = true;
-      } else if (newOriginatorId == *kvStoreIt->second.originatorId()) {
-        /*
-         * [3rd tie-breaker] value - prefer higher
-         *
-         * This can occur after kvstore restarts or simply reconnects after
-         * disconnection. We let one of the two values win if they differ(
-         * higher in this case but can be lower as long as it's deterministic).
-         * Otherwise, local store can have new value while other stores have
-         * old value and they never sync.
-         */
-        int rc = (*value.value()).compare(*kvStoreIt->second.value());
-        if (rc > 0) {
-          // versions and orginatorIds are same but value is higher
-          XLOG(DBG4) << fmt::format(
-              "(mergeKeyValues) Update key: {} with higher value", key);
-
-          updateAllNeeded = true;
-        } else if (rc == 0) {
-          /*
-           * [4th tie-breaker] ttlVersion - prefer higher
-           */
-          if (newTtlVersion > *kvStoreIt->second.ttlVersion()) {
-            XLOG(DBG4) << fmt::format(
-                "(mergeKeyValues) Update key: {} with higher ttlVersion: {}, old one: {}",
-                key,
-                newTtlVersion,
-                *kvStoreIt->second.ttlVersion());
-
-            updateTtlNeeded = true;
-          }
-        } else {
-          /*
-           * regarding to rc < 0 case, value in local store wins the
-           * tie-breaking and no update is generated.
-           */
-        }
-      } else {
-        /*
-         * regarding to value.originatorId < kvStoreIt->second.originatorId
-         * case, value in local store wins the tie-breaking and no update is
-         * generated.
-         */
-      }
-    }
-
-    if (!updateAllNeeded and !updateTtlNeeded) {
+    if (mergeType == MergeType::NO_UPDATE_NEEDED) {
       XLOG(DBG3) << fmt::format(
-          "(mergeKeyValues) no need to update anything for key: '{}'", key);
+          "({}) no need to update anything for key: '{}'", __FUNCTION__, key);
       stats.noMergeStats()->noMergeReasons()->emplace(
           key, thrift::KvStoreNoMergeReason::NO_NEED_TO_UPDATE);
       ++(*stats.noMergeStats()->numberOfNoNeedToUpdates());
       continue;
     }
 
+    auto kvStoreIt = kvStore.find(key);
+
     XLOG(DBG3) << fmt::format(
         "Updating key: {}\n  Version: {} -> {}\n  Originator: {} -> {}\n  TtlVersion: {} -> {}\n  Ttl: {} -> {}",
         key,
-        myVersion,
+        *kvStoreIt->second.version(),
         newVersion,
         (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId()
                                     : "null"),
@@ -340,7 +365,7 @@ mergeKeyValues(
         (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttl() : 0),
         newTtl);
 
-    if (updateAllNeeded) {
+    if (mergeType == MergeType::UPDATE_ALL_NEEDED) {
       ++(*stats.updateStats()->valUpdateCnt());
       FB_LOG_EVERY_MS(INFO, 500) << fmt::format(
           "Updating key: {}, Originator: {}, Version: {}, TtlVersion: {}, Ttl: {}",
@@ -368,22 +393,22 @@ mergeKeyValues(
         kvStoreIt->second.hash() =
             generateHash(newVersion, newOriginatorId, value.value());
       }
-    } else if (updateTtlNeeded) {
-      ++(*stats.updateStats()->ttlUpdateCnt());
-
+    } else if (mergeType == MergeType::UPDATE_TTL_NEEDED) {
       CHECK(kvStoreIt != kvStore.end());
+
+      ++(*stats.updateStats()->ttlUpdateCnt());
 
       // update TTL only, nothing else
       kvStoreIt->second.ttl() = newTtl;
       kvStoreIt->second.ttlVersion() = newTtlVersion;
     }
-
     // announce the update
     kvUpdates.emplace(key, value);
   }
 
   XLOG(DBG3) << fmt::format(
-      "(mergeKeyValues) updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
+      "() updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
+      __FUNCTION__,
       kvUpdates.size(),
       *stats.updateStats()->valUpdateCnt(),
       *stats.updateStats()->ttlUpdateCnt());
@@ -665,5 +690,4 @@ updatePublicationTtl(
     kv->second.ttl() = timeLeft.count() - ttlDecr.count();
   }
 }
-
 }; // namespace openr
