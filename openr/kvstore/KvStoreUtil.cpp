@@ -256,14 +256,13 @@ getMergeType(
        * old value and they never sync.
        */
 
-      int rc = value.value().has_value() ? 1 : -1;
-      if (kvStoreIt->second.value().has_value() and value.value().has_value()) {
-        rc = (*value.value()).compare(*kvStoreIt->second.value());
-      } else {
-        XLOG(WARNING) << fmt::format(
-            "Either incoming value is empty or kvstore does not have value for key [{}]",
-            key);
-      }
+      // Note: We assume local store should always have a value. If not, it is
+      // an invalid case and is ok to crash kvstore. For non-ttl update, the
+      // incoming keys should always have a value associated
+      auto rc =
+          (apache::thrift::can_throw(*value.value()))
+              .compare(apache::thrift::can_throw(*kvStoreIt->second.value()));
+
       if (rc > 0) {
         // versions and orginatorIds are same but value is higher
         XLOG(DBG4) << fmt::format(
@@ -407,7 +406,7 @@ mergeKeyValues(
   }
 
   XLOG(DBG3) << fmt::format(
-      "() updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
+      "({}) updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
       __FUNCTION__,
       kvUpdates.size(),
       *stats.updateStats()->valUpdateCnt(),
