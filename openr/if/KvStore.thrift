@@ -156,6 +156,8 @@ enum KvStoreNoMergeReason {
   INVALID_TTL = 2,
   OLD_VERSION = 3,
   NO_NEED_TO_UPDATE = 4,
+  LOOP_DETECTED = 5,
+  INCONSISTENCY_DETECTED = 6,
 }
 
 struct KvStoreUpdateStats {
@@ -184,9 +186,13 @@ struct KvStoreNoMergeReasonStats {
   6: bool inconsistencyDetetectedWithOriginator = false;
 }
 
+struct SetKeyValsResult {
+  1: NoMergeMap noMergeReasons; // check empty or not
+}
+
 struct KvStoreMergeStats {
-  KvStoreUpdateStats updateStats;
-  KvStoreNoMergeReasonStats noMergeStats;
+  1: KvStoreUpdateStats updateStats;
+  2: KvStoreNoMergeReasonStats noMergeStats;
 }
 
 /**
