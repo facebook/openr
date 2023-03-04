@@ -12,6 +12,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
 #include <openr/platform/NetlinkFibHandler.h>
+#include <cstdint>
 
 #include <net/if.h>
 
@@ -36,15 +37,16 @@ createSemiFutureWithClientIdError() {
 
 } // namespace
 
-NetlinkFibHandler::NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock)
+NetlinkFibHandler::NetlinkFibHandler(
+    fbnl::NetlinkProtocolSocket* nlSock, uint8_t routeTable)
     : facebook::fb303::BaseService("openr"),
       nlSock_(nlSock),
       startTime_(std::chrono::duration_cast<std::chrono::seconds>(
                      std::chrono::system_clock::now().time_since_epoch())
-                     .count()) {
+                     .count()),
+      routeTable_(routeTable) {
   CHECK_NOTNULL(nlSock);
 }
-
 NetlinkFibHandler::~NetlinkFibHandler() {}
 
 std::optional<int16_t>
@@ -131,8 +133,9 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
   std::vector<folly::SemiFuture<int>> result;
   for (auto& prefix : *prefixes) {
     fbnl::RouteBuilder rtBuilder;
-    rtBuilder.setDestination(toIPNetwork(prefix));
-    rtBuilder.setProtocolId(protocol.value());
+    rtBuilder.setDestination(toIPNetwork(prefix))
+        .setRouteTable(routeTable_)
+        .setProtocolId(protocol.value());
     result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
   return fbnl::NetlinkProtocolSocket::collectReturnStatus(
@@ -175,8 +178,9 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
   std::vector<folly::SemiFuture<int>> result;
   for (auto& topLabel : *topLabels) {
     fbnl::RouteBuilder rtBuilder;
-    rtBuilder.setMplsLabel(topLabel);
-    rtBuilder.setProtocolId(protocol.value());
+    rtBuilder.setMplsLabel(topLabel)
+        .setRouteTable(routeTable_)
+        .setProtocolId(protocol.value());
     result.emplace_back(nlSock_->deleteRoute(rtBuilder.build()));
   }
   return fbnl::NetlinkProtocolSocket::collectReturnStatus(
@@ -204,8 +208,8 @@ NetlinkFibHandler::semifuture_syncFib(
   // to complete and prepare the map of existing routes
   std::unordered_map<folly::CIDRNetwork, fbnl::Route> existingRoutes;
   {
-    auto v4Routes = nlSock_->getIPv4Routes(protocol.value()).get();
-    auto v6Routes = nlSock_->getIPv6Routes(protocol.value()).get();
+    auto v4Routes = nlSock_->getIPv4Routes(protocol.value(), routeTable_).get();
+    auto v6Routes = nlSock_->getIPv6Routes(protocol.value(), routeTable_).get();
     if (v4Routes.hasError()) {
       throw fbnl::NlException("Failed fetching IPv4 routes", v4Routes.error());
     }
@@ -284,7 +288,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   // Create set of existing route
   // NOTE: Synchronous call to retrieve all the routes
   std::unordered_map<int32_t, fbnl::Route> existingRoutes;
-  auto nlRoutes = nlSock_->getMplsRoutes(protocol.value()).get();
+  auto nlRoutes = nlSock_->getMplsRoutes(protocol.value(), routeTable_).get();
   if (nlRoutes.hasError()) {
     throw fbnl::NlException("Failed fetching IPv6 routes", nlRoutes.error());
   }
@@ -356,8 +360,8 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
   CHECK(protocol.has_value());
   XLOG(INFO) << "Get unicast routes for client " << getClientName(clientId);
 
-  auto v4Routes = nlSock_->getIPv4Routes(protocol.value());
-  auto v6Routes = nlSock_->getIPv6Routes(protocol.value());
+  auto v4Routes = nlSock_->getIPv4Routes(protocol.value(), routeTable_);
+  auto v6Routes = nlSock_->getIPv6Routes(protocol.value(), routeTable_);
   return folly::collectAll(std::move(v4Routes), std::move(v6Routes))
       .deferValue(
           [this](std::tuple<
@@ -391,7 +395,7 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
   CHECK(protocol.has_value());
   XLOG(INFO) << "Get mpls routes for client " << getClientName(clientId);
 
-  return nlSock_->getMplsRoutes(protocol.value())
+  return nlSock_->getMplsRoutes(protocol.value(), routeTable_)
       .deferValue(
           [this](folly::Expected<std::vector<fbnl::Route>, int>&& nlRoutes) {
             if (nlRoutes.hasError()) {
@@ -503,12 +507,48 @@ NetlinkFibHandler::buildNextHop(
     nhBuilder.reset();
   }
 }
+fbnl::Route
+NetlinkFibHandler::buildInterfaceRoute(const thrift::UnicastRoute& route) {
+  // Create interface prefix route object, use RTPROT_KERNEL to avoid being
+  // messed up by routing protocol.
+  fbnl::RouteBuilder rtBuilder;
+  rtBuilder.setDestination(toIPNetwork(*route.dest_ref()))
+      .setRouteTable(routeTable_)
+      .setProtocolId(RTPROT_KERNEL)
+      .setFlags(0)
+      .setValid(true);
 
+  // Set oif
+  if (route.nextHops()->size() != 1) {
+    throw fbnl::NlException(
+        "Malformed interface route. Should have one and only one nexthop.");
+  }
+  auto ifAddr = route.nextHops()[0].address();
+  auto ifName = ifAddr->ifName();
+  if (!ifName.has_value()) {
+    throw fbnl::NlException(
+        "Malformed interface route. Nexthop interface name should exist.");
+  }
+  auto ifIndex = getIfIndex(ifName.value());
+  if (!ifIndex.has_value()) {
+    throw fbnl::NlException(
+        "Malformed interface route. Nexthop interface name is not valid.");
+  }
+  rtBuilder.setOIf(static_cast<uint32_t>(ifIndex.value()));
+
+  // V4 prefix route need set scope to link and src to link addr
+  if (rtBuilder.getFamily() == AF_INET) {
+    rtBuilder.setScope(RT_SCOPE_LINK).setPrefSrc(toIPAddress(*ifAddr));
+  }
+
+  return rtBuilder.build();
+}
 fbnl::Route
 NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
   // Create route object
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setDestination(toIPNetwork(*route.dest()))
+      .setRouteTable(routeTable_)
       .setProtocolId(protocol)
       .setPriority(protocolToPriority(protocol))
       .setFlags(0)
@@ -532,6 +572,7 @@ NetlinkFibHandler::buildMplsRoute(
   // NOTE: Priority for MPLS routes is not supported in Linux
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setMplsLabel(static_cast<uint32_t>(*mplsRoute.topLabel()))
+      .setRouteTable(routeTable_)
       .setProtocolId(protocol)
       .setFlags(0)
       .setValid(true);
@@ -623,6 +664,15 @@ NetlinkFibHandler::getLoopbackIfIndex() {
     return std::nullopt;
   }
   return index;
+}
+
+void
+NetlinkFibHandler::setRouteTableId(const uint8_t id) {
+  routeTable_ = id;
+}
+uint8_t
+NetlinkFibHandler::getRouteTableId() {
+  return routeTable_;
 }
 
 void

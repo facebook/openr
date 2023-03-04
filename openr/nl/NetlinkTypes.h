@@ -13,6 +13,7 @@
 
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
+#include <cstdint>
 
 extern "C" {
 #include <linux/rtnetlink.h>
@@ -229,6 +230,14 @@ class RouteBuilder {
   RouteBuilder& setMultiPath(bool isMultiPath);
   bool isMultiPath() const;
 
+  // set|get RTA_OIF attr for rtm message
+  RouteBuilder& setOIf(uint32_t oif);
+  std::optional<uint32_t> getOIf() const;
+
+  // set|get RTA_PREFSRC attr
+  RouteBuilder& setPrefSrc(folly::IPAddress src);
+  std::optional<folly::IPAddress> getPrefSrc() const;
+
   void reset();
 
  private:
@@ -247,6 +256,8 @@ class RouteBuilder {
   folly::CIDRNetwork dst_;
   std::optional<uint32_t> mplsLabel_;
   bool isMultiPath_{true};
+  std::optional<int> oif_; // RTA_OIF
+  std::optional<folly::IPAddress> prefSrc_;
 };
 
 class Route final {
@@ -291,11 +302,13 @@ class Route final {
 
   bool isMultiPath() const;
 
-  void setPriority(uint32_t priority);
-
   std::string str() const;
 
   void setNextHops(const NextHopSet& nextHops);
+
+  std::optional<uint32_t> getOIf() const;
+
+  std::optional<folly::IPAddress> getPrefSrc() const;
 
  private:
   uint8_t type_{RTN_UNICAST};
@@ -313,6 +326,8 @@ class Route final {
   folly::CIDRNetwork dst_;
   std::optional<uint32_t> mplsLabel_;
   bool isMultiPath_{true};
+  std::optional<uint32_t> oif_;
+  std::optional<folly::IPAddress> prefSrc_;
 };
 
 bool operator==(const Route& lhs, const Route& rhs);
@@ -560,12 +575,17 @@ class LinkBuilder final {
 
   std::optional<GreInfo> getGreInfo() const;
 
+  LinkBuilder& setLinkGroup(uint32_t linkGroup);
+
+  std::optional<uint32_t> getLinkGroup() const;
+
  private:
   std::string linkName_;
   int ifIndex_{0};
   uint32_t flags_{0};
   std::optional<std::string> linkKind_;
   std::optional<GreInfo> greInfo_;
+  std::optional<uint32_t> linkGroup_;
 };
 
 class Link final {
@@ -594,6 +614,8 @@ class Link final {
 
   std::optional<GreInfo> getGreInfo() const;
 
+  std::optional<uint32_t> getLinkGroup() const;
+
   std::string str() const;
 
  private:
@@ -602,6 +624,7 @@ class Link final {
   uint32_t flags_{0};
   std::optional<std::string> linkKind_;
   std::optional<GreInfo> greInfo_;
+  std::optional<uint32_t> linkGroup_;
 };
 
 bool operator==(const Link& lhs, const Link& rhs);

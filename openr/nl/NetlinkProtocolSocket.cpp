@@ -342,7 +342,6 @@ NetlinkProtocolSocket::processMessage(
         break;
       }
 
-      bool isNotification = nlSeqIt == nlSeqNumMap_.end();
       if (nlSeqIt != nlSeqNumMap_.end()) {
         // Extend message timer as we received a valid ack
         nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
@@ -355,11 +354,13 @@ NetlinkProtocolSocket::processMessage(
           // Response to a add/del request - generate addr event for handler.
           // This occurs when we add/del IPv4 addresses generates address event
           // with the same sequence as the original request.
-          isNotification = true;
-        }
-      }
 
-      if (isNotification) {
+          // IfAddress notification
+          XLOG(DBG1) << "Address event. " << addr.str();
+          fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
+          netlinkEventsQueue_.push(addr);
+        }
+      } else {
         // IfAddress notification
         XLOG(DBG1) << "Address event. " << addr.str();
         fbData->addStatValue("netlink.notifications.addr", 1, fb303::SUM);
@@ -698,42 +699,61 @@ NetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-NetlinkProtocolSocket::getAllRoutes() {
+NetlinkProtocolSocket::getAllRoutes(std::optional<uint8_t> routeTableId) {
   fbnl::RouteBuilder builder;
   builder.setProtocolId(RTPROT_UNSPEC); // Explicitly set protocol to 0
   builder.setType(RTN_UNSPEC); // Explicitly set type to 0
+  // Set route table ID if given
+  if (routeTableId.has_value()) {
+    builder.setRouteTable(routeTableId.value());
+  }
   return getRoutes(builder.build());
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-NetlinkProtocolSocket::getIPv4Routes(uint8_t protocolId) {
+NetlinkProtocolSocket::getIPv4Routes(
+    uint8_t protocolId, std::optional<uint8_t> routeTableId) {
   fbnl::RouteBuilder builder;
   // Set address family to MPLS with default v4 route
   builder.setDestination({folly::IPAddressV4("0.0.0.0"), 0});
   // Set protocol ID
   builder.setProtocolId(protocolId);
   builder.setType(RTN_UNSPEC); // Explicitly set type to 0
+  // Set route table ID if given
+  if (routeTableId.has_value()) {
+    builder.setRouteTable(routeTableId.value());
+  }
   return getRoutes(builder.build());
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-NetlinkProtocolSocket::getIPv6Routes(uint8_t protocolId) {
+NetlinkProtocolSocket::getIPv6Routes(
+    uint8_t protocolId, std::optional<uint8_t> routeTableId) {
   fbnl::RouteBuilder builder;
   // Set address family to MPLS with default v6 route
   builder.setDestination({folly::IPAddressV6("::"), 0});
   // Set protocol ID
   builder.setProtocolId(protocolId);
   builder.setType(RTN_UNSPEC); // Explicitly set type to 0
+  // Set route table ID if given
+  if (routeTableId.has_value()) {
+    builder.setRouteTable(routeTableId.value());
+  }
   return getRoutes(builder.build());
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-NetlinkProtocolSocket::getMplsRoutes(uint8_t protocolId) {
+NetlinkProtocolSocket::getMplsRoutes(
+    uint8_t protocolId, std::optional<uint8_t> routeTableId) {
   fbnl::RouteBuilder builder;
   // Set address family to MPLS with default label
   builder.setMplsLabel(0);
   // Set protocol ID
   builder.setProtocolId(protocolId);
+  // Set route table ID if given
+  if (routeTableId.has_value()) {
+    builder.setRouteTable(routeTableId.value());
+  }
   return getRoutes(builder.build());
 }
 

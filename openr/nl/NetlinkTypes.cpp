@@ -6,6 +6,8 @@
  */
 
 #include <openr/nl/NetlinkTypes.h>
+#include <cstdint>
+#include <optional>
 
 extern "C" {
 #include <net/if.h>
@@ -182,6 +184,28 @@ RouteBuilder::isMultiPath() const {
   return isMultiPath_;
 }
 
+RouteBuilder&
+RouteBuilder::setOIf(uint32_t oif) {
+  oif_ = oif;
+  return *this;
+}
+
+std::optional<uint32_t>
+RouteBuilder::getOIf() const {
+  return oif_;
+}
+
+RouteBuilder&
+RouteBuilder::setPrefSrc(folly::IPAddress src) {
+  prefSrc_ = src;
+  return *this;
+}
+
+std::optional<folly::IPAddress>
+RouteBuilder::getPrefSrc() const {
+  return prefSrc_;
+}
+
 void
 RouteBuilder::reset() {
   type_ = RTN_UNICAST;
@@ -196,6 +220,8 @@ RouteBuilder::reset() {
   advMss_.reset();
   nextHops_.clear();
   isMultiPath_ = true;
+  oif_ = std::nullopt;
+  prefSrc_ = std::nullopt;
 }
 
 Route::Route(const RouteBuilder& builder)
@@ -213,7 +239,9 @@ Route::Route(const RouteBuilder& builder)
       nextHops_(builder.getNextHops()),
       dst_(builder.getDestination()),
       mplsLabel_(builder.getMplsLabel()),
-      isMultiPath_(builder.isMultiPath()) {}
+      isMultiPath_(builder.isMultiPath()),
+      oif_(builder.getOIf()),
+      prefSrc_(builder.getPrefSrc()) {}
 
 Route::~Route() {}
 
@@ -241,6 +269,8 @@ Route::operator=(Route&& other) noexcept {
   family_ = std::move(other.family_);
   mplsLabel_ = std::move(other.mplsLabel_);
   isMultiPath_ = std::move(other.isMultiPath_);
+  oif_ = std::move(other.oif_);
+  prefSrc_ = std::move(other.prefSrc_);
   return *this;
 }
 
@@ -268,6 +298,8 @@ Route::operator=(const Route& other) {
   family_ = other.family_;
   mplsLabel_ = other.mplsLabel_;
   isMultiPath_ = other.isMultiPath_;
+  oif_ = other.oif_;
+  prefSrc_ = other.prefSrc_;
   return *this;
 }
 
@@ -284,7 +316,7 @@ operator==(const Route& lhs, const Route& rhs) {
        lhs.getFlags() == rhs.getFlags() &&
        lhs.getPriority() == rhs.getPriority() && lhs.getTos() == rhs.getTos() &&
        lhs.getMtu() == rhs.getMtu() && lhs.getAdvMss() == rhs.getAdvMss() &&
-       lhs.getFamily() == rhs.getFamily());
+       lhs.getFamily() == rhs.getFamily() && lhs.getOIf() == rhs.getOIf());
 
   if (!ret) {
     return false;
@@ -375,6 +407,16 @@ Route::isMultiPath() const {
   return isMultiPath_;
 }
 
+std::optional<uint32_t>
+Route::getOIf() const {
+  return oif_;
+}
+
+std::optional<folly::IPAddress>
+Route::getPrefSrc() const {
+  return prefSrc_;
+}
+
 std::string
 Route::str() const {
   std::string result;
@@ -395,6 +437,14 @@ Route::str() const {
       scope_,
       static_cast<int>(type_));
 
+  if (oif_) {
+    char ifName[IF_NAMESIZE] = {0};
+    result += fmt::format(", dev {}", if_indextoname(oif_.value(), ifName));
+  }
+  if (prefSrc_) {
+    result += fmt::format(", src {}", prefSrc_.value().str());
+  }
+
   if (priority_) {
     result += fmt::format(", priority {}", priority_.value());
   }
@@ -411,11 +461,6 @@ Route::str() const {
     result += "\n  " + nextHop.str();
   }
   return result;
-}
-
-void
-Route::setPriority(uint32_t priority) {
-  priority_ = priority;
 }
 
 void
@@ -1143,12 +1188,23 @@ LinkBuilder::getGreInfo() const {
   return greInfo_;
 }
 
+LinkBuilder&
+LinkBuilder::setLinkGroup(uint32_t linkGroup) {
+  linkGroup_ = linkGroup;
+  return *this;
+}
+
+std::optional<uint32_t>
+LinkBuilder::getLinkGroup() const {
+  return linkGroup_;
+}
 Link::Link(const LinkBuilder& builder)
     : linkName_(builder.getLinkName()),
       ifIndex_(builder.getIfIndex()),
       flags_(builder.getFlags()),
       linkKind_(builder.getLinkKind()),
-      greInfo_(builder.getGreInfo()) {}
+      greInfo_(builder.getGreInfo()),
+      linkGroup_(builder.getLinkGroup()) {}
 
 Link::~Link() {}
 
@@ -1167,6 +1223,7 @@ Link::operator=(Link&& other) noexcept {
   flags_ = std::move(other.flags_);
   linkKind_ = std::move(other.linkKind_);
   greInfo_ = std::move(other.greInfo_);
+  linkGroup_ = std::move(other.linkGroup_);
   return *this;
 }
 
@@ -1185,6 +1242,7 @@ Link::operator=(const Link& other) {
   flags_ = other.flags_;
   linkKind_ = other.linkKind_;
   greInfo_ = other.greInfo_;
+  linkGroup_ = other.linkGroup_;
   return *this;
 }
 
@@ -1223,25 +1281,30 @@ Link::getGreInfo() const {
   return greInfo_;
 }
 
+std::optional<uint32_t>
+Link::getLinkGroup() const {
+  return linkGroup_;
+}
 std::string
 Link::str() const {
   return fmt::format(
-      "link {} intf-index {}, flags {}, kind {}, gre_info {}",
+      "link {} intf-index {}, flags {}, kind {}, gre_info {}, group {}",
       linkName_,
       ifIndex_,
       std::to_string(flags_),
       linkKind_ ? linkKind_.value() : "n/a",
-      greInfo_ ? greInfo_.value().str() : "n/a");
+      greInfo_ ? greInfo_.value().str() : "n/a",
+      linkGroup_ ? std::to_string(linkGroup_.value()) : "default");
 }
 
 bool
 operator==(const Link& lhs, const Link& rhs) {
-  return (
-      lhs.getLinkName() == rhs.getLinkName() and
-      lhs.getIfIndex() == rhs.getIfIndex() and
-      lhs.getFlags() == rhs.getFlags() and
-      lhs.getLinkKind() == rhs.getLinkKind() and
-      lhs.getGreInfo() == rhs.getGreInfo());
+  return (lhs.getLinkName() == rhs.getLinkName() and
+          lhs.getIfIndex() == rhs.getIfIndex() and
+          lhs.getFlags() == rhs.getFlags() and
+          lhs.getLinkKind() == rhs.getLinkKind() and
+          lhs.getGreInfo() == rhs.getGreInfo()) and
+      lhs.getLinkGroup() == rhs.getLinkGroup();
 }
 
 /*==================================Rule======================================*/

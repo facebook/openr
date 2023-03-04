@@ -96,6 +96,10 @@ NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) {
         builder = builder.setGreInfo(infoPair.second.value());
       }
     } break;
+    case IFLA_GROUP: {
+      auto group = reinterpret_cast<uint32_t*>(RTA_DATA(linkAttr));
+      builder = builder.setLinkGroup(*group);
+    } break;
     }
   }
   auto link = builder.build();

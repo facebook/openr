@@ -32,7 +32,8 @@ namespace openr {
 class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
                           public facebook::fb303::BaseService {
  public:
-  explicit NetlinkFibHandler(fbnl::NetlinkProtocolSocket* nlSock);
+  explicit NetlinkFibHandler(
+      fbnl::NetlinkProtocolSocket* nlSock, uint8_t routeTable = RT_TABLE_MAIN);
   ~NetlinkFibHandler() override;
 
   void
@@ -103,6 +104,12 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
    */
   static uint8_t protocolToPriority(const uint8_t protocol);
 
+  /**
+   * Set/Get Route Table ID this class use to program route into
+   */
+  void setRouteTableId(const uint8_t id);
+  uint8_t getRouteTableId();
+
  protected:
   /**
    * TODO: Migrate BGP++ to stream API for neighbor notifications. Also need to
@@ -138,6 +145,7 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
    * API to convert thrift route representation to netlink. Used for programming
    * routes in kernel.
    */
+  fbnl::Route buildInterfaceRoute(const thrift::UnicastRoute& route);
   fbnl::Route buildRoute(const thrift::UnicastRoute& route, int protocol);
   fbnl::Route buildMplsRoute(const thrift::MplsRoute& mplsRoute, int protocol);
   void buildMplsAction(
@@ -199,6 +207,9 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
 
   // Flag indicating the interface cache contains invalid entries
   bool cacheInvalid_{false};
+
+  // RouteTable ID this FibHandler will program into
+  uint8_t routeTable_{RT_TABLE_MAIN};
 };
 
 } // namespace openr

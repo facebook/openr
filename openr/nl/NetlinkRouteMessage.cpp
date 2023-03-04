@@ -710,6 +710,17 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
       uint32_t table = *(reinterpret_cast<uint32_t*> RTA_DATA(routeAttr));
       routeBuilder.setRouteTable(table);
     } break;
+
+    // Preferred source address, one of the use case is IPv4 link prefix routes.
+    // For example, when add ip address 10.0.0.1/31 to interface eth1, the
+    // following routes will be added by Linux kernel automatically:
+    //    10.0.0.0/31 dev eth1 proto kernel scope link src 10.0.0.1
+    case RTA_PREFSRC: {
+      auto ipAddr = parseIp(routeAttr, routeEntry->rtm_family);
+      if (ipAddr.hasValue()) {
+        routeBuilder.setPrefSrc(ipAddr.value());
+      }
+    } break;
     }
   }
 
@@ -811,6 +822,26 @@ NetlinkRouteMessage::addRoute(const Route& route) {
 
   if ((status = addRtaTable(route.getRouteTable()))) {
     return status;
+  }
+
+  // setup RTA_OIF (output interface index) attribute
+  if (route.getOIf()) {
+    const uint32_t oif = route.getOIf().value();
+    if ((status = addAttributes(
+             RTA_OIF, reinterpret_cast<const char*>(&oif), sizeof(uint32_t)))) {
+      return status;
+    }
+  }
+
+  // setup RTA_PREFSEC (Preferred source address) attribute
+  if (route.getPrefSrc()) {
+    auto src = route.getPrefSrc().value();
+    if ((status = addAttributes(
+             RTA_PREFSRC,
+             reinterpret_cast<const char*>(src.bytes()),
+             src.byteCount()))) {
+      return status;
+    }
   }
 
   return addNextHops(route);

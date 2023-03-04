@@ -42,10 +42,12 @@ const std::chrono::milliseconds kProcTimeout{500};
 const std::string kVethKind{"veth"};
 const std::string kVethNameX("vethTestX");
 const std::string kVethNameY("vethTestY");
+const uint32_t kVethGroup = 99; // Link group
 const uint8_t kRouteProtoId = 99; // Open/R protocolId
 const uint8_t kBgpProtoId = 253; // BGP protocolId
 const std::map<int16_t, int16_t> protoIdToPriority =
     thrift::Platform_constants::protocolIdtoPriority();
+const uint32_t kRouteTableId = 99; // RouteTable ID
 } // namespace
 
 folly::CIDRNetwork ipPrefix1 = folly::IPAddress::createNetwork("5501::/64");
@@ -187,8 +189,9 @@ class NlMessageFixture : public ::testing::Test {
 
   void
   addIntfPair(const std::string& ifNameA, const std::string& ifNameB) {
-    auto cmd = "ip link add {} type veth peer name {}"_shellify(
-        ifNameA.c_str(), ifNameB.c_str());
+    auto cmd =
+        "ip link add {} group {} type veth peer name {} group {}"_shellify(
+            ifNameA.c_str(), kVethGroup, ifNameB.c_str(), kVethGroup);
     folly::Subprocess proc(std::move(cmd));
     EXPECT_EQ(0, proc.wait().exitStatus());
   }
@@ -693,7 +696,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
 
   auto waitForLinkEvent = [&](const std::string& ifName,
                               const bool& isUp,
-                              const std::string& kind) {
+                              const std::string& kind,
+                              const uint32_t& group) {
     auto startTime = std::chrono::steady_clock::now();
     while (true) {
       // check if it is beyond kProcTimeout
@@ -709,7 +713,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       // get_if returns `nullptr` if targeted variant is NOT populated
       if (auto* link = std::get_if<Link>(&req.value())) {
         if (link->getLinkName() == ifName and link->isUp() == isUp and
-            link->getLinkKind().value_or("") == kind) {
+            link->getLinkKind().value_or("") == kind and
+            link->getLinkGroup().value_or(0) == group) {
           return;
         }
       }
@@ -725,8 +730,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
     bringDownIntf(kVethNameX);
     bringDownIntf(kVethNameY);
 
-    waitForLinkEvent(kVethNameX, false, kVethKind);
-    waitForLinkEvent(kVethNameY, false, kVethKind);
+    waitForLinkEvent(kVethNameX, false, kVethKind, kVethGroup);
+    waitForLinkEvent(kVethNameY, false, kVethKind, kVethGroup);
   }
 
   {
@@ -736,8 +741,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
-    waitForLinkEvent(kVethNameX, true, kVethKind);
-    waitForLinkEvent(kVethNameX, true, kVethKind);
+    waitForLinkEvent(kVethNameX, true, kVethKind, kVethGroup);
+    waitForLinkEvent(kVethNameX, true, kVethKind, kVethGroup);
   }
 }
 
@@ -995,6 +1000,29 @@ TEST_F(NlMessageFixture, InvalidIpRoute) {
   EXPECT_EQ(-EPROTONOSUPPORT, nlSock->deleteRoute(route).get());
   EXPECT_EQ(0, getErrorCount()); // ESRCH is ignored in error count
   EXPECT_EQ(getAckCount(), ackCount);
+}
+
+/*
+ * Verify adding interface route to different routing table.
+ */
+TEST_F(NlMessageFixture, InterfacePrefixRoute) {
+  uint32_t ackCount{0};
+  folly::CIDRNetwork network =
+      folly::IPAddress::createNetwork(ipAddrX1V4.str() + "/31");
+
+  // add interface prefix route to different route table
+  fbnl::RouteBuilder rtBuilder;
+  auto route = rtBuilder.setDestination(network)
+                   .setRouteTable(kRouteTableId)
+                   .setProtocolId(kRouteProtoId)
+                   .setValid(true)
+                   .setOIf(ifIndexX)
+                   .build();
+
+  ackCount = getAckCount();
+  EXPECT_EQ(0, nlSock->addRoute(route).get());
+  EXPECT_EQ(0, getErrorCount());
+  EXPECT_GE(getAckCount(), ackCount + 1);
 }
 
 /*

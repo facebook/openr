@@ -216,17 +216,20 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   getRoutes(const fbnl::Route& filter);
 
   /**
-   * APIs to retrieve routes from default routing table.
-   * std::vector<fbnl::Route> getAllRoutes();
+   * APIs to retrieve routes from a specific routing table.
+   * If no routing table ID specified, will read from RT_TABLE_MAIN.
    */
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-  getAllRoutes();
+  getAllRoutes(std::optional<uint8_t> routeTableId = std::nullopt);
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-  getIPv4Routes(uint8_t protocolId);
+  getIPv4Routes(
+      uint8_t protocolId, std::optional<uint8_t> routeTableId = std::nullopt);
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-  getIPv6Routes(uint8_t protocolId);
+  getIPv6Routes(
+      uint8_t protocolId, std::optional<uint8_t> routeTableId = std::nullopt);
   virtual folly::SemiFuture<folly::Expected<std::vector<fbnl::Route>, int>>
-  getMplsRoutes(uint8_t protocolId);
+  getMplsRoutes(
+      uint8_t protocolId, std::optional<uint8_t> routeTableId = std::nullopt);
 
   /**
    * Utility function to accumulate result of multiple requests into one.
