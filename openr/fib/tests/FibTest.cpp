@@ -659,8 +659,8 @@ TEST_F(FibDryRunTestFixture, initialRouteCleanupTest) {
   while (not fb303::fbData->hasCounter(counterKey)) {
   }
 
-  // waiting for one-time clean up signal under dryrun
-  EXPECT_TRUE(fib_->getUnicastRoutesCleared());
+  // NOTE: one-time cleanup signal is NOT in use
+  EXPECT_FALSE(fib_->getUnicastRoutesCleared());
 }
 
 // Fib single streaming client test.
