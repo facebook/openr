@@ -1236,6 +1236,23 @@ OpenrCtrlHandler::semifuture_unsetInterfaceMetricIncrement(
       std::move(*interfaceName));
 }
 
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setInterfaceMetricIncrementMulti(
+    std::unique_ptr<std::vector<std::string>> interfaces,
+    int32_t metricIncrementVal) {
+  CHECK(linkMonitor_);
+  return linkMonitor_->semifuture_setInterfaceMetricIncrementMulti(
+      std::move(*interfaces), metricIncrementVal);
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_unsetInterfaceMetricIncrementMulti(
+    std::unique_ptr<std::vector<std::string>> interfaces) {
+  CHECK(linkMonitor_);
+  return linkMonitor_->semifuture_unsetInterfaceMetricIncrementMulti(
+      std::move(*interfaces));
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 OpenrCtrlHandler::semifuture_getInterfaces() {
   CHECK(linkMonitor_);
