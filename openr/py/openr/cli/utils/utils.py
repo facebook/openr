@@ -1230,10 +1230,10 @@ def sprint_adj_db_delta(new_adj_db, old_adj_db):
             )
 
     # check for other adjDB changes
-    old_db_dict = copy.copy(old_adj_db).__dict__
+    old_db_dict = thrift_to_dict(old_adj_db)
     old_db_dict.pop("adjacencies", None)
     old_db_dict.pop("perfEvents", None)
-    new_db_dict = copy.copy(new_adj_db).__dict__
+    new_db_dict = thrift_to_dict(new_adj_db)
     new_db_dict.pop("adjacencies", None)
     new_db_dict.pop("perfEvents", None)
     if new_db_dict != old_db_dict:
