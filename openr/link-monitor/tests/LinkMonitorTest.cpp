@@ -1105,26 +1105,33 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
 
     LOG(INFO) << "11.3 Add interface-level metric increment";
     ret = linkMonitor
-              ->semifuture_setInterfaceMetricIncrement(
-                  interfaceName, linkIncMetric)
+              ->semifuture_setInterfaceMetricIncrementMulti(
+                  {interfaceName}, linkIncMetric)
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
 
     LOG(INFO) << "11.4 change interface-level metric increment";
     ret = linkMonitor
-              ->semifuture_setInterfaceMetricIncrement(
-                  interfaceName, changelinkIncMetric)
+              ->semifuture_setInterfaceMetricIncrementMulti(
+                  {interfaceName}, changelinkIncMetric)
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");
     // Setting the same metric again will skip advertising adjacencies again
     ret = linkMonitor
-              ->semifuture_setInterfaceMetricIncrement(
-                  interfaceName, changelinkIncMetric)
+              ->semifuture_setInterfaceMetricIncrementMulti(
+                  {interfaceName}, changelinkIncMetric)
               .get();
     // Setting an invalid metric will skip
-    ret = linkMonitor->semifuture_setInterfaceMetricIncrement(interfaceName, -1)
+    ret = linkMonitor
+              ->semifuture_setInterfaceMetricIncrementMulti({interfaceName}, -1)
+              .get();
+
+    // Setting containing an valid interface will skip
+    ret = linkMonitor
+              ->semifuture_setInterfaceMetricIncrementMulti(
+                  {interfaceName, "unrecognized"}, changelinkIncMetric)
               .get();
 
     LOG(INFO) << "12.1 Testing unset node-level metric increment";
@@ -1136,7 +1143,8 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     EXPECT_TRUE(folly::Unit() == ret);
 
     LOG(INFO) << "12.2 Testing unset interface-level metric increment";
-    ret = linkMonitor->semifuture_unsetInterfaceMetricIncrement(interfaceName)
+    ret = linkMonitor
+              ->semifuture_unsetInterfaceMetricIncrementMulti({interfaceName})
               .get();
     EXPECT_TRUE(folly::Unit() == ret);
     checkNextAdjPub("adj:node-1");

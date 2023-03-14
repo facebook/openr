@@ -1559,6 +1559,87 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
 }
 
 folly::SemiFuture<folly::Unit>
+LinkMonitor::semifuture_setInterfaceMetricIncrementMulti(
+    std::vector<std::string> interfaceNames, int32_t metricIncrementVal) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        interfaceNames,
+                        metricIncrementVal]() mutable {
+    // invalid increment input
+    if (metricIncrementVal <= 0) {
+      XLOG(ERR)
+          << "Skip cmd: setInterfaceMetricIncrement."
+          << "\n   Parameter `metricIncrementVal` should be a positive integer.";
+      p.setValue();
+      return;
+    }
+    setInterfaceMetricIncrementHelper(p, interfaceNames, metricIncrementVal);
+  });
+  return sf;
+}
+
+folly::SemiFuture<folly::Unit>
+LinkMonitor::semifuture_unsetInterfaceMetricIncrementMulti(
+    std::vector<std::string> interfaces) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p), interfaces]() mutable {
+    setInterfaceMetricIncrementHelper(p, interfaces, 0);
+  });
+  return sf;
+}
+
+void
+LinkMonitor::setInterfaceMetricIncrementHelper(
+    folly::Promise<folly::Unit>& p,
+    std::vector<std::string> interfaces,
+    int32_t metrics) {
+  // Caller must ensure non negative value
+  CHECK_GE(metrics, 0);
+  auto command = metrics != 0 ? "setInterfaceMetricIncrement"
+                              : "unsetInterfaceMetricIncrement";
+
+  for (const auto& interfaceName : interfaces) {
+    if (0 == interfaces_.count(interfaceName)) {
+      XLOG(ERR) << "Skip cmd: " << command
+                << " due to unknown interface: " << interfaceName;
+      p.setValue();
+      return;
+    }
+  }
+  bool stateChanged = false;
+
+  for (const auto& interfaceName : interfaces) {
+    auto oldMetric =
+        folly::get_default(*state_.linkMetricIncrementMap(), interfaceName, 0);
+    if (oldMetric == metrics) {
+      XLOG(INFO) << "Skip cmd: " << command
+                 << "\n  Increment metric: " << metrics
+                 << " already set for interface: " << interfaceName;
+      continue;
+    }
+
+    SYSLOG(INFO) << "Increment metric for interface " << interfaceName
+                 << "\n  Old increment value: " << oldMetric
+                 << "\n  Setting new increment value: " << metrics;
+
+    if (metrics == 0) {
+      state_.linkMetricIncrementMap()->erase(interfaceName);
+    } else {
+      state_.linkMetricIncrementMap()[interfaceName] = metrics;
+    }
+    stateChanged = true;
+  }
+
+  if (stateChanged) {
+    scheduleAdvertiseAdjAllArea();
+  }
+  p.setValue();
+}
+
+folly::SemiFuture<folly::Unit>
 LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
     std::string interfaceName) {
   folly::Promise<folly::Unit> p;

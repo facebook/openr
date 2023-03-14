@@ -121,7 +121,7 @@ class LinkMonitor final : public OpenrEventBase {
    * NOTE: all requests will be Throttled;
    *
    * - Set/unset node-level metric increment;
-   * - Set/unset node-level metric increment;
+   * - Set/unset interface-level metric increment;
    */
   folly::SemiFuture<folly::Unit> semifuture_setNodeInterfaceMetricIncrement(
       int32_t metricIncrementVal);
@@ -130,6 +130,10 @@ class LinkMonitor final : public OpenrEventBase {
       std::string interfaceName, int32_t metricIncrementVal);
   folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetricIncrement(
       std::string interfaceName);
+  folly::SemiFuture<folly::Unit> semifuture_setInterfaceMetricIncrementMulti(
+      std::vector<std::string> interfaceNames, int32_t metricIncrementVal);
+  folly::SemiFuture<folly::Unit> semifuture_unsetInterfaceMetricIncrementMulti(
+      std::vector<std::string> interfaceNames);
 
   /*
    * [Public API][Adjacency Metric Override]
@@ -180,6 +184,14 @@ class LinkMonitor final : public OpenrEventBase {
   void neighborRestartingEvent(const NeighborEvent& event);
   void neighborDownEvent(const NeighborEvent& event);
   void neighborRttChangeEvent(const NeighborEvent& event);
+
+  /*
+   * [Public Api Helper]
+   */
+  void setInterfaceMetricIncrementHelper(
+      folly::Promise<folly::Unit>& p,
+      std::vector<std::string> interfaces,
+      int32_t metrics);
 
   /*
    * [Netlink Platform]
