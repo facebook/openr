@@ -73,6 +73,11 @@ enum InitializationEvent {
    * Non-blocking: Initial Vlan state received from FSDB.
    */
   FSDB_SUBSCRIBED = 13,
+  /**
+   * Adjacency database is refreshed with the up-to-date db to unblock
+   * initial RIB computation.
+   */
+  ADJACENCY_DB_REFRESHED = 14,
 }
 
 exception KvStoreError {
