@@ -440,6 +440,37 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
 }
 
 template <class ClientType>
+folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
+KvStore<ClientType>::semifuture_setKvStoreKeyValues(
+    std::string area, thrift::KeySetParams keySetParams) {
+  folly::Promise<std::unique_ptr<thrift::SetKeyValsResult>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        keySetParams = std::move(keySetParams),
+                        area]() mutable {
+    XLOG(DBG3) << fmt::format(
+        "Set key requested for AREA: {}, by sender: {}, at time: {}",
+        area,
+        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                             : ""),
+        (keySetParams.timestamp_ms().has_value()
+             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+             : ""));
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
+      auto r = kvStoreDb.setKeyVals(
+          std::move(keySetParams), false /* remote update */);
+      // ready to return
+      p.setValue(std::make_unique<thrift::SetKeyValsResult>(std::move(r)));
+    } catch (thrift::KvStoreError const& e) {
+      p.setException(e);
+    }
+  });
+  return sf;
+}
+
+template <class ClientType>
 folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
 KvStore<ClientType>::semifuture_getKvStorePeerState(
     std::string const& area, std::string const& peerName) {
@@ -1544,7 +1575,7 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
 }
 
 template <class ClientType>
-void
+thrift::SetKeyValsResult
 KvStoreDb<ClientType>::setKeyVals(
     thrift::KeySetParams&& setParams, bool isSelfOriginatedUpdate) {
   // Update statistics
@@ -1562,7 +1593,10 @@ KvStoreDb<ClientType>::setKeyVals(
   thrift::Publication rcvdPublication;
   rcvdPublication.keyVals() = std::move(*setParams.keyVals());
   rcvdPublication.nodeIds().move_from(setParams.nodeIds());
-  mergePublication(rcvdPublication, isSelfOriginatedUpdate);
+  auto pub = mergePublication(rcvdPublication, isSelfOriginatedUpdate);
+  thrift::SetKeyValsResult result;
+  result.noMergeReasons() = std::move(*pub.noMergeKeyVals());
+  return result;
 }
 
 template <class ClientType>
@@ -1797,8 +1831,10 @@ KvStoreDb<ClientType>::processThriftSuccess(
 
   // ATTN: `peerName` is MANDATORY to fulfill the finialized
   //       full-sync with peers.
-  const auto kvUpdateCnt = mergePublication(
+  const auto mergeResult = mergePublication(
       pub, false /* remote update */, peerName /* request finalized sync */);
+
+  const auto kvUpdateCnt = mergeResult.keyVals()->size();
 
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
@@ -2539,7 +2575,7 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
 }
 
 template <class ClientType>
-size_t
+thrift::KvStoreMergeResult
 KvStoreDb<ClientType>::mergePublication(
     thrift::Publication const& rcvdPublication,
     bool isSelfOriginatedUpdate,
@@ -2559,7 +2595,12 @@ KvStoreDb<ClientType>::mergePublication(
       std::find(nodeIds->cbegin(), nodeIds->cend(), kvParams_.nodeId) !=
           nodeIds->cend()) {
     fb303::fbData->addStatValue("kvstore.looped_publications", 1, fb303::COUNT);
-    return 0;
+    thrift::KvStoreMergeResult result;
+    for (const auto& [key, _] : keyVals) {
+      result.noMergeKeyVals()->emplace(
+          std::make_pair(key, thrift::KvStoreNoMergeReason::LOOP_DETECTED));
+    }
+    return result;
   }
 
   if (not isSelfOriginatedUpdate) {
@@ -2622,7 +2663,8 @@ KvStoreDb<ClientType>::mergePublication(
    * delta to peers to prevent endless bouncing back of key add/expiration.
    */
   if (keyVals.empty() and keysToSendBack.empty()) {
-    return 0;
+    thrift::KvStoreMergeResult result;
+    return result;
   }
 
   /*
@@ -2637,9 +2679,11 @@ KvStoreDb<ClientType>::mergePublication(
   auto sender = senderId.has_value()
       ? senderId
       : (nodeIds.has_value() ? std::optional(nodeIds->back()) : std::nullopt);
-  auto [mergedKeyVals, stats] =
+
+  const auto result =
       mergeKeyValues(kvStore_, keyVals, kvParams_.filters, sender);
-  if (*stats.inconsistencyDetetectedWithOriginator()) {
+  const auto& mergedKeyVals = *result.keyVals();
+  if (*result.inconsistencyDetetectedWithOriginator()) {
     // inconsistency detected: Received a TTL update from originator
     // but key version are mismatched
     // Transition to IDLE to resync
@@ -2648,7 +2692,7 @@ KvStoreDb<ClientType>::mergePublication(
       disconnectPeer(it->second, KvStorePeerEvent::INCONSISTENCY_DETECTED);
       fb303::fbData->addStatValue(
           "kvstore.num_conflict_version_key", 1, fb303::COUNT);
-      return 0;
+      return result;
     }
   }
 
@@ -2689,7 +2733,7 @@ KvStoreDb<ClientType>::mergePublication(
     finalizeFullSync(keysToSendBack, senderId.value());
   }
 
-  return kvUpdateCnt;
+  return result;
 }
 
 template <class ClientType>

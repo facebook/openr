@@ -727,7 +727,8 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*filterKeys.get());
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
 
   thrift::KeyGetParams params;
   params.keys() = std::move(*filterKeys);
@@ -748,8 +749,11 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*filter.get())
-             << "; area: " << *area;
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*filter.get()),
+      *area);
 
   CHECK(kvStore_) << "kvstore not initialized";
 
@@ -773,8 +777,11 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*filter.get())
-             << "; area: " << *area;
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*filter.get()),
+      *area);
 
   CHECK(kvStore_);
 
@@ -786,12 +793,31 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << __FUNCTION__ << " for keys: " << toString(*setParams.get())
-             << "; area: " << *area;
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*setParams.get()),
+      *area);
 
   CHECK(kvStore_);
 
   return kvStore_->semifuture_setKvStoreKeyVals(
+      std::move(*area), std::move(*setParams));
+}
+
+folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
+OpenrCtrlHandler::semifuture_setKvStoreKeyValues(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*setParams.get()),
+      *area);
+
+  CHECK(kvStore_);
+
+  return kvStore_->semifuture_setKvStoreKeyValues(
       std::move(*area), std::move(*setParams));
 }
 

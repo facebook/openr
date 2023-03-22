@@ -89,6 +89,20 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
       std::unique_ptr<std::string> area) override;
 
   /*
+   * API to set key-val pairs by given:
+   *  - thrift::KeySetParams;
+   *  - a specifc area;
+   *
+   * ATTN: set key will automatically trigger (K, V) merge operation to:
+   *  1. update local kvStoreDb;
+   *  2. flood the delta update to peers if any;
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
+  semifuture_setKvStoreKeyValues(
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
+
+  /*
    * API to dump existing peers in a specified area
    */
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>

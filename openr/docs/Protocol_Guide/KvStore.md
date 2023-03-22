@@ -87,6 +87,14 @@ semifuture_setKvStoreKeyVals(std::string area, thrift::KeySetParams keySetParams
 
 /*
  * @params: area => single areaId to set K-V pairs
+ *          thrift::KeySetParams => parameters to set specific K-V pairs
+ * @return: thrift::SetKvStoreKeyVals
+ */
+folly::SemiFuture<thrift::SetKvStoreKeyVals>
+semifuture_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams)
+
+/*
+ * @params: area => single areaId to set K-V pairs
  *          thrift::KeyDumpParams => parameters to dump ALL K-V pairs
  * @return: thrift::Publication WITHOUT `value`(serialized binary data)
  */

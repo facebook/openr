@@ -69,6 +69,15 @@ KvStoreServiceHandler<ClientType>::semifuture_setKvStoreKeyVals(
 }
 
 template <class ClientType>
+folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
+KvStoreServiceHandler<ClientType>::semifuture_setKvStoreKeyValues(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  return kvStore_->semifuture_setKvStoreKeyValues(
+      std::move(*area), std::move(*setParams));
+}
+
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 KvStoreServiceHandler<ClientType>::semifuture_getKvStorePeersArea(
     std::unique_ptr<std::string> area) {

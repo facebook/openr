@@ -212,7 +212,7 @@ dumpAllWithThriftClientFromMultiple(
                        << folly::exceptionStr(result.exception());
           } else if (result.hasValue()) {
             auto keyVals = *result.value().keyVals();
-            const auto deltaPub = mergeKeyValues(merged, keyVals).first;
+            const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
 
             VLOG(3) << "Received kvstore publication with: " << keyVals.size()
                     << " key-vals. Incurred " << deltaPub.size()
@@ -265,7 +265,7 @@ dumpAllWithThriftClientFromMultiple(
       LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
     } else if (result.hasValue()) {
       auto keyVals = *result.value().keyVals();
-      const auto deltaPub = mergeKeyValues(merged, keyVals).first;
+      const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
 
       VLOG(3) << "Received kvstore publication with: " << keyVals.size()
               << " key-vals. Incurred " << deltaPub.size()

@@ -196,7 +196,7 @@ static void printKeyValInArea(
  *    the updated values.
  *  - the statistics about reasons keys are NOT merged.
  */
-std::pair<thrift::KeyVals, thrift::KvStoreNoMergeReasonStats> mergeKeyValues(
+thrift::KvStoreMergeResult mergeKeyValues(
     thrift::KeyVals& kvStore,
     const thrift::KeyVals& keyVals,
     std::optional<KvStoreFilters> const& filters = std::nullopt,
@@ -280,7 +280,7 @@ bool isValidVersion(
  * @param value - incoming thrift::Value
  * @param kvStore - existing key-value map
  * @param sender - the sender who sends the value
- * @param stats - record all the result and stats of this operation
+ * @param KvStoreMergeResult - record all the result and stats of this operation
  *
  * @return: MergeType - enum of the merging type
  */
@@ -289,7 +289,7 @@ MergeType getMergeType(
     const thrift::Value& value,
     const thrift::KeyVals& kvStore,
     std::optional<std::string> const& sender,
-    thrift::KvStoreMergeStats& stats);
+    thrift::KvStoreMergeResult& result);
 
 } // namespace openr
 

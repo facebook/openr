@@ -188,7 +188,7 @@ class KvStoreDb {
   thrift::Publication getKeyVals(std::vector<std::string> const& keys);
 
   // add new key-vals to kvstore_'s key-vals
-  void setKeyVals(
+  thrift::SetKeyValsResult setKeyVals(
       thrift::KeySetParams&& setParams, bool isSelfOriginatedUpdate = true);
 
   /*
@@ -203,9 +203,9 @@ class KvStoreDb {
    *                                   internal, aka, self-originated k-v pair.
    * @param: senderId => if senderId is set, will send back to `senderId` with
    *                     the k-v paris inside rcvdPublication.tobeUpdatedKeys
-   * @return: number of (k, v) updates against local "kvStore_"
+   * @return: thrift::KvStoreMergeResult
    */
-  size_t mergePublication(
+  thrift::KvStoreMergeResult mergePublication(
       thrift::Publication const& rcvdPublication,
       bool isSelfOriginatedUpdate,
       std::optional<std::string> senderId = std::nullopt);
@@ -651,6 +651,10 @@ class KvStore final : public OpenrEventBase {
       std::string area, thrift::KeyGetParams keyGetParams);
 
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
+      std::string area, thrift::KeySetParams keySetParams);
+
+  folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
+  semifuture_setKvStoreKeyValues(
       std::string area, thrift::KeySetParams keySetParams);
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>

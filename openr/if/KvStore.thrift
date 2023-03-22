@@ -151,6 +151,13 @@ typedef map<string, Value> (
   cpp.type = "std::unordered_map<std::string, openr::thrift::Value>",
 ) KeyVals
 
+/**
+ * Map of key to reason for not merging.
+ */
+typedef map<string, KvStoreNoMergeReason> (
+  cpp.type = "std::unordered_map<std::string, openr::thrift::KvStoreNoMergeReason>",
+) NoMergeMap
+
 /*
  * The struct KvStoreNoMergeReasonStats contains the statistics of reasons why
  * the incoming kvs are not merged
@@ -165,39 +172,14 @@ enum KvStoreNoMergeReason {
   INCONSISTENCY_DETECTED = 6,
 }
 
-struct KvStoreUpdateStats {
-  1: i64 ttlUpdateCnt = 0;
-  2: i64 valUpdateCnt = 0;
-}
-
-typedef map<string, KvStoreNoMergeReason> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::KvStoreNoMergeReason>",
-) NoMergeMap
-
-struct KvStoreNoMergeReasonStats {
-  // per-key reasons
-  1: NoMergeMap noMergeReasons;
-
-  // per-reason stats
-  // the incoming key does not match the filtered keys
-  2: i64 numberOfNoMatchedKeys = 0;
-  // the ttl of the incoming kv is invalid
-  3: list<i64> listInvalidTtls;
-  // the incoming kv has an invalid or old version
-  4: list<i64> listOldVersions;
-  // the kv does not need to be merged
-  5: i64 numberOfNoNeedToUpdates = 0;
-  // detected that sender is stale and need to full sync
-  6: bool inconsistencyDetetectedWithOriginator = false;
-}
-
 struct SetKeyValsResult {
   1: NoMergeMap noMergeReasons; // check empty or not
 }
 
-struct KvStoreMergeStats {
-  1: KvStoreUpdateStats updateStats;
-  2: KvStoreNoMergeReasonStats noMergeStats;
+struct KvStoreMergeResult {
+  1: KeyVals keyVals; // the publication to build if we update our KV store
+  2: NoMergeMap noMergeKeyVals; // the publication that did not get merged
+  3: bool inconsistencyDetetectedWithOriginator = false;
 }
 
 /**
@@ -532,6 +514,15 @@ service KvStoreService extends fb303_core.BaseService {
   void setKvStoreKeyVals(1: KeySetParams setParams, 2: string area) throws (
     1: KvStoreError error,
   );
+
+  /**
+   * Set/Update key-values in KvStore.
+   * Return information on why the key is not merged
+   */
+  SetKeyValsResult setKvStoreKeyValues(
+    1: KeySetParams setParams,
+    2: string area,
+  ) throws (1: KvStoreError error);
 
   /**
    * Get KvStore peers

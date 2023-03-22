@@ -310,6 +310,21 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    * ATTN: set key will automatically trigger (K, V) merge operation to:
    *  1. update local kvStoreDb;
    *  2. flood the delta update to peers if any;
+   * new api with debug info
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
+  semifuture_setKvStoreKeyValues(
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
+
+  /*
+   * API to set key-val pairs by given:
+   *  - thrift::KeySetParams;
+   *  - a specifc area;
+   *
+   * ATTN: set key will automatically trigger (K, V) merge operation to:
+   *  1. update local kvStoreDb;
+   *  2. flood the delta update to peers if any;
    */
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::unique_ptr<thrift::KeySetParams> setParams,
