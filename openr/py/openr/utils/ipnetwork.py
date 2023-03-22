@@ -249,13 +249,7 @@ def is_same_subnet(addr1, addr2, subnet) -> bool:
     Check whether two given addresses belong to the same subnet
     """
 
-    # pyre-fixme[6]: For 1st param expected `Union[bytes, int, IPv4Address,
-    #  IPv4Interface, IPv4Network, IPv6Address, IPv6Interface, IPv6Network, str]` but
-    #  got `Tuple[typing.Any, typing.Any]`.
     if ipaddress.ip_network((addr1, subnet), strict=False) == ipaddress.ip_network(
-        # pyre-fixme[6]: For 1st param expected `Union[bytes, int, IPv4Address,
-        #  IPv4Interface, IPv4Network, IPv6Address, IPv6Interface, IPv6Network, str]`
-        #  but got `Tuple[typing.Any, typing.Any]`.
         (addr2, subnet),
         strict=False,
     ):
