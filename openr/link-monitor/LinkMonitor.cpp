@@ -124,8 +124,6 @@ LinkMonitor::LinkMonitor(
       linkflapMaxBackoff_(std::chrono::milliseconds(
           *config->getLinkMonitorConfig().linkflap_max_backoff_ms())),
       areas_(config->getAreas()),
-      enableOrderedAdjPublication_(
-          *config->getConfig().enable_ordered_adj_publication()),
       interfaceUpdatesQueue_(interfaceUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),
       peerUpdatesQueue_(peerUpdatesQueue),
@@ -433,11 +431,6 @@ LinkMonitor::neighborUpEvent(
 
 void
 LinkMonitor::neighborAdjSyncedEvent(const NeighborEvent& event) {
-  // DO NOT processing this event if feature is NOT activated
-  if (not enableOrderedAdjPublication_) {
-    return;
-  }
-
   const auto& area = event.area;
   const auto& localIfName = event.localIfName;
   const auto& remoteNodeName = event.remoteNodeName;

@@ -292,9 +292,6 @@ class LinkMonitorTestFixture : public testing::Test {
     tConfig.link_monitor_config()->linkflap_max_backoff_ms() = 8;
     tConfig.link_monitor_config()->use_rtt_metric() = false;
 
-    // override feature toggling
-    tConfig.enable_ordered_adj_publication() = true;
-
     return tConfig;
   }
 
@@ -2456,20 +2453,7 @@ TEST_F(LinkMonitorTestFixture, GetAllLinks) {
       *link.networks.begin());
 }
 
-class InitializationTestFixture : public LinkMonitorTestFixture {
- public:
-  thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = LinkMonitorTestFixture::createConfig();
-
-    // override LM config
-    tConfig.enable_ordered_adj_publication() = true;
-
-    return tConfig;
-  }
-};
-
-TEST_F(InitializationTestFixture, InitialLinkDiscoveredTest) {
+TEST_F(LinkMonitorTestFixture, InitialLinkDiscoveredTest) {
   OpenrEventBase evb;
   int64_t scheduleAt = 0;
 
@@ -2499,7 +2483,7 @@ TEST_F(InitializationTestFixture, InitialLinkDiscoveredTest) {
   evb.waitUntilStopped();
 }
 
-TEST_F(InitializationTestFixture, InitialLinkDiscoveredNegativeTest) {
+TEST_F(LinkMonitorTestFixture, InitialLinkDiscoveredNegativeTest) {
   OpenrEventBase evb;
   evb.scheduleTimeout(
       std::chrono::seconds(Constants::kMaxDurationLinkDiscovery),
@@ -2519,7 +2503,7 @@ TEST_F(InitializationTestFixture, InitialLinkDiscoveredNegativeTest) {
   evb.waitUntilStopped();
 }
 
-TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
+TEST_F(LinkMonitorTestFixture, AdjacencyUpWithGracefulRestartTest) {
   // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
   // with `adjOnlyUsedByOtherNode` set to true.
   auto neighborEvent = nb2_up_event;
@@ -2535,7 +2519,7 @@ TEST_F(InitializationTestFixture, AdjacencyUpWithGracefulRestartTest) {
   checkNextAdjPub("adj:node-1");
 }
 
-TEST_F(InitializationTestFixture, AdjacencyUpTest) {
+TEST_F(LinkMonitorTestFixture, AdjacencyUpTest) {
   {
     // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
     // with `adjOnlyUsedByOtherNode` set to true.

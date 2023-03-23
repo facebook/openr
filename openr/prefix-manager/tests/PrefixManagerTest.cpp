@@ -3369,7 +3369,6 @@ class SingleProtocolRoutingTestFixture
     originatedPrefixV6.install_to_fib() = true;
 
     tConfig.originated_prefixes() = {originatedPrefixV4, originatedPrefixV6};
-    tConfig.enable_ordered_adj_publication() = true;
 
     // Enable BGP peering.
     tConfig.enable_bgp_peering() = true;

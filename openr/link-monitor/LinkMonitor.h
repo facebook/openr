@@ -344,9 +344,6 @@ class LinkMonitor final : public OpenrEventBase {
 
   std::unordered_map<std::string, AreaConfiguration> const areas_;
 
-  // flag to indicate if ordered publication is enabled
-  bool enableOrderedAdjPublication_{false};
-
   //
   // Mutable state
   //

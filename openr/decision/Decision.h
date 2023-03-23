@@ -140,7 +140,7 @@ class Decision : public OpenrEventBase {
       // Queue for publishing route updates
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 
-  virtual ~Decision() = default;
+  ~Decision();
 
   /**
    * Override stop method of OpenrEventBase

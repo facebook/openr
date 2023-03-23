@@ -547,9 +547,6 @@ class Spark final : public OpenrEventBase {
   std::vector<folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>>
       timeSeriesVector_{};
 
-  // flag to indicate if ordered publication is enabled
-  bool enableOrderedAdjPublication_{false};
-
   // global openr config
   std::shared_ptr<const Config> config_{nullptr};
 

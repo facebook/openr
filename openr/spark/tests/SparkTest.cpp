@@ -248,17 +248,6 @@ class SimpleSparkFixture : public SparkFixture {
 class InitializationTestFixture : public SimpleSparkFixture {
  protected:
   void
-  createConfig() override {
-    auto tConfig1 = getBasicOpenrConfig(nodeName1_);
-    auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.enable_ordered_adj_publication() = true;
-    tConfig2.enable_ordered_adj_publication() = true;
-
-    config1_ = std::make_shared<Config>(tConfig1);
-    config2_ = std::make_shared<Config>(tConfig2);
-  }
-
-  void
   validate() override {
     // Now wait for sparks to detect each other
     {
@@ -394,72 +383,6 @@ TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
         nodeName2_,
         nodeName1_);
   }
-}
-
-/*
- * This is the test fixture to test backward compatibility when
- * `enable_ordered_adj_publication` is set to different values on 2
- * Spark instances.
- */
-class InitializationBackwardCompatibilityTestFixture
-    : public InitializationTestFixture {
- protected:
-  void
-  createConfig() override {
-    auto tConfig1 = getBasicOpenrConfig(nodeName1_);
-    auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.enable_ordered_adj_publication() = true;
-    tConfig2.enable_ordered_adj_publication() = false;
-
-    config1_ = std::make_shared<Config>(tConfig1);
-    config2_ = std::make_shared<Config>(tConfig2);
-  }
-
-  void
-  validate() override {
-    // Now wait for sparks to detect each other
-    {
-      auto events = node1_->waitForEvents(NB_UP);
-      auto neighbor1 = events.value().back();
-      EXPECT_EQ(iface1, neighbor1.localIfName);
-      EXPECT_EQ(nodeName2_, neighbor1.remoteNodeName);
-      EXPECT_EQ(true, neighbor1.adjOnlyUsedByOtherNode);
-      LOG(INFO) << fmt::format(
-          "{} reported adjacency UP towards {} with adjacency hold",
-          nodeName1_,
-          nodeName2_);
-
-      events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
-      auto neighbor2 = events.value().back();
-      EXPECT_EQ(false, neighbor2.adjOnlyUsedByOtherNode);
-      LOG(INFO) << fmt::format(
-          "{} reported adjacency UP towards {} without adjacency hold",
-          nodeName1_,
-          nodeName2_);
-
-      ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
-      ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
-      ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
-    }
-
-    {
-      auto events = node2_->waitForEvents(NB_UP);
-      auto neighbor = events.value().back();
-      EXPECT_EQ(iface2, neighbor.localIfName);
-      EXPECT_EQ(nodeName1_, neighbor.remoteNodeName);
-      EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
-      LOG(INFO) << fmt::format(
-          "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
-      ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
-      ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
-      ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
-    }
-  }
-};
-
-TEST_F(InitializationBackwardCompatibilityTestFixture, AdjUpTest) {
-  // create 2 Spark instances with proper config and connect them
-  createAndConnect();
 }
 
 //

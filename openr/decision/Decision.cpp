@@ -173,9 +173,7 @@ Decision::Decision(
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
     // Block processing KvStore publication until initial peers are received.
     // This helps avoid missing KvStore adjacency publications for peers.
-    if (*config_->getConfig().enable_ordered_adj_publication()) {
-      initialPeersReceivedBaton_.wait();
-    }
+    initialPeersReceivedBaton_.wait();
 
     XLOG(INFO) << "Starting KvStore updates processing fiber";
     while (true) {
@@ -263,6 +261,10 @@ Decision::Decision(
   // Initialize some stat keys
   fb303::fbData->addStatExportType(
       "decision.rib_policy_processing.time_ms", fb303::AVG);
+}
+
+Decision::~Decision() {
+  stop();
 }
 
 void
@@ -480,9 +482,6 @@ Decision::getRibPolicy() {
 
 void
 Decision::processPeerUpdates(PeerEvent&& event) {
-  if (not *config_->getConfig().enable_ordered_adj_publication()) {
-    return;
-  }
   if (not initialPeersReceivedBaton_.ready()) {
     XLOG(INFO) << "[Initialization] Received initial PeerEvent.";
     // LinkMonitor publishes detected peers in one shot in Open/R initialization
@@ -536,9 +535,6 @@ Decision::processPeerUpdates(PeerEvent&& event) {
 
 void
 Decision::filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb) {
-  if (not *config_->getConfig().enable_ordered_adj_publication()) {
-    return;
-  }
   // In order to make Open/R initialization process of cold boot node hitless,
   // we would like to have the cold node compute & program all required routes
   // ahead of peers sending traffic through it. There are two stages from
@@ -577,9 +573,6 @@ Decision::filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb) {
 void
 Decision::updatePendingAdjacency(
     const std::string& area, const thrift::AdjacencyDatabase& newAdjacencyDb) {
-  if (not *config_->getConfig().enable_ordered_adj_publication()) {
-    return;
-  }
   // Update pending adjacency with up peers in Open/R initialization process.
   //
   // In case of two nodes (A, B) restart simultaneously,
@@ -946,13 +939,11 @@ Decision::rebuildRoutes(std::string const& event) {
 
 bool
 Decision::unblockInitialRoutesBuild() {
-  bool adjReceivedForPeers{true};
-  if (*config_->getConfig().enable_ordered_adj_publication()) {
-    // Wait till receiving initial peers and dual directional adjacencies with
-    // initial peers.
-    adjReceivedForPeers =
-        initialPeersReceivedBaton_.ready() and areaToPendingAdjacency_.empty();
-  }
+  // Wait till receiving initial peers and bi-directional adjacencies with
+  // initial peers.
+  bool adjReceivedForPeers =
+      initialPeersReceivedBaton_.ready() and areaToPendingAdjacency_.empty();
+
   // Initial routes build will be unblocked if all following conditions are
   // fulfilled,
   // - Received all types of static routes, aka, unreceivedRouteTypes_ is empty

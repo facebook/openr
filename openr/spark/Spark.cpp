@@ -244,34 +244,6 @@ Spark::SparkNeighbor::toThrift() const {
 /*
  * This is the util function to determine if flag `adjOnlyUsedByOtherNode` will
  * be reset based on received `SparkHeartbeatMsg`.
- *
- * A few situations to consider for backward compatibility.
- *
- * 1) local node + remote peer both have `enable_ordered_adj_publication=false`
- *
- *      `adjOnlyUsedByOtherNode` will ALWAYS be false(e.g. default)
- *      Processing logic will keep the SAME as existing flow.
- *
- * 2) local node + remote peer both have `enable_ordered_adj_publication=true`
- *
- *      `adjOnlyUsedByOtherNode` will first be set to TRUE when
- * `SparkHandshakeMsg` is received. The local node will wait until remote peer
- * sends the `SparkHeartbeatMsg` with `holdAdjacency=false`.
- * `adjOnlyUsedByOtherNode` will be reset.
- *
- * 3) local node: `enable_ordered_adj_publication=true`
- *    remote peer: `enable_ordered_adj_publication=false`
- *
- *      `adjOnlyUsedByOtherNode` will first be set to TRUE when
- * `SparkHandshakeMsg` is received. The remote peer will always send
- * `SparkHeartbeatMsg` with `holdAdjacency=false` since knob is off.
- *
- * 4) local node: `enable_ordered_adj_publication=false`
- *    remote peer: `enable_ordered_adj_publication=true`
- *
- *      From local node's perspective, it directly report NEIGHBOR_UP when
- *      `SparkHandshakeMsg` is received. `adjOnlyUsedByOtherNode` will be kept
- * false as the default value.
  */
 bool
 Spark::SparkNeighbor::shouldResetAdjacency(
@@ -320,8 +292,6 @@ Spark::Spark(
       kOpenrCtrlThriftPort_(*config->getThriftServerConfig().openr_ctrl_port()),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
-      enableOrderedAdjPublication_(
-          *config->getConfig().enable_ordered_adj_publication()),
       config_(std::move(config)) {
   CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
       << "Keepalive time must be less than GR-time.";
@@ -1026,11 +996,9 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   heartbeatMsg.nodeName() = myNodeName_;
   heartbeatMsg.seqNum() = mySeqNum_;
   heartbeatMsg.holdAdjacency() = false;
-  if (enableOrderedAdjPublication_) {
-    // ATTN: notify peer to set special adjacency flag when node is still within
-    // initialization procedure
-    heartbeatMsg.holdAdjacency() = (not initialized_);
-  }
+  // ATTN: notify peer to set special adjacency flag when node is still within
+  // initialization procedure
+  heartbeatMsg.holdAdjacency() = (not initialized_);
 
   thrift::SparkHelloPacket pkt;
   pkt.heartbeatMsg() = std::move(heartbeatMsg);
@@ -1236,8 +1204,7 @@ Spark::neighborUpWrapper(
   // The neighbor is coming up for the first time or cold booting. Mark the
   // neighbor to reflect that the corresponding adjacency can't be used by the
   // local node.
-  if (enableOrderedAdjPublication_ and
-      (not neighbor.gracefulRestartHoldTimer)) {
+  if (not neighbor.gracefulRestartHoldTimer) {
     // ATTN: expect adjacency attribute to be removed later with heartbeatMsg
     neighbor.adjOnlyUsedByOtherNode = true;
 
@@ -2061,11 +2028,6 @@ Spark::sendHelloMsg(
 
 void
 Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
-  // NOTE: do NOT process this event if feature is NOT enabled
-  if (not enableOrderedAdjPublication_) {
-    return;
-  }
-
   CHECK(event == thrift::InitializationEvent::PREFIX_DB_SYNCED) << fmt::format(
       "Unexpected initialization event: {}",
       apache::thrift::util::enumNameSafe(event));

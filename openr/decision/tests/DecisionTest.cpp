@@ -3896,6 +3896,7 @@ class DecisionTestFixture : public ::testing::Test {
     peerUpdatesQueue.close();
     kvStoreUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
+    routeUpdatesQueue.close();
 
     // Delete default rib policy file.
     remove(FLAGS_rib_policy_file.c_str());
@@ -3921,7 +3922,6 @@ class DecisionTestFixture : public ::testing::Test {
     // (i.e. spf recalculation, route rebuild) finished
     tConfig.decision_config()->debounce_min_ms() = debounceTimeoutMin.count();
     tConfig.decision_config()->debounce_max_ms() = debounceTimeoutMax.count();
-    tConfig.enable_ordered_adj_publication() = true;
     tConfig.enable_best_route_selection() = true;
     tConfig.decision_config()->save_rib_policy_min_ms() = 500;
     tConfig.decision_config()->save_rib_policy_max_ms() = 2000;
@@ -5068,24 +5068,23 @@ TEST_F(DecisionTestFixture, RibPolicyClear) {
  * Verifies that set/get APIs throws exception if RibPolicy feature is not
  * enabled.
  */
-TEST(Decision, RibPolicyFeatureKnob) {
-  auto tConfig = getBasicOpenrConfig("1");
-  tConfig.enable_rib_policy() = false; // Disable rib_policy feature
-  tConfig.enable_ordered_adj_publication() = false; // skip gr singals
+class DecisionNoRibPolicyTestFixture : public DecisionTestFixture {
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = DecisionTestFixture::createConfig();
+    // Disable rib_policy feature
+    tConfig.enable_rib_policy() = false;
 
-  auto config = std::make_shared<Config>(tConfig);
+    return tConfig;
+  }
+};
+
+TEST_F(DecisionNoRibPolicyTestFixture, RibPolicyFeatureKnob) {
   ASSERT_FALSE(config->isRibPolicyEnabled());
 
-  messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
-  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  auto decision = std::make_unique<Decision>(
-      config,
-      peerUpdatesQueue.getReader(),
-      kvStoreUpdatesQueue.getReader(),
-      staticRouteUpdatesQueue.getReader(),
-      routeUpdatesQueue);
+  // dummy event to unblock decision module from initialization
+  PeerEvent event;
+  peerUpdatesQueue.push(std::move(event));
 
   // SET
   {
@@ -5113,11 +5112,6 @@ TEST(Decision, RibPolicyFeatureKnob) {
     EXPECT_TRUE(sf.hasException());
     EXPECT_THROW(std::move(sf).get(), thrift::OpenrError);
   }
-
-  peerUpdatesQueue.close();
-  kvStoreUpdatesQueue.close();
-  staticRouteUpdatesQueue.close();
-  routeUpdatesQueue.close();
 }
 
 /**
@@ -6178,7 +6172,6 @@ class InitialRibBuildTestFixture : public DecisionTestFixture {
   openr::thrift::OpenrConfig
   createConfig() override {
     auto tConfig = DecisionTestFixture::createConfig();
-    tConfig.enable_ordered_adj_publication() = true;
 
     // Set config originated prefixes.
     thrift::OriginatedPrefix originatedPrefixV4;
