@@ -491,10 +491,12 @@ Fib::printUnicastRoutesAddUpdate(
   }
 
   for (auto const& route : unicastRoutesToUpdate) {
-    XLOG(DBG1) << "> " << toString(*route.dest())
-               << ", NextHopsCount = " << route.nextHops()->size();
+    XLOG(DBG1) << fmt::format(
+        "> {}, NextHopsCount = {}",
+        toString(*route.dest()),
+        route.nextHops()->size());
     for (auto const& nh : *route.nextHops()) {
-      XLOG(DBG1) << " " << toString(nh);
+      XLOG(DBG2) << fmt::format(" {}", toString(nh));
     }
   }
 }
