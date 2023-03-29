@@ -218,8 +218,8 @@ LinkMonitor::LinkMonitor(
       state_.isOverloaded() = false;
 
       XLOG(INFO) << fmt::format(
-          "[Drain Status] Override node soft-drain increment value: {}",
-          nodeInc);
+          "[Drain Status] Override node soft-drain increment value at startup: {}",
+          *state_.nodeMetricIncrementVal());
     } else {
       state_.isOverloaded() = assumeDrained;
 
