@@ -651,14 +651,6 @@ PrefixManager::triggerInitialPrefixDbSync() {
 
 bool
 PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
-  // If prepend label is set, the associated label route should have been
-  // programmed.
-  auto labelRef = prefixEntry.tPrefixEntry->prependLabel();
-  if (labelRef.has_value()) {
-    if (programmedLabels_.count(labelRef.value()) == 0) {
-      return false;
-    }
-  }
   // If nexthops is set in prefixEntry, it implicitly indicates that the
   // associated unicast routes should be programmed before the prefix is
   // advertised.
@@ -697,19 +689,14 @@ PrefixManager::syncKvStore() {
 
     // Check if prefix is updated and ready to be advertised.
     auto [_, bestEntry] = getBestPrefixEntry(prefixEntries);
-    const auto& labelRef = bestEntry.tPrefixEntry->prependLabel();
     bool hasPrefixUpdate = pendingUpdates_.hasPrefix(prefix);
-    bool haslabelUpdate =
-        labelRef.has_value() ? pendingUpdates_.hasLabel(*labelRef) : false;
     bool readyToBeAdvertised = prefixEntryReadyToBeAdvertised(bestEntry);
-    bool needToAdvertise =
-        ((hasPrefixUpdate or haslabelUpdate) and readyToBeAdvertised);
     // Get route updates from updated prefix entry.
     if (hasPrefixUpdate) {
       populateRouteUpdates(
           prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
     }
-    if (needToAdvertise) {
+    if (hasPrefixUpdate and readyToBeAdvertised) {
       XLOG(DBG1) << fmt::format(
           "Adding/updating keys for {}",
           folly::IPAddress::networkToString(prefix));
@@ -1606,28 +1593,13 @@ PrefixManager::storeProgrammedRoutes(
     const DecisionRouteUpdate& fibRouteUpdates) {
   // In case of full sync, reset previous stored programmed routes.
   if (fibRouteUpdates.type == DecisionRouteUpdate::FULL_SYNC) {
-    // Adding all previously programmed routes as pending updates.
-    for (const auto& deletedLabel : programmedLabels_) {
-      pendingUpdates_.addLabelChange(deletedLabel);
-    }
     for (const auto& deletedPrefix : programmedPrefixes_) {
       pendingUpdates_.addPrefixChange(deletedPrefix);
     }
-    programmedLabels_.clear();
     programmedPrefixes_.clear();
   }
 
-  // Record MPLS routes from OpenR/Fib.
-  for (auto& [label, _] : fibRouteUpdates.mplsRoutesToUpdate) {
-    if (programmedLabels_.insert(label).second /*inserted*/) {
-      pendingUpdates_.addLabelChange(label);
-    }
-  }
-  for (auto& deletedLabel : fibRouteUpdates.mplsRoutesToDelete) {
-    if (programmedLabels_.erase(deletedLabel) /*erased*/) {
-      pendingUpdates_.addLabelChange(deletedLabel);
-    }
-  }
+  // Record unicast routes from OpenR/Fib.
   for (const auto& [prefix, _] : fibRouteUpdates.unicastRoutesToUpdate) {
     if (programmedPrefixes_.insert(prefix).second /*inserted*/) {
       pendingUpdates_.addPrefixChange(prefix);
@@ -1653,7 +1625,6 @@ resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
       thrift::PrefixForwardingAlgorithm::SP_ECMP;
   prefixEntry.forwardingType() = thrift::PrefixForwardingType::IP;
   prefixEntry.minNexthop().reset();
-  prefixEntry.prependLabel().reset();
   prefixEntry.weight().reset();
 }
 } // namespace

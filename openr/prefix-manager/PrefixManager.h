@@ -33,12 +33,11 @@ class PrefixManagerPendingUpdates {
   void
   clear() {
     changedPrefixes_.clear();
-    changedLabels_.clear();
   }
 
   size_t
   size() {
-    return changedPrefixes_.size() + changedLabels_.size();
+    return changedPrefixes_.size();
   }
 
   const std::unordered_set<folly::CIDRNetwork>&
@@ -51,29 +50,18 @@ class PrefixManagerPendingUpdates {
     return changedPrefixes_.count(prefix) > 0;
   }
 
-  bool
-  hasLabel(const int32_t label) {
-    return changedLabels_.count(label) > 0;
-  }
-
   void
   addPrefixChange(const folly::CIDRNetwork& prefix) {
     changedPrefixes_.insert(prefix);
   }
 
-  void
-  addLabelChange(const int32_t label) {
-    changedLabels_.emplace(label);
-  }
-
  private:
-  // Track prefixes (MPLS labels) that have changed within this batch
+  // Track prefixes that have changed within this batch
   // ATTN: this collection contains:
-  //  - newly added prefixes (labels)
-  //  - updated prefixes (labels)
-  //  - prefixes (labels) being withdrawn
+  //  - newly added prefixes
+  //  - updated prefixes
+  //  - prefixes being withdrawn
   std::unordered_set<folly::CIDRNetwork> changedPrefixes_{};
-  std::unordered_set<int32_t> changedLabels_{};
 };
 
 } // namespace detail
@@ -538,13 +526,6 @@ class PrefixManager final : public OpenrEventBase {
    */
   std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
       ribPrefixDb_;
-
-  /*
-   * MPLS labels with label routes already programmed by FIB. For one prefix
-   * with prepend label, PrefixManager needs to make sure the associated label
-   * routes is programmed before advertisement.
-   */
-  std::unordered_set<int32_t> programmedLabels_;
 
   /*
    * Prefixes with unicast route already programmed by FIB. For one prefix,

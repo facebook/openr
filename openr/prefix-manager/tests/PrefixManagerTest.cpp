@@ -1316,14 +1316,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     prefixEntry1A.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
     prefixEntry1A.minNexthop() = 10;
-    prefixEntry1A.prependLabel() = 70000;
 
     // Non-transitive attributes should be reset after redistribution.
     expectedPrefixEntry1A.forwardingAlgorithm() =
         thrift::PrefixForwardingAlgorithm();
     expectedPrefixEntry1A.forwardingType() = thrift::PrefixForwardingType();
     expectedPrefixEntry1A.minNexthop().reset();
-    expectedPrefixEntry1A.prependLabel().reset();
 
     auto unicast1A = RibUnicastEntry(
         toIPNetwork(addr1), {path1_2_1}, prefixEntry1A, areaStrA, false);
@@ -1367,12 +1365,6 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     expectedPrefixEntry1B.metrics()->distance() = 2;
     // PrefixType being overridden with RIB type after area redistribution
     expectedPrefixEntry1B.type() = thrift::PrefixType::RIB;
-
-    // Set non-transitive attributes
-    prefixEntry1B.prependLabel() = 70001;
-
-    // Non-transitive attributes should NOT be reset after redistribution.
-    expectedPrefixEntry1B.prependLabel().reset();
 
     auto unicast1B = RibUnicastEntry(
         toIPNetwork(addr1), {path1_2_2}, prefixEntry1B, areaStrB, false);
