@@ -207,7 +207,7 @@ MockNetlinkProtocolSocket::getAllLinks() {
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
 MockNetlinkProtocolSocket::getAllNeighbors() {
-  CHECK(false) << "Not implemented";
+  return std::vector<fbnl::Neighbor>();
 }
 
 } // namespace openr::fbnl
