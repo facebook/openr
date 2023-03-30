@@ -258,20 +258,37 @@ class PrefixManager final : public OpenrEventBase {
    */
   void syncKvStore();
 
-  // Update KvStore keys of one prefix entry.
+  /*
+   * [Util function]
+   *
+   * This is the util function to interact with KvStore. It will
+   *  1) advertise into different KvStore specified with different areas.
+   *  2) withdraw from the areas which are no longer advertised to.
+   */
   void updatePrefixKeysInKvStore(
       const folly::CIDRNetwork& prefix, const PrefixEntry& prefixEntry);
 
-  // Add KvStore keys of one prefix entry.
-  // @return: set of the areas that this prefix will advertise to.
-  std::unordered_set<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
-
-  // Delete KvStore keys of one prefix entry.
   void deletePrefixKeysInKvStore(
       const folly::CIDRNetwork& prefix,
       DecisionRouteUpdate& routeUpdatesForDecision);
+  /*
+   * [Util function]
+   *
+   * Add prefix entry to KvStore(multi-areas)
+   *
+   * @param: prefix entry object containing prefix and destination areas
+   * @return: set of the areas that this prefix will advertise to.
+   */
+  std::unordered_set<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
 
-  // Delete KvStore keys form the areas for one prefix entry.
+  /*
+   * [Util function]
+   *
+   * Delete prefix entry from KvStore(multi-areas)
+   *
+   * @param: prefix to be withdrawn
+   * @param: areas to be withdrawn from
+   */
   void deleteKvStoreKeyHelper(
       const folly::CIDRNetwork& prefix,
       const std::unordered_set<std::string>& deletedArea);
@@ -401,6 +418,8 @@ class PrefixManager final : public OpenrEventBase {
       folly::CIDRNetwork,
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
+
+  // TODO: Merge this with advertiseStatus_.
   // Advertised prefixes in KvStore and associated best PrefixEntry.
   std::unordered_map<folly::CIDRNetwork, PrefixEntry> advertisedPrefixEntries_;
 
@@ -417,14 +436,17 @@ class PrefixManager final : public OpenrEventBase {
   // the serializer/deserializer helper we'll be using
   apache::thrift::CompactSerializer serializer_;
 
-  // AdervertiseStatus records following information of one prefix,
-  // * Areas where one prefix is advertised into. `PrefixManager` advertises
-  //   one prefix based on best-route-selection process, and could advertise
-  //   into multiple areas. Prefix withdrawal process will remove the prefix
-  //   from all advertised areas.
-  // * Published unicast route. `PrefixManager` sends to Decision the associated
-  //   unicast routes for the prefixes with nexthops set. Prefix withdrawal
-  //   process will remove associated unicast routes from Decision.
+  /*
+   * AdervertiseStatus records following information of one prefix,
+   *  1) Areas where one prefix is advertised into. `PrefixManager` advertises
+   *    one prefix based on best-route-selection process, and could advertise
+   *    into multiple areas. Prefix withdraw process will remove the prefix
+   *    from all advertised areas.
+   *
+   *  2) Published unicast route. `PrefixManager` sends to Decision the
+   *    associated unicast routes for the prefixes with nexthops set. Prefix
+   *    withdraw process will remove associated unicast routes from Decision.
+   */
   struct AdervertiseStatus {
     // Set of areas the prefix was already advertised.
     std::unordered_set<std::string> areas;

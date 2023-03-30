@@ -52,6 +52,7 @@ PrefixManager::PrefixManager(
   XLOG(INFO) << "[Initialization] PrefixManager should wait for RIB updates.";
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
 
+  // [TO_BE_DEPRECATED]
   if (config->isBgpPeeringEnabled()) {
     XLOG(INFO)
         << "[Initialization] PrefixManager should wait for BGP prefixes.";
@@ -150,8 +151,7 @@ PrefixManager::PrefixManager(
             update.policyName);
 
         if (uninitializedPrefixTypes_.erase(update.type)) {
-          // Received initial prefixes of certain type in OpenR initialization
-          // process.
+          // Received initial prefixes of certain type during initialization
           XLOG(INFO) << fmt::format(
               "[Initialization] Received {} prefixes of type {}.",
               update.prefixes.size() + update.prefixEntries.size(),
@@ -732,8 +732,6 @@ PrefixManager::syncKvStore() {
 
   // Push originatedRoutes update to staticRouteUpdatesQueue_.
   if (not routeUpdatesForDecision.empty()) {
-    CHECK(routeUpdatesForDecision.mplsRoutesToUpdate.empty());
-    CHECK(routeUpdatesForDecision.mplsRoutesToDelete.empty());
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
   }
 

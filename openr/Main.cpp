@@ -539,10 +539,10 @@ main(int argc, char** argv) {
   }
 
   // Create vip service module
-  auto vipRouteEvb = std::make_unique<OpenrEventBase>();
-  auto vipPluginArgs = VipPluginArgs{
-      vipRouteEvb->getEvb(), prefixUpdatesQueue, config, sslContext};
   if (config->isVipServiceEnabled()) {
+    auto vipRouteEvb = std::make_unique<OpenrEventBase>();
+    auto vipPluginArgs = VipPluginArgs{
+        vipRouteEvb->getEvb(), prefixUpdatesQueue, config, sslContext};
     startEventBase(
         allThreads,
         orderedEvbs,
