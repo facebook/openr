@@ -667,6 +667,7 @@ void
 PrefixManager::syncKvStore() {
   XLOG(DBG1) << "[KvStore Sync] Syncing " << pendingUpdates_.size()
              << " pending updates.";
+
   DecisionRouteUpdate routeUpdatesForDecision;
   DecisionRouteUpdate routeUpdatesForBgp;
   size_t receivedPrefixCnt = 0;
@@ -687,43 +688,51 @@ PrefixManager::syncKvStore() {
   for (const auto& [prefix, prefixEntries] : prefixMap_) {
     receivedPrefixCnt += prefixEntries.size();
 
-    // Check if prefix is updated and ready to be advertised.
+    /*
+     * Find the best entry out of a collection of prefix entries.
+     */
     auto [_, bestEntry] = getBestPrefixEntry(prefixEntries);
     bool hasPrefixUpdate = pendingUpdates_.hasPrefix(prefix);
     bool readyToBeAdvertised = prefixEntryReadyToBeAdvertised(bestEntry);
+
+    // TODO: deprecate BGP logic once the use case is deprecated
     // Get route updates from updated prefix entry.
     if (hasPrefixUpdate) {
       populateRouteUpdates(
           prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
     }
-    if (hasPrefixUpdate and readyToBeAdvertised) {
-      XLOG(DBG1) << fmt::format(
-          "Adding/updating keys for {}",
-          folly::IPAddress::networkToString(prefix));
-      updatePrefixKeysInKvStore(prefix, bestEntry);
-      advertisedPrefixEntries_[prefix] = bestEntry;
-      ++syncedPrefixCnt;
-      continue;
-    } else if (readyToBeAdvertised) {
-      // Skip still-ready-to-be and previously advertised prefix.
-      CHECK(advertisedPrefixEntries_.count(prefix));
-      continue;
-    }
 
-    // The prefix is awaiting to be advertised.
-    ++awaitingPrefixCnt;
+    if (readyToBeAdvertised) {
+      if (hasPrefixUpdate) {
+        XLOG(DBG1) << fmt::format(
+            "Adding/updating key {} with best entry: {}",
+            folly::IPAddress::networkToString(prefix),
+            toString(*bestEntry.tPrefixEntry, true));
 
-    // Check if previously advertised prefix is no longer ready to be
-    // advertised.
-    const auto& it = advertisedPrefixEntries_.find(prefix);
-    if (advertisedPrefixEntries_.cend() != it and
-        (not prefixEntryReadyToBeAdvertised(it->second))) {
-      XLOG(DBG1) << fmt::format(
-          "Deleting advertised keys for {}",
-          folly::IPAddress::networkToString(prefix));
-      deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
-      advertisedPrefixEntries_.erase(prefix);
-      ++syncedPrefixCnt;
+        updatePrefixKeysInKvStore(prefix, bestEntry);
+        advertisedPrefixEntries_[prefix] = bestEntry;
+        ++syncedPrefixCnt;
+      }
+    } else {
+      // The prefix is awaiting to be advertised.
+      ++awaitingPrefixCnt;
+
+      /*
+       * `advertisedPrefixEntries_` holds the "old" prefix entry advertised to
+       * KvStore. Since it is no longer ready to be advertised, withdraw it
+       * from KvStore.
+       */
+      const auto& it = advertisedPrefixEntries_.find(prefix);
+      if (advertisedPrefixEntries_.cend() != it and
+          (not prefixEntryReadyToBeAdvertised(it->second))) {
+        XLOG(DBG1) << fmt::format(
+            "Deleting advertised keys for {}",
+            folly::IPAddress::networkToString(prefix));
+
+        deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
+        advertisedPrefixEntries_.erase(prefix);
+        ++syncedPrefixCnt;
+      }
     }
   } // for
 
