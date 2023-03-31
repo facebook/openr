@@ -154,7 +154,6 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           },
           "minNexthop": 24,
           "prefix": "::/0",
-          "prependLabel": null,
           "tags": [
             "65520:822",
             "65527:896",
@@ -196,7 +195,6 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
           },
           "minNexthop": 24,
           "prefix": "0.0.0.0/0",
-          "prependLabel": null,
           "tags": [
             "65520:822",
             "65527:896",

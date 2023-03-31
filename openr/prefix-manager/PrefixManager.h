@@ -245,9 +245,7 @@ class PrefixManager final : public OpenrEventBase {
 
   /*
    * One prefixEntry is ready to be advertised iff
-   * - If prependLabel is set, the associated label route should have been
-   *   programmed locally.
-   * - [TODO] The associated unicast route should have been programmed locally.
+   * - The associated unicast route has been programmed locally.
    */
   bool prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry);
 

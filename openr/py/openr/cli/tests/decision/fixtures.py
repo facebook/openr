@@ -561,7 +561,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
           },
           "minNexthop": null,
           "prefix": "fd00:5::/64",
-          "prependLabel": null,
           "tags": [
             "INTERFACE_SUBNET",
             "openr-center:lo"
@@ -603,7 +602,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
           },
           "minNexthop": null,
           "prefix": "fd00:4::/64",
-          "prependLabel": null,
           "tags": [
             "INTERFACE_SUBNET",
             "openr-center:lo"
@@ -645,7 +643,6 @@ EXPECTED_ROUTES_RECEIVED_JSON = """\
           },
           "minNexthop": null,
           "prefix": "fd00:7::/64",
-          "prependLabel": null,
           "tags": [
             "INTERFACE_SUBNET",
             "openr-right:lo"
@@ -679,7 +676,6 @@ OLD_PREFIXES_JSON = """\
         },
         "minNexthop": null,
         "prefix": "fd00:6::/64",
-        "prependLabel": null,
         "tags": [
           "INTERFACE_SUBNET",
           "openr-right:lo"
@@ -698,7 +694,6 @@ OLD_PREFIXES_JSON = """\
         },
         "minNexthop": null,
         "prefix": "fd00:7::/64",
-        "prependLabel": null,
         "tags": [
           "INTERFACE_SUBNET",
           "openr-right:lo"

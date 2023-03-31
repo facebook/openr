@@ -326,11 +326,6 @@ struct PrefixEntry {
   8: optional i64 minNexthop;
 
   /**
-   * IP or MPLS next-hops of this prefix must have this label prepended
-   */
-  9: optional i32 prependLabel (deprecated);
-
-  /**
    * Metrics associated with this Prefix. Route advertisement from multiple
    * nodes is first tied up on Metrics (best path selection) and then next-hops
    * are computed towards the nodes announcing the best routes.
