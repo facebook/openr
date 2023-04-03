@@ -30,6 +30,8 @@ enum RuleAction {
   nextRule = 3,
   gotoRule = 4, // Future possibility
   logAndNextRule = 5,
+  logAndAllow = 6,
+  logAndDeny = 7,
 }
 
 enum RuleCondition {
