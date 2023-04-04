@@ -35,7 +35,7 @@ main(int argc, char* argv[]) {
 
   // Create list of prefixes for match
   std::vector<std::string> prefixStrs;
-  folly::split(",", FLAGS_prefixes, prefixStrs, true);
+  folly::split(',', FLAGS_prefixes, prefixStrs, true);
   std::vector<thrift::IpPrefix> prefixes;
   for (auto const& prefixStr : prefixStrs) {
     LOG(INFO) << "Prefix - " << prefixStr;
@@ -44,7 +44,7 @@ main(int argc, char* argv[]) {
 
   // Create list of tags for match
   std::vector<std::string> tags;
-  folly::split(",", FLAGS_tags, tags, true);
+  folly::split(',', FLAGS_tags, tags, true);
 
   // Action weight
   thrift::RibRouteActionWeight actionWeight;
@@ -53,10 +53,10 @@ main(int argc, char* argv[]) {
       Constants::kDefaultArea.toString(), FLAGS_area0_weight);
   // Parse neighbor->weight map and insert into the policy statement
   std::vector<std::string> neighborWeights;
-  folly::split(",", FLAGS_neighbor_weight, neighborWeights, true);
+  folly::split(',', FLAGS_neighbor_weight, neighborWeights, true);
   for (auto const& neighborWeight : neighborWeights) {
     std::vector<std::string> neighborWeightSplit;
-    folly::split(":", neighborWeight, neighborWeightSplit, true);
+    folly::split(':', neighborWeight, neighborWeightSplit, true);
     CHECK_EQ(2, neighborWeightSplit.size());
     int32_t weight = 0;
     try {

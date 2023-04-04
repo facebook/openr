@@ -304,7 +304,7 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
         if (keyDumpParams.keys().has_value()) {
           keyPrefixList = *keyDumpParams.keys();
         } else {
-          folly::split(",", *keyDumpParams.prefix(), keyPrefixList, true);
+          folly::split(',', *keyDumpParams.prefix(), keyPrefixList, true);
         }
 
         thrift::FilterOperator oper = thrift::FilterOperator::OR;
@@ -393,7 +393,7 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
         keyPrefixList = *keyDumpParams.keys();
       } else {
         // TODO: prefix field is deprecated
-        folly::split(",", *keyDumpParams.prefix(), keyPrefixList, true);
+        folly::split(',', *keyDumpParams.prefix(), keyPrefixList, true);
       }
       KvStoreFilters kvFilters{
           keyPrefixList, std::set<std::string>{} /* originatorId list */};

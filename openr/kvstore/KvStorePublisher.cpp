@@ -26,7 +26,7 @@ KvStorePublisher::KvStorePublisher(
   if (filter.keys().has_value()) {
     keyPrefix = std::move(*filter.keys());
   } else if (filter.prefix().is_set()) {
-    folly::split(",", *filter.prefix(), keyPrefix, true);
+    folly::split(',', *filter.prefix(), keyPrefix, true);
   }
 
   thrift::FilterOperator op =

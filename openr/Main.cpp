@@ -525,7 +525,7 @@ main(int argc, char** argv) {
 
     // Get the acceptable peer name set
     std::vector<std::string> acceptableNames;
-    folly::split(",", config->getSSLAcceptablePeers(), acceptableNames, true);
+    folly::split(',', config->getSSLAcceptablePeers(), acceptableNames, true);
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
   }
 
