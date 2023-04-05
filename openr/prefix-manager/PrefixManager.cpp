@@ -502,6 +502,7 @@ PrefixManager::updatePrefixKeysInKvStore(
 
   // override `advertiseStatus_` for next-round syncing
   advertiseStatus_[prefix].areas = std::move(updatedArea);
+  advertiseStatus_[prefix].advertisedBestEntry = prefixEntry;
 }
 
 std::unordered_set<std::string>
@@ -680,7 +681,6 @@ PrefixManager::syncKvStore() {
     if (it == prefixMap_.end()) {
       // Delete prefixes that do not exist in prefixMap_.
       deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
-      advertisedPrefixEntries_.erase(prefix);
       ++syncedPrefixCnt;
     }
   }
@@ -710,7 +710,6 @@ PrefixManager::syncKvStore() {
             toString(*bestEntry.tPrefixEntry, true));
 
         updatePrefixKeysInKvStore(prefix, bestEntry);
-        advertisedPrefixEntries_[prefix] = bestEntry;
         ++syncedPrefixCnt;
       }
     } else {
@@ -722,15 +721,15 @@ PrefixManager::syncKvStore() {
        * KvStore. Since it is no longer ready to be advertised, withdraw it
        * from KvStore.
        */
-      const auto& it = advertisedPrefixEntries_.find(prefix);
-      if (advertisedPrefixEntries_.cend() != it and
-          (not prefixEntryReadyToBeAdvertised(it->second))) {
+      const auto& it = advertiseStatus_.find(prefix);
+      if (advertiseStatus_.cend() != it and
+          (not prefixEntryReadyToBeAdvertised(
+              it->second.advertisedBestEntry))) {
         XLOG(DBG1) << fmt::format(
             "Deleting advertised keys for {}",
             folly::IPAddress::networkToString(prefix));
 
         deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
-        advertisedPrefixEntries_.erase(prefix);
         ++syncedPrefixCnt;
       }
     }
@@ -768,7 +767,7 @@ PrefixManager::syncKvStore() {
   // TODO: report per-area advertised prefixes if openr is running in
   // multi-areas.
   fb303::fbData->setCounter(
-      "prefix_manager.advertised_prefixes", advertisedPrefixEntries_.size());
+      "prefix_manager.advertised_prefixes", advertiseStatus_.size());
   fb303::fbData->setCounter(
       "prefix_manager.awaiting_prefixes", awaitingPrefixCnt);
 }

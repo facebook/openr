@@ -417,10 +417,6 @@ class PrefixManager final : public OpenrEventBase {
       std::unordered_map<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
 
-  // TODO: Merge this with advertiseStatus_.
-  // Advertised prefixes in KvStore and associated best PrefixEntry.
-  std::unordered_map<folly::CIDRNetwork, PrefixEntry> advertisedPrefixEntries_;
-
   // For prefixes came from PrefixEvent with an origination policy,
   // store the pre-policy version in originatedPrefixMap_.
   // Used in thrift request getAdvertisedRoutesWithOriginationPolicy().
@@ -435,7 +431,7 @@ class PrefixManager final : public OpenrEventBase {
   apache::thrift::CompactSerializer serializer_;
 
   /*
-   * AdervertiseStatus records following information of one prefix,
+   * AdvertiseStatus records following information of one prefix,
    *  1) Areas where one prefix is advertised into. `PrefixManager` advertises
    *    one prefix based on best-route-selection process, and could advertise
    *    into multiple areas. Prefix withdraw process will remove the prefix
@@ -445,13 +441,15 @@ class PrefixManager final : public OpenrEventBase {
    *    associated unicast routes for the prefixes with nexthops set. Prefix
    *    withdraw process will remove associated unicast routes from Decision.
    */
-  struct AdervertiseStatus {
+  struct AdvertiseStatus {
     // Set of areas the prefix was already advertised.
     std::unordered_set<std::string> areas;
     // Unicast route published to Decision for programming.
     std::optional<RibUnicastEntry> publishedRoute;
+    // Best entries published to KvStore for distribution
+    PrefixEntry advertisedBestEntry;
   };
-  std::unordered_map<folly::CIDRNetwork, AdervertiseStatus> advertiseStatus_{};
+  std::unordered_map<folly::CIDRNetwork, AdvertiseStatus> advertiseStatus_{};
 
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
