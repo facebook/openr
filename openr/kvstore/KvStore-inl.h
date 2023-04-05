@@ -1673,7 +1673,7 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::requestThriftPeerSync() {
   // minimal timeout for next run
-  auto timeout = std::chrono::milliseconds(Constants::kMaxBackoff);
+  auto timeout = std::chrono::milliseconds(Constants::kKvstoreSyncMaxBackoff);
 
   // pre-fetch of peers in "SYNCING" state for later calculation
   uint32_t numThriftPeersInSync =
@@ -1763,7 +1763,7 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     // in case pending peer size is over parallelSyncLimit,
     // wait until kMaxBackoff before sending next round of sync
     if (numThriftPeersInSync > parallelSyncLimitOverThrift_) {
-      timeout = Constants::kMaxBackoff;
+      timeout = Constants::kKvstoreSyncInitialBackoff;
       XLOG(INFO)
           << AreaTag()
           << fmt::format(
@@ -1958,7 +1958,10 @@ KvStoreDb<ClientType>::disconnectPeer(
   // reset client to reconnect later in next batch of thriftSyncTimer_
   // scanning
   peer.keepAliveTimer->cancelTimeout();
-  peer.expBackoff.reportError(); // apply exponential backoff
+  // we want to correct inconsistency fast
+  if (event != KvStorePeerEvent::INCONSISTENCY_DETECTED) {
+    peer.expBackoff.reportError(); // apply exponential backoff
+  }
   peer.client.reset();
 
   // state transition
@@ -2036,7 +2039,8 @@ KvStoreDb<ClientType>::addThriftPeers(
           AreaTag(),
           newPeerSpec,
           ExponentialBackoff<std::chrono::milliseconds>(
-              Constants::kInitialBackoff, Constants::kMaxBackoff),
+              Constants::kKvstoreSyncInitialBackoff,
+              Constants::kKvstoreSyncMaxBackoff),
           kvParams_);
 
       // TODO: remove this client call to use folly::Socket option to keep-alive
