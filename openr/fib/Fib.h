@@ -364,6 +364,13 @@ class Fib final : public OpenrEventBase {
   // routes will be programmed only if segment routing is enabled.
   const bool enableSegmentRouting_{false};
 
+  /*
+   * Special flag handling dryrun_ case to clean up routes programmed
+   * by previous incarnation.
+   */
+  const bool enableClearFibState_{false};
+  bool isUnicastRoutesCleared_{false};
+
   // Config knob - Minimum delay (in milliseconds) to be incurred before
   // deleting a a route (both unicast and mpls).
   const std::chrono::milliseconds routeDeleteDelay_{0};
@@ -402,10 +409,6 @@ class Fib final : public OpenrEventBase {
 
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
-
-  // Special flag handling dryrun_ case to clean up routes programmed
-  // by previous incarnation
-  bool isUnicastRoutesCleared_{false};
 };
 
 } // namespace openr

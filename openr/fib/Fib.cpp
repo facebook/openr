@@ -56,6 +56,7 @@ Fib::Fib(
       dryrun_(config->isDryrun()),
       enableSegmentRouting_(
           config->getConfig().enable_segment_routing().value_or(false)),
+      enableClearFibState_(*config->getConfig().enable_clear_fib_state()),
       routeDeleteDelay_(*config->getConfig().route_delete_delay_ms()),
       retryRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
@@ -832,9 +833,38 @@ Fib::syncRoutes() {
       << fmt::format("Syncing {} unicast routes in FIB", unicastRoutes.size());
 
   printUnicastRoutesAddUpdate(unicastRoutes);
+
   if (dryrun_) {
-    XLOG(INFO) << "Skipping programming of unicast routes in dryrun ... ";
+    /*
+     * NOTE: when `enable_clear_fib_state` knob is set, Open/R will clean up the
+     * fib routes programmed by its previous incarnation. This handles Open/R
+     * rollback from write mode(dryrun_=false) to shadow mode(dryrun_=true).
+     */
+    if (enableClearFibState_ and (not isUnicastRoutesCleared_)) {
+      try {
+        auto emptyRoutes = std::vector<thrift::UnicastRoute>{};
+        createFibClient(*getEvb(), client_, thriftPort_);
+        client_->sync_syncFib(kFibId_, emptyRoutes);
+      } catch (std::exception const& e) {
+        client_.reset();
+        fb303::fbData->addStatValue(
+            "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
+        XLOG(ERR) << "Failed to sync 0 unicast routes in FIB. Error: "
+                  << folly::exceptionStr(e);
+        return false;
+      }
+      // set one-time flag once
+      isUnicastRoutesCleared_ = true;
+
+      XLOG(INFO) << "Synced 0 unicast routes to clean up the stale routes.";
+    } else {
+      XLOG(INFO) << fmt::format(
+          "Skipping programming of {} unicast routes.", unicastRoutes.size());
+    }
   } else {
+    CHECK(not isUnicastRoutesCleared_)
+        << "flag should ONLY be set in dry_run mode";
+
     try {
       createFibClient(*getEvb(), client_, thriftPort_);
       client_->sync_syncFib(kFibId_, unicastRoutes);

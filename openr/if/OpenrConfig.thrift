@@ -881,6 +881,13 @@ struct OpenrConfig {
   105: bool enable_neighbor_monitor = false;
 
   /**
+   * This flag indicates if we want to clear fib routes programmed by previous
+   * incarnation. This is recommended to use in rollback scenario to clear all
+   * routes previously programmed.
+   */
+  106: bool enable_clear_fib_state = false;
+
+  /**
    * ATTN: All of the temp config knobs serving for gradual rollout purpose use
    * id range of 200 - 300
    */

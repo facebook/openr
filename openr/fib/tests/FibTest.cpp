@@ -564,6 +564,7 @@ class FibDryRunTestFixture : public ::testing::Test {
         false, /* enableSegmentRouting */
         true /* dryrun */);
     tConfig.fib_port() = fibThriftThread_.getAddress()->getPort();
+    tConfig.enable_clear_fib_state() = true;
 
     config_ = std::make_shared<Config>(std::move(tConfig));
     fib_ = std::make_shared<Fib>(
@@ -659,8 +660,7 @@ TEST_F(FibDryRunTestFixture, initialRouteCleanupTest) {
   while (not fb303::fbData->hasCounter(counterKey)) {
   }
 
-  // NOTE: one-time cleanup signal is NOT in use
-  EXPECT_FALSE(fib_->getUnicastRoutesCleared());
+  EXPECT_TRUE(fib_->getUnicastRoutesCleared());
 }
 
 // Fib single streaming client test.
