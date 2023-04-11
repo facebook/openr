@@ -578,12 +578,6 @@ void
 PrefixManager::deletePrefixKeysInKvStore(
     const folly::CIDRNetwork& prefix,
     DecisionRouteUpdate& routeUpdatesForDecision) {
-  // delete actual keys being advertised in the cache
-  //
-  // Sample format:
-  //  prefix    :    node1    :    0.0.0.0/32
-  //    |              |               |
-  //  marker         nodeId         prefixStr
   auto prefixIter = advertiseStatus_.find(prefix);
   if (prefixIter != advertiseStatus_.end()) {
     deleteKvStoreKeyHelper(prefix, prefixIter->second.areas);
@@ -604,6 +598,14 @@ PrefixManager::deleteKvStoreKeyHelper(
     deletedPrefixDb.thisNodeName() = nodeId_;
     deletedPrefixDb.deletePrefix() = true;
 
+    /*
+     * delete actual keys being advertised in the cache
+     *
+     * Sample format:
+     * prefix    :    node1    :    0.0.0.0/32
+     *   |              |               |
+     * marker         nodeId         prefixStr
+     */
     const auto prefixKeyStr = PrefixKey(nodeId_, prefix, area).getPrefixKeyV2();
     thrift::PrefixEntry entry;
     entry.prefix() = toIpPrefix(prefix);
@@ -679,12 +681,17 @@ PrefixManager::syncKvStore() {
   for (auto const& prefix : pendingUpdates_.getChangedPrefixes()) {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
-      // Delete prefixes that do not exist in prefixMap_.
+      XLOG(DBG1) << fmt::format(
+          "Deleting key: {} since it has been withdrawn.",
+          folly::IPAddress::networkToString(prefix));
+
       deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
       ++syncedPrefixCnt;
     }
   }
 
+  // TODO: iterate the whole prefixMap_ is time consuming.
+  // Explore scale enhancement
   for (const auto& [prefix, prefixEntries] : prefixMap_) {
     receivedPrefixCnt += prefixEntries.size();
 
@@ -705,9 +712,10 @@ PrefixManager::syncKvStore() {
     if (readyToBeAdvertised) {
       if (hasPrefixUpdate) {
         XLOG(DBG1) << fmt::format(
-            "Adding/updating key {} with best entry: {}",
+            "Adding/updating key: {} with best entry: {} to area: {}",
             folly::IPAddress::networkToString(prefix),
-            toString(*bestEntry.tPrefixEntry, true));
+            toString(*bestEntry.tPrefixEntry, true),
+            folly::join(",", bestEntry.dstAreas));
 
         updatePrefixKeysInKvStore(prefix, bestEntry);
         ++syncedPrefixCnt;
@@ -716,8 +724,12 @@ PrefixManager::syncKvStore() {
       // The prefix is awaiting to be advertised.
       ++awaitingPrefixCnt;
 
+      XLOG(DBG1) << fmt::format(
+          "Skip advertising key: {} since it is not ready to be advertised",
+          folly::IPAddress::networkToString(prefix));
+
       /*
-       * `advertisedPrefixEntries_` holds the "old" prefix entry advertised to
+       * `advertiseStatus_` holds the "old" prefix entry advertised to
        * KvStore. Since it is no longer ready to be advertised, withdraw it
        * from KvStore.
        */
@@ -726,8 +738,9 @@ PrefixManager::syncKvStore() {
           (not prefixEntryReadyToBeAdvertised(
               it->second.advertisedBestEntry))) {
         XLOG(DBG1) << fmt::format(
-            "Deleting advertised keys for {}",
-            folly::IPAddress::networkToString(prefix));
+            "Deleting previously advertised key: {} from area: {}",
+            folly::IPAddress::networkToString(prefix),
+            folly::join(",", it->second.areas));
 
         deletePrefixKeysInKvStore(prefix, routeUpdatesForDecision);
         ++syncedPrefixCnt;
