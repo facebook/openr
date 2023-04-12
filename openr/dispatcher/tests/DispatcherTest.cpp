@@ -271,10 +271,7 @@ class DispatcherKnobTestFixture : public DispatcherTestFixture {
   SetUp() override {
     config_ = std::make_shared<Config>(createConfig());
     createKvStore();
-
-    if (config_->isKvStoreDispatcherEnabled()) {
-      createDispatcher(kvStoreWrapper_->getReader());
-    }
+    createDispatcher(kvStoreWrapper_->getReader());
   }
 
   void

@@ -296,14 +296,6 @@ class Config {
     return *config_.enable_neighbor_monitor();
   }
 
-  //
-  // dispatcher
-  //
-  bool
-  isKvStoreDispatcherEnabled() const {
-    return config_.enable_kvstore_dispatcher().value();
-  }
-
   PrefixAllocationParams
   getPrefixAllocationParams() const {
     CHECK(isPrefixAllocationEnabled());

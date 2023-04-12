@@ -244,12 +244,9 @@ main(int argc, char** argv) {
    *  - Consumer will be marked and passed in with messaging::RQueue
    */
   std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr;
-  std::unique_ptr<DispatcherQueue> kvStorePublicationsDispatcherQueue;
 
   // DispatcherQueue is the KvStore -> subscribers queue with filtering enabled
-  if (config->isKvStoreDispatcherEnabled()) {
-    kvStorePublicationsDispatcherQueue = std::make_unique<DispatcherQueue>();
-  }
+  auto kvStorePublicationsDispatcherQueue = std::make_unique<DispatcherQueue>();
 
   // Decision -> Fib
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
@@ -409,29 +406,26 @@ main(int argc, char** argv) {
           config->toThriftKvStoreConfig()));
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
 
-  Dispatcher* dispatcher{nullptr};
-  if (config->isKvStoreDispatcherEnabled()) {
-    // Start Dispatcher
-    dispatcher = startEventBase(
-        allThreads,
-        orderedEvbs,
-        watchdog,
-        "dispatcher",
-        std::make_unique<Dispatcher>(
-            kvStoreUpdatesQueue.getReader("dispatcher"),
-            *kvStorePublicationsDispatcherQueue));
+  // Start Dispatcher
+  auto dispatcher = startEventBase(
+      allThreads,
+      orderedEvbs,
+      watchdog,
+      "dispatcher",
+      std::make_unique<Dispatcher>(
+          kvStoreUpdatesQueue.getReader("dispatcher"),
+          *kvStorePublicationsDispatcherQueue));
 
-    // make Decision/Prefix Manager subscribers of Dispatcher
-    decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
-        {Constants::kAdjDbMarker.toString(),
-         Constants::kPrefixDbMarker.toString()});
+  // make Decision/Prefix Manager subscribers of Dispatcher
+  decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
+      {Constants::kAdjDbMarker.toString(),
+       Constants::kPrefixDbMarker.toString()});
 
-    prefixMgrKvStoreUpdatesReader =
-        dispatcher->getReader({Constants::kPrefixDbMarker.toString()});
+  prefixMgrKvStoreUpdatesReader =
+      dispatcher->getReader({Constants::kPrefixDbMarker.toString()});
 
-    watchdog->addQueue(
-        *kvStorePublicationsDispatcherQueue, "kvStorePublicationsQueue");
-  }
+  watchdog->addQueue(
+      *kvStorePublicationsDispatcherQueue, "kvStorePublicationsQueue");
 
   // PrefixManager will wait for Fib programming and publishing updates
   auto prefixManager = startEventBase(
@@ -626,9 +620,7 @@ main(int argc, char** argv) {
   prefixMgrRouteUpdatesQueue.close();
   logSampleQueue.close();
   addrEventsQueue.close();
-  if (config->isKvStoreDispatcherEnabled()) {
-    kvStorePublicationsDispatcherQueue->close();
-  }
+  kvStorePublicationsDispatcherQueue->close();
 
   // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
   thriftCtrlServer->stop();

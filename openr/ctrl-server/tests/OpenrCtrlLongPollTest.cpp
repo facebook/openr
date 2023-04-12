@@ -30,6 +30,13 @@ class LongPollFixture : public ::testing::Test {
             areaIds, kvStoreConfig);
     kvStoreWrapper_->run();
 
+    // create Dispatcher module
+    dispatcher_ = std::make_shared<Dispatcher>(
+        kvStoreWrapper_->getReader(), kvStorePublicationsQueue_);
+
+    dispatcherThread_ = std::thread([this]() { dispatcher_->run(); });
+    dispatcher_->waitUntilRunning();
+
     // initialize OpenrCtrlHandler for testing usage
     handler_ = std::make_shared<OpenrCtrlHandler>(
         nodeName_,
@@ -43,7 +50,8 @@ class LongPollFixture : public ::testing::Test {
         nullptr, /* persistent-store raw ptr */
         nullptr, /* prefix-mgr raw ptr */
         nullptr, /* spark raw ptr */
-        nullptr /* config shared-ptr */);
+        nullptr /* config shared-ptr */,
+        dispatcher_.get());
 
     // ATTN: ctrlEvb must running in separate thread to mimick receiving
     // adj update for long-poll
@@ -53,12 +61,16 @@ class LongPollFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    kvStorePublicationsQueue_.close();
     kvStoreWrapper_->closeQueue();
     handler_.reset();
 
     ctrlEvb_.stop();
     ctrlEvb_.waitUntilStopped();
     ctrlEvbThread_.join();
+
+    dispatcher_->stop();
+    dispatcherThread_.join();
 
     kvStoreWrapper_->stop();
     kvStoreWrapper_.reset();
@@ -67,6 +79,10 @@ class LongPollFixture : public ::testing::Test {
  private:
   OpenrEventBase ctrlEvb_;
   std::thread ctrlEvbThread_;
+  std::shared_ptr<Dispatcher> dispatcher_{nullptr};
+  std::thread dispatcherThread_;
+
+  DispatcherQueue kvStorePublicationsQueue_;
 
  public:
   const std::string nodeName_{"Valar-Morghulis"};
