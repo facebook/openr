@@ -893,12 +893,6 @@ struct OpenrConfig {
    */
 
   /**
-   * Flag to indicate if adjacencyDb publication after prefixDb sync is enabled.
-   * Ref: https://openr.readthedocs.io/Protocol_Guide/Initialization_Process.html.
-   */
-  201: bool enable_ordered_adj_publication = true;
-
-  /**
    * Flag to enable Dispatcher module in the architecture.
    */
   202: bool enable_kvstore_dispatcher = false;
