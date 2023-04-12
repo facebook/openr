@@ -12,6 +12,7 @@ from openr.utils import printing, serializer
 
 
 class VersionCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,

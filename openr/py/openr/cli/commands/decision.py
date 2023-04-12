@@ -25,6 +25,7 @@ from thrift.python.serializer import deserialize
 
 
 class DecisionRoutesComputedCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -48,6 +49,7 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
 
 
 class DecisionAdjCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -76,6 +78,7 @@ class DecisionAdjCmd(OpenrCtrlCmd):
 
 
 class PathCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -751,6 +754,7 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
 
 class ReceivedRoutesCmd(OpenrCtrlCmd):
     # @override
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
