@@ -445,12 +445,6 @@ main(int argc, char** argv) {
   watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
   watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");
   watchdog->addQueue(prefixMgrRouteUpdatesQueue, "prefixMgrRouteUpdatesQueue");
-
-  // Prefix Allocator to automatically allocate prefixes for nodes
-  if (config->isPrefixAllocationEnabled()) {
-    XLOG(ERR) << "PrefixAllocator is deprecated";
-  }
-
   watchdog->addQueue(prefixUpdatesQueue, "prefixUpdatesQueue");
 
   // Start NeighborMonitor

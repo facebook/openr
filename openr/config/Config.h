@@ -106,9 +106,6 @@ class Config {
     populateInternalDb();
   }
 
-  static PrefixAllocationParams createPrefixAllocationParams(
-      const std::string& seedPfxStr, uint8_t allocationPfxLen);
-
   //
   // config
   //
@@ -261,31 +258,9 @@ class Config {
     return *config_.segment_routing_config();
   }
 
-  const thrift::SegmentRoutingAdjLabel&
-  getAdjSegmentLabels() const {
-    CHECK(
-        config_.segment_routing_config().has_value() and
-        config_.segment_routing_config()->sr_adj_label().has_value());
-    return *config_.segment_routing_config()->sr_adj_label();
-  }
-
   bool
   isSegmentRoutingConfigured() const {
     return config_.segment_routing_config().has_value();
-  }
-
-  //
-  // prefix Allocation
-  //
-  bool
-  isPrefixAllocationEnabled() const {
-    return config_.enable_prefix_allocation().value_or(false);
-  }
-
-  const thrift::PrefixAllocationConfig&
-  getPrefixAllocationConfig() const {
-    CHECK(isPrefixAllocationEnabled());
-    return *config_.prefix_allocation_config();
   }
 
   //
@@ -294,30 +269,6 @@ class Config {
   bool
   isNeighborMonitorEnabled() const {
     return *config_.enable_neighbor_monitor();
-  }
-
-  PrefixAllocationParams
-  getPrefixAllocationParams() const {
-    CHECK(isPrefixAllocationEnabled());
-    return *prefixAllocationParams_;
-  }
-
-  // MPLS labels
-  bool
-  isLabelRangeValid(thrift::LabelRange range) const {
-    if (not isMplsLabelValid(*range.start_label())) {
-      return false;
-    }
-
-    if (not isMplsLabelValid(*range.end_label())) {
-      return false;
-    }
-
-    if (*range.start_label() > *range.end_label()) {
-      return false;
-    }
-
-    return true;
   }
 
   //
@@ -584,12 +535,6 @@ class Config {
   // validate Link Monitor config
   void checkLinkMonitorConfig() const;
 
-  // validate Segment Routing config
-  void checkSegmentRoutingConfig() const;
-
-  // validate Prefix Allocation config
-  void checkPrefixAllocationConfig();
-
   // validate VipService Config
   void checkVipServiceConfig() const;
 
@@ -601,8 +546,6 @@ class Config {
 
   // thrift config
   thrift::OpenrConfig config_;
-  // prefix allocation
-  folly::Optional<PrefixAllocationParams> prefixAllocationParams_{folly::none};
 
   // areaId -> neighbor regex and interface regex mapped
   std::unordered_map<std::string /* areaId */, AreaConfiguration> areaConfigs_;

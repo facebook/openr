@@ -82,97 +82,6 @@ Config::getRunningConfig() const {
   return contents;
 }
 
-PrefixAllocationParams
-Config::createPrefixAllocationParams(
-    const std::string& seedPfxStr, uint8_t allocationPfxLen) {
-  // check seed_prefix and allocate_prefix_len are set
-  if (seedPfxStr.empty() or allocationPfxLen == 0) {
-    throw std::invalid_argument(
-        "seed_prefix and allocate_prefix_len must be filled.");
-  }
-
-  // validate seed prefix
-  auto seedPfx = folly::IPAddress::createNetwork(seedPfxStr);
-
-  // validate allocate_prefix_len
-  if (seedPfx.first.isV4() and
-      (allocationPfxLen <= seedPfx.second or allocationPfxLen > 32)) {
-    throw std::out_of_range(fmt::format(
-        "invalid allocate_prefix_len ({}), valid range = ({}, 32]",
-        allocationPfxLen,
-        seedPfx.second));
-  }
-
-  if ((seedPfx.first.isV6()) and
-      (allocationPfxLen <= seedPfx.second or allocationPfxLen > 128)) {
-    throw std::out_of_range(fmt::format(
-        "invalid allocate_prefix_len ({}), valid range = ({}, 128]",
-        allocationPfxLen,
-        seedPfx.second));
-  }
-
-  return {seedPfx, allocationPfxLen};
-}
-
-void
-Config::checkAdjacencyLabelConfig(
-    const openr::thrift::AreaConfig& areaConf) const {
-  if (areaConf.sr_adj_label().has_value()) {
-    // Check adj segment labels if configured or if label range is valid
-    if (areaConf.sr_adj_label()->sr_adj_label_type() ==
-        thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX) {
-      if (not areaConf.sr_adj_label()->adj_label_range().has_value()) {
-        throw std::invalid_argument(fmt::format(
-            "label range for adjacency labels is not configured for area id {}",
-            *areaConf.area_id()));
-      } else if (not isLabelRangeValid(
-                     *areaConf.sr_adj_label()->adj_label_range())) {
-        const auto& label_range = *areaConf.sr_adj_label()->adj_label_range();
-        throw std::invalid_argument(fmt::format(
-            "label range [{}, {}] for adjacency labels is invalid for area id {}",
-            *label_range.start_label(),
-            *label_range.end_label(),
-            *areaConf.area_id()));
-      }
-    }
-  }
-}
-
-void
-Config::checkNodeSegmentLabelConfig(
-    const openr::thrift::AreaConfig& areaConf) const {
-  // Check if Node Segment Label is configured or if label range is valid
-  if (areaConf.area_sr_node_label().has_value()) {
-    const auto& srNodeConfig = *areaConf.area_sr_node_label();
-    if (*srNodeConfig.sr_node_label_type() ==
-        thrift::SegmentRoutingNodeLabelType::AUTO) {
-      // Automatic node segment label allocation
-      if (not srNodeConfig.node_segment_label_range().has_value()) {
-        throw std::invalid_argument(fmt::format(
-            "node segment label range is not configured for area id: {}",
-            *areaConf.area_id()));
-      } else if (not isLabelRangeValid(
-                     *srNodeConfig.node_segment_label_range())) {
-        const auto& label_range = *srNodeConfig.node_segment_label_range();
-        throw std::invalid_argument(fmt::format(
-            "node segment label range [{}, {}] is invalid for area config id: {}",
-            *label_range.start_label(),
-            *label_range.end_label(),
-            *areaConf.area_id()));
-      }
-    } else if (not srNodeConfig.node_segment_label().has_value()) {
-      throw std::invalid_argument(fmt::format(
-          "static node segment label is not configured for area config id: {}",
-          *areaConf.area_id()));
-    } else if (not isMplsLabelValid(*srNodeConfig.node_segment_label())) {
-      throw std::invalid_argument(fmt::format(
-          "node segment label {} is invalid for area config id: {}",
-          *srNodeConfig.node_segment_label(),
-          *areaConf.area_id()));
-    }
-  }
-}
-
 void
 Config::populateAreaConfig() {
   if (config_.areas()->empty()) {
@@ -206,9 +115,6 @@ Config::populateAreaConfig() {
       throw std::invalid_argument(
           fmt::format("Duplicate area config id: {}", *areaConf.area_id()));
     }
-
-    checkNodeSegmentLabelConfig(areaConf);
-    checkAdjacencyLabelConfig(areaConf);
   }
 }
 
@@ -375,72 +281,6 @@ Config::checkLinkMonitorConfig() const {
 }
 
 void
-Config::checkSegmentRoutingConfig() const {
-  if (const auto& srConfig = config_.segment_routing_config()) {
-    if (srConfig->sr_adj_label().has_value()) {
-      // Check adj segment labels if configured or if label range is valid
-      if (srConfig->sr_adj_label()->sr_adj_label_type() ==
-          thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX) {
-        if (not srConfig->sr_adj_label()->adj_label_range().has_value()) {
-          throw std::invalid_argument(
-              "label range for adjacency labels is not configured");
-        } else if (not isLabelRangeValid(
-                       *srConfig->sr_adj_label()->adj_label_range())) {
-          const auto& label_range =
-              *srConfig->sr_adj_label()->adj_label_range();
-          throw std::invalid_argument(fmt::format(
-              "label range [{}, {}] for adjacency labels is invalid",
-              *label_range.start_label(),
-              *label_range.end_label()));
-        }
-      }
-    }
-  }
-}
-
-void
-Config::checkPrefixAllocationConfig() {
-  const auto& paConf = config_.prefix_allocation_config();
-  // check if config exists
-  if (not paConf) {
-    throw std::invalid_argument(
-        "enable_prefix_allocation = true, but prefix_allocation_config is empty");
-  }
-
-  // sanity check enum prefix_allocation_mode
-  if (not enumName(*paConf->prefix_allocation_mode())) {
-    throw std::invalid_argument("invalid prefix_allocation_mode");
-  }
-
-  auto seedPrefix = paConf->seed_prefix().value_or("");
-  auto allocatePfxLen = paConf->allocate_prefix_len().value_or(0);
-
-  switch (*paConf->prefix_allocation_mode()) {
-  case PrefixAllocationMode::DYNAMIC_ROOT_NODE: {
-    // populate prefixAllocationParams_ from seed_prefix and
-    // allocate_prefix_len
-    prefixAllocationParams_ =
-        createPrefixAllocationParams(seedPrefix, allocatePfxLen);
-
-    if (prefixAllocationParams_->first.first.isV4() and not isV4Enabled()) {
-      throw std::invalid_argument(
-          "v4 seed_prefix detected, but enable_v4 = false");
-    }
-    break;
-  }
-  case PrefixAllocationMode::DYNAMIC_LEAF_NODE:
-  case PrefixAllocationMode::STATIC: {
-    // seed_prefix and allocate_prefix_len have to to empty
-    if (not seedPrefix.empty() or allocatePfxLen > 0) {
-      throw std::invalid_argument(
-          "prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and allocate_prefix_len must be empty");
-    }
-    break;
-  }
-  }
-}
-
-void
 Config::checkVipServiceConfig() const {
   if (isVipServiceEnabled()) {
     if (not config_.vip_service_config()) {
@@ -579,19 +419,6 @@ Config::populateInternalDb() {
 
   // validate Link Monitor config (e.g. backoff)
   checkLinkMonitorConfig();
-
-  // validate Segment Routing config
-  checkSegmentRoutingConfig();
-
-  // validate Prefix Allocation config
-  if (isPrefixAllocationEnabled()) {
-    // by now areaConfigs_ should be filled.
-    if (areaConfigs_.size() > 1) {
-      throw std::invalid_argument(
-          "prefix_allocation only support single area config");
-    }
-    checkPrefixAllocationConfig();
-  }
 
   // validate VipServiceConfig config
   checkVipServiceConfig();

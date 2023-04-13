@@ -23,9 +23,6 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace {
-const auto& testSeedPrefix =
-    folly::IPAddress::createNetwork("fc00:cafe:babe::/64");
-const uint8_t testAllocationPfxLen = 128;
 
 openr::thrift::KvstoreFloodRate
 getFloodRate() {
@@ -33,18 +30,6 @@ getFloodRate() {
   floodrate.flood_msg_per_sec() = 1;
   floodrate.flood_msg_burst_size() = 1;
   return floodrate;
-}
-
-openr::thrift::PrefixAllocationConfig
-getPrefixAllocationConfig(openr::thrift::PrefixAllocationMode mode) {
-  openr::thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.prefix_allocation_mode() = mode;
-  if (mode == openr::thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE) {
-    pfxAllocationConf.seed_prefix() =
-        folly::IPAddress::networkToString(testSeedPrefix);
-    pfxAllocationConf.allocate_prefix_len() = testAllocationPfxLen;
-  }
-  return pfxAllocationConf;
 }
 
 openr::thrift::AreaConfig
@@ -119,25 +104,6 @@ TEST_F(ConfigTestFixture, ConstructFromFile) {
     EXPECT_ANY_THROW(Config(invalidConfigFile.path().string()));
   }
 
-  // out of range enum: prefix_allocation_mode
-  {
-    auto validTConf = getBasicOpenrConfig();
-    validTConf.enable_prefix_allocation() = true;
-    validTConf.prefix_allocation_config() = thrift::PrefixAllocationConfig();
-
-    std::string validConfStr;
-    EXPECT_NO_THROW(apache::thrift::SimpleJSONSerializer().serialize(
-        validTConf, &validConfStr));
-
-    folly::dynamic invalidConf = folly::parseJson(validConfStr);
-    // prefix_allocation_mode range [0-2]
-    invalidConf["prefix_allocation_config"]["prefix_allocation_mode"] = 3;
-
-    folly::test::TemporaryFile invalidConfFile;
-    folly::writeFileAtomic(
-        invalidConfFile.path().string(), folly::toJson(invalidConf));
-    EXPECT_ANY_THROW(Config(invalidConfFile.path().string()));
-  }
   // out of range enum: prefix_forwarding_type
   {
     folly::dynamic invalidConfig;
@@ -242,83 +208,6 @@ TEST(ConfigTest, PopulateAreaConfig) {
     std::vector<openr::thrift::AreaConfig> vec = {areaConfig};
     auto conf = getBasicOpenrConfig("node-1", vec);
     EXPECT_THROW(auto c = Config(conf), std::invalid_argument);
-  }
-
-  // area segment node label
-  {
-    auto confAreaPolicy = getBasicOpenrConfig();
-    openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
-
-    openr::thrift::SegmentRoutingNodeLabel node_segment_label;
-    areaConfig.area_sr_node_label() = node_segment_label;
-    confAreaPolicy.areas()->emplace_back(areaConfig);
-
-    // Area config with incomplete segment node label config
-    EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
-
-    openr::thrift::LabelRange node_segment_label_range;
-    node_segment_label_range.start_label() =
-        openr::MplsConstants::kSrGlobalRange.first;
-    node_segment_label_range.end_label() =
-        openr::MplsConstants::kSrGlobalRange.second;
-    node_segment_label.node_segment_label_range() = node_segment_label_range;
-
-    // Type is AUTO
-    node_segment_label.sr_node_label_type() =
-        openr::thrift::SegmentRoutingNodeLabelType::AUTO;
-
-    for (auto& areaConf : *confAreaPolicy.areas()) {
-      areaConf.area_sr_node_label() = node_segment_label;
-    }
-
-    // valid node segment label config
-    EXPECT_NO_THROW((Config(confAreaPolicy)));
-
-    // invalid label range and type is AUTO
-    node_segment_label_range.end_label() =
-        openr::MplsConstants::kSrGlobalRange.first;
-    node_segment_label_range.start_label() =
-        openr::MplsConstants::kSrGlobalRange.second;
-    node_segment_label.node_segment_label_range() = node_segment_label_range;
-    for (auto& areaConf : *confAreaPolicy.areas()) {
-      areaConf.area_sr_node_label() = node_segment_label;
-    }
-    EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
-
-    // Type is STATIC but no static label provided
-    node_segment_label.sr_node_label_type() =
-        openr::thrift::SegmentRoutingNodeLabelType::STATIC;
-    for (auto& areaConf : *confAreaPolicy.areas()) {
-      areaConf.area_sr_node_label() = node_segment_label;
-    }
-
-    EXPECT_THROW((Config(confAreaPolicy)), std::invalid_argument);
-  }
-
-  // area adjacency label
-  {
-    auto confAreaPolicy = getBasicOpenrConfig();
-    openr::thrift::AreaConfig areaConfig = getAreaConfig("1");
-
-    openr::thrift::SegmentRoutingAdjLabel adj_segment_label;
-    openr::thrift::LabelRange adj_label_range;
-    adj_label_range.start_label() = openr::MplsConstants::kSrLocalRange.first;
-    adj_label_range.end_label() = openr::MplsConstants::kSrLocalRange.second;
-    adj_segment_label.sr_adj_label_type() =
-        openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-    adj_segment_label.adj_label_range() = adj_label_range;
-
-    areaConfig.sr_adj_label() = adj_segment_label;
-
-    // valid adj label config
-    confAreaPolicy.areas()->emplace_back(areaConfig);
-    EXPECT_NO_THROW((Config(confAreaPolicy)));
-
-    // disabled adj label
-    (*confAreaPolicy.areas()).clear();
-    adj_segment_label.sr_adj_label_type() =
-        openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-    EXPECT_NO_THROW((Config(confAreaPolicy)));
   }
 }
 
@@ -546,67 +435,6 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
 
-  // prefix allocation
-
-  // enable_prefix_allocation = true, prefix_allocation_config = null
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation() = true;
-    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
-  }
-  // prefix_allocation_mode != DYNAMIC_ROOT_NODE, seed_prefix and
-  // allocate_prefix_len set
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation() = true;
-    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
-        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config()->prefix_allocation_mode() =
-        thrift::PrefixAllocationMode::DYNAMIC_LEAF_NODE;
-    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
-  }
-  // prefix_allocation_mode = DYNAMIC_ROOT_NODE, seed_prefix and
-  // allocate_prefix_len = null
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation() = true;
-    confInvalidPa.prefix_allocation_config() = thrift::PrefixAllocationConfig();
-    confInvalidPa.prefix_allocation_config()->prefix_allocation_mode() =
-        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
-    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
-  }
-  // seed_prefix: invalid ipadrres format
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation() = true;
-    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
-        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config()->seed_prefix() =
-        "fc00:cafe:babe:/64";
-    EXPECT_ANY_THROW((Config(confInvalidPa)));
-  }
-  // allocate_prefix_len: <= seed_prefix subnet length
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_prefix_allocation() = true;
-    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
-        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config()->allocate_prefix_len() = 60;
-    EXPECT_THROW((Config(confInvalidPa)), std::out_of_range);
-  }
-  // seed_prefix v4, enable_v4 = false
-  {
-    auto confInvalidPa = getBasicOpenrConfig();
-    confInvalidPa.enable_v4() = false;
-
-    confInvalidPa.enable_prefix_allocation() = true;
-    confInvalidPa.prefix_allocation_config() = getPrefixAllocationConfig(
-        thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-    confInvalidPa.prefix_allocation_config()->seed_prefix() = "127.0.0.1/24";
-    confInvalidPa.prefix_allocation_config()->allocate_prefix_len() = 32;
-    EXPECT_THROW((Config(confInvalidPa)), std::invalid_argument);
-  }
-
   // bgp peering
 
   // bgp peering enabled with empty bgp_config
@@ -783,38 +611,6 @@ TEST(ConfigTest, LinkMonitorGetter) {
   EXPECT_FALSE(domainNameArea.shouldDiscoverOnIface("eth0"));
 
   EXPECT_FALSE(domainNameArea.shouldRedistributeIface("eth0"));
-}
-
-TEST(ConfigTest, PrefixAllocatorGetter) {
-  auto tConfig = getBasicOpenrConfig();
-  tConfig.enable_prefix_allocation() = true;
-  const auto paConf = getPrefixAllocationConfig(
-      thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE);
-  tConfig.prefix_allocation_config() = paConf;
-  auto config = Config(tConfig);
-
-  // isPrefixAllocationEnabled
-  EXPECT_TRUE(config.isPrefixAllocationEnabled());
-
-  // getPrefixAllocationConfig
-  EXPECT_EQ(paConf, config.getPrefixAllocationConfig());
-
-  // getPrefixAllocationParams
-  const PrefixAllocationParams& params = {testSeedPrefix, testAllocationPfxLen};
-  EXPECT_EQ(params, config.getPrefixAllocationParams());
-}
-
-TEST(ConfigTest, SegmentRoutingConfig) {
-  auto tConfig = getBasicOpenrConfig();
-  const auto& srConf = getSegmentRoutingConfig();
-  tConfig.segment_routing_config() = srConf;
-  auto config = Config(tConfig);
-
-  // getSegmentRoutingConfig
-  EXPECT_EQ(srConf, config.getSegmentRoutingConfig());
-  EXPECT_EQ(
-      *config.getAdjSegmentLabels().sr_adj_label_type(),
-      openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX);
 }
 
 TEST(ConfigTest, ToThriftKvStoreConfig) {
