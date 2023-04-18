@@ -671,16 +671,6 @@ struct OpenrConfig {
    * service then disable this option.
    */
   8: optional bool enable_netlink_fib_handler;
-  /**
-   * [TO BE DEPRECATED]
-   * Wait for fib service will always be enabled except two cases:
-   *  - enable_netlink_fib_handler = true, openr launches its own route programming module
-   *  - dryrun = true, openr is not intended to do route programming
-   *
-   * Knob to enable/disable waiting for the FIB service to be ready
-   * before initialize Open/R.
-   */
-  9: bool enable_fib_service_waiting = true (deprecated);
 
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP;
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP;

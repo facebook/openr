@@ -151,11 +151,6 @@ class Config {
   }
 
   bool
-  isFibServiceWaitingEnabled() const {
-    return *config_.enable_fib_service_waiting();
-  }
-
-  bool
   isRibPolicyEnabled() const {
     return *config_.enable_rib_policy();
   }
