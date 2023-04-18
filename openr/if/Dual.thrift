@@ -14,6 +14,8 @@ namespace lua openr.Dual
 /**
  * DUAL message type
  */
+include "thrift/annotation/cpp.thrift"
+
 enum DualMessageType {
   UPDATE = 1,
   QUERY = 2,
@@ -83,16 +85,18 @@ struct DualPerRootCounters {
 /**
  * Map of neighbor-node to neighbor-counters
  */
-typedef map<string, DualPerNeighborCounters> (
-  cpp.type = "std::unordered_map<std::string, /* neighbor */ openr::thrift::DualPerNeighborCounters>",
-) NeighborCounters
+@cpp.Type{
+  name = "std::unordered_map<std::string, /* neighbor */ openr::thrift::DualPerNeighborCounters>",
+}
+typedef map<string, DualPerNeighborCounters> NeighborCounters
 
 /**
  * Map of root-node to root-counters
  */
-typedef map<string, map<string, DualPerRootCounters>> (
-  cpp.type = "std::unordered_map<std::string, /* root */ std::map<std::string /* neighbor */, openr::thrift::DualPerRootCounters>>",
-) RootCounters
+@cpp.Type{
+  name = "std::unordered_map<std::string, /* root */ std::map<std::string /* neighbor */, openr::thrift::DualPerRootCounters>>",
+}
+typedef map<string, map<string, DualPerRootCounters>> RootCounters
 
 /**
  * All DUAL related counters

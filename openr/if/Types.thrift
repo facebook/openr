@@ -15,6 +15,7 @@ namespace wiki Open_Routing.Thrift_APIs.Types
 
 include "openr/if/Network.thrift"
 include "openr/if/OpenrConfig.thrift"
+include "thrift/annotation/cpp.thrift"
 
 /*
  * [Spark Neighbor FSM]
@@ -417,9 +418,10 @@ struct StaticAllocation {
  * @deprecated - Map of node name to adjacency database. This is deprecated
  * and should go away once area migration is complete.
  */
-typedef map<string, AdjacencyDatabase> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::AdjacencyDatabase>",
-) AdjDbs
+@cpp.Type{
+  name = "std::unordered_map<std::string, openr::thrift::AdjacencyDatabase>",
+}
+typedef map<string, AdjacencyDatabase> AdjDbs
 
 /**
  * Represents complete route database that is or should be programmed in
@@ -556,9 +558,8 @@ struct DumpLinksReply {
   /**
    * Details of all the interfaces on system.
    */
-  6: map<string, InterfaceDetails> (
-    cpp.template = "std::unordered_map",
-  ) interfaceDetails;
+  @cpp.Type{template = "std::unordered_map"}
+  6: map<string, InterfaceDetails> interfaceDetails;
 } (cpp.minimize_padding)
 
 /**

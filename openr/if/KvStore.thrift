@@ -13,6 +13,7 @@ namespace lua openr.KvStore
 namespace wiki Open_Routing.Thrift_APIs.KvStore
 
 include "fb303/thrift/fb303_core.thrift"
+include "thrift/annotation/cpp.thrift"
 
 /*
  * Events in OpenR initialization process.
@@ -147,16 +148,16 @@ struct Value {
  * Map of key to value. This is a representation of KvStore data-base. Using
  * `std::unordered_map` in C++ for efficient lookups.
  */
-typedef map<string, Value> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::Value>",
-) KeyVals
+@cpp.Type{name = "std::unordered_map<std::string, openr::thrift::Value>"}
+typedef map<string, Value> KeyVals
 
 /**
  * Map of key to reason for not merging.
  */
-typedef map<string, KvStoreNoMergeReason> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::KvStoreNoMergeReason>",
-) NoMergeMap
+@cpp.Type{
+  name = "std::unordered_map<std::string, openr::thrift::KvStoreNoMergeReason>",
+}
+typedef map<string, KvStoreNoMergeReason> NoMergeMap
 
 /*
  * The struct KvStoreNoMergeReasonStats contains the statistics of reasons why
@@ -322,9 +323,8 @@ struct PeerSpec {
 /**
  * Unordered map for efficiency for peer to peer-spec
  */
-typedef map<string, PeerSpec> (
-  cpp.type = "std::unordered_map<std::string, openr::thrift::PeerSpec>",
-) PeersMap
+@cpp.Type{name = "std::unordered_map<std::string, openr::thrift::PeerSpec>"}
+typedef map<string, PeerSpec> PeersMap
 
 /**
  * KvStore Response specification. This is also used to respond to GET requests
