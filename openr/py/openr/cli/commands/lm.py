@@ -185,15 +185,12 @@ class LMCmdBase(OpenrCtrlCmd):
         ):
             sys.exit(0)
 
-        # Fail stop. Weak guarantee. No-op are skip[ed].
-        # Fail to drain a link will cause the script to stop, without reverting the links that are
-        # already drained.
-        for interface in intefaces_to_process:
-            if metric_inc:
-                await client.setInterfaceMetricIncrement(interface, metric_inc)
-            else:
-                await client.unsetInterfaceMetricIncrement(interface)
-            print(f"Successfully {action} for interface {interface} on node {host}.\n")
+        if metric_inc:
+            await client.setInterfaceMetricIncrementMulti(
+                intefaces_to_process, metric_inc
+            )
+        else:
+            await client.unsetInterfaceMetricIncrementMulti(intefaces_to_process)
 
         print(
             f"Success {len(intefaces_to_process)}, Skipped {len(interfaces) - len(intefaces_to_process)}"
