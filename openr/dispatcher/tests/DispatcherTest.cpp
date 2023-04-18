@@ -285,10 +285,6 @@ class DispatcherKnobTestFixture : public DispatcherTestFixture {
   createConfig() {
     // create basic openr config
     auto tConfig = getBasicOpenrConfig();
-
-    // override KvStore Dispatcher knob
-    tConfig.enable_kvstore_dispatcher() = true;
-
     return tConfig;
   }
 

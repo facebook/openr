@@ -886,14 +886,8 @@ struct OpenrConfig {
    * routes previously programmed.
    */
   106: bool enable_clear_fib_state = false;
-
-  /**
-   * ATTN: All of the temp config knobs serving for gradual rollout purpose use
-   * id range of 200 - 300
-   */
-
-  /**
-   * Flag to enable Dispatcher module in the architecture.
-   */
-  202: bool enable_kvstore_dispatcher = false;
+/**
+ * ATTN: All of the temp config knobs serving for gradual rollout purpose use
+ * id range of 200 - 300
+ */
 } (cpp.minimize_padding)
