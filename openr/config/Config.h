@@ -135,17 +135,6 @@ class Config {
   }
 
   bool
-  isAdjacencyLabelsEnabled() const {
-    if (isSegmentRoutingEnabled() && isSegmentRoutingConfigured()) {
-      const auto& srConfig = getSegmentRoutingConfig();
-      return srConfig.sr_adj_label().has_value() &&
-          srConfig.sr_adj_label()->sr_adj_label_type() !=
-          thrift::SegmentRoutingAdjLabelType::DISABLED;
-    }
-    return false;
-  }
-
-  bool
   isNetlinkFibHandlerEnabled() const {
     return config_.enable_netlink_fib_handler().value_or(false);
   }

@@ -130,7 +130,6 @@ Decision::Decision(
       config->getNodeName(),
       config->isV4Enabled(),
       config->isSegmentRoutingEnabled(),
-      config->isAdjacencyLabelsEnabled(),
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled());
 

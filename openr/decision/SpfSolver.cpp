@@ -75,13 +75,11 @@ SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
     bool enableNodeSegmentLabel,
-    bool enableAdjacencyLabels,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
       enableNodeSegmentLabel_(enableNodeSegmentLabel),
-      enableAdjacencyLabels_(enableAdjacencyLabels),
       enableBestRouteSelection_(enableBestRouteSelection),
       v4OverV6Nexthop_(v4OverV6Nexthop) {
   // Initialize stat keys
@@ -481,39 +479,6 @@ SpfSolver::buildRouteDb(
 
     for (auto& [_, nodeToEntry] : labelToNode) {
       routeDb.addMplsRoute(std::move(nodeToEntry.second));
-    }
-  }
-
-  //
-  // Create MPLS routes for all of our adjacencies
-  //
-  if (enableAdjacencyLabels_) {
-    for (const auto& [_, linkState] : areaLinkStates) {
-      for (const auto& link : linkState.linksFromNode(myNodeName)) {
-        const auto topLabel = link->getAdjLabelFromNode(myNodeName);
-        // Top label is not set => Non-SR mode
-        if (topLabel == 0) {
-          continue;
-        }
-        // If mpls label is not valid then ignore it
-        if (not isMplsLabelValid(topLabel)) {
-          XLOG(ERR) << "Ignoring invalid adjacency label " << topLabel
-                    << " of link " << link->directionalToString(myNodeName);
-          fb303::fbData->addStatValue(
-              "decision.skipped_mpls_route", 1, fb303::COUNT);
-          continue;
-        }
-
-        routeDb.addMplsRoute(RibMplsEntry(
-            topLabel,
-            {createNextHop(
-                link->getNhV6FromNode(myNodeName),
-                link->getIfaceFromNode(myNodeName),
-                link->getMetricFromNode(myNodeName),
-                createMplsAction(thrift::MplsActionCode::PHP),
-                link->getArea(),
-                link->getOtherNodeName(myNodeName))}));
-      }
     }
   }
 

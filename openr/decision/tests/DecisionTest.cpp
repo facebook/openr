@@ -353,22 +353,6 @@ getUnicastRoutes(
 }
 
 void
-validateAdjLabelRoutes(
-    RouteMap const& routeMap,
-    std::string const& nodeName,
-    std::vector<thrift::Adjacency> const& adjs) {
-  for (auto const& adj : adjs) {
-    const std::pair<std::string, std::string> routeKey{
-        nodeName, std::to_string(*adj.adjLabel())};
-    ASSERT_EQ(1, routeMap.count(routeKey));
-    EXPECT_EQ(
-        routeMap.at(routeKey),
-        NextHops(
-            {createNextHopFromAdj(adj, false, *adj.metric(), labelPhpAction)}));
-  }
-}
-
-void
 validatePopLabelRoute(
     RouteMap const& routeMap, std::string const& nodeName, int32_t nodeLabel) {
   const std::pair<std::string, std::string> routeKey{
@@ -1007,25 +991,25 @@ TEST(SpfSolver, AdjacencyUpdate) {
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
   //
-  // dump routes for both nodes, expect 4 route entries (1 unicast, 3 label) on
-  // each (node1-label, node2-label and adjacency-label)
+  // dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
+  // each (node1-label, node2-label)
   //
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(2, routeDb->mplsRoutes.size()); // node label route
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(2, routeDb->mplsRoutes.size()); // node label route
 
   //
   // Update adjacency database of node 1 by changing it's nexthops and verift
   // that update properly responds to the event
   //
-  *adjacencyDb1.adjacencies()[0].nextHopV6() =
+  adjacencyDb1.adjacencies()[0].nextHopV6() =
       toBinaryAddress("fe80::1234:b00c");
   {
     auto res =
@@ -1035,19 +1019,19 @@ TEST(SpfSolver, AdjacencyUpdate) {
   }
 
   //
-  // dump routes for both nodes, expect 4 route entries (1 unicast, 3 label) on
-  // each (node1-label, node2-label and adjacency-label)
+  // dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
+  // each (node1-label, node2-label)
   //
 
   routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(2, routeDb->mplsRoutes.size()); // node label route
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(2, routeDb->mplsRoutes.size()); // node label route
 
   //
   // Update adjacency database of node 2 by changing it's nexthops and verift
@@ -1063,40 +1047,19 @@ TEST(SpfSolver, AdjacencyUpdate) {
   }
 
   //
-  // dump routes for both nodes, expect 4 route entries (1 unicast, 3 label) on
-  // each (node1-label, node2-label and adjacency-label)
+  // dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
+  // each (node1-label, node2-label)
   //
 
   routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
+  EXPECT_EQ(2, routeDb->mplsRoutes.size()); // node label route
 
   routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
-  EXPECT_EQ(3, routeDb->mplsRoutes.size()); // node and adj route
-
-  //
-  // Change adjLabel. This should report route-attribute change only for node1
-  // and not for node2's adjLabel change
-  //
-
-  adjacencyDb1.adjacencies()[0].adjLabel() = 111;
-  {
-    auto res =
-        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
-    EXPECT_FALSE(res.topologyChanged);
-    EXPECT_TRUE(res.linkAttributesChanged);
-  }
-
-  adjacencyDb2.adjacencies()[0].adjLabel() = 222;
-  {
-    auto res =
-        linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName);
-    EXPECT_FALSE(res.topologyChanged);
-    EXPECT_TRUE(res.linkAttributesChanged);
-  }
+  EXPECT_EQ(2, routeDb->mplsRoutes.size()); // node label route
 
   // Change nodeLabel.
   adjacencyDb1.nodeLabel() = 11;
@@ -1128,8 +1091,7 @@ TEST(MplsRoutes, BasicTest) {
       nodeName,
       false /* disable v4 */,
       true /* enable segment label */,
-      true /* enable adj labels */,
-      false /* disable LFA */);
+      false /* disable best route selection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -1158,17 +1120,15 @@ TEST(MplsRoutes, BasicTest) {
 
   auto routeMap =
       getRouteMap(spfSolver, {"1", "2", "3"}, areaLinkStates, prefixState);
-  EXPECT_EQ(5, routeMap.size());
+  EXPECT_EQ(3, routeMap.size());
 
   // Validate 1's routes
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
 
   // Validate 2's routes (no node label route)
-  validateAdjLabelRoutes(routeMap, "2", {adj23});
 
   // Validate 3's routes
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", {adj32});
 }
 
 /**
@@ -1190,7 +1150,6 @@ TEST(BGPRedistribution, IgpMetric) {
       nodeName,
       false /* enableV4 */,
       true /* enable segment label */,
-      true /* enable adj labels */,
       true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
@@ -1338,7 +1297,6 @@ TEST(Decision, IgpCost) {
       nodeName,
       false /* enableV4 */,
       true /* enable segment label */,
-      true /* enable adj labels */,
       true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
@@ -1401,7 +1359,6 @@ TEST(Decision, BestRouteSelection) {
       nodeName,
       false /* enableV4 */,
       true /* enable segment label */,
-      true /* enable adj labels */,
       true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
@@ -1529,10 +1486,7 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
 
   std::string nodeName("1");
   SpfSolver spfSolver(
-      nodeName,
-      false /* disable v4 */,
-      true /* enable segment label */,
-      true /* enable adj labels */);
+      nodeName, false /* disable v4 */, true /* enable segment label */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -1587,10 +1541,7 @@ INSTANTIATE_TEST_CASE_P(
 TEST(ConnectivityTest, OverloadNodeTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(
-      nodeName,
-      false /* disable v4 */,
-      true /* enable segment label */,
-      true /* enable adj labels */);
+      nodeName, false /* disable v4 */, true /* enable segment label */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -1624,13 +1575,9 @@ TEST(ConnectivityTest, OverloadNodeTest) {
   // node-1 => node-2 (label + unicast)
   // node-2 => node-1, node-3 (label + unicast)
   // node-3 => node-2 (label + unicast)
-  //
-  // NOTE: Adjacency label route remains up regardless of overloaded status and
-  // there will be 4 of them
-  EXPECT_EQ(15, routeMap.size());
+  EXPECT_EQ(11, routeMap.size());
 
   // validate router 1
-
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops({createNextHopFromAdj(adj12, false, 10)}));
@@ -1641,10 +1588,8 @@ TEST(ConnectivityTest, OverloadNodeTest) {
           adj12, false, *adj12.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
-
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
       NextHops({createNextHopFromAdj(adj23, false, 10)}));
@@ -1662,10 +1607,8 @@ TEST(ConnectivityTest, OverloadNodeTest) {
           adj23, false, *adj23.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
-
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
       NextHops({createNextHopFromAdj(adj32, false, 10)}));
@@ -1676,7 +1619,6 @@ TEST(ConnectivityTest, OverloadNodeTest) {
           adj32, false, *adj32.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 }
 
 //
@@ -1691,10 +1633,7 @@ TEST(ConnectivityTest, OverloadNodeTest) {
 TEST(ConnectivityTest, CompatibilityNodeTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(
-      nodeName,
-      false /* disable v4 */,
-      true /* enable segment label */,
-      true /* enable adj labels */);
+      nodeName, false /* disable v4 */, true /* enable segment label */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
@@ -1728,11 +1667,11 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   auto routeMap =
       getRouteMap(spfSolver, {"1", "2", "3"}, areaLinkStates, prefixState);
 
-  // We only expect 6 unicast routes, 9 node label routes and 6 adjacency routes
+  // We only expect 6 unicast routes, 9 node label routes
   // node-1 => node-2, node-3
   // node-2 => node-1, node-3
   // node-3 => node-2, node-1
-  EXPECT_EQ(21, routeMap.size());
+  EXPECT_EQ(15, routeMap.size());
 
   // validate router 1
 
@@ -1756,7 +1695,6 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
           adj13_old, false, *adj13_old.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -1777,7 +1715,6 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
           adj23, false, *adj23.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 3
 
@@ -1798,7 +1735,6 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
           adj32, false, *adj32.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // adjacency update (remove adjacency) for node1
   adjacencyDb1 = createAdjDb("1", {adj12_old_2}, 0);
@@ -1835,12 +1771,11 @@ class SimpleRingMeshTopologyFixture
   CustomSetUp(
       bool useKsp2Ed,
       bool useNodeSegmentLabel,
-      bool useAdjLabel,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
     std::string nodeName("1");
-    spfSolver = std::make_unique<SpfSolver>(
-        nodeName, v4Enabled, useNodeSegmentLabel, useAdjLabel);
+    spfSolver =
+        std::make_unique<SpfSolver>(nodeName, v4Enabled, useNodeSegmentLabel);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13, adj14}, 1);
     adjacencyDb2 = createAdjDb("2", {adj21, adj23, adj24}, 2);
     adjacencyDb3 = createAdjDb("3", {adj31, adj32, adj34}, 3);
@@ -1937,7 +1872,6 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
   CustomSetUp(
       true /* useKsp2Ed */,
       true /* enable node segment label */,
-      true /* enable adj labels */,
       std::get<1>(GetParam()));
   auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
 
@@ -1994,7 +1928,6 @@ TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
            createNextHopFromAdj(adj14, v4Enabled, 20, push2)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   adjacencyDb3.isOverloaded() = true;
   auto& linkState = areaLinkStates.at(kTestingAreaName);
@@ -2030,12 +1963,11 @@ class SimpleRingTopologyFixture
   CustomSetUp(
       bool useKsp2Ed,
       bool useNodeSegmentLabel,
-      bool useAdjLabels,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
     std::string nodeName("1");
-    spfSolver = std::make_unique<SpfSolver>(
-        nodeName, v4Enabled, useNodeSegmentLabel, useAdjLabels);
+    spfSolver =
+        std::make_unique<SpfSolver>(nodeName, v4Enabled, useNodeSegmentLabel);
     adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
     adjacencyDb2 = createAdjDb("2", {adj21, adj24}, 2);
     adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
@@ -2143,18 +2075,14 @@ INSTANTIATE_TEST_CASE_P(
 // Verify SpfSolver finds the shortest path
 //
 TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* use node segment label */,
-      true /* use adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* use node segment label */);
   fb303::fbData->resetAllData();
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 2 = 8
-  EXPECT_EQ(36, routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   // validate router 1
   const auto counters = fb303::fbData->getCounters();
@@ -2185,7 +2113,6 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
       NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -2215,7 +2142,6 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
       NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
 
@@ -2245,7 +2171,6 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
       NextHops({createNextHopFromAdj(adj31, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
 
@@ -2275,7 +2200,6 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
            createNextHopFromAdj(adj43, false, 20, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 }
 
 //
@@ -2286,10 +2210,7 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
 // and no withdraw happened.
 //
 TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* use node segment label */,
-      true /* use adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* use node segment label */);
   fb303::fbData->resetAllData();
   // make node1's mpls label same as node2.
   adjacencyDb1.nodeLabel() = 2;
@@ -2342,17 +2263,13 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
 // Use the same topology, but test multi-path routing
 //
 TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* use node segment label */,
-      true /* use adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* use node segment label */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 2 = 8
-  EXPECT_EQ(36, routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   // validate router 1
 
@@ -2382,7 +2299,6 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
       NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -2412,7 +2328,6 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
       NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
 
@@ -2442,7 +2357,6 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
       NextHops({createNextHopFromAdj(adj31, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
 
@@ -2472,7 +2386,6 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj43, false, 20, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 }
 
 //
@@ -2482,7 +2395,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
   CustomSetUp(
       true /* useKsp2Ed */,
       true /* enable node segment label */,
-      true /* enable adj labels */,
       std::get<1>(GetParam()));
   fb303::fbData->resetAllData();
   auto routeMap = getRouteMap(
@@ -2490,9 +2402,8 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 2 = 8
   EXPECT_EQ(
-      (std::get<1>(GetParam()) == thrift::PrefixType::BGP ? 48 : 36),
+      (std::get<1>(GetParam()) == thrift::PrefixType::BGP ? 40 : 28),
       routeMap.size());
 
   const auto counters = fb303::fbData->getCounters();
@@ -2556,7 +2467,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
       NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -2590,7 +2500,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
       NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
 
@@ -2624,7 +2533,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
       NextHops({createNextHopFromAdj(adj31, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
 
@@ -2658,7 +2566,6 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
            createNextHopFromAdj(adj43, false, 20, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 
   // this is to test corner cases for traceEdgeDisjointPaths algorithm.
   // In this example, node 3 is overloaded, and link between node 1 and node 2
@@ -2690,10 +2597,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
 // verify all non-POP nodes find their closest POPs
 //
 TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* enable node segment label */,
-      true /* enable adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* enable node segment label */);
   // Advertise default prefixes from node-1 and node-4
   auto defaultRoutePrefix = v4Enabled ? "0.0.0.0/0" : "::/0";
   auto defaultRoute = toIpPrefix(defaultRoutePrefix);
@@ -2709,8 +2613,7 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
 
   // Unicast routes => 4 * (4 - 1) + 2 (default routes) = 14
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 2 = 8
-  EXPECT_EQ(38, routeMap.size());
+  EXPECT_EQ(30, routeMap.size());
 
   // validate router 1
   // no default route boz it's attached
@@ -2746,10 +2649,7 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
 // It will disconnect node-1 with node-4 but rests should be reachable
 //
 TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* enable node segment label */,
-      true /* enable adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* enable node segment label */);
   adjacencyDb2.isOverloaded() = true;
   adjacencyDb3.isOverloaded() = true;
   auto& linkState = areaLinkStates.at(kTestingAreaName);
@@ -2763,8 +2663,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
 
   // Unicast routes => 2 + 3 + 3 + 2 = 10
   // Node label routes => 3 + 4 + 4 + 3 = 14
-  // Adj label routes => 4 * 2 = 8
-  EXPECT_EQ(32, routeMap.size());
+  EXPECT_EQ(24, routeMap.size());
 
   // validate router 1
 
@@ -2783,7 +2682,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
       NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -2813,7 +2711,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
       NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
 
@@ -2843,7 +2740,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
       NextHops({createNextHopFromAdj(adj31, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
 
@@ -2862,7 +2758,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
       NextHops({createNextHopFromAdj(adj42, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 }
 
 //
@@ -2870,10 +2765,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
 // enabled. node-3 will get disconnected
 //
 TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* enable node segment label */,
-      true /* enable adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* enable node segment label */);
   adjacencyDb3.adjacencies()[0].isOverloaded() = true; // make adj31 overloaded
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
@@ -2884,8 +2776,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 2 = 8
-  EXPECT_EQ(36, routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   // validate router 1
 
@@ -2911,7 +2802,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -2935,7 +2825,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
   // no routes for router 3
@@ -2959,7 +2848,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj34, false, 30, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
   EXPECT_EQ(
@@ -2982,7 +2870,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj42, false, 20, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 
   // Now also make adj34 overloaded which will disconnect the node-3
   adjacencyDb3.adjacencies()[1].isOverloaded() = true;
@@ -2994,8 +2881,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 
   // Unicast routes => 2 + 2 + 0 + 2 = 6
   // Node label routes => 3 * 3 + 1 = 10
-  // Adj label routes => 4 * 2 = 8
-  EXPECT_EQ(24, routeMap.size());
+  EXPECT_EQ(16, routeMap.size());
 
   // validate router 1
 
@@ -3013,7 +2899,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -3031,12 +2916,10 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
   EXPECT_EQ(
@@ -3053,7 +2936,6 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       NextHops({createNextHopFromAdj(adj42, false, 20, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 }
 
 /* add this block comment to suppress multiline breaker "\"s below
@@ -3083,11 +2965,10 @@ class ParallelAdjRingTopologyFixture
   CustomSetUp(
       bool useKsp2Ed,
       bool useNodeSegmentLabel,
-      bool useAdjLabels,
       std::optional<thrift::PrefixType> prefixType = std::nullopt) {
     std::string nodeName("1");
-    spfSolver = std::make_unique<SpfSolver>(
-        nodeName, false, useNodeSegmentLabel, useAdjLabels);
+    spfSolver =
+        std::make_unique<SpfSolver>(nodeName, false, useNodeSegmentLabel);
     // R1 -> R2
     adj12_1 =
         createAdjacency("2", "2/1", "1/1", "fe80::2:1", "192.168.2.1", 11, 201);
@@ -3195,17 +3076,13 @@ INSTANTIATE_TEST_CASE_P(
     ::testing::Values(std::nullopt, thrift::PrefixType::BGP));
 
 TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* enable segment label */,
-      true /* enable adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* enable segment label */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 4 = 16
-  EXPECT_EQ(44, routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   // validate router 1
   EXPECT_EQ(
@@ -3238,7 +3115,6 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
            createNextHopFromAdj(adj12_1, false, 11, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
   EXPECT_EQ(
@@ -3271,7 +3147,6 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
            createNextHopFromAdj(adj21_1, false, 11, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
   EXPECT_EQ(
@@ -3298,7 +3173,6 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
       NextHops({createNextHopFromAdj(adj31_1, false, 11, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
   EXPECT_EQ(
@@ -3325,24 +3199,19 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
            createNextHopFromAdj(adj43_1, false, 22, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 }
 
 //
 // Use the same topology, but test multi-path routing
 //
 TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
-  CustomSetUp(
-      false /* useKsp2Ed */,
-      true /* enable segment label */,
-      true /* enable adj labels */);
+  CustomSetUp(false /* useKsp2Ed */, true /* enable segment label */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 4 = 16
-  EXPECT_EQ(44, routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   // validate router 1
 
@@ -3379,7 +3248,6 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj12_2, false, 11, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "1", *adjacencyDb1.adjacencies());
 
   // validate router 2
 
@@ -3415,7 +3283,6 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj21_2, false, 11, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "2", *adjacencyDb2.adjacencies());
 
   // validate router 3
 
@@ -3445,7 +3312,6 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
       NextHops({createNextHopFromAdj(adj31_1, false, 11, labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "3", *adjacencyDb3.adjacencies());
 
   // validate router 4
 
@@ -3475,7 +3341,6 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj43_1, false, 22, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-  validateAdjLabelRoutes(routeMap, "4", *adjacencyDb4.adjacencies());
 }
 
 //
@@ -3484,10 +3349,7 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
 TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
   std::optional<thrift::PrefixType> prefixType = GetParam();
   CustomSetUp(
-      true /* useKsp2Ed */,
-      true /* enable segment label */,
-      true /* enable adj labels */,
-      prefixType);
+      true /* useKsp2Ed */, true /* enable segment label */, prefixType);
 
   auto pushCode = thrift::MplsActionCode::PUSH;
   auto push1 =
@@ -3592,8 +3454,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  // Adj label routes => 4 * 3 = 16
-  EXPECT_EQ((GetParam() == thrift::PrefixType::BGP ? 56 : 44), routeMap.size());
+  EXPECT_EQ((GetParam() == thrift::PrefixType::BGP ? 40 : 28), routeMap.size());
 
   // validate router 1
 
@@ -3750,11 +3611,7 @@ class GridTopologyFixture : public ::testing::TestWithParam<int> {
  public:
   GridTopologyFixture()
       : spfSolver(
-            nodeName,
-            false,
-            true /* enable node segment label */,
-            true /* enable adj segment labels */,
-            false) {}
+            nodeName, false, true /* enable node segment label */, false) {}
 
  protected:
   void
@@ -3797,8 +3654,8 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
   // unicastRoutes => n^2 * (n^2 - 1)
   // node label routes => n^2 * n^2
   // adj label routes => 2 * 2 * n * (n - 1) (each link is reported twice)
-  // Total => 2n^4 + 3n^2 - 4n
-  EXPECT_EQ(2 * n * n * n * n + 3 * n * n - 4 * n, routeMap.size());
+  // Total => 2n^4 - n^2
+  EXPECT_EQ(2 * n * n * n * n - n * n, routeMap.size());
 
   int src{0}, dst{0};
   NextHops nextHops;
@@ -3839,7 +3696,7 @@ TEST(GridTopology, StressTest) {
     return;
   }
   std::string nodeName("1");
-  SpfSolver spfSolver(nodeName, false, true, true, true);
+  SpfSolver spfSolver(nodeName, false, true, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
