@@ -175,9 +175,6 @@ class Config {
 
   void populateAreaConfig();
 
-  void checkAdjacencyLabelConfig(
-      const openr::thrift::AreaConfig& areaConf) const;
-
   void checkNodeSegmentLabelConfig(
       const openr::thrift::AreaConfig& areaConf) const;
 
@@ -216,14 +213,6 @@ class Config {
   std::chrono::milliseconds
   getKvStoreKeyTtl() const {
     return std::chrono::milliseconds(*config_.kvstore_config()->key_ttl_ms());
-  }
-
-  //
-  // decision
-  //
-  bool
-  isBgpRouteProgrammingEnabled() const {
-    return *config_.decision_config()->enable_bgp_route_programming();
   }
 
   //

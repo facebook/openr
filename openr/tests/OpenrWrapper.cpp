@@ -46,7 +46,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // decision config
   tConfig.decision_config()->debounce_min_ms() = 10;
   tConfig.decision_config()->debounce_max_ms() = 250;
-  tConfig.decision_config()->enable_bgp_route_programming() = true;
 
   // prefix allocation config
   tConfig.enable_prefix_allocation() = true;

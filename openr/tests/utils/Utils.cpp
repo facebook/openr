@@ -150,13 +150,6 @@ getBasicOpenrConfig(
   config.spark_config() = sparkConfig;
 
   /*
-   * [OVERRIDE] thrift::DecisionConfig
-   */
-  openr::thrift::DecisionConfig decisionConfig;
-  decisionConfig.enable_bgp_route_programming() = true;
-  config.decision_config() = decisionConfig;
-
-  /*
    * [OVERRIDE] thrift::AreaConfig
    */
   if (areaCfg.empty()) {

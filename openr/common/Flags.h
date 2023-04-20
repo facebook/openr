@@ -16,7 +16,6 @@ DECLARE_string(config);
 DECLARE_bool(override_drain_state);
 
 // migration workflow flags
-DECLARE_bool(enable_bgp_route_programming);
 DECLARE_int32(bgp_thrift_port);
 
 // bgp stateful ha

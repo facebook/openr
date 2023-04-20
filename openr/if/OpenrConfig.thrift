@@ -149,9 +149,6 @@ struct DecisionConfig {
   /** Decision time to save rib policy  in frequent setRibPolicy requests
   (in milliseconds). */
   4: i32 save_rib_policy_max_ms = 60000;
-
-  /** Knob to enable/disable BGP route programming. */
-  101: bool enable_bgp_route_programming = true;
 }
 
 struct LinkMonitorConfig {

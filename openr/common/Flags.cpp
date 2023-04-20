@@ -13,10 +13,6 @@ DEFINE_bool(
     false,
     "If set, will override persistent store drain state with value passed in "
     "--assume_drained");
-DEFINE_bool(
-    enable_bgp_route_programming,
-    true,
-    "Enable programming routes with prefix type BGP to the system FIB");
 DEFINE_int32(bgp_thrift_port, 2029, "port for thrift service");
 DEFINE_string(
     spr_ha_state_file,

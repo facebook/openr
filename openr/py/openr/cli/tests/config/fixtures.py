@@ -47,8 +47,7 @@ OPENR_CONFIG_STR = r"""
   },
   "decision_config": {
     "debounce_max_ms": 250,
-    "debounce_min_ms": 10,
-    "enable_bgp_route_programming": true
+    "debounce_min_ms": 10
   },
   "domain": "p002_f01_vll2",
   "enable_best_route_selection": true,
