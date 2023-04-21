@@ -160,11 +160,6 @@ class Config {
   }
 
   bool
-  isUcmpEnabled() const {
-    return *config_.enable_ucmp();
-  }
-
-  bool
   isDryrun() const {
     return config_.dryrun().value_or(false);
   }
