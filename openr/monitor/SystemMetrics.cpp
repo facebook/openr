@@ -8,6 +8,7 @@
 #include "openr/monitor/SystemMetrics.h"
 
 #include <folly/logging/xlog.h>
+#include <re2/re2.h>
 
 namespace openr {
 

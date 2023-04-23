@@ -8,6 +8,7 @@
 #include <fmt/core.h>
 
 #include <openr/common/LsdbTypes.h>
+#include <re2/re2.h>
 
 namespace openr {
 

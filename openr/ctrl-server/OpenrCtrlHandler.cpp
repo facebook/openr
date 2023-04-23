@@ -6,6 +6,7 @@
  */
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
+#include <re2/re2.h>
 
 #if __has_include("filesystem")
 #include <filesystem>

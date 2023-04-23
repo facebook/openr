@@ -9,6 +9,7 @@
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Types.h>
+#include <re2/re2.h>
 
 namespace openr {
 
