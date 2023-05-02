@@ -700,54 +700,69 @@ TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
 // Start LinkMonitor and ensure drain state are set correctly according to
 // parameters
 TEST_F(LinkMonitorTestFixture, DrainState) {
-  // 1. default setup:
-  // persistent store == null, assume_drain = false, override_drain_state =
-  // isOverloaded should be read from assume_drain, = false
-  auto res = linkMonitor->semifuture_getInterfaces().get();
-  ASSERT_NE(nullptr, res);
-  EXPECT_FALSE(*res->isOverloaded());
-
-  // 2. restart with persistent store info
-  // override_drain_state = false, persistent store has overload = true
-  // isOverloaded should be read from persistent store, = true
-  stopLinkMonitor();
-
+  /*
+   * Test 1: start with empty persistent store
+   *  - persistent store is empty, assume_drained = false
+   * Expect:
+   *  - `isOverloaded` should be read from assume_drained = false
+   */
   {
+    auto res = linkMonitor->semifuture_getInterfaces().get();
+    ASSERT_NE(nullptr, res);
+    EXPECT_FALSE(*res->isOverloaded());
+  }
+
+  /*
+   * Test 2: restart with non-empty persistent store
+   *  - manually set persistent store with isOverloaded = true
+   * Expect:
+   *  - `isOverloaded` should be read from persistent store
+   */
+  {
+    stopLinkMonitor();
+
     // Save isOverloaded to be true in config store
     thrift::LinkMonitorState state;
     state.isOverloaded() = true;
     auto resp = configStore->storeThriftObj(kConfigKey, state).get();
     EXPECT_EQ(folly::Unit(), resp);
+
+    // Create new neighbor update queue. Previous one is closed
+    neighborUpdatesQueue.open();
+    initializationEventQueue.open();
+    nlSock->openQueue();
+    kvStoreWrapper->openQueue();
+    createLinkMonitor(false /*overrideDrainState*/);
+
+    auto res = linkMonitor->semifuture_getInterfaces().get();
+    ASSERT_NE(nullptr, res);
+    EXPECT_TRUE(*res->isOverloaded());
   }
 
-  // Create new neighbor update queue. Previous one is closed
-  neighborUpdatesQueue.open();
-  initializationEventQueue.open();
-  nlSock->openQueue();
-  kvStoreWrapper->openQueue();
-  createLinkMonitor(false /*overrideDrainState*/);
-  // checkNextAdjPub("adj:node-1");
+  /*
+   * Test 3: restart with empty persistent store again.
+   *  - persistent store is empty, assume_drained = false
+   * Expect:
+   *  - `isOverloaded` should be read from assume_drained = false
+   */
+  {
+    stopLinkMonitor();
 
-  res = linkMonitor->semifuture_getInterfaces().get();
-  ASSERT_NE(nullptr, res);
-  EXPECT_TRUE(*res->isOverloaded());
+    // Erase data from config store
+    auto resp = configStore->erase(kConfigKey).get();
+    EXPECT_EQ(true, resp);
 
-  // 3. restart with override_drain_state = true
-  // override_drain_state = true, assume_drain = false, persistent store has
-  // overload = true isOverloaded should be read from assume_drain store, =
-  // false
-  stopLinkMonitor();
+    // Create new neighbor update queue. Previous one is closed
+    neighborUpdatesQueue.open();
+    initializationEventQueue.open();
+    nlSock->openQueue();
+    kvStoreWrapper->openQueue();
+    createLinkMonitor(true /*overrideDrainState*/);
 
-  // Create new neighbor update queue. Previous one is closed
-  neighborUpdatesQueue.open();
-  initializationEventQueue.open();
-  nlSock->openQueue();
-  kvStoreWrapper->openQueue();
-  createLinkMonitor(true /*overrideDrainState*/);
-
-  res = linkMonitor->semifuture_getInterfaces().get();
-  ASSERT_NE(nullptr, res);
-  EXPECT_FALSE(*res->isOverloaded());
+    auto res = linkMonitor->semifuture_getInterfaces().get();
+    ASSERT_NE(nullptr, res);
+    EXPECT_FALSE(*res->isOverloaded());
+  }
 }
 
 // receive neighbor up/down events from "spark"

@@ -180,26 +180,10 @@ LinkMonitor::LinkMonitor(
    * Load link-monitor state from previous incarnation. This includes:
    *  - drain/undrain/softdrain state;
    *  - link/node overload status;
-   *  - allocated node label;
    *  - etc.;
    */
-  XLOG(INFO) << "Loading link-monitor state";
-
   auto state =
       configStore_->loadThriftObj<thrift::LinkMonitorState>(kConfigKey).get();
-  // If assumeDrained is set, we will assume drained if no drain state
-  // is found in the persitentStore
-  auto assumeDrained = config->isAssumeDrained();
-  if (state.hasValue()) {
-    XLOG(INFO) << "Successfully loaded link-monitor state from disk.";
-    state_ = state.value();
-    printLinkMonitorState(state_);
-  } else {
-    XLOG(INFO) << fmt::format(
-        "[Drain Status] Failed to load link-monitor-state from disk. Setting node as {}",
-        assumeDrained ? "DRAINED" : "UNDRAINED");
-    state_.isOverloaded() = assumeDrained;
-  }
 
   /*
    * [Drain/Undrain/Softdrain Status]
@@ -209,7 +193,20 @@ LinkMonitor::LinkMonitor(
    *  - nodeMetricIncrementVal: this is the SOFT_DRAIN value. The Open/R
    *                            instance will add metric to the adj database;
    */
-  if (overrideDrainState) {
+  if (state.hasValue()) {
+    XLOG(INFO) << "Successfully loaded link-monitor state from disk.";
+    state_ = state.value();
+    printLinkMonitorState(state_);
+  } else {
+    /*
+     * In case that persistent store can't be read, `assumeDrained` flag will
+     * be the back-up default value Open/R uses upon restarting.
+     *
+     * NOTE:
+     * Depend on if soft-drain is enabled or not, Open/R will choose different
+     * settings to start with.
+     */
+    auto assumeDrained = config->isAssumeDrained();
     if (config->isSoftdrainEnabled()) {
       const auto nodeInc = config->getNodeMetricIncrement();
       state_.nodeMetricIncrementVal() = assumeDrained ? nodeInc : 0;
@@ -217,18 +214,56 @@ LinkMonitor::LinkMonitor(
       // ATTN: node should NOT be soft and hard drained at the same time
       state_.isOverloaded() = false;
 
-      XLOG(INFO) << fmt::format(
-          "[Drain Status] Override node soft-drain increment value at startup: {}",
-          *state_.nodeMetricIncrementVal());
+      XLOG(INFO)
+          << "[Drain Status] Failed to load persistent store from file system. "
+          << fmt::format(
+                 "Set node soft-drain increment value: {}",
+                 *state_.nodeMetricIncrementVal());
     } else {
       state_.isOverloaded() = assumeDrained;
 
       // ATTN: node should NOT be soft and hard drained at the same time
       state_.nodeMetricIncrementVal() = 0;
 
-      XLOG(INFO) << fmt::format(
-          "[Drain Status] Override node as {}",
-          assumeDrained ? "DRAINED" : "UNDRAINED");
+      XLOG(INFO)
+          << "[Drain Status] Failed to load persistent store from file system. "
+          << fmt::format(
+                 "Set node hard-drain state: {}",
+                 *state_.isOverloaded() ? "DRAINED" : "UNDRAINED");
+    }
+  }
+
+  /*
+   * NOTE:
+   * In case there is a discrepancy between persistent store and file system
+   * flag set by drainer. Open/R will always trust fs flag over persistent
+   * store(can be potentially corrupted/can't read due to software iisue/etc.)
+   */
+  if (config->isDrainerFlagInUse()) {
+    if (config->isUndrainedPathExist()) {
+      // Device is undrained
+      state_.nodeMetricIncrementVal() = 0;
+      state_.isOverloaded() = false;
+    } else {
+      // Device is hard-drained/soft-drained
+      if (config->isSoftdrainEnabled()) {
+        const auto nodeInc = config->getNodeMetricIncrement();
+        state_.nodeMetricIncrementVal() = nodeInc;
+
+        // ATTN: node should NOT be soft and hard drained at the same time
+        state_.isOverloaded() = false;
+
+        XLOG(INFO) << fmt::format(
+            "[Drain Status] Override node soft-drain increment value: {}",
+            nodeInc);
+      } else {
+        // ATTN: node should NOT be soft and hard drained at the same time
+        state_.nodeMetricIncrementVal() = 0;
+
+        state_.isOverloaded() = true;
+
+        XLOG(INFO) << "[Drain Status] Override node hard-drain state: DRAINED";
+      }
     }
   }
 
