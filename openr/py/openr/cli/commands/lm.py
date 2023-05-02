@@ -6,7 +6,7 @@
 
 
 import sys
-from builtins import object
+from string import ascii_letters
 from typing import Any, Dict, List, Optional, Sequence
 
 import click
@@ -15,8 +15,33 @@ from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.OpenrCtrl.thrift_types import AdjacenciesFilter
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
-from openr.thrift.Types.thrift_types import DumpLinksReply
+from openr.thrift.Types.thrift_types import DumpLinksReply, InterfaceDetails
 from openr.utils import ipnetwork, printing
+
+
+def interface_key(interface: str) -> int:
+    """
+    Used for sorting the interfaces by slot/sub-slot/port
+    Normally strings are sorted in alphabetical order,
+    sorted(['et1_1_1', 'et1_2_1', 'et1_10_1', 'et1_11_1'])
+    gives ['et1_10_1', 'et1_11_1', 'et1_1_1', 'et1_2_1']
+    because alphabetically 'et1_10_1' < 'et1_1_1'.
+    To avoid this, this function calculates the key by using
+    the numerical values, so we sort by slot then sub-slot then port.
+    interface_key('et1_1_1') < interface_key('et1_10_1')
+    Formula: key(etA_B_C) = A * 100^2 + B * 100 + C * 1
+    """
+    try:
+        # assume that separator is constant '_'
+        items = interface.lstrip(ascii_letters).split("_")
+        key = 0
+        factor = 1
+        for unit in items[::-1]:
+            key += int(unit) * factor
+            factor *= 100
+        return key
+    except ValueError:
+        return hash(interface)
 
 
 class LMCmdBase(OpenrCtrlCmd):
@@ -290,27 +315,33 @@ class LMCmdBase(OpenrCtrlCmd):
         print(utils.json_dumps(links_dict))
 
     @classmethod
-    def build_table_rows(cls, interfaces: Dict[str, object]) -> List[List[str]]:
+    def build_table_rows(
+        cls, interfaces: Dict[str, InterfaceDetails]
+    ) -> List[List[str]]:
         rows = []
-        for (k, v) in sorted(interfaces.items()):
-            raw_row = cls.build_table_row(k, v)
-            addrs = raw_row[3]
-            raw_row[3] = ""
-            rows.append(raw_row)
-            for addrStr in addrs:
-                rows.append(["", "", "", addrStr])
+        for interface in sorted(interfaces, key=interface_key):
+            details = interfaces[interface]
+            row = cls.build_table_row(interface, details)
+            rows.append(row)
         return rows
 
     @staticmethod
-    def build_table_row(k: str, v: object) -> List[Any]:
-        # pyre-fixme[16]: `object` has no attribute `metricOverride`.
-        metric_override = v.metricOverride if v.metricOverride else ""
-        # pyre-fixme[16]: `object` has no attribute `info`.
+    def build_table_row(k: str, v: InterfaceDetails) -> List[Any]:
+        metric_override = ""
+        if v.metricOverride:
+            # [TO BE DEPRECATED]
+            metric_override = v.metricOverride
+        if v.linkMetricIncrementVal > 0:
+            metric_override = v.linkMetricIncrementVal
+        if v.isOverloaded:
+            metric_override = (
+                click.style("Overloaded", fg="red")
+                if utils.is_color_output_supported()
+                else "Overloaded"
+            )
         if v.info.isUp:
             backoff_sec = int(
-                # pyre-fixme[16]: `object` has no attribute `linkFlapBackOffMs`.
-                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0)
-                / 1000
+                (v.linkFlapBackOffMs if v.linkFlapBackOffMs else 0) / 1000
             )
             if backoff_sec == 0:
                 state = "Up"
@@ -324,18 +355,12 @@ class LMCmdBase(OpenrCtrlCmd):
                 if utils.is_color_output_supported()
                 else "Down"
             )
-        # pyre-fixme[16]: `object` has no attribute `isOverloaded`.
-        if v.isOverloaded:
-            metric_override = (
-                click.style("Overloaded", fg="red")
-                if utils.is_color_output_supported()
-                else "Overloaded"
-            )
         addrs = []
         for prefix in v.info.networks:
             addrStr = ipnetwork.sprint_addr(prefix.prefixAddress.addr)
             addrs.append(addrStr)
-        row = [k, state, metric_override, addrs]
+        addresses = " ".join(addrs)
+        row = [k, state, metric_override, addresses]
         return row
 
     @classmethod

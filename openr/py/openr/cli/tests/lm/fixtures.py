@@ -78,13 +78,7 @@ LM_LINKS_EXPECTED_OPENR_RIGHT_STDOUT = """
 == Node Overload: NO, Node Metric Increment: 0  ==
 
 Interface    Status    Metric Override    Addresses
------------  --------  -----------------  -------------------------
-lo           Up
-                                          127.0.0.1
-                                          10.6.9.2
-                                          fd00:2::
-                                          ::1
-right0       Up
-                                          fd00::2
-                                          fe80::50ef:deff:fe4c:d4f6
+-----------  --------  -----------------  ---------------------------------
+right0       Up                           fd00::2 fe80::50ef:deff:fe4c:d4f6
+lo           Up                           127.0.0.1 10.6.9.2 fd00:2:: ::1
 """
