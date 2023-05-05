@@ -489,8 +489,7 @@ main(int argc, char** argv) {
           logSampleQueue,
           kvRequestQueue,
           std::move(linkMonitorNeighborUpdatesQueueReader),
-          std::move(linkMonitorNetlinkEventsQueueReader),
-          FLAGS_override_drain_state));
+          std::move(linkMonitorNetlinkEventsQueueReader)));
   watchdog->addQueue(interfaceUpdatesQueue, "interfaceUpdatesQueue");
   watchdog->addQueue(peerUpdatesQueue, "peerUpdatesQueue");
 

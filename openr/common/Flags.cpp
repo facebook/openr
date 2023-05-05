@@ -8,11 +8,6 @@
 #include <openr/common/Flags.h>
 
 DEFINE_string(config, "", "OpenR config file path");
-DEFINE_bool(
-    override_drain_state,
-    false,
-    "If set, will override persistent store drain state with value passed in "
-    "--assume_drained");
 DEFINE_int32(bgp_thrift_port, 2029, "port for thrift service");
 DEFINE_string(
     spr_ha_state_file,

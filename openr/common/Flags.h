@@ -12,9 +12,6 @@
 // openr config file
 DECLARE_string(config);
 
-// drain workflow flags
-DECLARE_bool(override_drain_state);
-
 // migration workflow flags
 DECLARE_int32(bgp_thrift_port);
 

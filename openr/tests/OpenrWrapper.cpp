@@ -137,8 +137,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       logSampleQueue_,
       kvRequestQueue_,
       neighborUpdatesQueue_.getReader(),
-      nlSock_->getReader(),
-      false /* overrideDrainState */);
+      nlSock_->getReader());
 
   //
   // create monitor

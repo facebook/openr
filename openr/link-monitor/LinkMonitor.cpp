@@ -108,8 +108,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
     messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
-    messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue,
-    bool overrideDrainState)
+    messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue)
     : nodeId_(config->getNodeName()),
       enablePerfMeasurement_(
           *config->getLinkMonitorConfig().enable_perf_measurement()),

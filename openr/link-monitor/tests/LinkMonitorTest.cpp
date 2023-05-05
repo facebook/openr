@@ -219,7 +219,7 @@ class LinkMonitorTestFixture : public testing::Test {
     createPrefixManager();
 
     // start a link monitor
-    createLinkMonitor(true /* overrideDrainState */);
+    createLinkMonitor();
   }
 
   void
@@ -374,7 +374,7 @@ class LinkMonitorTestFixture : public testing::Test {
   }
 
   void
-  createLinkMonitor(bool overrideDrainState = false) {
+  createLinkMonitor() {
     linkMonitor = std::make_unique<LinkMonitor>(
         config,
         nlSock.get(),
@@ -385,8 +385,7 @@ class LinkMonitorTestFixture : public testing::Test {
         logSampleQueue,
         kvRequestQueue,
         neighborUpdatesQueue.getReader(),
-        nlSock->getReader(),
-        overrideDrainState);
+        nlSock->getReader());
 
     linkMonitorThread = std::make_unique<std::thread>([this]() {
       folly::setThreadName("LinkMonitor");
@@ -732,7 +731,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
     initializationEventQueue.open();
     nlSock->openQueue();
     kvStoreWrapper->openQueue();
-    createLinkMonitor(false /*overrideDrainState*/);
+    createLinkMonitor();
 
     auto res = linkMonitor->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
@@ -757,7 +756,7 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
     initializationEventQueue.open();
     nlSock->openQueue();
     kvStoreWrapper->openQueue();
-    createLinkMonitor(true /*overrideDrainState*/);
+    createLinkMonitor();
 
     auto res = linkMonitor->semifuture_getInterfaces().get();
     ASSERT_NE(nullptr, res);
@@ -2225,8 +2224,7 @@ TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
         logSampleQueue,
         kvRequestQueue,
         neighborUpdatesQueue.getReader(),
-        nlSock->getReader(),
-        false /* overrideDrainState */);
+        nlSock->getReader());
     linkMonitors.emplace_back(std::move(lm));
 
     auto lmThread =
