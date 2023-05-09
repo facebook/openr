@@ -397,27 +397,6 @@ struct LabelRange {
   2: i32 end_label;
 }
 
-enum SegmentRoutingAdjLabelType {
-  /**
-   * Disable adjacency label allocation.
-   */
-  DISABLED = 0,
-  /**
-   * Automatic allocation of adjacency labels and use
-   * interface ifIndex to generate unique adj label.
-   */
-  AUTO_IFINDEX = 1,
-}
-
-struct SegmentRoutingAdjLabel {
-  1: SegmentRoutingAdjLabelType sr_adj_label_type;
-  /**
-   * The range of labels to assign adjacency labels from
-   * if SegmentRoutingAdjLabelType is AUTO_IFINDEX.
-   */
-  2: LabelRange adj_label_range;
-}
-
 enum SegmentRoutingNodeLabelType {
   /**
    * Current way of allocation. Needs range parameter.
@@ -450,17 +429,6 @@ struct SegmentRoutingNodeLabel {
    * sr_node_label_type is AUTO.
    */
   3: optional LabelRange node_segment_label_range;
-} (cpp.minimize_padding)
-
-struct SegmentRoutingConfig {
-  /**
-   * Specifies how adj segment label should be allocated.
-   * This feature is turned off if:
-   *  (a) sr_adj_label is not specified in config.
-   *  (b) type is sr_adj_label.SegmentRoutingAdjLabelType
-   *      is DISABLE
-   */
-  2: optional SegmentRoutingAdjLabel sr_adj_label (deprecated);
 } (cpp.minimize_padding)
 
 /**
@@ -543,15 +511,6 @@ struct AreaConfig {
    * should be unique per device per area.
    */
   8: optional SegmentRoutingNodeLabel area_sr_node_label;
-
-  /**
-   * The way adjacency segment label should be allocated.
-   * This feature is turned off if:
-   *  (a) sr_adj_label is not specified in config.
-   *  (b) type is sr_adj_label.SegmentRoutingAdjLabelType
-   *      is DISABLE
-   */
-  9: optional SegmentRoutingAdjLabel sr_adj_label;
 } (cpp.minimize_padding)
 
 /**
@@ -811,11 +770,6 @@ struct OpenrConfig {
    * established KvStore Peer Sync Events.
    */
   55: i32 adj_hold_time_s = 4;
-
-  /**
-   * Config for segment routing.
-   */
-  56: optional SegmentRoutingConfig segment_routing_config;
 
   /**
    * Delay in milliseconds for route deletion. Route withdrawal would not get

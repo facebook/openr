@@ -41,25 +41,6 @@ getAreaConfig(const std::string& areaId) {
   return area;
 }
 
-openr::thrift::SegmentRoutingConfig
-getSegmentRoutingConfig() {
-  openr::thrift::SegmentRoutingConfig segment_routing_config;
-  openr::thrift::SegmentRoutingAdjLabel adj_segment_label;
-
-  // adj segment label range
-  openr::thrift::LabelRange adj_label_range;
-  adj_label_range.start_label() = openr::MplsConstants::kSrLocalRange.first;
-  adj_label_range.end_label() = openr::MplsConstants::kSrLocalRange.second;
-  adj_segment_label.sr_adj_label_type() =
-      openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-  adj_segment_label.adj_label_range() = adj_label_range;
-
-  // segment routing config
-  segment_routing_config.sr_adj_label() = adj_segment_label;
-
-  return segment_routing_config;
-}
-
 const std::string myArea = "myArea";
 
 } // namespace
@@ -615,8 +596,6 @@ TEST(ConfigTest, LinkMonitorGetter) {
 
 TEST(ConfigTest, ToThriftKvStoreConfig) {
   auto tConfig = getBasicOpenrConfig();
-  const auto& srConf = getSegmentRoutingConfig();
-  tConfig.segment_routing_config() = srConf;
   auto config = Config(tConfig);
 
   EXPECT_NO_THROW(config.toThriftKvStoreConfig());

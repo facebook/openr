@@ -219,19 +219,6 @@ class Config {
   }
 
   //
-  // segment routing
-  //
-  const thrift::SegmentRoutingConfig&
-  getSegmentRoutingConfig() const {
-    return *config_.segment_routing_config();
-  }
-
-  bool
-  isSegmentRoutingConfigured() const {
-    return config_.segment_routing_config().has_value();
-  }
-
-  //
   // neighbor-monitor
   //
   bool
