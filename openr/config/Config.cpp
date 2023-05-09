@@ -19,7 +19,6 @@
 #include <re2/re2.h>
 
 using apache::thrift::util::enumName;
-using openr::thrift::PrefixAllocationMode;
 using openr::thrift::PrefixForwardingAlgorithm;
 using openr::thrift::PrefixForwardingType;
 

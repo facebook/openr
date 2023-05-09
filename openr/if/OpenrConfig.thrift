@@ -308,50 +308,6 @@ struct ThriftClientConfig {
   2: VerifyServerType verify_server_type;
 }
 
-enum PrefixAllocationMode {
-  /** Looks for seed_prefix in kvstore and elects a subprefix */
-  DYNAMIC_LEAF_NODE = 0,
-  /** Elects subprefix from configured seed_prefix */
-  DYNAMIC_ROOT_NODE = 1,
-  /** Looks for static allocation key in kvstore and use the prefix */
-  STATIC = 2,
-}
-
-struct PrefixAllocationConfig {
-  /**
-   * Loopback address to which auto elected prefix will be assigned if enabled
-   */
-  1: string loopback_interface = "lo";
-  /**
-   * If set to true along with enable_prefix_allocation, second valid IP address
-   * of the block will be assigned onto loopback_interface.
-   */
-  2: bool set_loopback_addr = false;
-  /**
-   * Whenever new address is elected for a node, before assigning it to
-   * interface all previously allocated prefixes or other global prefixes will
-   * be overridden with the new one. Use it with care!
-   */
-  3: bool override_loopback_addr = false;
-
-  /**
-   * If PrefixAllocationMode is DYNAMIC_ROOT_NODE, seed_prefix and
-   * allocate_prefix_len needs to be filled.
-   */
-  4: PrefixAllocationMode prefix_allocation_mode;
-  /**
-   * In order to elect a prefix for the node a super prefix to elect from is
-   * required. This is only applicable when enable_prefix_allocation is set to
-   * true. e.g. "face:b00c::/64"
-   */
-  5: optional string seed_prefix;
-  /**
-   * Block size of allocated prefix in terms of it’s prefix length. If this is
-   * set as 80, /80 prefix will be elected for a node. e.g. face:b00c:0:0:1234::/80
-   */
-  6: optional i32 allocate_prefix_len;
-}
-
 struct OriginatedPrefix {
   1: string prefix;
 
@@ -636,14 +592,6 @@ struct OpenrConfig {
    */
   18: optional bool enable_watchdog;
   19: optional WatchdogConfig watchdog_config;
-
-  /**
-   * Enable prefix allocator to elect and assign a unique prefix for the node.
-   * You will need to specify other configuration parameters in
-   * prefix_allocation_config.
-   */
-  20: optional bool enable_prefix_allocation;
-  21: optional PrefixAllocationConfig prefix_allocation_config;
 
   /** TCP port on which FibService will be listening. */
   23: i32 fib_port;

@@ -47,16 +47,6 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   tConfig.decision_config()->debounce_min_ms() = 10;
   tConfig.decision_config()->debounce_max_ms() = 250;
 
-  // prefix allocation config
-  tConfig.enable_prefix_allocation() = true;
-  thrift::PrefixAllocationConfig pfxAllocationConf;
-  pfxAllocationConf.loopback_interface() = "";
-  pfxAllocationConf.prefix_allocation_mode() =
-      thrift::PrefixAllocationMode::DYNAMIC_ROOT_NODE;
-  pfxAllocationConf.seed_prefix() = "fc00:cafe:babe::/62";
-  pfxAllocationConf.allocate_prefix_len() = 64;
-  tConfig.prefix_allocation_config() = std::move(pfxAllocationConf);
-
   // watchdog
   tConfig.enable_watchdog() = true;
   thrift::WatchdogConfig watchdogConf;
