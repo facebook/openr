@@ -65,8 +65,7 @@ openr::thrift::AreaConfig createAreaConfig(
     const std::string& areaId,
     const std::vector<std::string>& neighborRegexes,
     const std::vector<std::string>& interfaceRegexes,
-    const std::optional<std::string>& policy = std::nullopt,
-    const bool enableAdjLabels = false);
+    const std::optional<std::string>& policy = std::nullopt);
 
 /*
  * Util function to genearate basic Open/R config in UT env.
@@ -77,8 +76,7 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
     bool enableV4 = true,
     bool enableSegmentRouting = false,
     bool dryrun = true,
-    bool enableV4OverV6Nexthop = false,
-    bool enableAdjLabels = false);
+    bool enableV4OverV6Nexthop = false);
 
 std::vector<thrift::PrefixEntry> generatePrefixEntries(
     const PrefixGenerator& prefixGenerator, uint32_t num);

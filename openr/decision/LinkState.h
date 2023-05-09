@@ -343,14 +343,6 @@ class LinkState {
   SpfResult const& getSpfResult(
       const std::string& nodeName, bool useLinkMetric = true) const;
 
-  // API to resolve UCMP weights for all node's on the shortest path
-  // between a root node and a list of weighted leaf nodes.
-  UcmpResult resolveUcmpWeights(
-      const SpfResult& spfGraph,
-      const std::unordered_map<std::string, int64_t>& dstWeights,
-      thrift::PrefixForwardingAlgorithm algo,
-      bool useLinkMetric = true) const;
-
  private:
   // LinkState belongs to a unique area
   const std::string area_;

@@ -3772,8 +3772,7 @@ class DecisionTestFixture : public ::testing::Test {
         true /* enable v4 */,
         true /* enableSegmentRouting */,
         true /* dryrun */,
-        false /* enableV4OverV6Nexthop */,
-        true /* enableAdjLabels */);
+        false /* enableV4OverV6Nexthop */);
 
     // timeout to wait until decision debounce
     // (i.e. spf recalculation, route rebuild) finished

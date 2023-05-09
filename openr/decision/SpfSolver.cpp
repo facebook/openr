@@ -294,9 +294,7 @@ SpfSolver::createRouteForPrefix(
     }
 
     switch (*areaRules.forwardingAlgo()) {
-    case thrift::PrefixForwardingAlgorithm::SP_ECMP:
-    case thrift::PrefixForwardingAlgorithm::SP_UCMP_ADJ_WEIGHT_PROPAGATION:
-    case thrift::PrefixForwardingAlgorithm::SP_UCMP_PREFIX_WEIGHT_PROPAGATION: {
+    case thrift::PrefixForwardingAlgorithm::SP_ECMP: {
       auto spfAreaResults = selectBestPathsSpf(
           myNodeName, prefix, routeSelectionResult, area, linkState->second);
 

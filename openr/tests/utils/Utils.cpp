@@ -63,8 +63,7 @@ createAreaConfig(
     const std::string& areaId,
     const std::vector<std::string>& neighborRegexes,
     const std::vector<std::string>& interfaceRegexes,
-    const std::optional<std::string>& policy,
-    const bool enableAdjLabels) {
+    const std::optional<std::string>& policy) {
   openr::thrift::AreaConfig areaConfig;
   areaConfig.area_id() = areaId;
   areaConfig.neighbor_regexes() = neighborRegexes;
@@ -73,18 +72,6 @@ createAreaConfig(
     areaConfig.import_policy_name() = policy.value();
   }
 
-  if (enableAdjLabels) {
-    openr::thrift::SegmentRoutingAdjLabelType sr_adj_label_type;
-    openr::thrift::SegmentRoutingAdjLabel sr_adj_label;
-    openr::thrift::LabelRange lr;
-
-    lr.start_label() = openr::MplsConstants::kSrLocalRange.first;
-    lr.end_label() = openr::MplsConstants::kSrLocalRange.second;
-    sr_adj_label_type = openr::thrift::SegmentRoutingAdjLabelType::AUTO_IFINDEX;
-    sr_adj_label.sr_adj_label_type() = sr_adj_label_type;
-    sr_adj_label.adj_label_range() = lr;
-    areaConfig.sr_adj_label() = sr_adj_label;
-  }
   return areaConfig;
 }
 
@@ -101,8 +88,7 @@ getBasicOpenrConfig(
     bool enableV4,
     bool enableSegmentRouting,
     bool dryrun,
-    bool enableV4OverV6Nexthop,
-    bool enableAdjLabels) {
+    bool enableV4OverV6Nexthop) {
   /*
    * [DEFAULT] thrift::OpenrConfig
    */
@@ -153,8 +139,8 @@ getBasicOpenrConfig(
    * [OVERRIDE] thrift::AreaConfig
    */
   if (areaCfg.empty()) {
-    config.areas() = {createAreaConfig(
-        kTestingAreaName, {".*"}, {".*"}, std::nullopt, enableAdjLabels)};
+    config.areas() = {
+        createAreaConfig(kTestingAreaName, {".*"}, {".*"}, std::nullopt)};
   } else {
     config.areas() = areaCfg;
   }

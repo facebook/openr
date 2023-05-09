@@ -1553,8 +1553,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       true /* enable v4 */,
       true /* enable segment routing */,
       true /* dryrun */,
-      false /* enable v4 over v6 nh */,
-      true /* enable adj labels */);
+      false /* enable v4 over v6 nh */);
   auto config1 = std::make_shared<Config>(tConfig1);
 
   auto tConfig2 = getBasicOpenrConfig(
@@ -1563,8 +1562,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       true /* enable v4 */,
       true /* enable segment routing */,
       true /* dryrun */,
-      false /* enable v4 over v6 nh */,
-      true /* enable adj labels */);
+      false /* enable v4 over v6 nh */);
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeName1, config1);
@@ -1603,8 +1601,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       true /* enable v4 */,
       true /* enable segment routing */,
       true /* dryrun */,
-      false /* enable v4 over v6 nh */,
-      true /* enable adj labels */);
+      false /* enable v4 over v6 nh */);
 
   auto config3 = std::make_shared<Config>(tConfig3);
 
