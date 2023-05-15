@@ -1638,6 +1638,7 @@ Spark::processHelloMsg(
     neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_INFO;
     logStateTransition(neighborName, ifName, oldState, neighbor.state);
   } else if (neighbor.state == thrift::SparkNeighState::ESTABLISHED) {
+    const auto curSeqNum = neighbor.seqNum;
     // Update local seqNum maintained for this neighbor
     neighbor.seqNum = remoteSeqNum;
 
@@ -1650,11 +1651,36 @@ Spark::processHelloMsg(
       return;
     }
 
-    if (tsIt == neighborInfos.end()) {
-      //
-      // Did NOT find our own info in peer's hello msg. Peer doesn't want to
-      // form adjacency with us. Drop neighborship.
-      //
+    /*
+     * Open/R will try to address one of the possible partial-adjacency case,
+     * aka, when there is uni-directional link between node A and B showed as
+     * the following:
+
+     *      ---X-->
+     * A                B
+     *      <------
+
+     * A will still recognize B as neighbor, whereas B loses neighbor-ship from
+     * A.
+     * Hence A will received B's helloMsg, which does not contain A as neighbor.
+     * A knows B may have troubles receiving A's keepalive. A will tear down B's
+     * neighbor-ship to keep both side in sync.
+
+     * To avoid false alarm under graceful-restart(GR) circumstance, aka, A
+     * didn't receive B's restarting signal and keep B in ESTABLISHED state
+     * before hold timer expiration, Open/R will double confirm the
+     * sequence number received from peer.
+
+     * - Case1: currSeqNum < remoteSeqNum
+     *       => peer is not restarting since seqNum monotonically increasing.
+     *       [Result]   Tear down.
+     * - Case2: currSeqNum >= remoteSeqNum
+     *       => highly likely peer is restarted/unexpected restarting but
+     *          missed restarting signal.
+     *       [Result]   Keep peer in ESTABLISHED state and let hold timer
+     *                  takes care of neighbor state.
+     */
+    if (curSeqNum < remoteSeqNum and tsIt == neighborInfos.end()) {
       thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
           getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO);
