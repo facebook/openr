@@ -136,25 +136,17 @@ class KvStoreBenchmarkTestFixture {
   void
   checkThriftPublication(
       uint32_t num, messaging::RQueue<KvStorePublication> kvStoreUpdatesQ) {
-    auto suspender = folly::BenchmarkSuspender();
     uint32_t total{0};
 
-    // start measuring time
-    suspender.dismiss();
     while (true) {
       auto thriftPub = kvStoreUpdatesQ.get();
       if (not thriftPub.hasValue()) {
         continue;
       }
 
-      // stop measuring time as this is just parsing
-      suspender.rehire();
       if (auto* pub = std::get_if<thrift::Publication>(&(thriftPub.value()))) {
         total += pub->keyVals()->size();
       }
-
-      // start measuring time again
-      suspender.dismiss();
 
       if (total >= num) {
         return;
@@ -380,20 +372,20 @@ BM_KvStoreClearKey(
         counters["memory_before_opertion(MB)"] = mem.value() / 1024 / 1024;
       }
     }
-    // Start measuring benchmark time
-    suspender.dismiss();
+
+    std::vector<ClearKeyValueRequest> clearKvRequests{};
 
     for (auto& clearKey : clearKeys) {
-      // Stop measuring benchmark time, just generating key
-      suspender.rehire();
-
       // Generate updated PersistKeyValueRequest
       auto unsetPrefixRequest = ClearKeyValueRequest(
           kTestingAreaName, clearKey, genRandomStr(kValLen), true);
+      clearKvRequests.emplace_back(std::move(unsetPrefixRequest));
+    }
 
-      // Resume measuring time
-      suspender.dismiss();
+    // Start measuring benchmark time
+    suspender.dismiss();
 
+    for (auto& unsetPrefixRequest : clearKvRequests) {
       testFixture->kvRequestQueue_.push(std::move(unsetPrefixRequest));
     }
 
