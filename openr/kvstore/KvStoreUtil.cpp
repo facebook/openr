@@ -419,18 +419,26 @@ mergeKeyValues(
     }
 
     auto kvStoreIt = kvStore.find(key);
-
+    auto localVersion = -1;
+    std::string localOriginatorId = "null";
+    auto localTtl = -1;
+    auto localTtlVersion = -1;
+    if (kvStoreIt != kvStore.end()) {
+      localVersion = *kvStoreIt->second.version();
+      localTtl = *kvStoreIt->second.ttl();
+      localTtlVersion = *kvStoreIt->second.ttlVersion();
+      localOriginatorId = *kvStoreIt->second.originatorId();
+    }
     XLOG(DBG3) << fmt::format(
         "Updating key: {}\n  Version: {} -> {}\n  Originator: {} -> {}\n  TtlVersion: {} -> {}\n  Ttl: {} -> {}",
         key,
-        *kvStoreIt->second.version(),
+        localVersion,
         *value.version(),
-        (kvStoreIt != kvStore.end() ? *kvStoreIt->second.originatorId()
-                                    : "null"),
+        localOriginatorId,
         *value.originatorId(),
-        (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttlVersion() : 0),
+        localTtlVersion,
         *value.ttlVersion(),
-        (kvStoreIt != kvStore.end() ? *kvStoreIt->second.ttl() : 0),
+        localTtl,
         *value.ttl());
 
     if (mergeType == MergeType::UPDATE_ALL_NEEDED) {
