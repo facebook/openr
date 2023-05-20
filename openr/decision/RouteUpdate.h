@@ -74,8 +74,7 @@ struct DecisionRouteUpdate {
   void
   addRouteToUpdate(RibUnicastEntry route) {
     auto prefix = route.prefix; // NOTE: Intended copy
-    auto res = unicastRoutesToUpdate.emplace(prefix, std::move(route));
-    CHECK(res.second) << "Duplicate Unicast route update";
+    unicastRoutesToUpdate.insert_or_assign(prefix, std::move(route));
   }
 
   /**
@@ -86,8 +85,7 @@ struct DecisionRouteUpdate {
   void
   addMplsRouteToUpdate(RibMplsEntry route) {
     auto label = route.label; // NOTE: Intended copy
-    auto res = mplsRoutesToUpdate.emplace(label, std::move(route));
-    CHECK(res.second) << "Duplicate MPLS route update";
+    mplsRoutesToUpdate.insert_or_assign(label, std::move(route));
   }
 
   // TODO: rename this func
