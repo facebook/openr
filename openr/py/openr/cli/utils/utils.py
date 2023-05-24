@@ -1032,6 +1032,8 @@ def find_adj_list_deltas(
         ]
     )
     delta_list.extend(
+        # pyre-fixme[6]: For 1st argument expected `Iterable[Tuple[str, typing.Any,
+        #  None]]` but got `List[Tuple[str, Adjacency, Adjacency]]`.
         [
             (tags[2], a, b)
             for a, b in product(old_adj_list, new_adj_list)
