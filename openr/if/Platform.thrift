@@ -140,13 +140,6 @@ service FibService extends fb303_core.BaseService {
     1: PlatformError error,
   );
 
-  //
-  // BGP API (for emulation only)
-  //
-  void registerForNeighborChanged() throws (1: PlatformError error) (
-    thread = 'eb',
-  );
-
   void sendNeighborDownInfo(1: list<string> neighborIp) throws (
     1: PlatformError error,
   );

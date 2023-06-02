@@ -74,9 +74,6 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
   void sendNeighborDownInfo(
       std::unique_ptr<std::vector<std::string>> neighborIp) override;
 
-  void async_eb_registerForNeighborChanged(
-      std::unique_ptr<apache::thrift::HandlerCallback<void>> callback) override;
-
   int64_t aliveSince() override;
 
   facebook::fb303::cpp2::fb303_status getStatus() override;

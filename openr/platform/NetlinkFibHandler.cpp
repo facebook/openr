@@ -711,34 +711,6 @@ NetlinkFibHandler::sendNeighborDownInfo(
 }
 
 void
-NetlinkFibHandler::async_eb_registerForNeighborChanged(
-    std::unique_ptr<apache::thrift::HandlerCallback<void>> cb) {
-  auto ctx = cb->getConnectionContext()->getConnectionContext();
-  auto client = ctx->getDuplexClient<
-      thrift::NeighborListenerClientForFibagentAsyncClient>();
-
-  XLOG(INFO) << "registered for bgp";
-  std::lock_guard<std::mutex> g(listenersMutex_);
-  auto info = listeners_.get();
-  CHECK(cb->getEventBase()->isInEventBaseThread());
-  if (!info) {
-    info = new ThreadLocalListener(cb->getEventBase());
-    listeners_.reset(info);
-  }
-
-  // make sure the eventbase is same, because later we want to run callback in
-  // cb's eventbase
-  DCHECK_EQ(info->eventBase, cb->getEventBase());
-  if (!info->eventBase) {
-    info->eventBase = cb->getEventBase();
-  }
-  info->clients.clear();
-  info->clients.emplace(ctx, client);
-  XLOG(INFO) << "registered for bgp success";
-  cb->done();
-}
-
-void
 NetlinkFibHandler::invokeNeighborListeners(
     ThreadLocalListener* listener,
     const std::vector<std::string>& neighborIps,
