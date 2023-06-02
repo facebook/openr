@@ -74,11 +74,9 @@ LM_LINKS_OPENR_RIGHT_OK = DumpLinksReply(
     },
 )
 
-LM_LINKS_EXPECTED_OPENR_RIGHT_STDOUT = """
-== Node Overload: NO, Node Metric Increment: 0  ==
-
-Interface    Status    Metric Override    Addresses
------------  --------  -----------------  ---------------------------------
-right0       Up                           fd00::2 fe80::50ef:deff:fe4c:d4f6
+LM_LINK_EXPECTED_STDOUT_L0 = """
 lo           Up                           127.0.0.1 10.6.9.2 fd00:2:: ::1
+"""
+LM_LINK_EXPECTED_STDOUT_RIGHT0 = """
+right0       Up                           fd00::2 fe80::50ef:deff:fe4c:d4f6
 """

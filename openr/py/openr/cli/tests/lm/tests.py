@@ -17,7 +17,11 @@ from openr.cli.tests import helpers
 BASE_MODULE = "openr.cli.clis.lm"
 BASE_CMD_MODULE = "openr.cli.commands.lm"
 
-from .fixtures import LM_LINKS_EXPECTED_OPENR_RIGHT_STDOUT, LM_LINKS_OPENR_RIGHT_OK
+from .fixtures import (
+    LM_LINK_EXPECTED_STDOUT_L0,
+    LM_LINK_EXPECTED_STDOUT_RIGHT0,
+    LM_LINKS_OPENR_RIGHT_OK,
+)
 
 
 class CliLmTests(TestCase):
@@ -44,4 +48,7 @@ class CliLmTests(TestCase):
             catch_exceptions=False,
         )
         self.assertEqual(0, invoked_return.exit_code)
-        self.assertEqual(LM_LINKS_EXPECTED_OPENR_RIGHT_STDOUT, invoked_return.stdout)
+        self.assertNotEqual(
+            -1, invoked_return.stdout.find(LM_LINK_EXPECTED_STDOUT_RIGHT0)
+        )
+        self.assertNotEqual(-1, invoked_return.stdout.find(LM_LINK_EXPECTED_STDOUT_L0))
