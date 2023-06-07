@@ -31,9 +31,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       nodeId_,
       {}, /* area config */
       v4Enabled,
-      true /*enableSegmentRouting*/,
-      false /*orderedFibProgramming*/,
-      true /*dryrun*/);
+      true /* enableSegmentRouting */,
+      true /* dryrun */);
 
   // link monitor config
   auto& lmConf = *tConfig.link_monitor_config();
@@ -256,10 +255,6 @@ OpenrWrapper<Serializer>::run() {
     eventBase_.run();
     VLOG(1) << nodeId_ << " Stopping eventBase_";
   });
-
-  // trigger openr initialization event for PrefixManager module
-  triggerInitializationEventForPrefixManager(
-      fibRouteUpdatesQueue_, kvStoreUpdatesQueue_);
 }
 
 template <class Serializer>

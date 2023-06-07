@@ -5,11 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
-#include <sodium.h>
 
 #include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -20,6 +20,7 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/tests/OpenrWrapper.h>
@@ -29,6 +30,8 @@ using namespace std;
 using namespace openr;
 
 using apache::thrift::CompactSerializer;
+
+namespace fb303 = facebook::fb303;
 
 namespace {
 
@@ -212,6 +215,37 @@ class OpenrFixture : public ::testing::Test {
       openrWrappers_{};
 };
 
+/*
+ * This test creates one single standalone Open/R instance to verify Open/R
+ * initialization will finish within certain threshold time instead of endless
+ * waiting. Test will verify Open/R reach INITIALIZED state ultimately.
+ */
+TEST_F(OpenrFixture, InitializationWithStandaloneNode) {
+  fb303::fbData->resetAllData();
+
+  auto openr = createOpenr("initialization", false /* enable_v4 */);
+  openr->run();
+  LOG(INFO) << "Successfully started standalone Open/R instance for testing";
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::seconds(20), [&]() {
+    // build initialization key for counter check
+    auto initializedEvent = static_cast<thrift::InitializationEvent>(
+        int(openr::thrift::InitializationEvent::INITIALIZED));
+    auto counterKey = fmt::format(
+        Constants::kInitEventCounterFormat,
+        apache::thrift::util::enumNameSafe(initializedEvent));
+    EXPECT_TRUE(fb303::fbData->hasCounter(counterKey));
+    EXPECT_GE(fb303::fbData->getCounter(counterKey), 0);
+
+    // prevent endless running of evb
+    evb.stop();
+  });
+
+  // let evb fly
+  evb.run();
+}
+
 //
 // Test topology:
 //
@@ -311,12 +345,6 @@ main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   folly::init(&argc, &argv);
   google::InstallFailureSignalHandler();
-
-  // init sodium security library
-  if (::sodium_init() == -1) {
-    LOG(ERROR) << "Failed initializing sodium";
-    return 1;
-  }
 
   // Run the tests
   return RUN_ALL_TESTS();
