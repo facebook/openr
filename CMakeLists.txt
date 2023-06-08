@@ -242,6 +242,7 @@ add_library(openrlib
   openr/link-monitor/AdjacencyEntry.cpp
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
+  openr/neighbor-monitor/NeighborMonitor.cpp
   openr/nl/NetlinkAddrMessage.cpp
   openr/nl/NetlinkLinkMessage.cpp
   openr/nl/NetlinkNeighborMessage.cpp
