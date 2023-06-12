@@ -5,9 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <folly/init/Init.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <folly/experimental/coro/GtestHelpers.h>
+#include <folly/init/Init.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
@@ -253,11 +255,18 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::shared_ptr<OpenrCtrlHandler> handler_{nullptr};
 };
 
-TEST_F(OpenrCtrlFixture, getMyNodeName) {
+TEST_F(OpenrCtrlFixture, GetMyNodeName) {
   std::string res{""};
   handler_->getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
 }
+
+#if FOLLY_HAS_COROUTINES
+CO_TEST_F(OpenrCtrlFixture, GetMyNodeNameCoro) {
+  auto name = co_await handler_->co_getMyNodeName();
+  EXPECT_EQ(nodeName_, *name);
+}
+#endif // FOLLY_HAS_COROUTINES
 
 TEST_F(OpenrCtrlFixture, InitializationApis) {
   // Add KVSTORE_SYNCED event into fb303. Initialization not converged yet.

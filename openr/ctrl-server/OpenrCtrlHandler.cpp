@@ -354,8 +354,15 @@ OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
 
 void
 OpenrCtrlHandler::getMyNodeName(std::string& _return) {
-  _return = std::string(nodeName_);
+  _return = nodeName_;
 }
+
+#if FOLLY_HAS_COROUTINES
+folly::coro::Task<std::unique_ptr<std::string>>
+OpenrCtrlHandler::co_getMyNodeName() {
+  co_return folly::copy_to_unique_ptr(nodeName_);
+}
+#endif // FOLLY_HAS_COROUTINES
 
 void
 OpenrCtrlHandler::getOpenrVersion(thrift::OpenrVersions& _openrVersion) {

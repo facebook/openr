@@ -83,6 +83,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Openr Node Name
   void getMyNodeName(std::string& _return) override;
 
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
+#endif // FOLLY_HAS_COROUTINES
   //
   // config APIs
   //
@@ -534,7 +537,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   void closeKvStorePublishers();
   void closeFibPublishers();
 
-  const std::string nodeName_;
+  const std::string nodeName_{""};
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
 
   // Pointers to Open/R modules

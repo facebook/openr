@@ -61,8 +61,26 @@ if (TARGET Folly::folly_exception_tracer)
   set(FOLLY_EXCEPTION_TRACER Folly::folly_exception_tracer)
 endif()
 
-
 add_compile_definitions(NO_FOLLY_EXCEPTION_TRACER)
+
+# enable coroutine compiler option if supported by compiler
+include(CheckCXXCompilerFlag)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  check_cxx_compiler_flag(-fcoroutines COMPILER_HAS_F_COROUTINES)
+  if (COMPILER_HAS_F_COROUTINES)
+    message(
+      STATUS
+      "GCC has support for C++ coroutines, setting flag for Folly build."
+    )
+    add_compile_options(-fcoroutines)
+  else()
+    message(
+      STATUS
+      "GCC does not have support for C++ coroutines, "
+      "disabling Folly coroutine support."
+    )
+  endif()
+endif()
 
 include_directories(
   ${Boost_INCLUDE_DIR}
