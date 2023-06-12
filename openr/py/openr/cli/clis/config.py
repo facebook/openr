@@ -16,10 +16,6 @@ class ConfigCli:
         self.config.add_command(ConfigDryRunCli().dryrun, name="dryrun")
         self.config.add_command(ConfigCompareCli().compare, name="compare")
         self.config.add_command(
-            ConfigPrefixAllocatorCli().config_prefix_allocator,
-            name="prefix-allocator-config",
-        )
-        self.config.add_command(
             ConfigLinkMonitorCli().config_link_monitor, name="link-monitor-config"
         )
         self.config.add_command(
@@ -68,15 +64,6 @@ class ConfigCompareCli:
         """Migration cli: Compare config with current running config"""
 
         config.ConfigCompareCmd(cli_opts).run(file)
-
-
-class ConfigPrefixAllocatorCli:
-    @click.command()
-    @click.pass_obj
-    def config_prefix_allocator(cli_opts):  # noqa: B902
-        """Dump prefix allocation config"""
-
-        config.ConfigPrefixAllocatorCmd(cli_opts).run()
 
 
 class ConfigLinkMonitorCli:

@@ -82,7 +82,6 @@ class TechSupportCmd(object):
         openr.VersionCmd(self.cli_opts).run(False)
 
     def print_config(self):
-        config.ConfigPrefixAllocatorCmd(self.cli_opts).run()
         config.ConfigLinkMonitorCmd(self.cli_opts).run()
         config.ConfigPrefixManagerCmd(self.cli_opts).run()
 

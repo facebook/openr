@@ -14,7 +14,7 @@ from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.thrift.OpenrCtrl.thrift_types import OpenrError
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types import thrift_types as openr_types
-from openr.utils import ipnetwork, printing
+from openr.utils import printing
 from openr.utils.consts import Consts
 from thrift.python.serializer import deserialize
 
@@ -74,36 +74,6 @@ class ConfigStoreCmdBase(OpenrCtrlCmd):
             exception_str = "Exception getting key for {}: {}".format(config_key, ex)
 
         return (blob, exception_str)
-
-
-class ConfigPrefixAllocatorCmd(ConfigStoreCmdBase):
-    async def _run(self, client: OpenrCtrlCppClient.Async, *args, **kwargs):
-        (prefix_alloc_blob, exception_str) = await self.getConfigWrapper(
-            client, Consts.PREFIX_ALLOC_KEY
-        )
-
-        if prefix_alloc_blob is None:
-            print(exception_str)
-            return
-
-        prefix_alloc = deserialize(openr_types.AllocPrefix, prefix_alloc_blob)
-        self.print_config(prefix_alloc)
-
-    def print_config(self, prefix_alloc: openr_types.AllocPrefix) -> None:
-        seed_prefix = prefix_alloc.seedPrefix
-        seed_prefix_addr = ipnetwork.sprint_addr(seed_prefix.prefixAddress.addr)
-
-        caption = "Prefix Allocator parameters stored"
-        rows = []
-        rows.append(
-            ["Seed prefix: {}/{}".format(seed_prefix_addr, seed_prefix.prefixLength)]
-        )
-        rows.append(["Allocated prefix length: {}".format(prefix_alloc.allocPrefixLen)])
-        rows.append(
-            ["Allocated prefix index: {}".format(prefix_alloc.allocPrefixIndex)]
-        )
-
-        print(printing.render_vertical_table(rows, caption=caption))
 
 
 class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
