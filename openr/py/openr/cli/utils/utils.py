@@ -568,12 +568,50 @@ def dump_adj_db_full(
         other_node_db = global_adj_db.get(adj.otherNodeName, None)
         if other_node_db is None:
             continue
+        # attention: store peer's adjacency overload status for a potential
+        # overriding with better displaying purpose
         other_node_neighbors = {
-            (a.otherNodeName, a.otherIfName) for a in other_node_db.adjacencies
+            (adjacency.otherNodeName, adjacency.otherIfName): adjacency.isOverloaded
+            for adjacency in other_node_db.adjacencies
         }
-        if (this_node_name, adj.ifName) not in other_node_neighbors:
+        # skip the uni-directional adjacencies since we only display bi-dir
+        if (this_node_name, adj.ifName) not in other_node_neighbors.keys():
             continue
-        adjacencies.append(adj)
+        # if one side of adjacency is OVERLOADED. Set the other side as well.
+        adj_updated = None
+        if isinstance(adj, openr_types.Adjacency):
+            adj_updated = openr_types.Adjacency(
+                otherNodeName=adj.otherNodeName,
+                ifName=adj.ifName,
+                nextHopV6=adj.nextHopV6,
+                nextHopV4=adj.nextHopV4,
+                metric=adj.metric,
+                adjLabel=adj.adjLabel,
+                isOverloaded=adj.isOverloaded
+                | other_node_neighbors[(this_node_name, adj.ifName)],
+                rtt=adj.rtt,
+                timestamp=adj.timestamp,
+                weight=adj.weight,
+                otherIfName=adj.otherIfName,
+                adjOnlyUsedByOtherNode=adj.adjOnlyUsedByOtherNode,
+            )
+        else:
+            adj_updated = openr_types_py.Adjacency(
+                otherNodeName=adj.otherNodeName,
+                ifName=adj.ifName,
+                nextHopV6=adj.nextHopV6,
+                nextHopV4=adj.nextHopV4,
+                metric=adj.metric,
+                adjLabel=adj.adjLabel,
+                isOverloaded=adj.isOverloaded
+                | other_node_neighbors[(this_node_name, adj.ifName)],
+                rtt=adj.rtt,
+                timestamp=adj.timestamp,
+                weight=adj.weight,
+                otherIfName=adj.otherIfName,
+                adjOnlyUsedByOtherNode=adj.adjOnlyUsedByOtherNode,
+            )
+        adjacencies.append(adj_updated)
 
     return (
         adj_db.nodeMetricIncrementVal,
