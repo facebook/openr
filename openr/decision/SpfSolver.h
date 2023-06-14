@@ -10,6 +10,7 @@
 #include <chrono>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 
 #include <openr/decision/LinkState.h>
 #include <openr/decision/PrefixState.h>
@@ -239,19 +240,13 @@ class SpfSolver {
   std::optional<int64_t> getMinNextHopThreshold(
       RouteSelectionResult nodes, PrefixEntries const& prefixEntries);
 
-  // Filter hard-drained then soft-drained nodes, unless there is no more viable
-  // candidate after that operations
-  PrefixEntries filterDrainedNodes(
-      PrefixEntries& prefixes,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
-
   // [hard-drain]
   PrefixEntries filterHardDrainedNodes(
       PrefixEntries& prefixes,
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 
   // [soft-drain]
-  PrefixEntries filterSoftDrainedNodes(
+  std::unordered_set<NodeAndArea> getSoftDrainedNodes(
       PrefixEntries& prefixes,
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 

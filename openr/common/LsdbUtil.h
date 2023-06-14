@@ -322,7 +322,8 @@ selectBestPrefixMetrics(
  */
 std::set<NodeAndArea> selectRoutes(
     const PrefixEntries& prefixEntries,
-    thrift::RouteSelectionAlgorithm algorithm);
+    thrift::RouteSelectionAlgorithm algorithm,
+    const std::unordered_set<NodeAndArea>& drainedNodes = {});
 
 // Deterministically choose one as best path from multipaths. Used in Decision.
 // Choose local if local node is a part of the multipaths.

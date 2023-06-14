@@ -815,11 +815,18 @@ selectShortestDistancePerArea(
 std::set<NodeAndArea>
 selectRoutes(
     const PrefixEntries& prefixEntries,
-    thrift::RouteSelectionAlgorithm algorithm) {
+    thrift::RouteSelectionAlgorithm algorithm,
+    const std::unordered_set<NodeAndArea>& drainedNodes) {
   /*
    * [Best Route Selection] Part 1/2:
    *
-   *  - 1st tie-breaker : drain_metric - prefer lower;
+   *  - 1st tie-breaker : drained_state - prefer not drained;
+   *     a node is drained if it has any drain state;
+   *       - metrics.drain_metric is positive (drained path redistributed
+   *          remotely)
+   *       - drainedNodes.count(key) is positive (node is drained (in the same
+   *          area))
+   *     Set to -1 if drained, otherwise 0.
    *  - 2nd tie-breaker: path_preference - prefer higher;
    *  - 3rd tie-breaker: source_preference - prefer higher;
    */
@@ -831,7 +838,9 @@ selectRoutes(
   for (auto& [key, metricsWrapper] : prefixEntries) {
     auto& metrics = *metricsWrapper->metrics();
     std::tuple<int32_t, int32_t, int32_t> metricsTuple{
-        -(*metrics.drain_metric()), /* prefer-lower */
+        -(*metrics.drain_metric() or
+          (int32_t) drainedNodes.count(key)), /* prefer-lower, set to -1 if
+                                                 drained, otherwise 0*/
         *metrics.path_preference(), /* prefer-higher */
         *metrics.source_preference() /* prefer-higher */};
 

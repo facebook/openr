@@ -219,7 +219,7 @@ SpfSolver::createRouteForPrefix(
 
   // Skip if no valid prefixes
   if (prefixEntries.empty()) {
-    XLOG(DBG3) << "Skipping route to "
+    XLOG(INFO) << "Skipping route to "
                << folly::IPAddress::networkToString(prefix)
                << " with no reachable node.";
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
@@ -497,12 +497,17 @@ SpfSolver::selectBestRoutes(
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   RouteSelectionResult ret;
 
-  auto filteredPrefixes = filterDrainedNodes(prefixEntries, areaLinkStates);
+  // Filter out nodes that are hard drained (overloaded set), noop if all
+  // destination are overloaded
+  auto filteredPrefixes = filterHardDrainedNodes(prefixEntries, areaLinkStates);
+  auto softDrainedNoes = getSoftDrainedNodes(prefixEntries, areaLinkStates);
 
   if (enableBestRouteSelection_) {
     // Perform best route selection based on metrics
     ret.allNodeAreas = selectRoutes(
-        filteredPrefixes, thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE);
+        filteredPrefixes,
+        thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE,
+        softDrainedNoes);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
   } else {
     // If it is openr route, all nodes are considered as best nodes.
@@ -539,32 +544,19 @@ SpfSolver::getMinNextHopThreshold(
   return maxMinNexthopForPrefix;
 }
 
-PrefixEntries
-SpfSolver::filterDrainedNodes(
+std::unordered_set<NodeAndArea>
+SpfSolver::getSoftDrainedNodes(
     PrefixEntries& prefixes,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  auto hardDrainFiltered = filterHardDrainedNodes(prefixes, areaLinkStates);
-  return filterSoftDrainedNodes(hardDrainFiltered, areaLinkStates);
-}
-
-PrefixEntries
-SpfSolver::filterSoftDrainedNodes(
-    PrefixEntries& prefixes,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  int minVal = std::numeric_limits<int32_t>::max();
-  PrefixEntries filteredEntries;
+  std::unordered_set<NodeAndArea> softDrainedNodes;
   for (auto& [nodeArea, metricsWrapper] : prefixes) {
     const auto& [node, area] = nodeArea;
     int softDrainValue = areaLinkStates.at(area).getNodeMetricIncrement(node);
-    if (softDrainValue < minVal) {
-      minVal = softDrainValue;
-      filteredEntries.clear();
-    }
-    if (softDrainValue == minVal) {
-      filteredEntries.emplace(nodeArea, metricsWrapper);
+    if (softDrainValue > 0) {
+      softDrainedNodes.emplace(nodeArea);
     }
   }
-  return filteredEntries;
+  return softDrainedNodes;
 }
 
 PrefixEntries

@@ -800,7 +800,7 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
     EXPECT_EQ(1, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
   }
 
-  // 3] soft Drain 1 harder (100), 2 will have 3 as next hop
+  // 3] soft Drain 1 harder (100), 2 will still have both next hop.
   adjacencyDb1.nodeMetricIncrementVal() = nodeIncVal100;
   {
     auto res =
@@ -813,14 +813,12 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
     EXPECT_EQ(1, routeDb->unicastRoutes.size());
     // check one nexthop to 3
     const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
-    EXPECT_EQ(1, ribEntry.nexthops.size());
-    const auto nh = *ribEntry.nexthops.cbegin();
-    EXPECT_EQ(createNextHopFromAdj(adj23, false, *adj23.metric()), nh);
+    EXPECT_EQ(2, ribEntry.nexthops.size());
     // check that drain metric is set
     EXPECT_EQ(1, *ribEntry.bestPrefixEntry.metrics()->drain_metric());
   }
 
-  // 4] undrain 1, 3 is still softdrained. Will choose 1
+  // 3] undrain 1, 3 is still softdrained. Will choose 1
   adjacencyDb1.nodeMetricIncrementVal() = 0;
   {
     auto res =
