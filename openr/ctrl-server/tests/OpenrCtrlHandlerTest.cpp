@@ -212,6 +212,23 @@ class OpenrCtrlFixture : public ::testing::Test {
         .get();
   }
 
+  std::unique_ptr<openr::thrift::SetKeyValsResult>
+  setKvStoreKeyValues(
+      const thrift::KeyVals& keyVals,
+      const std::string& area,
+      const std::string& nodeId = "") {
+    thrift::KeySetParams setParams;
+    setParams.keyVals() = keyVals;
+    if (not nodeId.empty()) {
+      setParams.nodeIds() = {nodeId};
+    }
+    return handler_
+        ->semifuture_setKvStoreKeyValues(
+            std::make_unique<thrift::KeySetParams>(setParams),
+            std::make_unique<std::string>(area))
+        .get();
+  }
+
  protected:
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
@@ -462,6 +479,114 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
             .get(),
         thrift::OpenrError);
   }
+}
+
+TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
+  thrift::KeyVals kvs(
+      {{"key1", createThriftValue(2, "node1", std::string("value1"))},
+       {"key11", createThriftValue(1, "node1", std::string("value11"))},
+       {"key111", createThriftValue(1, "node1", std::string("value111"))},
+       {"key2", createThriftValue(1, "node1", std::string("value2"))},
+       {"key22", createThriftValue(1, "node1", std::string("value22"))},
+       {"key222", createThriftValue(1, "node1", std::string("value222"))},
+       {"key3", createThriftValue(1, "node3", std::string("value3"))},
+       {"key33", createThriftValue(1, "node33", std::string("value33"))},
+       {"key333", createThriftValue(1, "node33", std::string("value333"))}});
+
+  thrift::KeyVals keyValsPod;
+  keyValsPod["keyPod1"] =
+      createThriftValue(1, "node1", std::string("valuePod1"));
+  keyValsPod["keyPod2"] =
+      createThriftValue(1, "node1", std::string("valuePod2"));
+
+  thrift::KeyVals keyValsPlane;
+  keyValsPlane["keyPlane1"] =
+      createThriftValue(1, "node1", std::string("valuePlane1"));
+  keyValsPlane["keyPlane2"] =
+      createThriftValue(1, "node1", std::string("valuePlane2"));
+
+  const std::string kSimpleNodeId = "node1";
+  //
+  // area list get
+  //
+  {
+    auto config = handler_->semifuture_getRunningConfigThrift().get();
+    std::unordered_set<std::string> areas;
+    for (auto const& area : *config->areas()) {
+      areas.insert(*area.area_id());
+    }
+    EXPECT_THAT(areas, testing::SizeIs(3));
+    EXPECT_THAT(
+        areas,
+        testing::UnorderedElementsAre(kPodAreaId, kPlaneAreaId, kSpineAreaId));
+  }
+
+  // Success
+  {
+    EXPECT_EQ(
+        setKvStoreKeyValues(kvs, kSpineAreaId)->noMergeReasons()->size(), 0);
+    EXPECT_EQ(
+        setKvStoreKeyValues(keyValsPod, kPodAreaId)->noMergeReasons()->size(),
+        0);
+    EXPECT_EQ(
+        setKvStoreKeyValues(keyValsPlane, kPlaneAreaId)
+            ->noMergeReasons()
+            ->size(),
+        0);
+  }
+
+  // LOOP_DETECTED
+  {
+    const std::string kLoopDetectionKey = "key99";
+    thrift::KeyVals loopKvs(
+        {{kLoopDetectionKey,
+          createThriftValue(1, "node1", std::string("value1"))}});
+    auto result = *setKvStoreKeyValues(loopKvs, kSpineAreaId, nodeName_)
+                       ->noMergeReasons();
+    EXPECT_EQ(result.size(), 1);
+    EXPECT_EQ(
+        thrift::KvStoreNoMergeReason::LOOP_DETECTED, result[kLoopDetectionKey]);
+  }
+
+  // INVALID_TTL
+  {
+    const std::string kInvalidTtlKey = "key99";
+    int64_t kInvalidTtl = -1;
+    thrift::KeyVals invalidTtlKvs(
+        {{kInvalidTtlKey,
+          createThriftValue(1, "node1", std::string("value1"), kInvalidTtl)}});
+    auto result =
+        *setKvStoreKeyValues(invalidTtlKvs, kSpineAreaId)->noMergeReasons();
+    EXPECT_EQ(result.size(), 1);
+    EXPECT_EQ(
+        thrift::KvStoreNoMergeReason::INVALID_TTL, result[kInvalidTtlKey]);
+  }
+
+  // OLD_VERSION
+  {
+    const std::string kOldVersionKey = "key1";
+    int64_t kOldVersion = 1;
+    thrift::KeyVals oldVersionKvs(
+        {{kOldVersionKey,
+          createThriftValue(kOldVersion, "node1", std::string("value1"))}});
+    auto result =
+        *setKvStoreKeyValues(oldVersionKvs, kSpineAreaId)->noMergeReasons();
+    EXPECT_EQ(result.size(), 1);
+    EXPECT_EQ(
+        thrift::KvStoreNoMergeReason::OLD_VERSION, result[kOldVersionKey]);
+  }
+
+  // NO_NEED_TO_UPDATE
+  {
+    auto result = *setKvStoreKeyValues(kvs, kSpineAreaId)->noMergeReasons();
+    EXPECT_EQ(result.size(), kvs.size());
+    for (const auto& [_, v] : result) {
+      EXPECT_EQ(thrift::KvStoreNoMergeReason::NO_NEED_TO_UPDATE, v);
+    }
+  }
+  // TODO:
+  // NO_MATCHED_KEY = 1,
+  // INCONSISTENCY_DETECTED = 6,
 }
 
 TEST_F(OpenrCtrlFixture, KvStoreApis) {
