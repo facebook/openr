@@ -272,33 +272,76 @@ enum VerifyServerType {
 }
 
 struct ThriftServerConfig {
-  /** Bind address of thrift server. */
+  /**
+   * Bind address of thrift server.
+   */
   1: string listen_addr = "::";
-  /** Port of thrift server. */
+
+  /**
+   * Port of thrift server.
+   */
   2: i32 openr_ctrl_port = 2018;
-  /** Knob to enable/disable TLS thrift server. */
+
+  /**
+   * Knob to enable/disable TLS thrift server.
+   */
   3: bool enable_secure_thrift_server = false;
-  /** Certificate authority path for verifying peers. */
+
+  /**
+   * Certificate authority path for verifying peers.
+   */
   4: optional string x509_ca_path;
-  /** Certificate path for the associated wangle::SSLContextConfig. */
+
+  /**
+   * Certificate path for the associated wangle::SSLContextConfig.
+   */
   5: optional string x509_cert_path;
-  /** The key path for the associated wangle::SSLContextConfig.
-  If unspecified, will use x509_cert_path */
+
+  /**
+   * The key path for the associated wangle::SSLContextConfig.
+   * If unspecified, will use x509_cert_path
+   */
   6: optional string x509_key_path;
-  /** eccCurveName for the associated wangle::SSLContextConfig */
+
+  /**
+   * eccCurveName for the associated wangle::SSLContextConfig
+   */
   7: optional string ecc_curve_name;
-  /** A comma separated list of strings. Strings are x509 common names to
-  accept SSL connections from. If an empty string is provided, the server
-  will accept connections from any authenticated peer. */
+
+  /**
+   * A comma separated list of strings. Strings are x509 common names to
+   * accept SSL connections from. If an empty string is provided, the server
+   * will accept connections from any authenticated peer.
+   */
   8: optional string acceptable_peers;
-  /** TLS ticket seed file path to use for client session resumption. */
+
+  /**
+   * TLS ticket seed file path to use for client session resumption.
+   */
   9: optional string ticket_seed_path;
-  /** Verify type for client when enabling secure server. */
+
+  /**
+   * Verify type for client when enabling secure server.
+   */
   10: optional VerifyClientType verify_client_type;
-  /** Knob to enable/disable non-default VRF thrift server. */
+
+  /**
+   * Knob to enable/disable non-default VRF thrift server.
+   */
   11: optional bool enable_non_default_vrf_thrift_server;
-  /** Timeout (4 seconds by default) of Cpp2Worker join in Thrift server */
+
+  /**
+   * Timeout (4 seconds by default) of Cpp2Worker join in Thrift server.
+   */
   12: i32 workers_join_timeout = 4;
+
+  /**
+   * User specified non-default vrf list to start thrift server from.
+   *
+   * Attention: this flag will be in use only when
+   *  `enable_non_default_vrf_thrift_server = true`
+   */
+  13: list<string> vrf_names = [];
 }
 
 struct ThriftClientConfig {

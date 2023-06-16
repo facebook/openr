@@ -295,6 +295,11 @@ class Config {
         .value_or(false);
   }
 
+  const std::vector<std::string>
+  getNonDefaultVrfNames() const {
+    return *getThriftServerConfig().vrf_names();
+  }
+
   const std::string
   getSSLCertPath() const {
     auto certPath = getThriftServerConfig().x509_cert_path();

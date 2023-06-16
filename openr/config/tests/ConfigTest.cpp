@@ -601,4 +601,18 @@ TEST(ConfigTest, ToThriftKvStoreConfig) {
   EXPECT_NO_THROW(config.toThriftKvStoreConfig());
 }
 
+TEST(ConfigTest, NonDefaultVrfConfigGetter) {
+  std::string mgmtVrf{"mgmtVrf"};
+  thrift::ThriftServerConfig thrift_server_config;
+  thrift_server_config.vrf_names() = {mgmtVrf};
+
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.thrift_server() = thrift_server_config;
+
+  // no soft-drained flag
+  auto config = Config(tConfig);
+  const auto vrfs = config.getNonDefaultVrfNames();
+  EXPECT_EQ(1, vrfs.size());
+  EXPECT_EQ(mgmtVrf, vrfs.front());
+}
 } // namespace openr
