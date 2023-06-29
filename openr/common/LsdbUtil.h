@@ -194,11 +194,6 @@ thrift::PrefixEntry createPrefixEntryWithMetrics(
     thrift::PrefixType const& type,
     thrift::PrefixMetrics const& metrics);
 
-thrift::AllocPrefix createAllocPrefix(
-    thrift::IpPrefix const& seedPrefix,
-    int64_t allocPrefixLen,
-    int64_t allocPrefixIndex);
-
 thrift::OpenrVersions createOpenrVersions(
     const thrift::OpenrVersion& version,
     const thrift::OpenrVersion& lowestSupportedVersion);

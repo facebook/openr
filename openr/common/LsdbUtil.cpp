@@ -545,19 +545,6 @@ createPrefixEntryWithMetrics(
   return prefixEntry;
 }
 
-// construct thrift::AllocPrefix
-thrift::AllocPrefix
-createAllocPrefix(
-    const thrift::IpPrefix& seedPrefix,
-    int64_t allocPrefixLen,
-    int64_t allocPrefixIndex) {
-  thrift::AllocPrefix allocPrefix;
-  allocPrefix.seedPrefix() = seedPrefix;
-  allocPrefix.allocPrefixLen() = allocPrefixLen;
-  allocPrefix.allocPrefixIndex() = allocPrefixIndex;
-  return allocPrefix;
-}
-
 // construct thrift::OpenrVersions
 thrift::OpenrVersions
 createOpenrVersions(

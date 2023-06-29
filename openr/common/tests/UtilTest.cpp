@@ -1051,17 +1051,6 @@ TEST(UtilTest, BuildInfoConstruction) {
   EXPECT_EQ(info.buildMode().value(), BuildInfo::getBuildMode());
 }
 
-TEST(UtilTest, AllocPrefixConstruction) {
-  thrift::IpPrefix ipPrefix = toIpPrefix("192.0.0.0/8");
-  const int64_t prefixLen = 24;
-  const int64_t prefixIndex = 4;
-  thrift::AllocPrefix allocPrefix =
-      createAllocPrefix(ipPrefix, prefixLen, prefixIndex);
-  EXPECT_EQ(allocPrefix.seedPrefix().value(), ipPrefix);
-  EXPECT_EQ(allocPrefix.allocPrefixLen().value(), prefixLen);
-  EXPECT_EQ(allocPrefix.allocPrefixIndex().value(), prefixIndex);
-}
-
 TEST(UtilTest, PerfEventConstruction) {
   thrift::PerfEvent perfEvent =
       createPerfEvent("Test Node", "Test Perf Event Construction", 100);

@@ -379,42 +379,6 @@ struct PrefixDatabase {
 } (cpp.minimize_padding)
 
 /**
- * @deprecated - Allocated prefix information. This is stored in the persistent
- * store and can be read via config get thrift API.
- */
-struct AllocPrefix {
-  /**
-   * Seed prefix from which sub-prefixes are allocated
-   */
-  1: Network.IpPrefix seedPrefix;
-
-  /**
-   * Allocated prefix length
-   */
-  2: i64 allocPrefixLen;
-
-  /**
-   * My allocated prefix, i.e., index within seed prefix
-   */
-  3: i64 allocPrefixIndex;
-}
-
-/**
- * @deprecated - Prefix allocation configuration. This is set in KvStore by
- * remote controller. The PrefixAllocator learns its own prefix, assign it on
- * the interface, and advertise it in the KvStore.
- *
- * See PrefixAllocator documentation for static configuration mode.
- */
-struct StaticAllocation {
-  /**
-   * Map of node to allocated prefix. This map usually contains entries for all
-   * the nodes in the network.
-   */
-  1: map<string/* node-name */ , Network.IpPrefix> nodePrefixes;
-}
-
-/**
  * @deprecated - Map of node name to adjacency database. This is deprecated
  * and should go away once area migration is complete.
  */

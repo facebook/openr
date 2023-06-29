@@ -494,7 +494,7 @@ service OpenrCtrl extends KvStore.KvStoreService {
     2: KvStore.KeyVals snapshot,
   ) throws (1: OpenrError error);
 
-  // Deprecated, prefer API sepcfying area
+  // Deprecated, prefer API specifying area
   // TODO, remove once EBB has transition away from this
   bool longPollKvStoreAdj(1: KvStore.KeyVals snapshot) throws (
     1: OpenrError error,

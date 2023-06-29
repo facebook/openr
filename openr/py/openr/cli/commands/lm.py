@@ -234,47 +234,6 @@ class LMCmdBase(OpenrCtrlCmd):
             return None
         return metricOverride == metric
 
-    async def toggle_link_metric(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        override: bool,
-        interface: str,
-        metric: int,
-        yes: bool,
-    ) -> None:
-        links = await client.getInterfaces()
-        print()
-
-        if interface not in links.interfaceDetails:
-            print("No such interface: {}".format(interface))
-            return
-
-        status = self.check_link_overriden(links, interface, metric)
-        if not override and status is None:
-            print("Interface hasn't been assigned metric override.\n")
-            sys.exit(0)
-
-        if override and status:
-            print(
-                "Interface: {} has already been set with metric: {}.\n".format(
-                    interface, metric
-                )
-            )
-            sys.exit(0)
-
-        action = "set override metric" if override else "unset override metric"
-        question_str = "Are you sure to {} for interface {} ?"
-        if not utils.yesno(question_str.format(action, interface), yes):
-            print()
-            return
-
-        if override:
-            await client.setInterfaceMetric(interface, metric)
-        else:
-            await client.unsetInterfaceMetric(interface)
-
-        print("Successfully {} for the interface.\n".format(action))
-
     def interface_info_to_dict(self, interface_info):
         def _update(interface_info_dict, interface_info):
             interface_info_dict.update(
@@ -474,34 +433,6 @@ class ClearLinkMetricCmd(LMCmdBase):
         **kwargs,
     ) -> None:
         await self.toggle_link_metric_inc(client, interfaces, 0, yes)
-
-
-# [TO BE DEPRECATED]
-class SetLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        interface: str,
-        metric: str,
-        yes: bool,
-        *args,
-        **kwargs,
-    ) -> None:
-        await self.toggle_link_metric(client, True, interface, int(metric), yes)
-
-
-class UnsetLinkMetricCmd(LMCmdBase):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        interface: str,
-        yes: bool,
-        *args,
-        **kwargs,
-    ) -> None:
-        await self.toggle_link_metric(client, False, interface, 0, yes)
 
 
 class OverrideAdjMetricCmd(LMCmdBase):
