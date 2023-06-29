@@ -70,7 +70,7 @@ class LMCli:
 class LMValidateCli:
     @click.command()
     @click.pass_obj
-    def validate(cli_opts):
+    def validate(cli_opts):  # noqa: B902
         """Run checks on discovered interfaces"""
 
         lm.LMValidateCmd(cli_opts).run()
@@ -164,8 +164,9 @@ class IncreaseNodeMetricCli:
     @click.command()
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
-    def increase_node_metric(cli_opts, metric, yes):  # noqa: B902
+    def increase_node_metric(cli_opts, metric, yes, quiet):  # noqa: B902
         """
         Increase node-level metric for soft-drain behavior.
         """
@@ -174,15 +175,17 @@ class IncreaseNodeMetricCli:
         lm.IncreaseNodeMetricCmd(cli_opts).run(metric, yes)
 
         # show adj metric result
-        nodes = parse_nodes(cli_opts, "")
-        lm.LMAdjCmd(cli_opts).run(nodes, False)
+        if not quiet:
+            nodes = parse_nodes(cli_opts, "")
+            lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
 class ClearNodeMetricCli:
     @click.command()
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
-    def clear_node_metric(cli_opts, yes):  # noqa: B902
+    def clear_node_metric(cli_opts, yes, quiet):  # noqa: B902
         """
         Clear node-level metric increment for soft-drain behavior.
         """
@@ -191,8 +194,9 @@ class ClearNodeMetricCli:
         lm.ClearNodeMetricCmd(cli_opts).run(yes)
 
         # show adj metric result
-        nodes = parse_nodes(cli_opts, "")
-        lm.LMAdjCmd(cli_opts).run(nodes, False)
+        if not quiet:
+            nodes = parse_nodes(cli_opts, "")
+            lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
 class IncreaseLinkMetricCli:
@@ -200,8 +204,9 @@ class IncreaseLinkMetricCli:
     @click.argument("interface", nargs=-1, required=True)
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
-    def increase_link_metric(cli_opts, interface, metric, yes):  # noqa: B902
+    def increase_link_metric(cli_opts, interface, metric, yes, quiet):  # noqa: B902
         """
         Increase link-level metric for soft-drain behavior.
         """
@@ -210,16 +215,18 @@ class IncreaseLinkMetricCli:
         lm.IncreaseLinkMetricCmd(cli_opts).run(interface, metric, yes)
 
         # show adj metric result
-        nodes = parse_nodes(cli_opts, "")
-        lm.LMAdjCmd(cli_opts).run(nodes, False)
+        if not quiet:
+            nodes = parse_nodes(cli_opts, "")
+            lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
 class ClearLinkMetricCli:
     @click.command()
     @click.argument("interface", nargs=-1, required=True)
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
-    def clear_link_metric(cli_opts, interface, yes):  # noqa: B902
+    def clear_link_metric(cli_opts, interface, yes, quiet):  # noqa: B902
         """
         Clear link-level metric increment for soft-drain behavior.
         """
@@ -228,8 +235,9 @@ class ClearLinkMetricCli:
         lm.ClearLinkMetricCmd(cli_opts).run(interface, yes)
 
         # show adj metric result
-        nodes = parse_nodes(cli_opts, "")
-        lm.LMAdjCmd(cli_opts).run(nodes, False)
+        if not quiet:
+            nodes = parse_nodes(cli_opts, "")
+            lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
 class OverrideAdjMetricCli:
@@ -238,8 +246,11 @@ class OverrideAdjMetricCli:
     @click.argument("interface")
     @click.argument("metric")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
-    def override_adj_metric(cli_opts, node, interface, metric, yes):  # noqa: B902
+    def override_adj_metric(
+        cli_opts, node, interface, metric, yes, quiet  # noqa: B902
+    ):
         """
         Override the adjacency metric value.
         """
@@ -250,8 +261,10 @@ class OverrideAdjMetricCli:
             return
 
         lm.OverrideAdjMetricCmd(cli_opts).run(node, interface, metric, yes)
-        nodes = parse_nodes(cli_opts, "")
-        kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
+
+        if not quiet:
+            nodes = parse_nodes(cli_opts, "")
+            kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 
 class ClearAdjMetricOverrideCli:
@@ -259,8 +272,9 @@ class ClearAdjMetricOverrideCli:
     @click.argument("node")
     @click.argument("interface")
     @click.option("--yes", is_flag=True, help="Make command non-interactive")
+    @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
-    def clear_adj_metric_override(cli_opts, node, interface, yes):  # noqa: B902
+    def clear_adj_metric_override(cli_opts, node, interface, yes, quiet):  # noqa: B902
         """
         Clear previously overridden adjacency metric value.
         """
@@ -271,5 +285,6 @@ class ClearAdjMetricOverrideCli:
             return
 
         lm.ClearAdjMetricOverrideCmd(cli_opts).run(node, interface, yes)
-        nodes = parse_nodes(cli_opts, "")
-        kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
+        if not quiet:
+            nodes = parse_nodes(cli_opts, "")
+            kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
