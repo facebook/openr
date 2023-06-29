@@ -7,15 +7,6 @@
 
 #pragma once
 
-#include <algorithm>
-#include <cstdint>
-#include <memory>
-#include <numeric>
-#include <string>
-#include <unordered_map>
-#include <unordered_set>
-#include <vector>
-
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -24,64 +15,28 @@ namespace openr {
 
 using LinkStateMetric = uint64_t;
 
-// HoldableValue is the basic building block for ordered FIB programming
-// (rfc 6976)
-//
-// updateValue() will cause the previous value to be held for ttl
-// time, where the ttl is chosen based on if the update is an up or down event.
-// Subsequent updateValue() calls with the same value are no-ops.
-// An update call with a new value when hasHold() is true results in the hold
-// being clearted, thus changeing value().
-//
-// value() will return the held value until decrementTtl() returns true and the
-// held value is cleared.
-
-template <class T>
-class HoldableValue {
- public:
-  explicit HoldableValue(T val);
-
-  void operator=(T val);
-
-  const T& value() const;
-
-  bool hasHold() const;
-
-  // these methods return true if the call results in the value changing
-  bool decrementTtl();
-  bool updateValue(
-      T val, LinkStateMetric holdUpTtl, LinkStateMetric holdDownTtl);
-
- private:
-  bool isChangeBringingUp(T val);
-
-  T val_;
-  std::optional<T> heldVal_;
-  LinkStateMetric holdTtl_{0};
-};
-
-//
-// Why define Link and LinkState? Isn't link state fully captured by something
-// like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
-// It is, but these classes provide a few major benefits over that simple
-// structure:
-//
-// 1. Only stores bidirectional links. i.e. for a link, the node at both ends
-// is advertising the adjancecy
-//
-// 2. Defines a hash and comparators that operate on the essential property of a
-// network link: the tuple: unorderedPair<orderedPair<nodeName, ifName>,
-//                                orderedPair<nodeName, ifName>>
-//
-// 3. For each unique link in the network, holds a single object that can be
-// quickly accessed and modified via the nodeName of either end of the link.
-//
-// 4. Provides useful apis to read and write link state.
-//
-// 5. Provides Shortest path results and handles memoizing this expesive
-// computation while the link state has not changed
-//
-
+/*
+ * Why define Link and LinkState? Isn't link state fully captured by something
+ * like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
+ *
+ * The answer is YES, but these classes provide a few major benefits over that
+ * simple structure:
+ *
+ * 1. Only stores bidirectional links. i.e. for a link, the node at both ends
+ * is advertising the adjancecy
+ *
+ * 2. Defines a hash and comparators that operate on the essential property of a
+ * network link: the tuple: unorderedPair<orderedPair<nodeName, ifName>,
+ *                                orderedPair<nodeName, ifName>>
+ *
+ * 3. For each unique link in the network, holds a single object that can be
+ * quickly accessed and modified via the nodeName of either end of the link.
+ *
+ * 4. Provides useful apis to read and write link state.
+ *
+ * 5. Provides SPF results and handles memoizing this expensive computation
+ * while the link state has not changed.
+ */
 class Link {
  public:
   Link(
@@ -99,15 +54,26 @@ class Link {
       const openr::thrift::Adjacency& adj2);
 
  private:
+  // link can only belongs to one specific area
   const std::string area_;
+
+  // node names and link names from both ends
   const std::string n1_, n2_, if1_, if2_;
+
+  // metric from both ends
   LinkStateMetric metric1_{1}, metric2_{1};
+
+  // interface overload(Hard-drain) state
   bool overload1_{false}, overload2_{false};
+
+  // adjacency label for segment routing use case
   int32_t adjLabel1_{0}, adjLabel2_{0};
-  // Weight represents a link's capacity (ex: 100Gbps)
+
+  // weight represents a link's capacity (ex: 100Gbps)
   int64_t weight1_, weight2_;
+
+  // link addresses including v4 and v6
   thrift::BinaryAddress nhV41_, nhV42_, nhV61_, nhV62_;
-  LinkStateMetric holdUpTtl_{0};
 
   const std::pair<
       std::pair<std::string, std::string>,
@@ -117,14 +83,11 @@ class Link {
  public:
   const size_t hash{0};
 
-  void setHoldUpTtl(LinkStateMetric ttl);
-
   bool isUp() const;
 
-  bool decrementHolds();
-
-  bool hasHolds() const;
-
+  /*
+   * [Accesor Method]
+   */
   const std::string&
   getArea() const {
     return area_;
@@ -152,6 +115,9 @@ class Link {
   const thrift::BinaryAddress& getNhV6FromNode(
       const std::string& nodeName) const;
 
+  /*
+   * [Mutator Method]
+   */
   void setNhV4FromNode(
       const std::string& nodeName, const thrift::BinaryAddress& nhV4);
 
@@ -164,11 +130,7 @@ class Link {
 
   void setWeightFromNode(const std::string& nodeName, int64_t weight);
 
-  bool setOverloadFromNode(
-      const std::string& nodeName,
-      bool overload,
-      LinkStateMetric holdUpTtl,
-      LinkStateMetric holdDownTtl);
+  bool setOverloadFromNode(const std::string& nodeName, bool overload);
 
   bool operator<(const Link& other) const;
 
@@ -310,20 +272,6 @@ class LinkState {
       weight_ = weight;
     }
 
-    void
-    normalizeNextHopWeights() {
-      int64_t gcd{0};
-      for (auto& [_, nh] : nextHopLinks_) {
-        gcd = std::gcd(gcd, nh.weight);
-      }
-
-      if (gcd > 1) {
-        for (auto& [_, nh] : nextHopLinks_) {
-          nh.weight = nh.weight / gcd;
-        }
-      }
-    }
-
    private:
     std::unordered_map<std::string, NextHopLink> nextHopLinks_;
     std::optional<int64_t> weight_{std::nullopt};
@@ -338,7 +286,7 @@ class LinkState {
   // - getKthPaths()
   //
   // each is memoized all params. memoization invalidated for any topolgy
-  // altering calls, i.e. if decrementHolds(), updateAdjacencyDatabase(), or
+  // altering calls, i.e. if pdateAdjacencyDatabase(), or
   // deleteAdjacencyDatabase() returns with LinkState::topologyChanged set true
   SpfResult const& getSpfResult(
       const std::string& nodeName, bool useLinkMetric = true) const;
@@ -402,8 +350,6 @@ class LinkState {
     bool nodeLabelChanged{false};
   };
 
-  LinkStateChange decrementHolds();
-
   // update adjacencies for the given router
   LinkStateChange updateAdjacencyDatabase(
       thrift::AdjacencyDatabase const& adjacencyDb, std::string area);
@@ -436,8 +382,6 @@ class LinkState {
   bool isNodeOverloaded(const std::string& nodeName) const;
 
   uint64_t getNodeMetricIncrement(const std::string& nodeName) const;
-
-  bool hasHolds() const;
 
   size_t
   numLinks() const {
@@ -496,11 +440,7 @@ class LinkState {
 
   void removeNode(const std::string& nodeName);
 
-  bool updateNodeOverloaded(
-      const std::string& nodeName,
-      bool isOverloaded,
-      LinkStateMetric holdUpTtl,
-      LinkStateMetric holdDownTtl);
+  bool updateNodeOverloaded(const std::string& nodeName, bool isOverloaded);
 
   // run Dijkstra's Shortest Path First algorithm on the link state graph
   SpfResult runSpf(
@@ -530,9 +470,7 @@ class LinkState {
   LinkSet allLinks_;
 
   // [hard-drain]
-  // [TODO] remove holdableValue
-  std::unordered_map<std::string /* nodeName */, HoldableValue<bool>>
-      nodeOverloads_;
+  std::unordered_map<std::string /* nodeName */, bool> nodeOverloads_;
 
   // [soft-drain]
   // track nodeMetricInc per node, 0 means not softdrained. Higher the value,

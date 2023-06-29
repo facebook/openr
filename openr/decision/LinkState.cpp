@@ -47,79 +47,6 @@ std::hash<openr::LinkState::LinkSet>::operator()(
 
 namespace openr {
 
-template <class T>
-HoldableValue<T>::HoldableValue(T val) : val_(val) {}
-
-template <class T>
-void
-HoldableValue<T>::operator=(T val) {
-  val_ = val;
-  heldVal_.reset();
-  holdTtl_ = 0;
-}
-
-template <class T>
-const T&
-HoldableValue<T>::value() const {
-  return heldVal_.has_value() ? heldVal_.value() : val_;
-}
-
-template <class T>
-bool
-HoldableValue<T>::hasHold() const {
-  return heldVal_.has_value();
-}
-
-template <class T>
-bool
-HoldableValue<T>::decrementTtl() {
-  if (heldVal_ && 0 == --holdTtl_) {
-    heldVal_.reset();
-    return true;
-  }
-  return false;
-}
-
-template <class T>
-bool
-HoldableValue<T>::updateValue(
-    T val, LinkStateMetric holdUpTtl, LinkStateMetric holdDownTtl) {
-  // calling update with the same value is a no-op
-  if (val != val_) {
-    if (hasHold()) {
-      // If there was already a hold we need to fall back to fast update.
-      // Otherwise, there are cases that could lead to longer transient
-      // (less transient?) loops.
-      heldVal_.reset();
-      holdTtl_ = 0;
-    } else {
-      holdTtl_ = isChangeBringingUp(val) ? holdUpTtl : holdDownTtl;
-      if (0 != holdTtl_) {
-        heldVal_ = val_;
-      }
-    }
-    val_ = val;
-    return !hasHold();
-  }
-  return false;
-}
-
-template <>
-bool
-HoldableValue<bool>::isChangeBringingUp(bool val) {
-  return val_ && !val;
-}
-
-template <>
-bool
-HoldableValue<LinkStateMetric>::isChangeBringingUp(LinkStateMetric val) {
-  return val < val_;
-}
-
-// explicit instantiations for our use cases
-template class HoldableValue<LinkStateMetric>;
-template class HoldableValue<bool>;
-
 Link::Link(
     const std::string& area,
     const std::string& nodeName1,
@@ -234,28 +161,9 @@ Link::getOverloadFromNode(const std::string& nodeName) const {
   throw std::invalid_argument(nodeName);
 }
 
-void
-Link::setHoldUpTtl(LinkStateMetric ttl) {
-  holdUpTtl_ = ttl;
-}
-
 bool
 Link::isUp() const {
-  return (0 == holdUpTtl_) && !overload1_ && !overload2_;
-}
-
-bool
-Link::decrementHolds() {
-  bool holdExpired = false;
-  if (0 != holdUpTtl_) {
-    holdExpired |= (0 == --holdUpTtl_);
-  }
-  return holdExpired;
-}
-
-bool
-Link::hasHolds() const {
-  return 0 != holdUpTtl_;
+  return (not overload1_) and (not overload2_);
 }
 
 const thrift::BinaryAddress&
@@ -339,11 +247,7 @@ Link::setWeightFromNode(const std::string& nodeName, int64_t weight) {
 }
 
 bool
-Link::setOverloadFromNode(
-    const std::string& nodeName,
-    bool overload,
-    LinkStateMetric holdUpTtl,
-    LinkStateMetric holdDownTtl) {
+Link::setOverloadFromNode(const std::string& nodeName, bool overload) {
   bool const wasUp = isUp();
   if (n1_ == nodeName) {
     overload1_ = overload;
@@ -492,22 +396,34 @@ LinkState::orderedLinksFromNode(const std::string& nodeName) const {
 
 bool
 LinkState::updateNodeOverloaded(
-    const std::string& nodeName,
-    bool isOverloaded,
-    LinkStateMetric holdUpTtl,
-    LinkStateMetric holdDownTtl) {
-  if (nodeOverloads_.count(nodeName)) {
-    return nodeOverloads_.at(nodeName).updateValue(
-        isOverloaded, holdUpTtl, holdDownTtl);
+    const std::string& nodeName, bool isOverloaded) {
+  /*
+   * As per `insert_or_assign`'s documentation:
+   *
+   * https://en.cppreference.com/w/cpp/container/unordered_map/insert_or_assign
+   *
+   * template<class M>
+   * std::pair<iterator, bool>
+   *
+   * will be returned. The `bool` component is:
+   *  - TRUE: if the insertion took place
+   *  - FALSE: if the assignment took place
+   */
+  if (nodeOverloads_.count(nodeName) and
+      nodeOverloads_.at(nodeName) == isOverloaded) {
+    // don't indicate LinkState change for duplicate update
+    return false;
   }
-  nodeOverloads_.emplace(nodeName, HoldableValue<bool>{isOverloaded});
+
+  const auto [_, inserted] =
+      nodeOverloads_.insert_or_assign(nodeName, isOverloaded);
   // don't indicate LinkState changed if this is a new node
-  return false;
+  return not inserted;
 }
 
 bool
 LinkState::isNodeOverloaded(const std::string& nodeName) const {
-  return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName).value();
+  return nodeOverloads_.count(nodeName) and nodeOverloads_.at(nodeName);
 }
 
 std::uint64_t
@@ -517,37 +433,6 @@ LinkState::getNodeMetricIncrement(const std::string& nodeName) const {
     return it->second;
   }
   return 0;
-}
-
-LinkState::LinkStateChange
-LinkState::decrementHolds() {
-  LinkStateChange change;
-  for (auto& link : allLinks_) {
-    change.topologyChanged |= link->decrementHolds();
-  }
-  for (auto& kv : nodeOverloads_) {
-    change.topologyChanged |= kv.second.decrementTtl();
-  }
-  if (change.topologyChanged) {
-    spfResults_.clear();
-    kthPathResults_.clear();
-  }
-  return change;
-}
-
-bool
-LinkState::hasHolds() const {
-  for (auto& link : allLinks_) {
-    if (link->hasHolds()) {
-      return true;
-    }
-  }
-  for (auto& kv : nodeOverloads_) {
-    if (kv.second.hasHold()) {
-      return true;
-    }
-  }
-  return false;
 }
 
 std::shared_ptr<Link>
@@ -588,9 +473,6 @@ LinkState::updateAdjacencyDatabase(
     thrift::AdjacencyDatabase const& newAdjacencyDb, std::string area) {
   LinkStateChange change;
 
-  // TODO remove holdable value
-  LinkStateMetric holdUpTtl = 0, holdDownTtl = 0;
-
   // Area field must be specified and match with area_
   DCHECK_EQ(area_, area);
   for (auto const& adj : *newAdjacencyDb.adjacencies()) {
@@ -619,8 +501,8 @@ LinkState::updateAdjacencyDatabase(
   std::unordered_set<Link> linksDown;
 
   // topology changed if a node is overloaded / un-overloaded
-  change.topologyChanged |= updateNodeOverloaded(
-      nodeName, *newAdjacencyDb.isOverloaded(), holdUpTtl, holdDownTtl);
+  change.topologyChanged |=
+      updateNodeOverloaded(nodeName, *newAdjacencyDb.isOverloaded());
 
   // topology is changed if softdrain value is changed.
   change.topologyChanged |= *priorAdjacencyDb.nodeMetricIncrementVal() !=
@@ -638,7 +520,6 @@ LinkState::updateAdjacencyDatabase(
         (oldIter == oldLinks.end() || **newIter < **oldIter)) {
       // newIter is pointing at a Link not currently present, record this as a
       // link to add and advance newIter
-      (*newIter)->setHoldUpTtl(holdUpTtl);
       change.topologyChanged |= (*newIter)->isUp();
       // even if we are holding a change, we apply the change to our link state
       // and check for holds when running spf. this ensures we don't add the
@@ -687,10 +568,7 @@ LinkState::updateAdjacencyDatabase(
           oldLink.getOverloadFromNode(nodeName),
           newLink.getOverloadFromNode(nodeName));
       change.topologyChanged |= oldLink.setOverloadFromNode(
-          nodeName,
-          newLink.getOverloadFromNode(nodeName),
-          holdUpTtl,
-          holdDownTtl);
+          nodeName, newLink.getOverloadFromNode(nodeName));
     }
 
     // Check if adjacency label has changed
