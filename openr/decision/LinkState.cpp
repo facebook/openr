@@ -85,109 +85,6 @@ Link::Link(
   weight2_ = *adj2.weight();
 }
 
-const std::string&
-Link::getOtherNodeName(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return n2_;
-  }
-  if (n2_ == nodeName) {
-    return n1_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-const std::string&
-Link::firstNodeName() const {
-  return orderedNames_.first.first;
-}
-
-const std::string&
-Link::secondNodeName() const {
-  return orderedNames_.second.first;
-}
-
-const std::string&
-Link::getIfaceFromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return if1_;
-  }
-  if (n2_ == nodeName) {
-    return if2_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-LinkStateMetric
-Link::getMetricFromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return metric1_;
-  }
-  if (n2_ == nodeName) {
-    return metric2_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-int32_t
-Link::getAdjLabelFromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return adjLabel1_;
-  }
-  if (n2_ == nodeName) {
-    return adjLabel2_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-int64_t
-Link::getWeightFromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return weight1_;
-  }
-  if (n2_ == nodeName) {
-    return weight2_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-bool
-Link::getOverloadFromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return overload1_;
-  }
-  if (n2_ == nodeName) {
-    return overload2_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-bool
-Link::isUp() const {
-  return (not overload1_) and (not overload2_);
-}
-
-const thrift::BinaryAddress&
-Link::getNhV4FromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return nhV41_;
-  }
-  if (n2_ == nodeName) {
-    return nhV42_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
-const thrift::BinaryAddress&
-Link::getNhV6FromNode(const std::string& nodeName) const {
-  if (n1_ == nodeName) {
-    return nhV61_;
-  }
-  if (n2_ == nodeName) {
-    return nhV62_;
-  }
-  throw std::invalid_argument(nodeName);
-}
-
 void
 Link::setNhV4FromNode(
     const std::string& nodeName, const thrift::BinaryAddress& nhV4) {
@@ -736,23 +633,40 @@ LinkState::runSpf(
     auto const recordedNodeMetric = emplaceRc.first->second.metric();
     auto const& recordedNodeNextHops = emplaceRc.first->second.nextHops();
 
-    if (isNodeOverloaded(recordedNodeName) &&
+    if (isNodeOverloaded(recordedNodeName) and
         recordedNodeName != thisNodeName) {
-      // no transit traffic through this node. we've recorded the nexthops to
-      // this node, but will not consider any of it's adjancecies as offering
-      // lower cost paths towards further away nodes. This effectively drains
-      // traffic away from this node
+      /*
+       * [Node Hard-Drain]
+       *
+       * No transit traffic through this node. We've recorded the nexthops to
+       * this node, but will not consider any of it's adjancecies as offering
+       * lower cost paths towards further away nodes. This effectively drains
+       * traffic away from this node.
+       */
       continue;
     }
-    // we have the shortest path nexthops for recordedNodeName. Use these
-    // nextHops for any node that is connected to recordedNodeName that doesn't
-    // already have a lower cost path from thisNodeName
-    //
-    // this is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS
+    /*
+     * We have the shortest path nexthops for `recordedNodeName`. Use these
+     * nextHops for any node that is connected to `recordedNodeName` that
+     * doesn't already have a lower cost path from thisNodeName.
+     *
+     * This is the "relax" step in the Dijkstra Algorithm pseudocode in CLRS.
+     */
     for (const auto& link : linksFromNode(recordedNodeName)) {
       auto& otherNodeName = link->getOtherNodeName(recordedNodeName);
       if (!link->isUp() or result.count(otherNodeName) or
           linksToIgnore.count(link)) {
+        /*
+         * [Interface Hard-Drain]
+         *
+         * When interface is hard-drained, aka, with overload bit set,
+         *
+         * link->isUp() returns false
+         *
+         * with either side of the adjacency marked as `overloaded`.
+         *
+         * This prevents Dijkstra algorithm from considering this link.
+         */
         continue;
       }
       auto metric =

@@ -500,14 +500,14 @@ SpfSolver::selectBestRoutes(
   // Filter out nodes that are hard drained (overloaded set), noop if all
   // destination are overloaded
   auto filteredPrefixes = filterHardDrainedNodes(prefixEntries, areaLinkStates);
-  auto softDrainedNoes = getSoftDrainedNodes(prefixEntries, areaLinkStates);
+  auto softDrainedNodes = getSoftDrainedNodes(prefixEntries, areaLinkStates);
 
   if (enableBestRouteSelection_) {
     // Perform best route selection based on metrics
     ret.allNodeAreas = selectRoutes(
         filteredPrefixes,
         thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE,
-        softDrainedNoes);
+        softDrainedNodes);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
   } else {
     // If it is openr route, all nodes are considered as best nodes.

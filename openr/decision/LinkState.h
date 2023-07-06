@@ -83,37 +83,116 @@ class Link {
  public:
   const size_t hash{0};
 
-  bool isUp() const;
-
   /*
-   * [Accesor Method]
+   * [Accessor Method]
    */
-  const std::string&
+  inline bool
+  isUp() const {
+    return (not overload1_) and (not overload2_);
+  }
+
+  inline const std::string&
   getArea() const {
     return area_;
   }
 
-  const std::string& getOtherNodeName(const std::string& nodeName) const;
+  inline const std::string&
+  getOtherNodeName(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return n2_;
+    }
+    if (n2_ == nodeName) {
+      return n1_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  const std::string& firstNodeName() const;
+  inline const std::string&
+  firstNodeName() const {
+    return orderedNames_.first.first;
+  }
 
-  const std::string& secondNodeName() const;
+  inline const std::string&
+  secondNodeName() const {
+    return orderedNames_.second.first;
+  }
 
-  const std::string& getIfaceFromNode(const std::string& nodeName) const;
+  inline const std::string&
+  getIfaceFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return if1_;
+    }
+    if (n2_ == nodeName) {
+      return if2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  LinkStateMetric getMetricFromNode(const std::string& nodeName) const;
+  inline LinkStateMetric
+  getMetricFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return metric1_;
+    }
+    if (n2_ == nodeName) {
+      return metric2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  int32_t getAdjLabelFromNode(const std::string& nodeName) const;
+  inline int32_t
+  getAdjLabelFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return adjLabel1_;
+    }
+    if (n2_ == nodeName) {
+      return adjLabel2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  int64_t getWeightFromNode(const std::string& nodeName) const;
+  inline int64_t
+  getWeightFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return weight1_;
+    }
+    if (n2_ == nodeName) {
+      return weight2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  bool getOverloadFromNode(const std::string& nodeName) const;
+  inline bool
+  getOverloadFromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return overload1_;
+    }
+    if (n2_ == nodeName) {
+      return overload2_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  const thrift::BinaryAddress& getNhV4FromNode(
-      const std::string& nodeName) const;
+  inline const thrift::BinaryAddress&
+  getNhV4FromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return nhV41_;
+    }
+    if (n2_ == nodeName) {
+      return nhV42_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
-  const thrift::BinaryAddress& getNhV6FromNode(
-      const std::string& nodeName) const;
+  inline const thrift::BinaryAddress&
+  getNhV6FromNode(const std::string& nodeName) const {
+    if (n1_ == nodeName) {
+      return nhV61_;
+    }
+    if (n2_ == nodeName) {
+      return nhV62_;
+    }
+    throw std::invalid_argument(nodeName);
+  }
 
   /*
    * [Mutator Method]
@@ -225,59 +304,6 @@ class LinkState {
 
   using SpfResult =
       std::unordered_map<std::string /* otherNodeName */, NodeSpfResult>;
-
-  // Class which holds the UCMP results for a specific node which is part of the
-  // SPF graph from a root node to a list of weighted leaf nodes. The class
-  // holds the following node UCMP results.
-  //   - Node's next-hop weights
-  //   - Node's advertised weight
-  class NodeUcmpResult {
-   public:
-    class NextHopLink {
-     public:
-      NextHopLink(
-          std::shared_ptr<Link> const& l, std::string const& n, int64_t w)
-          : link(l), nextHopNode(n), weight(w) {}
-      std::shared_ptr<Link> const link;
-      std::string const nextHopNode;
-      int64_t weight{0};
-    };
-
-    explicit NodeUcmpResult() {}
-
-    std::unordered_map<std::string, NextHopLink> const&
-    nextHopLinks() const {
-      return nextHopLinks_;
-    }
-
-    std::optional<int64_t>
-    weight() const {
-      return weight_;
-    }
-
-    void
-    addNextHopLink(
-        const std::string& localIface,
-        std::shared_ptr<Link> const& link,
-        std::string const& nextHopNode,
-        int64_t weight) {
-      nextHopLinks_.emplace(
-          std::piecewise_construct,
-          std::forward_as_tuple(localIface),
-          std::forward_as_tuple(link, nextHopNode, weight));
-    }
-
-    void
-    setWeight(int64_t weight) {
-      weight_ = weight;
-    }
-
-   private:
-    std::unordered_map<std::string, NextHopLink> nextHopLinks_;
-    std::optional<int64_t> weight_{std::nullopt};
-  };
-
-  using UcmpResult = std::unordered_map<std::string, NodeUcmpResult>;
 
   using Path = std::vector<std::shared_ptr<Link>>;
 
@@ -502,29 +528,15 @@ class DijkstraQSpfNode {
   LinkState::NodeSpfResult result;
 };
 
-// Dijkstra queue element used to derive UCMP weights for all node's
-// on the shortest path between a root node and a list of weighted lead nodes
-class DijkstraQUcmpNode {
- public:
-  DijkstraQUcmpNode(const std::string& n, LinkStateMetric m)
-      : nodeName(n), metric_(m) {}
-
-  LinkStateMetric
-  metric() {
-    return metric_;
-  }
-
-  const std::string nodeName{""};
-  LinkStateMetric metric_{0};
-  LinkState::NodeUcmpResult result;
-};
-
-// Dijkstra Q template class.
-// Implements a priority queue using a heap.
-//
-// Template object must have the following elements
-//   - metric
-//   - nodeName
+/*
+ * Dijkstra Q template class.
+ *
+ * Implements a priority queue using a heap.
+ *
+ * Template object must have the following elements
+ *  - metric
+ *  - nodeName
+ */
 template <class T>
 class DijkstraQ {
  private:

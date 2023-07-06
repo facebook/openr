@@ -54,16 +54,4 @@ getLinkState(std::unordered_map<int, std::vector<int>> adjMap) {
   return getLinkState(weightedAdjMap);
 }
 
-std::vector<std::pair<std::string, int64_t>>
-getNodeUcmpResults(const LinkState::NodeUcmpResult& result) {
-  std::vector<std::pair<std::string, int64_t>> ret;
-
-  const auto& nextHopLinks = result.nextHopLinks();
-  for (const auto& [iface, nextHopLink] : nextHopLinks) {
-    ret.emplace_back(iface, nextHopLink.weight);
-  }
-
-  return ret;
-}
-
 } // namespace openr
