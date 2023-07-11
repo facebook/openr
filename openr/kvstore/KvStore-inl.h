@@ -860,12 +860,70 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
 }
 
 template <class ClientType>
+folly::SemiFuture<folly::Unit>
+KvStoreDb<ClientType>::KvStorePeer::semifuture_setKvStoreKeyVals(
+    const std::string& area, const thrift::KeySetParams& keySetParams) {
+  if (not kvParams_.enable_secure_thrift_client) {
+    return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
+  }
+  // TLS fallback
+  try {
+    return secureClient->semifuture_setKvStoreKeyVals(keySetParams, area);
+  } catch (const folly::AsyncSocketException& ex) {
+    LOG(ERROR)
+        << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
+  }
+}
+
+template <class ClientType>
+folly::SemiFuture<thrift::Publication>
+KvStoreDb<ClientType>::KvStorePeer::semifuture_getKvStoreKeyValsFilteredArea(
+    const thrift::KeyDumpParams& filter, const std::string& area) {
+  if (not kvParams_.enable_secure_thrift_client) {
+    return plainTextClient->semifuture_getKvStoreKeyValsFilteredArea(
+        filter, area);
+  }
+  // TLS fallback
+  try {
+    return secureClient->semifuture_getKvStoreKeyValsFilteredArea(filter, area);
+  } catch (const folly::AsyncSocketException& ex) {
+    LOG(ERROR)
+        << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    return plainTextClient->semifuture_getKvStoreKeyValsFilteredArea(
+        filter, area);
+  }
+}
+
+template <class ClientType>
+folly::SemiFuture<facebook::fb303::cpp2::fb303_status>
+KvStoreDb<ClientType>::KvStorePeer::semifuture_getStatus() {
+  if (not kvParams_.enable_secure_thrift_client) {
+    return plainTextClient->semifuture_getStatus();
+  }
+  // TLS fallback
+  try {
+    return secureClient->semifuture_getStatus();
+  } catch (const folly::AsyncSocketException& ex) {
+    LOG(ERROR)
+        << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    return plainTextClient->semifuture_getStatus();
+  }
+}
+
+template <class ClientType>
 bool
 KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     OpenrEventBase* evb, std::optional<int> maybeIpTos) {
   // use the existing thrift client if any
-  if (client) {
-    return true;
+  if (kvParams_.enable_secure_thrift_client) {
+    if (secureClient and plainTextClient) {
+      return true;
+    }
+  } else {
+    if (plainTextClient) {
+      return true;
+    }
   }
 
   try {
@@ -877,57 +935,42 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         nodeName);
 
     if (kvParams_.enable_secure_thrift_client) {
-      try {
-        auto context = std::make_shared<folly::SSLContext>();
-        context->setVerificationOption(
-            folly::SSLContext::VerifyServerCertificate::IF_PRESENTED);
-        context->loadTrustedCertificates(kvParams_.x509_ca_path->c_str());
-        // Thrift's Rocket transport requires an ALPN
-        context->setAdvertisedNextProtocols({"rs"});
-        context->loadCertificate(kvParams_.x509_cert_path->c_str());
-        context->loadPrivateKey(kvParams_.x509_key_path->c_str());
-        folly::ssl::SSLCommonOptions::setClientOptions(*context);
-        // Since we are suggesting support for rocket in ALPN,
-        // we should use RocketClientChannel to match what is negotiated
-        client = getOpenrCtrlSecureClient<
-            ClientType,
-            apache::thrift::RocketClientChannel>(
-            *(evb->getEvb()),
-            context,
-            folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
-            *peerSpec.ctrlPort(), /* port to establish TCP connection */
-            Constants::kServiceConnTimeout, /* client connection timeout */
-            Constants::kServiceProcTimeout, /* request processing timeout */
-            folly::AsyncSocket::anyAddress(), /* bindAddress */
-            maybeIpTos /* IP_TOS value for control plane */);
-        fb303::fbData->addStatValue(
-            "kvstore.thrift.secure_client", 1, fb303::COUNT);
-      } catch (const std::exception& ex) {
-        client = getOpenrCtrlPlainTextClient<ClientType>(
-            *(evb->getEvb()),
-            folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
-            *peerSpec.ctrlPort(), /* port to establish TCP connection */
-            Constants::kServiceConnTimeout, /* client connection timeout */
-            Constants::kServiceProcTimeout, /* request processing timeout */
-            folly::AsyncSocket::anyAddress(), /* bindAddress */
-            maybeIpTos /* IP_TOS value for control plane */);
-
-        fb303::fbData->addStatValue(
-            "kvstore.thrift.plaintext_client.fallback", 1, fb303::COUNT);
-      }
-    } else {
-      client = getOpenrCtrlPlainTextClient<ClientType>(
+      auto context = std::make_shared<folly::SSLContext>();
+      context->setVerificationOption(
+          folly::SSLContext::VerifyServerCertificate::IF_PRESENTED);
+      context->loadTrustedCertificates(kvParams_.x509_ca_path->c_str());
+      // Thrift's Rocket transport requires an ALPN
+      context->setAdvertisedNextProtocols({"rs"});
+      context->loadCertificate(kvParams_.x509_cert_path->c_str());
+      context->loadPrivateKey(kvParams_.x509_key_path->c_str());
+      folly::ssl::SSLCommonOptions::setClientOptions(*context);
+      // Since we are suggesting support for rocket in ALPN,
+      // we should use RocketClientChannel to match what is negotiated
+      secureClient = getOpenrCtrlSecureClient<
+          ClientType,
+          apache::thrift::RocketClientChannel>(
           *(evb->getEvb()),
+          context,
           folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
           *peerSpec.ctrlPort(), /* port to establish TCP connection */
           Constants::kServiceConnTimeout, /* client connection timeout */
           Constants::kServiceProcTimeout, /* request processing timeout */
           folly::AsyncSocket::anyAddress(), /* bindAddress */
           maybeIpTos /* IP_TOS value for control plane */);
-
       fb303::fbData->addStatValue(
-          "kvstore.thrift.plaintext_client", 1, fb303::COUNT);
+          "kvstore.thrift.secure_client", 1, fb303::COUNT);
     }
+    plainTextClient = getOpenrCtrlPlainTextClient<ClientType>(
+        *(evb->getEvb()),
+        folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
+        *peerSpec.ctrlPort(), /* port to establish TCP connection */
+        Constants::kServiceConnTimeout, /* client connection timeout */
+        Constants::kServiceProcTimeout, /* request processing timeout */
+        folly::AsyncSocket::anyAddress(), /* bindAddress */
+        maybeIpTos /* IP_TOS value for control plane */);
+
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.plaintext_client", 1, fb303::COUNT);
 
     // TODO: leverage folly::Socket's KEEP_ALIVE option to manage this
     // instead of manipulating getStatus() call on our own.
@@ -950,7 +993,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
 
     // clean up state for next round of scanning
     keepAliveTimer->cancelTimeout();
-    client.reset();
+    plainTextClient.reset();
+    secureClient.reset();
     expBackoff.reportError(); // apply exponential backoff
     return false;
   }
@@ -1730,8 +1774,8 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
 
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.client->semifuture_getKvStoreKeyValsFilteredArea(
-        params, area_);
+    auto sf =
+        thriftPeer.semifuture_getKvStoreKeyValsFilteredArea(params, area_);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue(
@@ -1962,7 +2006,11 @@ KvStoreDb<ClientType>::disconnectPeer(
   if (event != KvStorePeerEvent::INCONSISTENCY_DETECTED) {
     peer.expBackoff.reportError(); // apply exponential backoff
   }
-  peer.client.reset();
+
+  peer.plainTextClient.reset();
+  if (kvParams_.enable_secure_thrift_client) {
+    peer.secureClient.reset();
+  }
 
   // state transition
   auto oldState = *peer.peerSpec.state();
@@ -2025,7 +2073,10 @@ KvStoreDb<ClientType>::addThriftPeers(
       peerIter->second.peerSpec.state() =
           thrift::KvStorePeerState::IDLE; // set IDLE initially
       peerIter->second.keepAliveTimer->cancelTimeout(); // cancel timer
-      peerIter->second.client.reset(); // destruct thriftClient
+      peerIter->second.plainTextClient.reset(); // destruct thriftClient
+      if (kvParams_.enable_secure_thrift_client) {
+        peerIter->second.secureClient.reset();
+      }
     } else {
       // case 3: found a new peer coming up
       XLOG(INFO) << AreaTag()
@@ -2051,8 +2102,9 @@ KvStoreDb<ClientType>::addThriftPeers(
           folly::AsyncTimeout::make(*(evb_->getEvb()), [this, name]() noexcept {
             auto period = addJitter(Constants::kThriftClientKeepAliveInterval);
             auto& p = thriftPeers_.at(name);
-            CHECK(p.client) << "thrift client is NOT initialized";
-            p.client->semifuture_getStatus();
+            CHECK(p.plainTextClient)
+                << "thrift plaintext client is NOT initialized";
+            p.semifuture_getStatus();
             p.keepAliveTimer->scheduleTimeout(period);
           });
       thriftPeers_.emplace(name, std::move(peer));
@@ -2123,7 +2175,10 @@ KvStoreDb<ClientType>::delThriftPeers(std::vector<std::string> const& peers) {
 
     // destroy peer info
     peerIter->second.keepAliveTimer.reset();
-    peerIter->second.client.reset();
+    peerIter->second.plainTextClient.reset();
+    if (kvParams_.enable_secure_thrift_client) {
+      peerIter->second.secureClient.reset();
+    }
     thriftPeers_.erase(peerIter);
   }
 }
@@ -2286,7 +2341,8 @@ KvStoreDb<ClientType>::finalizeFullSync(
 
   auto& thriftPeer = peerIt->second;
   if (*thriftPeer.peerSpec.state() == thrift::KvStorePeerState::IDLE or
-      (not thriftPeer.client)) {
+      ((not thriftPeer.plainTextClient)) or
+      (kvParams_.enable_secure_thrift_client and not thriftPeer.secureClient)) {
     // TODO: evaluate the condition later to add to pending collection
     // peer in thriftPeers collection can still be in IDLE state.
     // Skip final full-sync with those peers.
@@ -2310,7 +2366,7 @@ KvStoreDb<ClientType>::finalizeFullSync(
                               startTime.time_since_epoch())
                               .count();
 
-  auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
+  auto sf = thriftPeer.semifuture_setKvStoreKeyVals(area_, params);
   std::move(sf)
       .via(evb_->getEvb())
       .thenValue([this, senderId, startTime](folly::Unit&&) {
@@ -2456,7 +2512,7 @@ KvStoreDb<ClientType>::floodPublication(
         fb303::SUM);
 
     auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.client->semifuture_setKvStoreKeyVals(params, area_);
+    auto sf = thriftPeer.semifuture_setKvStoreKeyVals(area_, params);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([startTime](folly::Unit&&) {

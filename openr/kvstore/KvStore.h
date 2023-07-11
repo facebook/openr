@@ -486,6 +486,19 @@ class KvStoreDb {
     bool getOrCreateThriftClient(
         OpenrEventBase* evb, std::optional<int> maybeIpTos);
 
+#pragma region ApiWrapper
+    // KvStorePeer API wrappers
+    folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
+        const std::string& area, const thrift::KeySetParams& keySetParams);
+
+    folly::SemiFuture<thrift::Publication>
+    semifuture_getKvStoreKeyValsFilteredArea(
+        const thrift::KeyDumpParams& filter, const std::string& area);
+
+    folly::SemiFuture<facebook::fb303::cpp2::fb303_status>
+    semifuture_getStatus();
+#pragma endregion ApiWrapper
+
     // node name
     const std::string nodeName{};
 
@@ -501,7 +514,10 @@ class KvStoreDb {
     // KvStorePeer now supports 2 types of clients:
     // 1. thrift::OpenrCtrlCppAsyncClient -> KvStore runs with Open/R;
     // 2. thrift::KvStoreServiceAsyncClient -> KvStore runs independently;
-    std::unique_ptr<ClientType> client{nullptr};
+    std::unique_ptr<ClientType> plainTextClient{nullptr};
+
+    // only if TLS is enabled
+    std::unique_ptr<ClientType> secureClient{nullptr};
 
     // [TO BE DEPRECATED]
     // timer to periodically send keep-alive status
