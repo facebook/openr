@@ -669,6 +669,15 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
   fb303::fbData->addStatExportType(
+      "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
+      fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
+      fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.thrift.semifuture_getStatus.secure_client.failure",
+      fb303::COUNT);
+  fb303::fbData->addStatExportType(
       "kvstore.thrift.num_full_sync", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_full_sync_success", fb303::COUNT);
@@ -872,6 +881,10 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_setKvStoreKeyVals(
   } catch (const folly::AsyncSocketException& ex) {
     LOG(ERROR)
         << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
+        1,
+        fb303::COUNT);
     return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
   }
 }
@@ -890,6 +903,10 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_getKvStoreKeyValsFilteredArea(
   } catch (const folly::AsyncSocketException& ex) {
     LOG(ERROR)
         << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
+        1,
+        fb303::COUNT);
     return plainTextClient->semifuture_getKvStoreKeyValsFilteredArea(
         filter, area);
   }
@@ -907,6 +924,10 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_getStatus() {
   } catch (const folly::AsyncSocketException& ex) {
     LOG(ERROR)
         << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.semifuture_getStatus.secure_client.failure",
+        1,
+        fb303::COUNT);
     return plainTextClient->semifuture_getStatus();
   }
 }
