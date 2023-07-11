@@ -858,13 +858,38 @@ SpfSolver::getNextHopsThrift(
     const auto neighborNode = link->getOtherNodeName(myNodeName);
     const auto search = nextHopNodes.find(neighborNode);
 
-    // Ignore overloaded links or nexthops
+    /*
+     * [Interface Hard-Drain]
+     *
+     * When interface is hard-drained, aka, with overload bit set,
+     *
+     * link->isUp() returns false
+     *
+     * with either side of the adjacency marked as `overloaded`.
+     *
+     * Ignore overloaded links or nexthops.
+     */
     if (search == nextHopNodes.end() or not link->isUp()) {
       continue;
     }
 
-    // Ignore nexthops that are not shortest
-    Metric distOverLink = link->getMetricFromNode(myNodeName) + search->second;
+    /*
+     * [Interface Soft-Drain]
+     *
+     * When interface is soft-drained, aka, with metric overridden,
+     *
+     * link->getMaxMetric() returns the larger metric among both ends.
+     *
+     * In case interface drain is operated only on one side,
+     *
+     * nodeA(if_a_b)[DRAINED] - (if_b_a)nodeB
+     *
+     * nodeB will still be able to detect interface soft-drain with higher
+     * metric and re-calculate SPF path.
+     *
+     * Ignore nexthops that are not shortest.
+     */
+    Metric distOverLink = link->getMaxMetric() + search->second;
     if (distOverLink != minMetric) {
       continue;
     }

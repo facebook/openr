@@ -622,9 +622,7 @@ LinkState::runSpf(
 
   DijkstraQ<DijkstraQSpfNode> q;
   q.insertNode(thisNodeName, 0);
-  uint64_t loop = 0;
   while (auto node = q.extractMin()) {
-    ++loop;
     // we've found this node's shortest paths. record it
     auto emplaceRc = result.emplace(node->nodeName, std::move(node->result));
     CHECK(emplaceRc.second);
@@ -669,8 +667,19 @@ LinkState::runSpf(
          */
         continue;
       }
-      auto metric =
-          useLinkMetric ? link->getMetricFromNode(recordedNodeName) : 1;
+      /*
+       * [Interface Soft-Drain]
+       *
+       * When interface soft-drain is issued, unlike interface hard-drain, which
+       * will set "isOverloaded" bit inside thrift::Adjacency and excluded from
+       * Dijkstra's SPF run(see comments in "Interface Hard-Drain"), it just
+       * increase the "metric" inside thrift::Adjacency.
+       *
+       * Plus interface soft-drain can be issued only from one side of the link.
+       * SPF should consider max metric of the bi-directional adj instead of
+       * uni-directional one from "current node" to "other node".
+       */
+      auto metric = useLinkMetric ? link->getMaxMetric() : 1;
       auto otherNode = q.get(otherNodeName);
       if (!otherNode) {
         q.insertNode(otherNodeName, recordedNodeMetric + metric);
@@ -696,7 +705,6 @@ LinkState::runSpf(
       }
     }
   }
-  XLOG(DBG3) << "Dijkstra loop count: " << loop;
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
   XLOG(DBG3) << "SPF elapsed time: " << deltaTime.count() << "ms.";

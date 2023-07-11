@@ -139,6 +139,11 @@ class Link {
     throw std::invalid_argument(nodeName);
   }
 
+  inline LinkStateMetric
+  getMaxMetric() const {
+    return std::max(metric1_, metric2_);
+  }
+
   inline int32_t
   getAdjLabelFromNode(const std::string& nodeName) const {
     if (n1_ == nodeName) {
@@ -468,18 +473,30 @@ class LinkState {
 
   bool updateNodeOverloaded(const std::string& nodeName, bool isOverloaded);
 
-  // run Dijkstra's Shortest Path First algorithm on the link state graph
+  /*
+   * [Dijkstra's Shortest-Path-First(SPF) Algorithm]
+   *
+   * Run SPF algorithm on the link-state graph.
+   *
+   * @param: src - the source node for the SPF run.
+   * @param: useLinkMetric - if set, the algorithm will respect adjacency weight
+   *                         advertised from the adjacent nodes, otherwise it
+   *                         will consider the graph unweighted.
+   * @param: linksToIgnore - optionally specify a set of links to not use when
+   *                         running SPF. By default, this is an empty set.
+   *
+   * @return: SpfResult - a map of node -> NodeSpfResult obj mapping
+   */
   SpfResult runSpf(
-      const std::string& src, /* the source node for the SPF run */
-      bool useLinkMetric, /* if set, the algorithm will respect adjancecy
-                             weights as advertised from the adjacent nodes,
-                             otherwise it will consider the graph unweighted */
-      const LinkSet& linksToIgnore =
-          {} /* optionaly specify a set of links to not use when running */)
-      const;
+      const std::string& src,
+      bool useLinkMetric,
+      const LinkSet& linksToIgnore = {}) const;
 
-  // returns Link object if the reverse adjancency is present in
-  // adjacencyDatabases_.at(adj.otherNodeName), else returns nullptr
+  /*
+   * Util method to create Link object:
+   *  - only if the bi-directional(reverse) adjacency is present
+   *  - otherwise returns nullptr
+   */
   std::shared_ptr<Link> maybeMakeLink(
       const std::string& nodeName, const thrift::Adjacency& adj) const;
 

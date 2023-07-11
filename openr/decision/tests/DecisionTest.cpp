@@ -56,16 +56,14 @@ const auto adj12OnlyUsedBy2 = createAdjacency(
     100002,
     Constants::kDefaultAdjWeight,
     true);
+const auto adj12_1 =
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 1000021);
+const auto adj12_2 =
+    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 20, 1000022);
 const auto adj13 =
     createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 100003);
 const auto adj14 =
     createAdjacency("4", "1/4", "4/1", "fe80::4", "192.168.0.4", 10, 100004);
-const auto adj12_old_1 =
-    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 1000021);
-const auto adj12_old_2 =
-    createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 20, 1000022);
-const auto adj13_old =
-    createAdjacency("3", "1/3", "3/1", "fe80::3", "192.168.0.3", 10, 1000031);
 // R2 -> R1, R3, R4
 const auto adj21 =
     createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 100001);
@@ -79,8 +77,6 @@ const auto adj21OnlyUsedBy1 = createAdjacency(
     100001,
     Constants::kDefaultAdjWeight,
     true);
-const auto adj21_old_1 =
-    createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 1000011);
 const auto adj23 =
     createAdjacency("3", "2/3", "3/2", "fe80::3", "192.168.0.3", 10, 100003);
 const auto adj24 =
@@ -175,21 +171,6 @@ const thrift::AdjacencyDatabase kEmptyAdjDb;
 const apache::thrift::optional_field_ref<thrift::PerfEvents const&>
     kEmptyPerfEventRef{kEmptyAdjDb.perfEvents()};
 
-// TODO @girasoley - Remove this once we implement feature in BGP to not
-// program Open/R received routes.
-// Decision enforces the need for loopback address of the node
-void
-addLoopbackAddress(thrift::PrefixDatabase& prefixDb, bool v4Enabled) {
-  const auto index = folly::to<size_t>(prefixDb.thisNodeName().value());
-  if (v4Enabled) {
-    prefixDb.prefixEntries()->emplace_back(
-        createPrefixEntry(toIpPrefix(fmt::format("172.0.0.{}/32", index))));
-  } else {
-    prefixDb.prefixEntries()->emplace_back(
-        createPrefixEntry(toIpPrefix(fmt::format("fd00::{}/128", index))));
-  }
-}
-
 thrift::PrefixDatabase
 createPrefixDbWithKspfAlgo(
     thrift::PrefixDatabase const& prefixDb,
@@ -214,11 +195,6 @@ createPrefixDbWithKspfAlgo(
         thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
     entry.type() = thrift::PrefixType::BGP;
     newPrefixDb.prefixEntries()->push_back(entry);
-  }
-
-  // Add loopback address if any
-  if (prefixType == thrift::PrefixType::BGP and not prefix.has_value()) {
-    addLoopbackAddress(newPrefixDb, v4Enabled);
   }
 
   return newPrefixDb;
@@ -1536,7 +1512,7 @@ INSTANTIATE_TEST_CASE_P(
 // 1<--->2<--->3
 //   10     10
 //
-TEST(ConnectivityTest, OverloadNodeTest) {
+TEST(ConnectivityTest, NodeHardDrainTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(
       nodeName, false /* disable v4 */, true /* enable segment label */);
@@ -1619,48 +1595,80 @@ TEST(ConnectivityTest, OverloadNodeTest) {
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
 }
 
-//
-// AdjacencyDb compatibility test in a circle topology with shortest path
-// calculation
-// In old version remoter interface name is not sepcified
-// 1(old)<--->2(new)<--->3(new)
-//     |  20         10   ^
-//     |                  |
-//     |                  |
-//     |------------------|
-TEST(ConnectivityTest, CompatibilityNodeTest) {
-  std::string nodeName("1");
+/*
+ * Interface soft-drain test will mimick the soft-drain behavior to change
+ * adj metric on one side, aka, uni-directionally. The test will verify both
+ * ends of the link will react to this drain behavior and change SPF calculation
+ * result accordinly.
+ *
+ * The test forms a circle topology for SPF calculation.
+ *
+ *         20       10
+ *     1<------>2<------>3(new)
+ *     ^   10       10   ^
+ *     |                 |
+ *     |        10       |
+ *     |-----------------|
+ *              10
+ */
+TEST(ConnectivityTest, InterfaceSoftDrainTest) {
+  const std::string nodeName("1");
   SpfSolver spfSolver(
       nodeName, false /* disable v4 */, true /* enable segment label */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  // Initialize link-state and prefix-state obj
+  std::unordered_map<std::string, LinkState> areaLinkStates = {
+      {kTestingAreaName, LinkState(kTestingAreaName)}};
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
-  // Add all adjacency DBs
-  auto adjacencyDb1 = createAdjDb("1", {adj12_old_1}, 1);
-  auto adjacencyDb2 = createAdjDb("2", {adj21_old_1, adj23}, 2);
+  /*
+   * Create adjacency DBs with:
+   *
+   * node1 -> {node2(metric = 10)}
+   * node2 -> {node1(metric = 10), node3(metric = 10)}
+   * node3 -> {node1(metric = 10), node2(metric = 10)}
+   */
+  auto adjacencyDb1 = createAdjDb("1", {adj12_1}, 1);
+  auto adjacencyDb2 = createAdjDb("2", {adj21, adj23}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj32, adj31_old}, 3);
 
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+  {
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
+    EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
 
-  EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName)
-                   .topologyChanged);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
-                  .topologyChanged);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
-                  .topologyChanged);
+    // No bi-directional adjacencies yet. No topo change.
+    EXPECT_FALSE(
+        linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName)
+            .topologyChanged);
+    // node2 <-> node3 has bi-directional adjs. Expect topo change.
+    EXPECT_TRUE(
+        linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
+            .topologyChanged);
+    // node1 <-> node2 has bi-directional adjs. Expect topo change.
+    EXPECT_TRUE(
+        linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
+            .topologyChanged);
+  }
 
-  // add/update adjacency of node1 with old versions
-  adjacencyDb1 = createAdjDb("1", {adj12_old_1, adj13_old}, 1);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
-                  .topologyChanged);
-  adjacencyDb1 = createAdjDb("1", {adj12_old_2, adj13_old}, 1);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
-                  .topologyChanged);
+  /*
+   * add/update adjacency of node1 with old versions
+   * node1 -> {node2(metric = 20), node3(metric = 10)}
+   * node2 -> {node1(metric = 10), node3(metric = 10)}
+   * node3 -> {node1(metric = 10), node2(metric = 10)}
+   */
+  {
+    // Update adjDb to add node1 -> node3 to form bi-dir adj. Expect topo
+    // change.
+    auto adjDb1 = createAdjDb("1", {adj12_1, adj13}, 1);
+    EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjDb1, kTestingAreaName)
+                    .topologyChanged);
+    // Update adjDb1 to increase node1 -> node2 metric. Expect topo change.
+    adjDb1 = createAdjDb("1", {adj12_2, adj13}, 1);
+    EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjDb1, kTestingAreaName)
+                    .topologyChanged);
+  }
 
   auto routeMap =
       getRouteMap(spfSolver, {"1", "2", "3"}, areaLinkStates, prefixState);
@@ -1672,12 +1680,11 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   EXPECT_EQ(15, routeMap.size());
 
   // validate router 1
-
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops(
-          {createNextHopFromAdj(adj12_old_2, false, 20),
-           createNextHopFromAdj(adj13_old, false, 20)}));
+          {createNextHopFromAdj(adj12_2, false, 20),
+           createNextHopFromAdj(adj13, false, 20)}));
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr3))],
       NextHops({createNextHopFromAdj(adj13, false, 10)}));
@@ -1685,28 +1692,31 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   EXPECT_EQ(
       routeMap[make_pair("1", std::to_string(*adjacencyDb2.nodeLabel()))],
       NextHops(
-          {createNextHopFromAdj(adj12_old_2, false, 20, labelPhpAction),
-           createNextHopFromAdj(adj13_old, false, 20, labelSwapAction2)}));
+          {createNextHopFromAdj(adj12_2, false, 20, labelPhpAction),
+           createNextHopFromAdj(adj13, false, 20, labelSwapAction2)}));
   EXPECT_EQ(
       routeMap[make_pair("1", std::to_string(*adjacencyDb3.nodeLabel()))],
       NextHops({createNextHopFromAdj(
-          adj13_old, false, *adj13_old.metric(), labelPhpAction)}));
+          adj13, false, *adj13.metric(), labelPhpAction)}));
 
   validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
 
   // validate router 2
-
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
       NextHops({createNextHopFromAdj(adj23, false, 10)}));
+  // SPF will choose the max metric between node1 and node2. Hence create ECMP
+  // towards node1 and node3
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj21, false, 10)}));
-
+      NextHops(
+          {createNextHopFromAdj(adj21, false, 20),
+           createNextHopFromAdj(adj23, false, 20)}));
   EXPECT_EQ(
       routeMap[make_pair("2", std::to_string(*adjacencyDb1.nodeLabel()))],
-      NextHops({createNextHopFromAdj(
-          adj21, false, *adj21.metric(), labelPhpAction)}));
+      NextHops(
+          {createNextHopFromAdj(adj21, false, 20, labelPhpAction),
+           createNextHopFromAdj(adj23, false, 20, labelSwapAction1)}));
   EXPECT_EQ(
       routeMap[make_pair("2", std::to_string(*adjacencyDb3.nodeLabel()))],
       NextHops({createNextHopFromAdj(
@@ -1715,7 +1725,6 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
 
   // validate router 3
-
   EXPECT_EQ(
       routeMap[make_pair("3", toString(addr2))],
       NextHops({createNextHopFromAdj(adj32, false, 10)}));
@@ -1735,14 +1744,14 @@ TEST(ConnectivityTest, CompatibilityNodeTest) {
   validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
 
   // adjacency update (remove adjacency) for node1
-  adjacencyDb1 = createAdjDb("1", {adj12_old_2}, 0);
+  adjacencyDb1 = createAdjDb("1", {adj12_2}, 0);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                   .topologyChanged);
   adjacencyDb3 = createAdjDb("3", {adj32}, 0);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
                    .topologyChanged);
 
-  adjacencyDb1 = createAdjDb("1", {adj12_old_2, adj13_old}, 0);
+  adjacencyDb1 = createAdjDb("1", {adj12_2, adj13}, 0);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
 }
@@ -2400,9 +2409,7 @@ TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  EXPECT_EQ(
-      (std::get<1>(GetParam()) == thrift::PrefixType::BGP ? 40 : 28),
-      routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   const auto counters = fb303::fbData->getCounters();
   // 4 + 4 * 3 peer per node (clean runs are memoized, 2nd runs  with linksTo
@@ -3452,7 +3459,7 @@ TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
 
   // Unicast routes => 4 * (4 - 1) = 12
   // Node label routes => 4 * 4 = 16
-  EXPECT_EQ((GetParam() == thrift::PrefixType::BGP ? 40 : 28), routeMap.size());
+  EXPECT_EQ(28, routeMap.size());
 
   // validate router 1
 
