@@ -719,7 +719,7 @@ struct OpenrConfig {
   * Set the file path for softdrained_flag. If the file flag is set. Open/R
   * will be set SOFT_DRAINED.
   */
-  39: bool enable_soft_drain = false;
+  39: bool enable_soft_drain = true;
 
   /**
   * [Soft-Drain]

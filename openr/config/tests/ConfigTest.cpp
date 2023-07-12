@@ -532,7 +532,7 @@ TEST(ConfigTest, GeneralGetter) {
     // enable_vip_service
     EXPECT_FALSE(config.isVipServiceEnabled());
     // enable_soft_drain
-    EXPECT_FALSE(config.isSoftdrainEnabled());
+    EXPECT_TRUE(config.isSoftdrainEnabled());
 
     // getSparkConfig
     EXPECT_EQ(*tConfig.spark_config(), config.getSparkConfig());
