@@ -870,7 +870,7 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
 
 template <class ClientType>
 folly::SemiFuture<folly::Unit>
-KvStoreDb<ClientType>::KvStorePeer::semifuture_setKvStoreKeyVals(
+KvStoreDb<ClientType>::KvStorePeer::setKvStoreKeyValsWrapper(
     const std::string& area, const thrift::KeySetParams& keySetParams) {
   if (not kvParams_.enable_secure_thrift_client) {
     return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
@@ -879,8 +879,7 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_setKvStoreKeyVals(
   try {
     return secureClient->semifuture_setKvStoreKeyVals(keySetParams, area);
   } catch (const folly::AsyncSocketException& ex) {
-    LOG(ERROR)
-        << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
     fb303::fbData->addStatValue(
         "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
         1,
@@ -891,7 +890,7 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_setKvStoreKeyVals(
 
 template <class ClientType>
 folly::SemiFuture<thrift::Publication>
-KvStoreDb<ClientType>::KvStorePeer::semifuture_getKvStoreKeyValsFilteredArea(
+KvStoreDb<ClientType>::KvStorePeer::getKvStoreKeyValsFilteredAreaWrapper(
     const thrift::KeyDumpParams& filter, const std::string& area) {
   if (not kvParams_.enable_secure_thrift_client) {
     return plainTextClient->semifuture_getKvStoreKeyValsFilteredArea(
@@ -901,8 +900,7 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_getKvStoreKeyValsFilteredArea(
   try {
     return secureClient->semifuture_getKvStoreKeyValsFilteredArea(filter, area);
   } catch (const folly::AsyncSocketException& ex) {
-    LOG(ERROR)
-        << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
     fb303::fbData->addStatValue(
         "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
         1,
@@ -914,7 +912,7 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_getKvStoreKeyValsFilteredArea(
 
 template <class ClientType>
 folly::SemiFuture<facebook::fb303::cpp2::fb303_status>
-KvStoreDb<ClientType>::KvStorePeer::semifuture_getStatus() {
+KvStoreDb<ClientType>::KvStorePeer::getStatusWrapper() {
   if (not kvParams_.enable_secure_thrift_client) {
     return plainTextClient->semifuture_getStatus();
   }
@@ -922,8 +920,7 @@ KvStoreDb<ClientType>::KvStorePeer::semifuture_getStatus() {
   try {
     return secureClient->semifuture_getStatus();
   } catch (const folly::AsyncSocketException& ex) {
-    LOG(ERROR)
-        << fmt::format("method {} got exception: {}", __FUNCTION__, ex.what());
+    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
     fb303::fbData->addStatValue(
         "kvstore.thrift.semifuture_getStatus.secure_client.failure",
         1,
@@ -1795,8 +1792,7 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
 
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
-    auto sf =
-        thriftPeer.semifuture_getKvStoreKeyValsFilteredArea(params, area_);
+    auto sf = thriftPeer.getKvStoreKeyValsFilteredAreaWrapper(params, area_);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue(
@@ -2125,7 +2121,7 @@ KvStoreDb<ClientType>::addThriftPeers(
             auto& p = thriftPeers_.at(name);
             CHECK(p.plainTextClient)
                 << "thrift plaintext client is NOT initialized";
-            p.semifuture_getStatus();
+            p.getStatusWrapper();
             p.keepAliveTimer->scheduleTimeout(period);
           });
       thriftPeers_.emplace(name, std::move(peer));
@@ -2387,7 +2383,7 @@ KvStoreDb<ClientType>::finalizeFullSync(
                               startTime.time_since_epoch())
                               .count();
 
-  auto sf = thriftPeer.semifuture_setKvStoreKeyVals(area_, params);
+  auto sf = thriftPeer.setKvStoreKeyValsWrapper(area_, params);
   std::move(sf)
       .via(evb_->getEvb())
       .thenValue([this, senderId, startTime](folly::Unit&&) {
@@ -2533,7 +2529,7 @@ KvStoreDb<ClientType>::floodPublication(
         fb303::SUM);
 
     auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.semifuture_setKvStoreKeyVals(area_, params);
+    auto sf = thriftPeer.setKvStoreKeyValsWrapper(area_, params);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([startTime](folly::Unit&&) {

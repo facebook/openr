@@ -488,15 +488,13 @@ class KvStoreDb {
 
 #pragma region ApiWrapper
     // KvStorePeer API wrappers
-    folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
+    folly::SemiFuture<folly::Unit> setKvStoreKeyValsWrapper(
         const std::string& area, const thrift::KeySetParams& keySetParams);
 
-    folly::SemiFuture<thrift::Publication>
-    semifuture_getKvStoreKeyValsFilteredArea(
+    folly::SemiFuture<thrift::Publication> getKvStoreKeyValsFilteredAreaWrapper(
         const thrift::KeyDumpParams& filter, const std::string& area);
 
-    folly::SemiFuture<facebook::fb303::cpp2::fb303_status>
-    semifuture_getStatus();
+    folly::SemiFuture<facebook::fb303::cpp2::fb303_status> getStatusWrapper();
 #pragma endregion ApiWrapper
 
     // node name
