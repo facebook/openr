@@ -119,7 +119,13 @@ KvStoreWrapper<ClientType>::setKeys(
   }
 
   try {
-    kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
+    auto result =
+        kvStore_->semifuture_setKvStoreKeyValues(area, std::move(params)).get();
+    if (result->noMergeReasons()->size() != 0) {
+      XLOG(ERR) << fmt::format(
+          "Error when merging key-value with size: {}",
+          result->noMergeReasons()->size());
+    }
   } catch (std::exception const& e) {
     XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
     return false;
