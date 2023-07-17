@@ -664,6 +664,11 @@ class KvStore final : public OpenrEventBase {
   semifuture_getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
+      std::string area, thrift::KeyGetParams keyGetParams);
+#endif // FOLLY_HAS_COROUTINES
+
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
@@ -716,6 +721,13 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
   semifuture_getKvStorePeerState(
       std::string const& area, std::string const& peerName);
+
+  // [private APIs]
+ private:
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
+      std::string area, thrift::KeyGetParams keyGetParams);
+#endif // FOLLY_HAS_COROUTINES
 
  private:
   // disable copying

@@ -589,6 +589,77 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
   // INCONSISTENCY_DETECTED = 6,
 }
 
+#if FOLLY_HAS_COROUTINES
+CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
+  thrift::KeyVals kvs(
+      {{"key1", createThriftValue(1, "node1", std::string("value1"))},
+       {"key11", createThriftValue(1, "node1", std::string("value11"))},
+       {"key111", createThriftValue(1, "node1", std::string("value111"))},
+       {"key2", createThriftValue(1, "node1", std::string("value2"))},
+       {"key22", createThriftValue(1, "node1", std::string("value22"))},
+       {"key222", createThriftValue(1, "node1", std::string("value222"))},
+       {"key3", createThriftValue(1, "node3", std::string("value3"))},
+       {"key33", createThriftValue(1, "node33", std::string("value33"))},
+       {"key333", createThriftValue(1, "node33", std::string("value333"))}});
+
+  thrift::KeyVals keyValsPod;
+  keyValsPod["keyPod1"] =
+      createThriftValue(1, "node1", std::string("valuePod1"));
+  keyValsPod["keyPod2"] =
+      createThriftValue(1, "node1", std::string("valuePod2"));
+
+  thrift::KeyVals keyValsPlane;
+  keyValsPlane["keyPlane1"] =
+      createThriftValue(1, "node1", std::string("valuePlane1"));
+  keyValsPlane["keyPlane2"] =
+      createThriftValue(1, "node1", std::string("valuePlane2"));
+
+  //
+  // area list get
+  //
+  {
+    auto config = handler_->semifuture_getRunningConfigThrift().get();
+    std::unordered_set<std::string> areas;
+    for (auto const& area : *config->areas()) {
+      areas.insert(*area.area_id());
+    }
+    EXPECT_THAT(areas, testing::SizeIs(3));
+    EXPECT_THAT(
+        areas,
+        testing::UnorderedElementsAre(kPodAreaId, kPlaneAreaId, kSpineAreaId));
+  }
+
+  // Key set/get
+  {
+    setKvStoreKeyVals(kvs, kSpineAreaId);
+    setKvStoreKeyVals(keyValsPod, kPodAreaId);
+    setKvStoreKeyVals(keyValsPlane, kPlaneAreaId);
+  }
+
+  {
+    std::vector<std::string> filterKeys{"key11", "key2"};
+    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
+        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
+        std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
+    EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
+  }
+
+  // pod keys
+  {
+    std::vector<std::string> filterKeys{"keyPod1"};
+    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
+        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
+        std::make_unique<std::string>(kPodAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(1, keyVals.size());
+    EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
+  }
+}
+#endif // FOLLY_HAS_COROUTINES
+
 TEST_F(OpenrCtrlFixture, KvStoreApis) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(1, "node1", std::string("value1"))},
