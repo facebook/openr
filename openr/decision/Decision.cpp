@@ -533,43 +533,6 @@ Decision::processPeerUpdates(PeerEvent&& event) {
 }
 
 void
-Decision::filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb) {
-  // In order to make Open/R initialization process of cold boot node hitless,
-  // we would like to have the cold node compute & program all required routes
-  // ahead of peers sending traffic through it. There are two stages from
-  // adjacency propagation perspective to achieve this.
-  // Stage1:
-  // - coldboot_node injects `adj:coldboot_node->peer_node`,
-  // - peer_node injects `adj:peer_node->coldboot_node` with
-  //   `adjOnlyUsedByOtherNode=true`
-  // NOTE: This means `adj:peer_node<->coldboot_node` can only be used by
-  // coldboot_node, As a result, coldboot_node compute & program routes first.
-  //
-  // Stage2:
-  // - peer_node updates `adj:peer_node->coldboot_node`
-  // In this way, peers start using coldboot_node for route computation &
-  // programming.
-  for (auto adjIter = adjacencyDb.adjacencies()->begin();
-       adjIter != adjacencyDb.adjacencies()->end();) {
-    if (*adjIter->adjOnlyUsedByOtherNode() and
-        *adjIter->otherNodeName() != myNodeName_) {
-      // Remove thrift::Adjacency if `adjOnlyUsedByOtherNode=true` but
-      // `myNodeName_!=otherNodeName`
-      adjacencyDb.adjacencies()->erase(adjIter);
-      XLOG(INFO) << fmt::format(
-          "Filtered adjacency {}:{}->{}:{} since it cannot be used by {}.",
-          *adjacencyDb.thisNodeName(),
-          *adjIter->ifName(),
-          *adjIter->otherNodeName(),
-          *adjIter->otherIfName(),
-          myNodeName_);
-    } else {
-      ++adjIter;
-    }
-  }
-}
-
-void
 Decision::updatePendingAdjacency(
     const std::string& area, const thrift::AdjacencyDatabase& newAdjacencyDb) {
   // Update pending adjacency with up peers in Open/R initialization process.
@@ -703,10 +666,6 @@ Decision::updateKeyInLsdb(
 
       // Process adjacency to unblock Open/R initialization.
       updatePendingAdjacency(area, adjacencyDb);
-
-      // Filter adjacency that cannot be used by this node in route
-      // computation.
-      filterUnuseableAdjacency(adjacencyDb);
 
       auto& nodeName = *adjacencyDb.thisNodeName();
       adjacencyDb.area() = area;

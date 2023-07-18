@@ -243,13 +243,6 @@ class Decision : public OpenrEventBase {
       const std::string& area, const thrift::AdjacencyDatabase& newAdjacencyDb);
 
   /*
-   * Filter adjacency that can not be used by this node.
-   * thrift::Adjacency `A->B` with `adjOnlyUsedByOtherNode=true` is filtered if
-   * myNodeName_ is not B.
-   */
-  void filterUnuseableAdjacency(thrift::AdjacencyDatabase& adjacencyDb);
-
-  /*
    * Rebuild all routes and send out update delta. Check current pendingUpdates_
    * to decide which routes need rebuilding, otherwise rebuild all. Use
    * pendingUpdates_.perfEvents() in the sent route delta appended with param
