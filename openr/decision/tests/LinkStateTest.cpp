@@ -98,7 +98,7 @@ TEST(LinkStateTest, BasicOperation) {
   auto adjDb2 = openr::createAdjDb(n2, {adj21, adj23}, 2);
   auto adjDb3 = openr::createAdjDb(n3, {adj31, adj32}, 3);
 
-  openr::LinkState state{kTestingAreaName};
+  openr::LinkState state{kTestingAreaName, n1};
 
   EXPECT_EQ(kTestingAreaName.t, state.getArea());
 
@@ -143,6 +143,47 @@ TEST(LinkStateTest, BasicOperation) {
   EXPECT_THAT(state.linksFromNode(n1), testing::IsEmpty());
   EXPECT_THAT(state.linksFromNode(n2), UnorderedElementsAre(Pointee(l2)));
   EXPECT_THAT(state.linksFromNode(n3), UnorderedElementsAre(Pointee(l2)));
+}
+
+TEST(LinkStateTest, linkUsable) {
+  // Topology: 1 -- 2 -- 3
+  // n1 is being initlized
+  std::string n1 = "node1";
+  std::string n2 = "node2";
+  std::string n3 = "node3";
+  auto adj12 =
+      openr::createAdjacency(n2, "if2", "if1", "fe80::2", "10.0.0.2", 1, 1, 1);
+  auto adj21 =
+      openr::createAdjacency(n1, "if1", "if2", "fe80::1", "10.0.0.1", 1, 1, 1);
+  *adj21.adjOnlyUsedByOtherNode() = true;
+  auto adj23 =
+      openr::createAdjacency(n3, "if3", "if2", "fe80::3", "10.0.0.3", 1, 1, 1);
+  auto adj32 =
+      openr::createAdjacency(n2, "if2", "if3", "fe80::2", "10.0.0.2", 1, 1, 1);
+
+  auto adjDb1 = openr::createAdjDb(n1, {adj12}, 1);
+  auto adjDb2 = openr::createAdjDb(n2, {adj21, adj23}, 2);
+  auto adjDb3 = openr::createAdjDb(n3, {adj32}, 3);
+
+  for (const auto& node : {n1, n2, n3}) {
+    // construct a linkstate from each node's perspective
+    openr::LinkState state{kTestingAreaName, node};
+    state.updateAdjacencyDatabase(adjDb1, kTestingAreaName);
+    state.updateAdjacencyDatabase(adjDb2, kTestingAreaName);
+    state.updateAdjacencyDatabase(adjDb3, kTestingAreaName);
+    auto n1links = state.linksFromNode(n1);
+    EXPECT_EQ(n1links.size(), 1);
+    // link 1-2 is usable only from n1's perspective
+    if (node == n1) {
+      EXPECT_TRUE((*n1links.cbegin())->getUsability());
+    } else {
+      EXPECT_FALSE((*n1links.cbegin())->getUsability());
+    }
+    // link 2-3 is always usable
+    auto n3links = state.linksFromNode(n3);
+    EXPECT_EQ(n3links.size(), 1);
+    EXPECT_TRUE((*n3links.cbegin())->getUsability());
+  }
 }
 
 TEST(LinkStateTest, pathAInPathB) {

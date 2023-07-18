@@ -802,7 +802,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
   auto it = areaLinkStates_.find(area);
   if (it == areaLinkStates_.end()) {
-    it = areaLinkStates_.emplace(area, area).first;
+    it = areaLinkStates_.emplace(area, LinkState(area, myNodeName_)).first;
   }
   auto& areaLinkState = it->second;
 

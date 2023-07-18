@@ -44,6 +44,8 @@
 
 const openr::AreaId kTestingAreaName{"test_area_name"};
 
+const std::string kTestingNodeName("test_node");
+
 namespace openr {
 /**
  * Log OpenR initialization event and export to fb303::fbData.

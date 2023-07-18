@@ -203,7 +203,8 @@ Link::directionalToString(const std::string& fromNode) const {
       getIfaceFromNode(getOtherNodeName(fromNode)));
 }
 
-LinkState::LinkState(const std::string& area) : area_(area) {}
+LinkState::LinkState(const std::string& area, const std::string& myNodeName)
+    : area_(area), myNodeName_(myNodeName) {}
 
 size_t
 LinkState::LinkPtrHash::operator()(const std::shared_ptr<Link>& l) const {
@@ -355,8 +356,9 @@ LinkState::maybeMakeLink(
       if (nodeName == *otherAdj.otherNodeName() &&
           *adj.otherIfName() == *otherAdj.ifName() &&
           *adj.ifName() == *otherAdj.otherIfName()) {
+        auto usable = linkUsable(adj, otherAdj);
         return std::make_shared<Link>(
-            area_, nodeName, adj, *adj.otherNodeName(), otherAdj);
+            area_, nodeName, adj, *adj.otherNodeName(), otherAdj, usable);
       }
     }
   }

@@ -435,7 +435,8 @@ TEST(ShortestPathTest, UnreachableNodes) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
@@ -478,7 +479,8 @@ TEST(SpfSolver, DrainedNodeLeastPreferred) {
       true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
@@ -594,7 +596,8 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
@@ -632,7 +635,8 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
@@ -671,7 +675,8 @@ TEST(ShortestPathTest, UnknownNode) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   PrefixState prefixState;
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
@@ -703,7 +708,8 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
@@ -834,7 +840,8 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
@@ -942,7 +949,8 @@ TEST(SpfSolver, AdjacencyUpdate) {
       false /* disable LFA */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
   //
@@ -1068,7 +1076,8 @@ TEST(MplsRoutes, BasicTest) {
       false /* disable best route selection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
 
   PrefixState prefixState;
@@ -1127,7 +1136,8 @@ TEST(BGPRedistribution, IgpMetric) {
       true /* enableBestRouteSelection */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
@@ -1287,7 +1297,8 @@ TEST(Decision, IgpCost) {
   auto adjacencyDb2 = createAdjDb("2", {adj21, adj24}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
   auto adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
@@ -1345,7 +1356,8 @@ TEST(Decision, BestRouteSelection) {
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 3);
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
@@ -1463,7 +1475,8 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
       nodeName, false /* disable v4 */, true /* enable segment label */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
@@ -1518,7 +1531,8 @@ TEST(ConnectivityTest, NodeHardDrainTest) {
       nodeName, false /* disable v4 */, true /* enable segment label */);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
@@ -1618,7 +1632,7 @@ TEST(ConnectivityTest, InterfaceSoftDrainTest) {
 
   // Initialize link-state and prefix-state obj
   std::unordered_map<std::string, LinkState> areaLinkStates = {
-      {kTestingAreaName, LinkState(kTestingAreaName)}};
+      {kTestingAreaName, LinkState(kTestingAreaName, nodeName)}};
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 
@@ -1788,7 +1802,8 @@ class SimpleRingMeshTopologyFixture
     adjacencyDb3 = createAdjDb("3", {adj31, adj32, adj34}, 3);
     adjacencyDb4 = createAdjDb("4", {adj41, adj42, adj43}, 4);
 
-    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    areaLinkStates.emplace(
+        kTestingAreaName, LinkState(kTestingAreaName, nodeName));
     auto& linkState = areaLinkStates.at(kTestingAreaName);
 
     EXPECT_EQ(
@@ -1980,7 +1995,8 @@ class SimpleRingTopologyFixture
     adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
     adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
 
-    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    areaLinkStates.emplace(
+        kTestingAreaName, LinkState(kTestingAreaName, nodeName));
     auto& linkState = areaLinkStates.at(kTestingAreaName);
 
     EXPECT_EQ(
@@ -3026,7 +3042,8 @@ class ParallelAdjRingTopologyFixture
     adjacencyDb4 = createAdjDb("4", {adj42_1, adj43_1, adj43_2, adj43_3}, 4);
 
     // Adjacency db's
-    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    areaLinkStates.emplace(
+        kTestingAreaName, LinkState(kTestingAreaName, nodeName));
     auto& linkState = areaLinkStates.at(kTestingAreaName);
     EXPECT_FALSE(
         linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
@@ -3622,7 +3639,8 @@ class GridTopologyFixture : public ::testing::TestWithParam<int> {
   void
   SetUp() override {
     n = GetParam();
-    areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+    areaLinkStates.emplace(
+        kTestingAreaName, LinkState(kTestingAreaName, kTestingNodeName));
     auto& linkState = areaLinkStates.at(kTestingAreaName);
     createGrid(linkState, prefixState, n);
   }
@@ -3704,7 +3722,8 @@ TEST(GridTopology, StressTest) {
   SpfSolver spfSolver(nodeName, false, true, true);
 
   std::unordered_map<std::string, LinkState> areaLinkStates;
-  areaLinkStates.emplace(kTestingAreaName, LinkState(kTestingAreaName));
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, kTestingNodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   PrefixState prefixState;
 

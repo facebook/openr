@@ -15,6 +15,30 @@ namespace openr {
 
 using LinkStateMetric = uint64_t;
 
+inline bool
+adjUsable(const thrift::Adjacency& adj, const std::string& nodeName) {
+  // if onlyUsedByOther is set, then only the node that is "other" can
+  // use this adj
+
+  // Motivation: when neighbor A is initializing, we want to prevent routing
+  // traffic to/through A, but we want to let A to route through us (B). Thus,
+  // before A is fully initialized, we will have adj {self: B, other: A,
+  // adjOnlyUsedByOtherNode: true} this prevents all nodes except A using this
+  // adj
+
+  // Case1: we are adjacent to an initilizing node, returns false (other !=
+  //      self)
+  // Case2: we are the initilizing node and neighbor is not, return true;
+  //      (other == self)
+  // Case3: we are not adjacent to the initilizing node, return
+  //      false; (other != self)
+  // Case4: Initilized: return true;
+  if (*adj.adjOnlyUsedByOtherNode() and *adj.otherNodeName() != nodeName) {
+    return false;
+  }
+  return true;
+}
+
 /*
  * Why define Link and LinkState? Isn't link state fully captured by something
  * like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
@@ -204,6 +228,11 @@ class Link {
     throw std::invalid_argument(nodeName);
   }
 
+  inline bool
+  getUsability() const {
+    return usable_;
+  }
+
   /*
    * [Mutator Method]
    */
@@ -234,7 +263,7 @@ class Link {
 
 class LinkState {
  public:
-  explicit LinkState(const std::string& area);
+  explicit LinkState(const std::string& area, const std::string& myNodeName);
 
   struct LinkPtrHash {
     size_t operator()(const std::shared_ptr<Link>& l) const;
@@ -333,6 +362,9 @@ class LinkState {
   // LinkState belongs to a unique area
   const std::string area_;
 
+  // Current node name
+  const std::string myNodeName_;
+
   // memoization structure for getSpfResult()
   mutable std::unordered_map<
       std::pair<std::string /* nodeName */, bool /* useLinkMetric */>,
@@ -429,6 +461,13 @@ class LinkState {
   size_t
   numNodes() const {
     return linkMap_.size();
+  }
+
+  bool
+  linkUsable(
+      const thrift::Adjacency& adj1, const thrift::Adjacency& adj2) const {
+    // link is usable, only if both adj are usable by us.
+    return adjUsable(adj1, myNodeName_) and adjUsable(adj2, myNodeName_);
   }
 
   // get adjacency databases
