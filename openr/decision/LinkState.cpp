@@ -52,12 +52,14 @@ Link::Link(
     const std::string& nodeName1,
     const std::string& if1,
     const std::string& nodeName2,
-    const std::string& if2)
+    const std::string& if2,
+    bool usable)
     : area_(area),
       n1_(nodeName1),
       n2_(nodeName2),
       if1_(if1),
       if2_(if2),
+      usable_(usable),
       orderedNames_(
           std::minmax(std::make_pair(n1_, if1_), std::make_pair(n2_, if2_))),
       hash(std::hash<std::pair<
@@ -69,8 +71,9 @@ Link::Link(
     const std::string& nodeName1,
     const openr::thrift::Adjacency& adj1,
     const std::string& nodeName2,
-    const openr::thrift::Adjacency& adj2)
-    : Link(area, nodeName1, *adj1.ifName(), nodeName2, *adj2.ifName()) {
+    const openr::thrift::Adjacency& adj2,
+    bool usable)
+    : Link(area, nodeName1, *adj1.ifName(), nodeName2, *adj2.ifName(), usable) {
   metric1_ = *adj1.metric();
   metric2_ = *adj2.metric();
   overload1_ = *adj1.isOverloaded();
@@ -155,6 +158,16 @@ Link::setOverloadFromNode(const std::string& nodeName, bool overload) {
   }
   // since we don't support simplex overloads, we only signal topo change if
   // this is true
+  return wasUp != isUp();
+}
+
+bool
+Link::setLinkUsability(const Link& newLink) {
+  // copy newLink's usablity
+  // make sure that they represent the same link
+  CHECK(*this == newLink); // checking hash (ordered names are checked)
+  bool wasUp = isUp();
+  usable_ = newLink.usable_;
   return wasUp != isUp();
 }
 
@@ -455,6 +468,15 @@ LinkState::updateAdjacencyDatabase(
           newLink.getMetricFromNode(nodeName));
       change.topologyChanged |= oldLink.setMetricFromNode(
           nodeName, newLink.getMetricFromNode(nodeName));
+    }
+
+    // Check if link is now usable / unusable
+    auto isUp = newLink.isUp();
+    auto wasUp = oldLink.isUp();
+    if (isUp != wasUp) {
+      XLOG(DBG1)
+          << fmt::format("[LINK UPDATE] Link usability: {} -> {}", wasUp, isUp);
+      change.topologyChanged |= oldLink.setLinkUsability(newLink);
     }
 
     if (newLink.getOverloadFromNode(nodeName) !=

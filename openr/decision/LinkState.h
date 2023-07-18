@@ -44,14 +44,16 @@ class Link {
       const std::string& nodeName1,
       const std::string& if1,
       const std::string& nodeName2,
-      const std::string& if2);
+      const std::string& if2,
+      bool usable = true);
 
   Link(
       const std::string& area,
       const std::string& nodeName1,
       const openr::thrift::Adjacency& adj1,
       const std::string& nodeName2,
-      const openr::thrift::Adjacency& adj2);
+      const openr::thrift::Adjacency& adj2,
+      bool usable = true);
 
  private:
   // link can only belongs to one specific area
@@ -65,6 +67,9 @@ class Link {
 
   // interface overload(Hard-drain) state
   bool overload1_{false}, overload2_{false};
+
+  // whether link can be used due to device initilization state
+  bool usable_{true};
 
   // adjacency label for segment routing use case
   int32_t adjLabel1_{0}, adjLabel2_{0};
@@ -88,7 +93,7 @@ class Link {
    */
   inline bool
   isUp() const {
-    return (not overload1_) and (not overload2_);
+    return (not overload1_) and (not overload2_) and usable_;
   }
 
   inline const std::string&
@@ -215,6 +220,8 @@ class Link {
   void setWeightFromNode(const std::string& nodeName, int64_t weight);
 
   bool setOverloadFromNode(const std::string& nodeName, bool overload);
+
+  bool setLinkUsability(const Link& newLink);
 
   bool operator<(const Link& other) const;
 
