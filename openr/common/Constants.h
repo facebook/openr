@@ -52,8 +52,8 @@ class Constants {
   static constexpr std::chrono::milliseconds kInitialBackoff{64};
   static constexpr std::chrono::milliseconds kMaxBackoff{8192};
   // Kvstore
-  static constexpr std::chrono::milliseconds kKvstoreSyncInitialBackoff{2000};
-  static constexpr std::chrono::milliseconds kKvstoreSyncMaxBackoff{64000};
+  static constexpr std::chrono::milliseconds kKvstoreSyncInitialBackoff{4s};
+  static constexpr std::chrono::milliseconds kKvstoreSyncMaxBackoff{256s};
   // FIB, perhaps this could be removed and above used in time
   static constexpr std::chrono::milliseconds kFibInitialBackoff{8};
   static constexpr std::chrono::milliseconds kFibMaxBackoff{4096};
