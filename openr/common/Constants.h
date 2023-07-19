@@ -47,49 +47,30 @@ class Constants {
   // event log category
   static constexpr folly::StringPiece kEventLogCategory{"perfpipe_aquaman"};
 
-  // ExponentialBackoff durations
+  /*
+   * [Exponential Backoff Constants]
+   */
+
   // Link-monitor
   static constexpr std::chrono::milliseconds kInitialBackoff{64};
   static constexpr std::chrono::milliseconds kMaxBackoff{8192};
+
   // Kvstore
   static constexpr std::chrono::milliseconds kKvstoreSyncInitialBackoff{4s};
   static constexpr std::chrono::milliseconds kKvstoreSyncMaxBackoff{256s};
-  // FIB, perhaps this could be removed and above used in time
+
+  // Fib
   static constexpr std::chrono::milliseconds kFibInitialBackoff{8};
   static constexpr std::chrono::milliseconds kFibMaxBackoff{4096};
 
-  // Persistent store specific
+  // Persistent-Store
   static constexpr std::chrono::milliseconds kPersistentStoreInitialBackoff{
       100};
   static constexpr std::chrono::milliseconds kPersistentStoreMaxBackoff{5000};
 
-  //
-  // KvStore specific
-  //
-
-  // default interval for flooding topology dump
-  static constexpr std::chrono::seconds kFloodTopoDumpInterval{300};
-
-  // default thrift client keep alive interval to avoid idle timeout
-  static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
-
-  // Count of maximum pending kvstore sync response before waiting for
-  // kMaxBackoff to send the next sync request
-  static constexpr size_t kMaxFullSyncPendingCountThreshold{32};
-
-  // Invalid version for thrift::Value
-  // If version is undefined, then thrift::Value
-  // is not valid
-  static constexpr int64_t kUndefinedVersion{0};
-
-  // Timeout for kvstore streaming in milliseconds
-  static constexpr int64_t kStreamTimeoutMs{100};
-  // Queue timeout for kvstore streaming in milliseconds
-  static constexpr int64_t kStreamQueueTimeoutMs{5000};
-
-  //
-  // LinkMonitor specific
-  //
+  /*
+   * [LinkMonitor Constants]
+   */
 
   // Hold time to wait before advertising link events. We use different
   // timers for UP (Throttle=100ms) and DOWN events are immediately
@@ -100,9 +81,9 @@ class Constants {
   // Adjacency DOWN event is immediately advertised.
   static constexpr std::chrono::milliseconds kAdjacencyThrottleTimeout{1000};
 
-  //
-  // Spark specific
-  //
+  /*
+   * [Spark Constants]
+   */
 
   // the multicast address used by Spark
   static constexpr folly::StringPiece kSparkMcastAddr{"ff02::1"};
@@ -116,9 +97,9 @@ class Constants {
   // for the purpose of limiting the number of packets per second processed
   static constexpr size_t kNumTimeSeries{1024};
 
-  //
-  // Platform/Fib specific
-  //
+  /*
+   * [Platform/Fib Constants]
+   */
 
   // Default const parameters for Open/R -> Platform agent thrift connection
   static constexpr folly::StringPiece kPlatformHost{"::1"};
@@ -136,16 +117,32 @@ class Constants {
   // Time interval for keep alive check between fib and switch agent
   static constexpr std::chrono::milliseconds kKeepAliveCheckInterval{1000};
 
-  // Timeout duration for which if a client connection has no activity, then it
-  // will be dropped. We keep it 3 * kPlatformSyncInterval so that thrift
-  // connection between OpenR and platform service remains up forever under
-  // ideal conditions.
+  /*
+   * Timeout duration for which if a client connection has no activity, then it
+   * will be dropped.
+   *
+   * Attention: this flag only applies when Open/R starts thrift server to
+   * accept thrift requests on its own.
+   */
   static constexpr std::chrono::seconds kPlatformThriftIdleTimeout{
       Constants::kPlatformSyncInterval * 3};
 
-  //
-  // KvStore specific
-  //
+  /*
+   * [KvStore Constants]
+   */
+
+  // Default interval for flooding topology dump
+  static constexpr std::chrono::seconds kFloodTopoDumpInterval{300}; // 5min
+
+  // Default thrift client keep alive interval to avoid idle timeout
+  static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
+
+  // Count of maximum pending kvstore sync response before waiting for
+  // kMaxBackoff to send the next sync request
+  static constexpr size_t kMaxFullSyncPendingCountThreshold{32};
+
+  // If version is undefined, the corresponding thrift::Value is invalid.
+  static constexpr int64_t kUndefinedVersion{0};
 
   // the time we hold on to clear keys from KvStore
   static constexpr std::chrono::milliseconds kKvStoreClearThrottleTimeout{10};
@@ -159,9 +156,7 @@ class Constants {
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};
 
-  // KvStore default areaId
-  //
-  // NOTE: this is a special areaId that is treated as the wildcard area.
+  // NOTE: this is a special areaId that is treated as the wildcard.
   // Interfaces configured into this area will form adjacencies with any other
   // node not validating what area they claim to be in.
   static constexpr folly::StringPiece kDefaultArea{"0"};
@@ -174,15 +169,15 @@ class Constants {
 
   // max interval to update TTL for each key in kvstore w/ finite TTL
   static constexpr std::chrono::milliseconds kMaxTtlUpdateInterval{2h};
+
   // TTL infinity, never expires
-  // int version
-  static constexpr int64_t kTtlInfinity{INT32_MIN};
-  // ttl to decrement before re-flooding
-  static constexpr std::chrono::milliseconds kTtlDecrement{1};
-  // min ttl expiry time to qualify for peer sync
-  static constexpr std::chrono::milliseconds kTtlThreshold{500};
-  // ms version
+  static constexpr int64_t kTtlInfinity{INT32_MIN}; // integer version
   static constexpr std::chrono::milliseconds kTtlInfInterval{kTtlInfinity};
+
+  // Ttl to decrement before re-flooding
+  static constexpr std::chrono::milliseconds kTtlDecrement{1};
+  // Min ttl expiry time to qualify for peer sync
+  static constexpr std::chrono::milliseconds kTtlThreshold{500};
 
   // adjacencies can have weights for weighted ecmp
   static constexpr int64_t kDefaultAdjWeight{1};
