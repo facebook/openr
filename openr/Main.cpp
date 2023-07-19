@@ -566,8 +566,7 @@ main(int argc, char** argv) {
       std::make_unique<Fib>(
           config,
           std::move(fibDecisionRouteUpdatesQueueReader),
-          fibRouteUpdatesQueue,
-          logSampleQueue));
+          fibRouteUpdatesQueue));
   watchdog->addQueue(fibRouteUpdatesQueue, "fibRouteUpdatesQueue");
 
   // Create Open/R control handler

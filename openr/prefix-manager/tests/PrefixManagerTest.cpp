@@ -685,8 +685,8 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
             createThriftValue(
                 keyVersion + 1, /* key version */
                 nodeId_, /* originatorId */
-                writeThriftObjStr(emptyPrefixDb, serializer), /* value */
-                Constants::kKvStoreDbTtl.count()));
+                writeThriftObjStr(emptyPrefixDb, serializer) /* value */
+                ));
       });
 
   // Wait for throttled update to announce to kvstore
@@ -742,8 +742,8 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
             createThriftValue(
                 staleKeyVersion, /* key version */
                 nodeId_, /* originatorId */
-                writeThriftObjStr(prefixDb, serializer), /* value */
-                Constants::kKvStoreDbTtl.count()));
+                writeThriftObjStr(prefixDb, serializer) /* value */
+                ));
       });
 
   // prefix manager will override the key inserted above with higher key

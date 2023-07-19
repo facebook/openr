@@ -94,10 +94,7 @@ class FibWrapper {
 
     // Creat Fib module and start fib thread
     fib = std::make_shared<Fib>(
-        config,
-        routeUpdatesQueue.getReader(),
-        fibRouteUpdatesQueue,
-        logSampleQueue);
+        config, routeUpdatesQueue.getReader(), fibRouteUpdatesQueue);
 
     fibThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Fib thread starting";
@@ -111,7 +108,6 @@ class FibWrapper {
     LOG(INFO) << "Closing queues";
     fibRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
-    logSampleQueue.close();
 
     // This will be invoked before Fib's d-tor
     fib->stop();
@@ -152,7 +148,6 @@ class FibWrapper {
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
   messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader{
       fibRouteUpdatesQueue.getReader()};
-  messaging::ReplicateQueue<LogSample> logSampleQueue;
 
   std::shared_ptr<Config> config;
   std::shared_ptr<Fib> fib;

@@ -339,10 +339,7 @@ class FibTestFixture : public ::testing::Test {
     config_ = std::make_shared<Config>(tConfig);
 
     fib_ = std::make_shared<Fib>(
-        config_,
-        routeUpdatesQueue.getReader(),
-        fibRouteUpdatesQueue,
-        logSampleQueue);
+        config_, routeUpdatesQueue.getReader(), fibRouteUpdatesQueue);
 
     fibThread_ = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Fib thread starting";
@@ -379,7 +376,6 @@ class FibTestFixture : public ::testing::Test {
     LOG(INFO) << "Closing queues";
     fibRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
-    logSampleQueue.close();
 
     LOG(INFO) << "Stopping openr ctrl handler";
     handler_.reset();
@@ -523,7 +519,6 @@ class FibTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
-  messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
   messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader =
       fibRouteUpdatesQueue.getReader();
 
@@ -568,10 +563,7 @@ class FibDryRunTestFixture : public ::testing::Test {
 
     config_ = std::make_shared<Config>(std::move(tConfig));
     fib_ = std::make_shared<Fib>(
-        config_,
-        routeUpdatesQueue.getReader(),
-        fibRouteUpdatesQueue,
-        logSampleQueue);
+        config_, routeUpdatesQueue.getReader(), fibRouteUpdatesQueue);
 
     fibThread_ = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Fib thread starting";
@@ -585,7 +577,6 @@ class FibDryRunTestFixture : public ::testing::Test {
   TearDown() override {
     fibRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
-    logSampleQueue.close();
 
     LOG(INFO) << "Stopping the Fib thread";
     fib_->stop();
@@ -603,7 +594,6 @@ class FibDryRunTestFixture : public ::testing::Test {
 
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
-  messaging::ReplicateQueue<openr::LogSample> logSampleQueue;
   messaging::RQueue<DecisionRouteUpdate> fibRouteUpdatesQueueReader =
       fibRouteUpdatesQueue.getReader();
 

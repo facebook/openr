@@ -40,8 +40,7 @@ class Fib final : public OpenrEventBase {
       // consumer queue
       messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
       // producer queue
-      messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
-      messaging::ReplicateQueue<LogSample>& logSampleQueue);
+      messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue);
 
   /**
    * Override stop method of OpenrEventBase
@@ -225,11 +224,6 @@ class Fib final : public OpenrEventBase {
   void updateGlobalCounters();
 
   /**
-   * Create, log, and publish Open/R convergence event through LogSampleQueue
-   */
-  void logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents);
-
-  /**
    * State variables to represent computed and programmed routes.
    */
   struct RouteState {
@@ -406,9 +400,6 @@ class Fib final : public OpenrEventBase {
   // route programming retry timers
   // NOTE: We initialize with a single slot for exclusive locking
   folly::fibers::Semaphore updateRoutesSemaphore_{1};
-
-  // Queue to publish the event log
-  messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 };
 
 } // namespace openr

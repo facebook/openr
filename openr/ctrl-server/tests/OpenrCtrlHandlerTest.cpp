@@ -91,10 +91,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 
     // Create Fib moduleKeySyncMultipleArea
     fib = std::make_shared<Fib>(
-        config,
-        routeUpdatesQueue_.getReader(),
-        fibRouteUpdatesQueue_,
-        logSampleQueue_);
+        config, routeUpdatesQueue_.getReader(), fibRouteUpdatesQueue_);
     fibThread_ = std::thread([&]() { fib->run(); });
 
     // Create PrefixManager module

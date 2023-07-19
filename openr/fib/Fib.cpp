@@ -49,8 +49,7 @@ logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
 Fib::Fib(
     std::shared_ptr<const Config> config,
     messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueue,
-    messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue,
-    messaging::ReplicateQueue<LogSample>& logSampleQueue)
+    messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue)
     : myNodeName_(*config->getConfig().node_name()),
       thriftPort_(*config->getConfig().fib_port()),
       dryrun_(config->isDryrun()),
@@ -60,8 +59,7 @@ Fib::Fib(
       routeDeleteDelay_(*config->getConfig().route_delete_delay_ms()),
       retryRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
-      fibRouteUpdatesQueue_(fibRouteUpdatesQueue),
-      logSampleQueue_(logSampleQueue) {
+      fibRouteUpdatesQueue_(fibRouteUpdatesQueue) {
   CHECK_GE(routeDeleteDelay_.count(), 0)
       << "Route delete duration must be >= 0ms";
 
@@ -1078,7 +1076,7 @@ Fib::createFibClient(
   // Create channel and set timeout
   auto channel =
       apache::thrift::RocketClientChannel::newChannel(std::move(newSocket));
-  channel->setTimeout(Constants::kPlatformRoutesProcTimeout.count());
+  channel->setTimeout(Constants::kPlatformProcTimeout.count());
 
   // Set client
   client = std::make_unique<apache::thrift::Client<thrift::FibService>>(
@@ -1099,62 +1097,6 @@ Fib::updateGlobalCounters() {
       "fib.num_unicast_routes", routeState_.unicastRoutes.size());
   fb303::fbData->setCounter(
       "fib.num_mpls_routes", routeState_.mplsRoutes.size());
-}
-
-void
-Fib::logPerfEvents(std::optional<thrift::PerfEvents>& perfEvents) {
-  if (not perfEvents.has_value() or not perfEvents->events()->size()) {
-    return;
-  }
-
-  // Ignore bad perf event sample if creation time of first event is
-  // less than creation time of our recently logged perf events.
-  if (recentPerfEventCreateTs_ >= *perfEvents->events()->at(0).unixTs()) {
-    XLOG(WARNING) << "Ignoring perf event with old create timestamp "
-                  << *perfEvents->events()[0].unixTs() << ", expected > "
-                  << recentPerfEventCreateTs_;
-    return;
-  } else {
-    recentPerfEventCreateTs_ = *perfEvents->events()->at(0).unixTs();
-  }
-
-  // Add latest event information (this function is meant to be called after
-  // routeDb has synced)
-  addPerfEvent(*perfEvents, myNodeName_, "OPENR_FIB_ROUTES_PROGRAMMED");
-
-  // Ignore perf events with very off total duration
-  auto totalDuration = getTotalPerfEventsDuration(*perfEvents);
-  if (totalDuration.count() < 0 or
-      totalDuration > Constants::kConvergenceMaxDuration) {
-    XLOG(WARNING) << "Ignoring perf event with bad total duration "
-                  << totalDuration.count() << "ms.";
-    return;
-  }
-
-  // Log event
-  auto eventStrs = sprintPerfEvents(*perfEvents);
-  XLOG(INFO) << "OpenR convergence performance. "
-             << "Duration=" << totalDuration.count();
-  for (auto& str : eventStrs) {
-    XLOG(DBG2) << "  " << str;
-  }
-
-  // Add new entry to perf DB and purge extra entries
-  perfDb_.push_back(std::move(perfEvents).value());
-  while (perfDb_.size() >= Constants::kPerfBufferSize) {
-    perfDb_.pop_front();
-  }
-
-  // Export convergence duration counter
-  fb303::fbData->addStatValue(
-      "fib.convergence_time_ms", totalDuration.count(), fb303::AVG);
-
-  // Add event logs
-  LogSample sample{};
-  sample.addString("event", "ROUTE_CONVERGENCE");
-  sample.addStringVector("perf_events", eventStrs);
-  sample.addInt("duration_ms", totalDuration.count());
-  logSampleQueue_.push(sample);
 }
 
 std::string

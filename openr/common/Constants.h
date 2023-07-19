@@ -88,25 +88,6 @@ class Constants {
   static constexpr int64_t kStreamQueueTimeoutMs{5000};
 
   //
-  // PrefixAllocator specific
-  //
-
-  // default interval for prefix allocator to sync with kvstore
-  static constexpr std::chrono::milliseconds kPrefixAllocatorSyncInterval{1000};
-
-  // seed prefix and allocated prefix length is separate by comma
-  static constexpr folly::StringPiece kSeedPrefixAllocLenSeparator{","};
-
-  // kvstore key for prefix allocator parameters indicating seed prefix and
-  // allocation prefix length
-  static constexpr folly::StringPiece kSeedPrefixAllocParamKey{
-      "e2e-network-prefix"};
-
-  // kvstore key for prefix allocator parameters indicating static allocation
-  static constexpr folly::StringPiece kStaticPrefixAllocParamKey{
-      "e2e-network-allocations"};
-
-  //
   // LinkMonitor specific
   //
 
@@ -139,18 +120,20 @@ class Constants {
   // Platform/Fib specific
   //
 
-  // Default const parameters for thrift connections with Switch agent
+  // Default const parameters for Open/R -> Platform agent thrift connection
   static constexpr folly::StringPiece kPlatformHost{"::1"};
   static constexpr std::chrono::milliseconds kPlatformConnTimeout{100};
-  static constexpr std::chrono::milliseconds kPlatformRoutesProcTimeout{20000};
+  static constexpr std::chrono::milliseconds kPlatformProcTimeout{20000};
+
+  // Default const parameters for external entity -> Open/R thrift connection
   static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
   static constexpr std::chrono::milliseconds kServiceConnSSLTimeout{1000};
   static constexpr std::chrono::milliseconds kServiceProcTimeout{2500};
 
-  // time interval to sync between Open/R and Platform
+  // Time interval to sync between Open/R and Platform
   static constexpr std::chrono::seconds kPlatformSyncInterval{60};
 
-  // time interval for keep alive check between fib and switch agent
+  // Time interval for keep alive check between fib and switch agent
   static constexpr std::chrono::milliseconds kKeepAliveCheckInterval{1000};
 
   // Timeout duration for which if a client connection has no activity, then it
@@ -159,9 +142,6 @@ class Constants {
   // ideal conditions.
   static constexpr std::chrono::seconds kPlatformThriftIdleTimeout{
       Constants::kPlatformSyncInterval * 3};
-
-  // PrefixAllocator address programming retry interval 100 ms
-  static constexpr std::chrono::milliseconds kPrefixAllocatorRetryInterval{100};
 
   //
   // KvStore specific
@@ -175,12 +155,6 @@ class Constants {
 
   // Kvstore timer for flooding pending publication
   static constexpr std::chrono::milliseconds kFloodPendingPublication{100};
-
-  // KvStore database TTLs
-  static constexpr std::chrono::milliseconds kKvStoreDbTtl{5min};
-
-  // RangeAllocator keys TTLs
-  static constexpr std::chrono::milliseconds kRangeAllocTtl{5min};
 
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};

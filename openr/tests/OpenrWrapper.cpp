@@ -163,10 +163,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create FIB
   //
   fib_ = std::make_unique<Fib>(
-      config_,
-      routeUpdatesQueue_.getReader(),
-      fibRouteUpdatesQueue_,
-      logSampleQueue_);
+      config_, routeUpdatesQueue_.getReader(), fibRouteUpdatesQueue_);
 
   // Watchdog thread to monitor thread aliveness
   watchdog = std::make_unique<Watchdog>(config_);

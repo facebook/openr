@@ -61,7 +61,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
       const thrift::Value& thriftVal,
       const AreaId& area,
       std::optional<std::chrono::milliseconds> processingTimeout =
-          Constants::kPlatformRoutesProcTimeout) noexcept {
+          Constants::kPlatformProcTimeout) noexcept {
     auto startTime = std::chrono::steady_clock::now();
 
     while (true) {
@@ -89,7 +89,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
       thrift::KvStorePeerState expPeerState,
       const AreaId& area,
       std::optional<std::chrono::milliseconds> processingTimeout =
-          Constants::kPlatformRoutesProcTimeout) noexcept {
+          Constants::kPlatformProcTimeout) noexcept {
     auto startTime = std::chrono::steady_clock::now();
 
     while (true) {
