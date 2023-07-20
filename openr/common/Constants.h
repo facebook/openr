@@ -104,7 +104,7 @@ class Constants {
   // Default const parameters for Open/R -> Platform agent thrift connection
   static constexpr folly::StringPiece kPlatformHost{"::1"};
   static constexpr std::chrono::milliseconds kPlatformConnTimeout{100};
-  static constexpr std::chrono::milliseconds kPlatformProcTimeout{20000};
+  static constexpr std::chrono::milliseconds kPlatformProcTimeout{10000}; // 10s
 
   // Default const parameters for external entity -> Open/R thrift connection
   static constexpr std::chrono::milliseconds kServiceConnTimeout{500};
