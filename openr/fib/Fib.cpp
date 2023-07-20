@@ -112,13 +112,20 @@ Fib::Fib(
 void
 Fib::stop() {
   // Send stop signal to internal fibers
+  updateRoutesSemaphore_.signal();
+  retryRoutesSemaphore_.signal();
   keepAliveStopSignal_.post();
   retryRoutesStopSignal_.post();
-  retryRoutesSignal_.signal();
+  XLOG(DBG1) << "[Exit] Posted signals to stop pending tasks.";
+
+  // Close socket/client created
+  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this]() { client_.reset(); });
+  XLOG(DBG1) << "[Exit] Closed client connection towards platform agent.";
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "Stopped FIB event base";
+  XLOG(DBG1) << "[Exit] Successfully stopped Fib eventbase.";
 }
 
 std::optional<folly::CIDRNetwork>
@@ -468,7 +475,7 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   updateRoutes(std::move(routeUpdate));
   if (routeState_.needsRetry()) {
     // Trigger initial Fib sync, or schedule retry routes timer if needed.
-    retryRoutesSignal_.signal();
+    retryRoutesSemaphore_.signal();
   }
 }
 
@@ -941,12 +948,12 @@ void
 Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
   XLOG(INFO) << "Starting RetryRoutes fiber task";
   auto timeout = folly::AsyncTimeout::make(
-      *getEvb(), [this]() noexcept { retryRoutesSignal_.signal(); });
+      *getEvb(), [this]() noexcept { retryRoutesSemaphore_.signal(); });
 
   // Repeat in loop
   while (not stopSignal.ready()) {
     // Wait for signal & retry routes
-    retryRoutesSignal_.wait();
+    retryRoutesSemaphore_.wait();
     retryRoutes();
 
     // Add async sleep signal for next invocation. Add only if non zero wait
@@ -1046,7 +1053,7 @@ Fib::keepAlive() noexcept {
     // FibAgent has restarted. Enforce full sync
     transitionRouteState(RouteState::FIB_CONNECTED);
     retryRoutesExpBackoff_.reportSuccess();
-    retryRoutesSignal_.signal();
+    retryRoutesSemaphore_.signal();
   }
   latestAliveSince_ = aliveSince;
 }

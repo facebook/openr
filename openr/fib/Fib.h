@@ -341,9 +341,6 @@ class Fib final : public OpenrEventBase {
   // Events to capture and indicate performance of protocol convergence.
   std::deque<thrift::PerfEvents> perfDb_;
 
-  // Create timestamp of recently logged perf event
-  int64_t recentPerfEventCreateTs_{0};
-
   // Name of node on which OpenR is running
   const std::string myNodeName_;
 
@@ -378,7 +375,7 @@ class Fib final : public OpenrEventBase {
   // - Semaphore used for signalling when routes are available for programming
   // - Exponential backoff to ease of things on repetitive failures
   folly::fibers::Baton retryRoutesStopSignal_;
-  folly::fibers::Semaphore retryRoutesSignal_{1};
+  folly::fibers::Semaphore retryRoutesSemaphore_{1};
   ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
 
   // Stop signal for KeepAlive fiber
