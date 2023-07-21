@@ -156,16 +156,15 @@ Decision::Decision(
 
   // Add reader to process peer updates from LinkMonitor
   addFiberTask([q = std::move(peerUpdatesQueue), this]() mutable noexcept {
-    XLOG(INFO) << "Starting peer updates processing fiber";
+    XLOG(DBG1) << "Starting peer-updates task";
     while (true) {
       auto maybePeerUpdate = q.get(); // perform read
-      XLOG(DBG3) << "Received peer update";
       if (maybePeerUpdate.hasError()) {
-        XLOG(INFO) << "Terminating peer updates processing fiber";
         break;
       }
       processPeerUpdates(std::move(maybePeerUpdate).value());
     }
+    XLOG(DBG1) << "[Exit] Peer-updates task finished";
   });
 
   // Add reader to process publication from KvStore
@@ -174,12 +173,10 @@ Decision::Decision(
     // This helps avoid missing KvStore adjacency publications for peers.
     initialPeersReceivedBaton_.wait();
 
-    XLOG(INFO) << "Starting KvStore updates processing fiber";
+    XLOG(DBG1) << "Starting kvStore-updates task";
     while (true) {
       auto maybePub = q.get(); // perform read
-      XLOG(DBG3) << "Received KvStore update";
       if (maybePub.hasError()) {
-        XLOG(INFO) << "Terminating KvStore updates processing fiber";
         break;
       }
       try {
@@ -216,16 +213,16 @@ Decision::Decision(
                     << folly::exceptionStr(e);
       }
     }
+    XLOG(DBG1) << "[Exit] KvStore-updates task finished";
   });
 
   // Add reader to process static routes publication from prefix-manager
   addFiberTask(
       [q = std::move(staticRouteUpdatesQueue), this]() mutable noexcept {
-        XLOG(INFO) << "Starting static routes update processing fiber";
+        XLOG(DBG1) << "Starting static routes update task";
         while (true) {
           auto maybeThriftPub = q.get(); // perform read
           if (maybeThriftPub.hasError()) {
-            XLOG(INFO) << "Terminating static routes update processing fiber";
             break;
           }
           const auto prefixType = maybeThriftPub.value().prefixType;
@@ -234,20 +231,20 @@ Decision::Decision(
                 "Received static routes update of prefix type {}",
                 apache::thrift::util::enumNameSafe<thrift::PrefixType>(
                     prefixType.value()));
-          } else {
-            XLOG(DBG2) << "Received static routes update";
           }
           processStaticRoutesUpdate(std::move(maybeThriftPub).value());
         }
+        XLOG(DBG1) << "[Exit] Static routes update task finished";
       });
 
   // Read rib policy from saved file.
   addFiberTask([this]() mutable noexcept {
-    XLOG(INFO) << "Starting readRibPolicy fiber";
+    XLOG(DBG1) << "Starting rib-policy task";
     readRibPolicy();
 
     initialRibPolicyRead_ = true;
     triggerInitialBuildRoutes();
+    XLOG(DBG1) << "[Exit] rib-policy task finished";
   });
 
   // Create RibPolicy timer to process routes on policy expiry
@@ -268,12 +265,15 @@ Decision::~Decision() {
 
 void
 Decision::stop() {
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Send termination signals to stop {} tasks.", getFiberTaskNum());
+
   // Post initialPeersReceivedBaton_ to unblock internal fiber from stopping.
   initialPeersReceivedBaton_.post();
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "Stopped Decision event base";
+  XLOG(DBG1) << "[Exit] Successfully stopped Decision eventbase.";
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>

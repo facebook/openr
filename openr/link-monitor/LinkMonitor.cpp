@@ -296,10 +296,10 @@ LinkMonitor::LinkMonitor(
 
   // Add fiber to process the neighbor events
   addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
+    XLOG(DBG1) << "Starting neighbor-event processing task";
     while (true) {
       auto maybeEvent = q.get();
       if (maybeEvent.hasError()) {
-        XLOG(INFO) << "Terminating neighbor update processing fiber";
         break;
       }
 
@@ -347,23 +347,31 @@ LinkMonitor::LinkMonitor(
             */
           });
     }
+    XLOG(DBG1) << "[Exit] Neighbor-event processing task finished.";
   });
 
   // Add fiber to process the LINK/ADDR events from platform
   addFiberTask([q = std::move(netlinkEventsQueue), this]() mutable noexcept {
+    XLOG(DBG1) << "Starting netlink event processing task";
+
     NetlinkEventProcessor visitor(*this);
     while (true) {
       auto maybeEvent = q.get();
       if (maybeEvent.hasError()) {
-        XLOG(INFO) << "Terminating netlink events processing fiber";
         break;
       }
       std::visit(visitor, std::move(*maybeEvent));
     }
+
+    XLOG(DBG1) << "[Exit] Netlink-event processing task finished.";
   });
 
   // Add fiber to process interfaceDb syning from netlink platform
-  addFiberTask([this]() mutable noexcept { syncInterfaceTask(); });
+  addFiberTask([this]() mutable noexcept {
+    XLOG(DBG1) << "Starting interface syncing task";
+    syncInterfaceTask();
+    XLOG(DBG1) << "[Exit] Interface-syncing task finished.";
+  });
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("link_monitor.neighbor_up", fb303::SUM);
@@ -377,13 +385,15 @@ LinkMonitor::LinkMonitor(
 
 void
 LinkMonitor::stop() {
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Send termination signals to stop {} tasks.", getFiberTaskNum());
+
   // Send stop signal for internal fibers
   syncInterfaceStopSignal_.post();
-  XLOG(INFO) << "Successfully posted stop signal for interface-syncing fiber";
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(INFO) << "EventBase successfully stopped in LinkMonitor";
+  XLOG(INFO) << "[Exit] Successfully stopped LinkMonitor eventbase.";
 }
 
 void
@@ -1062,8 +1072,6 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
 
 void
 LinkMonitor::syncInterfaceTask() noexcept {
-  XLOG(INFO) << "[Interface Sync] Starting interface syncing fiber task";
-
   // ATTN: use initial timeoff as the default value to wait for
   // small amount of time when thread starts before syncing
   std::chrono::milliseconds timeout{expBackoff_.getInitialBackoff()};
@@ -1097,8 +1105,6 @@ LinkMonitor::syncInterfaceTask() noexcept {
           timeout.count());
     }
   } // while
-
-  XLOG(INFO) << "[Interface Sync] Interface-syncing fiber task got stopped.";
 }
 
 bool

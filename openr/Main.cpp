@@ -128,10 +128,10 @@ startEventBase(
 
   // Start a thread
   allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
-    XLOG(INFO) << "Starting " << name << " thread ...";
-    folly::setThreadName(fmt::format("openr-{}", name));
+    XLOG(INFO) << fmt::format("Starting {} thread ...", name);
+    folly::setThreadName(name);
     evb->run();
-    XLOG(INFO) << name << " thread got stopped.";
+    XLOG(INFO) << fmt::format("[Exit] Successfully stopped {} thread.", name);
   }));
   evb->waitUntilRunning();
 
@@ -624,10 +624,8 @@ main(int argc, char** argv) {
   // Stop all threads (in reverse order of their creation)
   for (auto riter = orderedEvbs.rbegin(); orderedEvbs.rend() != riter;
        ++riter) {
-    XLOG(INFO) << "Stopping " << (*riter)->getEvbName();
     (*riter)->stop();
     (*riter)->waitUntilStopped();
-    XLOG(INFO) << "Finally stopped " << (*riter)->getEvbName();
   }
 
   // stop bgp speaker
@@ -668,7 +666,7 @@ main(int argc, char** argv) {
   }
 
   // Close syslog connection (this is optional)
-  SYSLOG(INFO) << "Stopping OpenR daemon: ppid = " << getpid();
+  SYSLOG(INFO) << "[Exit] Stopping OpenR daemon: ppid = " << getpid();
   closelog();
 
   return 0;

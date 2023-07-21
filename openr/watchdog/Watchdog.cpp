@@ -170,7 +170,6 @@ Watchdog::updateQueueCounters() {
   // TODO: T98478475 - Currently we only log the counters but don't take any
   // action if the queue keeps growing. In future, via T98478475, we should
   // invoke fireCrash() if the queue keeps growing.
-  XLOG(INFO) << "[QueueMonitor] Updating queue counters";
   for (auto const& [qName, q] : monitoredQs_) {
     fb303::fbData->setCounter(
         fmt::format("messaging.replicate_queue.{}.readers", qName),

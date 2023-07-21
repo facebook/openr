@@ -69,8 +69,11 @@ Fib::Fib(
   //
   // Start RetryRoute fiber with stop signal.
   //
-  addFiberTask(
-      [this]() mutable noexcept { retryRoutesTask(retryRoutesStopSignal_); });
+  addFiberTask([this]() mutable noexcept {
+    XLOG(DBG1) << "Starting retryRoutes task";
+    retryRoutesTask(retryRoutesStopSignal_);
+    XLOG(DBG1) << "[Exit] RetryRoutes task finished";
+  });
 
   //
   // Create KeepAlive task with stop signal. Signalling part consists of two
@@ -78,20 +81,24 @@ Fib::Fib(
   //   promise is fulfilled in Fib::stop()
   // - SemiFuture is passed to fiber for awaiting
   //
-  addFiberTask(
-      [this]() mutable noexcept { keepAliveTask(keepAliveStopSignal_); });
+  addFiberTask([this]() mutable noexcept {
+    XLOG(DBG1) << "Starting keepAlive task";
+    keepAliveTask(keepAliveStopSignal_);
+    XLOG(DBG1) << "[Exit] KeepAlive task finished";
+  });
 
   // Fiber to process route updates from Decision
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
+    XLOG(DBG1) << "Starting route-update task";
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
       if (maybeThriftObj.hasError()) {
-        XLOG(DBG1) << "Terminating route delta processing fiber";
         break;
       }
       fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
       processDecisionRouteUpdate(std::move(maybeThriftObj).value());
     }
+    XLOG(DBG1) << "[Exit] Route-update task finished";
   });
 
   // Initialize stats keys
@@ -111,12 +118,14 @@ Fib::Fib(
 
 void
 Fib::stop() {
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Send terminiation signals to stop {} tasks.", getFiberTaskNum());
+
   // Send stop signal to internal fibers
   updateRoutesSemaphore_.signal();
   retryRoutesSemaphore_.signal();
   keepAliveStopSignal_.post();
   retryRoutesStopSignal_.post();
-  XLOG(DBG1) << "[Exit] Posted signals to stop pending tasks.";
 
   // Close socket/client created
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
@@ -946,7 +955,6 @@ Fib::syncRoutes() {
 
 void
 Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
-  XLOG(INFO) << "Starting RetryRoutes fiber task";
   auto timeout = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { retryRoutesSemaphore_.signal(); });
 
@@ -963,7 +971,6 @@ Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
       timeout->scheduleTimeout(retryDuration);
     }
   } // while
-  XLOG(INFO) << "RetryRoutes fiber task got stopped";
 }
 
 void
@@ -1017,7 +1024,6 @@ Fib::retryRoutes() noexcept {
 
 void
 Fib::keepAliveTask(folly::fibers::Baton& stopSignal) noexcept {
-  XLOG(INFO) << "Starting KeepAlive fiber task";
   while (true) { // Break when stop signal is ready
     keepAlive();
     // Wait for a second. Will terminate if wait completes or signal is ready
@@ -1027,7 +1033,6 @@ Fib::keepAliveTask(folly::fibers::Baton& stopSignal) noexcept {
       stopSignal.reset(); // Baton experienced timeout
     }
   } // while
-  XLOG(INFO) << "KeepAlive fiber task got stopped";
 }
 
 void

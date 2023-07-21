@@ -141,14 +141,11 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   closeKvStorePublishers();
   closeFibPublishers();
 
-  XLOG(INFO) << "Cleanup all pending request(s).";
+  XLOG(INFO) << "[Exit] Cleanup all pending request(s).";
   longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
 
-  XLOG(INFO)
-      << "Waiting for termination of kvStoreUpdatesQueue, FibUpdatesQueue";
   folly::collectAll(workers_.begin(), workers_.end()).get();
-
-  XLOG(INFO) << "Collected all workers";
+  XLOG(INFO) << "[Exit] Successfully stopped OpenrCtrlHandler.";
 }
 
 // NOTE: We're intentionally creating list of publishers to and then invoke
@@ -165,8 +162,9 @@ OpenrCtrlHandler::closeKvStorePublishers() {
       publishers.emplace_back(std::move(publisher));
     }
   });
-  XLOG(INFO) << "Terminating " << publishers.size()
-             << " active KvStore snoop stream(s).";
+  XLOG(INFO) << fmt::format(
+      "[Exit] Terminating {} active KvStore snoop stream(s).",
+      publishers.size());
   for (auto& publisher : publishers) {
     // We have to send an exception as part of the completion, otherwise
     // thrift doesn't seem to notify the peer of the shutdown
@@ -185,8 +183,9 @@ OpenrCtrlHandler::closeFibPublishers() {
       fibPublishers_close.emplace_back(std::move(fibPublisher));
     }
   });
-  XLOG(INFO) << "Terminating " << fibPublishers_close.size()
-             << " active Fib snoop stream(s).";
+  XLOG(INFO) << fmt::format(
+      "[Exit] Terminating {} active Fib snoop stream(s).",
+      fibPublishers_close.size());
   for (auto& fibPublisher : fibPublishers_close) {
     std::move(fibPublisher).complete();
   }

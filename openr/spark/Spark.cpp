@@ -358,10 +358,10 @@ Spark::Spark(
 
   // Fiber to process interface updates from LinkMonitor
   addFiberTask([q = std::move(interfaceUpdatesQueue), this]() mutable noexcept {
+    XLOG(DBG1) << "Starting interface-updates processing task";
     while (true) {
       auto interfaceUpdates = q.get(); // perform read
       if (interfaceUpdates.hasError()) {
-        XLOG(INFO) << "Terminating interface update processing fiber";
         break;
       }
 
@@ -384,32 +384,35 @@ Spark::Spark(
       }
       processInterfaceUpdates(std::move(interfaceUpdates).value());
     }
+    XLOG(DBG1) << "[Exit] Interface-updates processing task finished";
   });
 
   // Fiber to process Open/R initialization event from PrefixManager
   addFiberTask(
       [q = std::move(initializationEventQueue), this]() mutable noexcept {
+        XLOG(DBG1) << "Starting initialization event processing task";
         while (true) {
           auto maybeEvent = q.get();
           if (maybeEvent.hasError()) {
-            XLOG(INFO) << "Terminating initialization events processing fiber";
             break;
           }
           processInitializationEvent(std::move(maybeEvent).value());
         }
+        XLOG(DBG1) << "[Exit] Initialization event processing task finished";
       });
 
   // Listen to NeighborMonitor if enabled
   if (config_->isNeighborMonitorEnabled()) {
     addFiberTask([q = std::move(addrEventQueue), this]() mutable noexcept {
+      XLOG(DBG1) << "Starting arp/ndp entry processing task";
       while (true) {
         auto maybeEvent = q.get();
         if (maybeEvent.hasError()) {
-          XLOG(INFO) << "Terminating neighbor events processing fiber";
           break;
         }
         processAddressEvent(std::move(maybeEvent).value());
       }
+      XLOG(DBG1) << "[Exit] Arp/ndp entry processing task finished";
     });
   }
 
@@ -444,9 +447,13 @@ Spark::initialNeighborsDiscovered() {
 void
 Spark::stop() {
   // NOTE: explicitly wait for msg to send out before going down
+  XLOG(DBG1) << fmt::format(
+                    "[Exit] Send termination signal to stop {} tasks.",
+                    getFiberTaskNum())
+             << " Notify neighbors for graceful restart shut-down.";
   floodRestartingMsg().get();
   OpenrEventBase::stop();
-  XLOG(DBG1) << "Spark Event Base stopped";
+  XLOG(DBG1) << "[Exit] Successfully stopped Spark eventbase.";
 }
 
 void
@@ -1112,8 +1119,9 @@ Spark::floodRestartingMsg() {
             ifName, false /* inFastInitState */, true /* restarting */);
       }
     }
-    XLOG(INFO) << "Successfully sent restarting msg to: " << interfaceDb_.size()
-               << " neighbors, ready to go down";
+    XLOG(DBG1) << fmt::format(
+        "[Exit] Successfully sent restarting message to: {} neighbors.",
+        interfaceDb_.size());
     p.setValue();
   });
   return sf;

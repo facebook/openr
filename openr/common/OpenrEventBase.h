@@ -78,6 +78,14 @@ class OpenrEventBase {
   }
 
   /**
+   * Get number of fiber tasks injected
+   */
+  uint64_t
+  getFiberTaskNum() const noexcept {
+    return fiberTaskFutures_.size();
+  }
+
+  /**
    * Runnable interface APIs
    */
 

@@ -48,12 +48,10 @@ KvStore<ClientType>::KvStore(
 
   // Add reader to process peer updates from LinkMonitor
   addFiberTask([q = std::move(peerUpdatesQueue), this]() mutable noexcept {
-    XLOG(INFO) << "Starting peer updates processing fiber";
+    XLOG(DBG1) << "Starting peer-updates task";
     while (true) {
       auto maybePeerUpdate = q.get(); // perform read
-      XLOG(DBG2) << "Received peer update...";
       if (maybePeerUpdate.hasError()) {
-        XLOG(INFO) << "Terminating peer updates processing fiber";
         break;
       }
       try {
@@ -62,16 +60,15 @@ KvStore<ClientType>::KvStore(
         XLOG(ERR) << "Failed to process peer request. Exception: " << ex.what();
       }
     }
+    XLOG(DBG1) << "[Exit] Peer-updates task finished";
   });
 
   // Add reader to process key-value requests from PrefixManager and LinkMonitor
   addFiberTask([kvQueue = std::move(kvRequestQueue), this]() mutable noexcept {
-    XLOG(INFO) << "Starting key-value requests processing fiber";
+    XLOG(DBG1) << "Starting kv-requests task";
     while (true) {
       auto maybeKvRequest = kvQueue.get(); // perform read
-      XLOG(DBG2) << "Received key-value request...";
       if (maybeKvRequest.hasError()) {
-        XLOG(INFO) << "Terminating key-value request processing fiber";
         break;
       }
       try {
@@ -81,6 +78,7 @@ KvStore<ClientType>::KvStore(
                   << ex.what();
       }
     }
+    XLOG(DBG1) << "[Exit] Kv-requests task finished";
   });
 
   initGlobalCounters();
@@ -102,18 +100,27 @@ KvStore<ClientType>::KvStore(
 template <class ClientType>
 void
 KvStore<ClientType>::stop() {
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Send termination signal to stop {} tasks.", getFiberTaskNum());
+
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
+    const auto num = kvStoreDb_.size();
+    XLOG(DBG1) << fmt::format("[Exit] Terminating {} kvStoreDbs", num);
+
     // NOTE: destructor of every instance inside `kvStoreDb_` will gracefully
     //       exit and wait for all pending thrift requests to be processed
     //       before eventbase stops.
     for (auto& [area, kvDb] : kvStoreDb_) {
       kvDb.stop();
     }
+
+    XLOG(DBG1)
+        << fmt::format("[Exit] Successfully terminated {} kvStoreDbs", num);
   });
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "KvStore event base stopped";
+  XLOG(DBG1) << "[Exit] Successfully stopped KvStore eventbase.";
 }
 
 template <class ClientType>
@@ -1105,15 +1112,23 @@ KvStoreDb<ClientType>::KvStoreDb(
         });
   }
 
-  XLOG(INFO)
-      << AreaTag()
-      << fmt::format("Starting kvstore DB instance for node: {}", nodeId);
+  XLOG(INFO) << fmt::format(
+      "{} Starting kvstore DB instance for node: {}", AreaTag(), nodeId);
 
   // Create a fiber task to periodically dump flooding topology.
-  evb_->addFiberTask([this]() mutable noexcept { floodTopoDumpTask(); });
+  evb_->addFiberTask([this]() mutable noexcept {
+    XLOG(DBG1) << AreaTag() << "Starting flood-topo dump task";
+    floodTopoDumpTask();
+    XLOG(DBG1)
+        << fmt::format("[Exit] {} Flood-topo dump task finished.", AreaTag());
+  });
 
   // Create a fiber task to periodically check adj key ttl.
-  evb_->addFiberTask([this]() mutable noexcept { checkKeyTtlTask(); });
+  evb_->addFiberTask([this]() mutable noexcept {
+    XLOG(DBG1) << AreaTag() << "Starting ttl-check task";
+    checkKeyTtlTask();
+    XLOG(DBG1) << fmt::format("[Exit] {} Ttl-check task finished.", AreaTag());
+  });
 
   // Perform full-sync if there are peers to sync with.
   thriftSyncTimer_ = folly::AsyncTimeout::make(
@@ -1179,7 +1194,10 @@ KvStoreDb<ClientType>::KvStoreDb(
 template <class ClientType>
 void
 KvStoreDb<ClientType>::stop() {
-  XLOG(INFO) << AreaTag() << "Terminating KvStoreDb.";
+  XLOG(DBG1) << fmt::format(
+      "[Exit] {} Send termination signal to stop {} tasks.",
+      AreaTag(),
+      evb_->getFiberTaskNum());
 
   // Send stop signal for internal fibers
   floodTopoStopSignal_.post();
@@ -1195,17 +1213,15 @@ KvStoreDb<ClientType>::stop() {
     unsetSelfOriginatedKeysThrottled_.reset();
     advertiseSelfOriginatedKeysThrottled_.reset();
     ttlCountdownTimer_.reset();
-    XLOG(INFO) << AreaTag() << "Successfully destroyed thriftPeers and timers";
   });
 
-  XLOG(INFO) << AreaTag() << "Successfully stopped KvStoreDb.";
+  XLOG(INFO)
+      << fmt::format("[Exit] {} Successfully stopped KvStoreDb.", AreaTag());
 }
 
 template <class ClientType>
 void
 KvStoreDb<ClientType>::floodTopoDumpTask() noexcept {
-  XLOG(INFO) << AreaTag() << "Starting flood-topo dump fiber task";
-
   while (true) { // Break when stop signal is ready
     // Sleep before next check
     // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
@@ -1216,8 +1232,6 @@ KvStoreDb<ClientType>::floodTopoDumpTask() noexcept {
     }
     floodTopoDump();
   } // while
-
-  XLOG(INFO) << AreaTag() << "Flood-topo dump fiber task got stopped.";
 }
 
 template <class ClientType>
@@ -1239,8 +1253,6 @@ KvStoreDb<ClientType>::floodTopoDump() noexcept {
 template <class ClientType>
 void
 KvStoreDb<ClientType>::checkKeyTtlTask() noexcept {
-  XLOG(INFO) << AreaTag() << "Starting adj key ttl-check fiber task";
-
   while (true) { // Break when stop signal is ready
     // Sleep before next check
     // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
@@ -1252,8 +1264,6 @@ KvStoreDb<ClientType>::checkKeyTtlTask() noexcept {
     }
     checkKeyTtl();
   } // while
-
-  XLOG(INFO) << AreaTag() << "Adj key ttl-check fiber task got stopped.";
 }
 
 template <class ClientType>

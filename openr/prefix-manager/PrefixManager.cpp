@@ -119,10 +119,10 @@ PrefixManager::PrefixManager(
 
   // Schedule fiber to read prefix updates messages
   addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
+    XLOG(DBG1) << "Starting prefix-updates processing task";
     while (true) {
       auto maybeUpdate = q.get(); // perform read
       if (maybeUpdate.hasError()) {
-        XLOG(DBG1) << "Terminating prefix update request processing fiber";
         break;
       }
       auto& update = maybeUpdate.value();
@@ -190,19 +190,19 @@ PrefixManager::PrefixManager(
                   << static_cast<int>(update.eventType);
       }
     }
+    XLOG(DBG1) << "[Exit] Prefix-updates processing task finished.";
   });
 
   // Fiber to process route updates from Fib.
   addFiberTask([q = std::move(fibRouteUpdatesQueue), this]() mutable noexcept {
+    XLOG(DBG1) << "Starting fib route-update processing task";
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
       if (maybeThriftObj.hasError()) {
-        XLOG(DBG1) << "Terminating route delta processing fiber";
         break;
       }
 
       try {
-        XLOG(DBG3) << "Received RIB updates from Fib";
         processFibRouteUpdates(std::move(maybeThriftObj).value());
       } catch (const std::exception&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
@@ -214,32 +214,29 @@ PrefixManager::PrefixManager(
         throw;
       }
     }
+    XLOG(DBG1) << "[Exit] Fib route-updates processing task finished.";
   });
 
   // Fiber to process publication from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
-    XLOG(INFO) << "Starting KvStore updates processing fiber";
+    XLOG(DBG1) << "Starting kvStore-updates processing task";
     while (true) {
       auto maybePub = q.get(); // perform read
       if (maybePub.hasError()) {
-        XLOG(DBG1) << fmt::format(
-            "Terminating KvStore updates processing fiber, error: {}",
-            maybePub.error());
         break;
       }
-      if (not maybePub.hasValue()) {
-        continue;
+      if (maybePub.hasValue()) {
+        // process different types of event
+        folly::variant_match(
+            std::move(maybePub).value(),
+            [this](thrift::Publication&& pub) {
+              // Process KvStore Thrift publication.
+              processPublication(std::move(pub));
+            },
+            [](thrift::InitializationEvent&& /* unused */) { return; });
       }
-
-      // process different types of event
-      folly::variant_match(
-          std::move(maybePub).value(),
-          [this](thrift::Publication&& pub) {
-            // Process KvStore Thrift publication.
-            processPublication(std::move(pub));
-          },
-          [this](thrift::InitializationEvent&& /* unused */) { return; });
     }
+    XLOG(DBG1) << "[Exit] KvStore-updates processing task finished.";
   });
 }
 
@@ -289,10 +286,17 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
 }
 
 PrefixManager::~PrefixManager() {
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Send termination signals to stop {} tasks.", getFiberTaskNum());
+
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
       [this]() { syncKvStoreThrottled_.reset(); });
+
+  // Invoke stop method of super class
+  OpenrEventBase::stop();
+  XLOG(DBG1) << "[Exit] Succeessfully stopped PrefixManager eventbase.";
 }
 
 thrift::PrefixEntry
