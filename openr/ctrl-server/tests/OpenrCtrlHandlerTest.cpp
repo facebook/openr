@@ -1084,16 +1084,14 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
+              if (!t.hasValue() or not t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
-              EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-              ASSERT_EQ(1, (*pub.keyVals_ref()).count(key));
-              EXPECT_EQ(
-                  "value1", (*pub.keyVals_ref()).at(key).value_ref().value());
-              EXPECT_EQ(
-                  received + 4, *(*pub.keyVals_ref()).at(key).version_ref());
+              EXPECT_EQ(1, (*pub.keyVals()).size());
+              ASSERT_EQ(1, (*pub.keyVals()).count(key));
+              EXPECT_EQ("value1", (*pub.keyVals()).at(key).value().value());
+              EXPECT_EQ(received + 4, *(*pub.keyVals()).at(key).version());
               received++;
             });
     EXPECT_EQ(1, handler_->getNumKvStorePublishers());
@@ -1185,14 +1183,13 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
+              if (!t.hasValue() or not t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
-              EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-              ASSERT_EQ(1, (*pub.keyVals_ref()).count(key));
-              EXPECT_EQ(
-                  "value4", (*pub.keyVals_ref()).at(key).value_ref().value());
+              EXPECT_EQ(1, (*pub.keyVals()).size());
+              ASSERT_EQ(1, (*pub.keyVals()).count(key));
+              EXPECT_EQ("value4", (*pub.keyVals()).at(key).value().value());
               received++;
             });
 
@@ -1201,16 +1198,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, random_key](auto&& t) {
-                  if (!t.hasValue() or
-                      not t->keyVals_ref()->count(random_key)) {
+                  if (!t.hasValue() or not t->keyVals()->count(random_key)) {
                     return;
                   }
                   auto& pub = *t;
-                  EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                  ASSERT_EQ(1, (*pub.keyVals_ref()).count(random_key));
+                  EXPECT_EQ(1, (*pub.keyVals()).size());
+                  ASSERT_EQ(1, (*pub.keyVals()).count(random_key));
                   EXPECT_EQ(
                       "value_random",
-                      (*pub.keyVals_ref()).at(random_key).value_ref().value());
+                      (*pub.keyVals()).at(random_key).value().value());
                   received++;
                 });
 
@@ -1279,16 +1275,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
+              if (!t.hasValue() or not t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
-              EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-              ASSERT_EQ(1, (*pub.keyVals_ref()).count(key));
+              EXPECT_EQ(1, (*pub.keyVals()).size());
+              ASSERT_EQ(1, (*pub.keyVals()).count(key));
               // Validates value is set with KeyDumpParams.doNotPublishValue =
               // false
-              EXPECT_EQ(
-                  "value333", (*pub.keyVals_ref()).at(key).value_ref().value());
+              EXPECT_EQ("value333", (*pub.keyVals()).at(key).value().value());
               received++;
             });
 
@@ -1355,15 +1350,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals_ref()->count(kv.first)) {
+                    if (not t->keyVals()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
-                    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                    ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
+                    EXPECT_EQ(1, (*pub.keyVals()).size());
+                    ASSERT_EQ(1, (*pub.keyVals()).count(kv.first));
                     EXPECT_EQ(
                         kv.second,
-                        (*pub.keyVals_ref()).at(kv.first).value_ref().value());
+                        (*pub.keyVals()).at(kv.first).value().value());
                     received++;
                   }
                 });
@@ -1439,15 +1434,12 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   bool found = false;
                   auto& pub = *t;
                   for (const auto& kv : keyvals) {
-                    if (t->keyVals_ref()->count(kv.first)) {
-                      EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                      ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
+                    if (t->keyVals()->count(kv.first)) {
+                      EXPECT_EQ(1, (*pub.keyVals()).size());
+                      ASSERT_EQ(1, (*pub.keyVals()).count(kv.first));
                       EXPECT_EQ(
                           kv.second,
-                          (*pub.keyVals_ref())
-                              .at(kv.first)
-                              .value_ref()
-                              .value());
+                          (*pub.keyVals()).at(kv.first).value().value());
                       received++;
                       found = true;
                     }
@@ -1533,15 +1525,12 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   bool found = false;
                   auto& pub = *t;
                   for (const auto& kv : keyvals) {
-                    if (t->keyVals_ref()->count(kv.first)) {
-                      EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                      ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
+                    if (t->keyVals()->count(kv.first)) {
+                      EXPECT_EQ(1, (*pub.keyVals()).size());
+                      ASSERT_EQ(1, (*pub.keyVals()).count(kv.first));
                       EXPECT_EQ(
                           kv.second,
-                          (*pub.keyVals_ref())
-                              .at(kv.first)
-                              .value_ref()
-                              .value());
+                          (*pub.keyVals()).at(kv.first).value().value());
                       received++;
                       found = true;
                     }
@@ -1609,14 +1598,13 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              if (!t.hasValue() or not t->keyVals_ref()->count(key)) {
+              if (!t.hasValue() or not t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
-              EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-              ASSERT_EQ(1, (*pub.keyVals_ref()).count(key));
-              EXPECT_EQ(
-                  "value1", (*pub.keyVals_ref()).at(key).value_ref().value());
+              EXPECT_EQ(1, (*pub.keyVals()).size());
+              ASSERT_EQ(1, (*pub.keyVals()).count(key));
+              EXPECT_EQ("value1", (*pub.keyVals()).at(key).value().value());
               received++;
             });
 
@@ -1678,15 +1666,15 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals_ref()->count(kv.first)) {
+                    if (not t->keyVals()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
-                    EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                    ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
+                    EXPECT_EQ(1, (*pub.keyVals()).size());
+                    ASSERT_EQ(1, (*pub.keyVals()).count(kv.first));
                     EXPECT_EQ(
                         kv.second,
-                        (*pub.keyVals_ref()).at(kv.first).value_ref().value());
+                        (*pub.keyVals()).at(kv.first).value().value());
                     received++;
                   }
                 });
@@ -1810,18 +1798,18 @@ TEST_F(
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals_ref()->count(kv.first)) {
+                    if (not t->keyVals()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
-                    ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
-                    if ((*pub.keyVals_ref()).count("key1") == 1) {
-                      const auto& val = (*pub.keyVals_ref())["key1"];
-                      if (*val.ttlVersion_ref() == 6) {
+                    ASSERT_EQ(1, (*pub.keyVals()).count(kv.first));
+                    if ((*pub.keyVals()).count("key1") == 1) {
+                      const auto& val = (*pub.keyVals())["key1"];
+                      if (*val.ttlVersion() == 6) {
                         newTtlVersionSeen = true;
                         /* TTL update has no value */
-                        EXPECT_EQ(false, val.value_ref().has_value());
-                        EXPECT_EQ(1, (*pub.keyVals_ref()).size());
+                        EXPECT_EQ(false, val.value().has_value());
+                        EXPECT_EQ(1, (*pub.keyVals()).size());
                       }
                     }
                   }
@@ -1908,15 +1896,15 @@ TEST_F(
               }
 
               for (const auto& kv : keyvals) {
-                if (not t->keyVals_ref()->count(kv.first)) {
+                if (not t->keyVals()->count(kv.first)) {
                   continue;
                 }
                 auto& pub = *t;
-                EXPECT_EQ(1, (*pub.keyVals_ref()).size());
-                ASSERT_EQ(1, (*pub.keyVals_ref()).count(kv.first));
-                if ((*pub.keyVals_ref()).count("key3") == 1) {
-                  const auto& val = (*pub.keyVals_ref())["key3"];
-                  EXPECT_LE(6, *val.ttlVersion_ref());
+                EXPECT_EQ(1, (*pub.keyVals()).size());
+                ASSERT_EQ(1, (*pub.keyVals()).count(kv.first));
+                if ((*pub.keyVals()).count("key3") == 1) {
+                  const auto& val = (*pub.keyVals())["key3"];
+                  EXPECT_LE(6, *val.ttlVersion());
                 }
               }
             });
