@@ -2292,27 +2292,6 @@ TEST_F(OpenrCtrlFixture, dispatcherApiTest) {
       std::find(filters.cbegin(), filters.cend(), filter3), filters.cend());
 }
 
-struct Entry {
-  std::string key;
-  std::string val;
-  std::string origId;
-  int64_t version;
-  int64_t ttl; // in millisecond
-  int64_t hash;
-  int64_t ttlVersion = 0;
-};
-
-thrift::Value
-createThriftValue(const Entry& entry) {
-  return createThriftValue(
-      entry.version,
-      entry.origId,
-      entry.val,
-      entry.ttl,
-      entry.ttlVersion,
-      entry.hash);
-}
-
 void
 checkKvs(thrift::KeyVals& l, thrift::KeyVals& r) {
   EXPECT_EQ(l.size(), r.size());
@@ -2343,32 +2322,14 @@ checkPublications(thrift::Publication& expected, thrift::Publication& actual) {
 // stream it to subscribers.
 TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
 #pragma region Data
-  const Entry entry1{
-      .key = "key1",
-      .val = "value1",
-      .origId = "node1",
-      .version = 1,
-      .ttl = 1000,
-      .hash = generateHash(1, "node1", "value1")};
-  Entry entry2{
-      .key = "key2",
-      .val = "value1",
-      .origId = "node1",
-      .version = 1,
-      .ttl = 30000,
-      .hash = generateHash(1, "node1", "value1")};
-  const Entry newEntry{
-      .key = "new entry",
-      .val = "value1",
-      .origId = "node1",
-      .version = 1,
-      .ttl = 30000,
-      .hash = generateHash(1, "node1", "value1")};
+  std::string kNewEntry = "newEntry";
+  std::string kEntry1 = "key1";
+  std::string kEntry2 = "key2";
 
-  std::vector<std::string> filterKeys{entry1.key, entry2.key, newEntry.key};
+  std::vector<std::string> filterKeys{kEntry1, kEntry2, kNewEntry};
   thrift::KeyVals kvs({
-      {entry1.key, createThriftValue(entry1)},
-      {entry2.key, createThriftValue(entry2)},
+      {kEntry1, createThriftValue(1, "node1", std::string("value1"), 1000)},
+      {kEntry2, createThriftValue(1, "node1", std::string("value2"), 3000)},
   });
   std::atomic<int> received{0};
 #pragma endregion Data
@@ -2406,51 +2367,41 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
 
 #pragma region StreamUpdate
   // new key, received = 0
-  auto val0 = createThriftValue(newEntry);
-  kvStoreWrapper_->setKey(kSpineAreaId, newEntry.key, val0, std::nullopt);
+  auto val0 = createThriftValue(1, "node1", std::string("value1"), 30000);
+  kvStoreWrapper_->setKey(kSpineAreaId, kNewEntry, val0, std::nullopt);
   {
     thrift::Publication p;
-    p.keyVals()->insert({newEntry.key, val0});
+    p.keyVals()->insert({kNewEntry, val0});
     p.area() = kSpineAreaId;
     expectedDeltas.emplace_back(p);
   }
 
   // existing value update, received = 1
-  entry2.version++;
-  entry2.val = "value2";
-  auto val1 = createThriftValue(entry2);
-  kvStoreWrapper_->setKey(kSpineAreaId, entry2.key, val1, std::nullopt);
+
+  auto val1 = createThriftValue(2, "node1", std::string("value22"), 3000);
+  kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val1, std::nullopt);
   {
     thrift::Publication p;
-    p.keyVals()->insert({entry2.key, val1});
+    p.keyVals()->insert({kEntry2, val1});
     p.area() = kSpineAreaId;
     expectedDeltas.emplace_back(p);
   }
 
   // updating version only, received = 2
-  entry2.version++;
-  auto val2 = createThriftValue(entry2);
-  kvStoreWrapper_->setKey(kSpineAreaId, entry2.key, val2, std::nullopt);
+  auto val2 = createThriftValue(3, "node1", std::string("value2"), 3000);
+  kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val2, std::nullopt);
   {
     thrift::Publication p;
-    p.keyVals()->insert({entry2.key, val2});
+    p.keyVals()->insert({kEntry2, val2});
     p.area() = kSpineAreaId;
     expectedDeltas.emplace_back(p);
   }
 
-  // ttl version update, received = 3
-  Entry ttlUpdate{
-      .key = entry2.key,
-      .val = entry2.val,
-      .origId = entry2.origId,
-      .version = entry2.version,
-      .ttl = Constants::kTtlInfinity,
-      .ttlVersion = entry2.ttlVersion + 1};
-  auto val3 = createThriftValue(ttlUpdate);
-  kvStoreWrapper_->setKey(kSpineAreaId, entry2.key, val3, std::nullopt);
+  auto val3 = createThriftValue(3, "node1", std::string("value2"), 3000, 100);
+  kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val3, std::nullopt);
   {
     thrift::Publication p;
-    p.keyVals()->insert({entry2.key, val3});
+    p.keyVals()->insert({kEntry2, val3});
     p.area() = kSpineAreaId;
     expectedDeltas.emplace_back(p);
   }
@@ -2461,7 +2412,7 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   {
     // key1 expired
     thrift::Publication p;
-    p.expiredKeys()->emplace_back(entry1.key);
+    p.expiredKeys()->emplace_back(kEntry1);
     p.area() = kSpineAreaId;
     expectedDeltas.emplace_back(p);
   }
