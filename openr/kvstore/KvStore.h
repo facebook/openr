@@ -495,6 +495,12 @@ class KvStoreDb {
         const thrift::KeyDumpParams& filter, const std::string& area);
 
     folly::SemiFuture<facebook::fb303::cpp2::fb303_status> getStatusWrapper();
+
+#if FOLLY_HAS_COROUTINES
+    folly::coro::Task<thrift::Publication>
+    getKvStoreKeyValsFilteredAreaCoroWrapper(
+        const thrift::KeyDumpParams& filter, const std::string& area);
+#endif
 #pragma endregion ApiWrapper
 
     // node name
@@ -664,17 +670,15 @@ class KvStore final : public OpenrEventBase {
   semifuture_getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
-      std::string area, thrift::KeyGetParams keyGetParams);
-#endif // FOLLY_HAS_COROUTINES
-
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
 #if FOLLY_HAS_COROUTINES
   folly::coro::Task<folly::Unit> co_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
+      std::string area, thrift::KeyGetParams keyGetParams);
 #endif
 
   folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
