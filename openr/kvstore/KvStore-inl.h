@@ -1204,15 +1204,28 @@ KvStoreDb<ClientType>::stop() {
   ttlCheckStopSignal_.post();
 
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
-    // Destroy thrift clients associated with peers, which will
-    // fulfill promises with exceptions if any.
-    thriftPeers_.clear();
-    selfOriginatedKeyTtlTimer_.reset();
-    advertiseKeyValsTimer_.reset();
-    selfOriginatedTtlUpdatesThrottled_.reset();
+    /*
+     * Reverse order to reset throttle
+     */
     unsetSelfOriginatedKeysThrottled_.reset();
     advertiseSelfOriginatedKeysThrottled_.reset();
+    selfOriginatedTtlUpdatesThrottled_.reset();
+    /*
+     * Reverse order to reset timer
+     */
+    advertiseKeyValsTimer_.reset();
+    selfOriginatedKeyTtlTimer_.reset();
     ttlCountdownTimer_.reset();
+    thriftSyncTimer_.reset();
+    /*
+     * Explicitly reset the `folly::AsyncTimer` to trigger cancellation of
+     * scheduled callbacks into the evb. Then destroy the `thriftPeers_`
+     * collecation.
+     */
+    for (auto& [_, peer] : thriftPeers_) {
+      peer.keepAliveTimer.reset();
+    }
+    thriftPeers_.clear();
   });
 
   XLOG(INFO)
