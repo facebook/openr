@@ -342,6 +342,12 @@ struct ThriftServerConfig {
    *  `enable_non_default_vrf_thrift_server = true`
    */
   13: list<string> vrf_names = [];
+
+  /**
+   * User specified default vrf name to pivot the thrift server to.
+   * This VRF is only used when pivoting back from a non-default VRF
+   */
+  14: optional string default_vrf_name;
 }
 
 struct ThriftClientConfig {

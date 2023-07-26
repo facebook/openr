@@ -301,6 +301,11 @@ class Config {
   }
 
   const std::string
+  getDefaultVrfName() const {
+    return getThriftServerConfig().default_vrf_name().value_or("");
+  }
+
+  const std::string
   getSSLCertPath() const {
     auto certPath = getThriftServerConfig().x509_cert_path();
     if ((not certPath) && isSecureThriftServerEnabled()) {

@@ -615,4 +615,30 @@ TEST(ConfigTest, NonDefaultVrfConfigGetter) {
   EXPECT_EQ(1, vrfs.size());
   EXPECT_EQ(mgmtVrf, vrfs.front());
 }
+
+TEST(ConfigTest, DefaultVrfConfigGetter) {
+  std::string defaultVrf{"defaultVrf"};
+  thrift::ThriftServerConfig thrift_server_config;
+  thrift_server_config.default_vrf_name() = defaultVrf;
+
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.thrift_server() = thrift_server_config;
+
+  // no soft-drained flag
+  auto config = Config(tConfig);
+  const auto vrf = config.getDefaultVrfName();
+  EXPECT_EQ(defaultVrf, vrf);
+}
+
+TEST(ConfigTest, DefaultVrfConfigGetterUnsetValue) {
+  thrift::ThriftServerConfig thrift_server_config;
+
+  auto tConfig = getBasicOpenrConfig();
+  tConfig.thrift_server() = thrift_server_config;
+
+  // no soft-drained flag
+  auto config = Config(tConfig);
+  const auto vrf = config.getDefaultVrfName();
+  EXPECT_EQ("", vrf);
+}
 } // namespace openr
