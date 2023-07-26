@@ -100,7 +100,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         kvRequestQueue_,
         prefixMgrRoutesUpdatesQueue_,
         prefixMgrInitializationEventsQueue_,
-        kvStoreWrapper_->getReader(),
+        dispatcher_->getReader({Constants::kPrefixDbMarker.toString()}),
         prefixUpdatesQueue_.getReader(),
         fibRouteUpdatesQueue_.getReader(),
         config);
