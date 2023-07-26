@@ -209,6 +209,19 @@ class OpenrCtrlFixture : public ::testing::Test {
         .get();
   }
 
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<void>
+  co_setKvStoreKeyVals(
+      const thrift::KeyVals& keyVals, const std::string& area) {
+    thrift::KeySetParams setParams;
+    setParams.keyVals() = keyVals;
+
+    co_await handler_->co_setKvStoreKeyVals(
+        std::make_unique<thrift::KeySetParams>(setParams),
+        std::make_unique<std::string>(area));
+  }
+#endif
+
   std::unique_ptr<openr::thrift::SetKeyValsResult>
   setKvStoreKeyValues(
       const thrift::KeyVals& keyVals,
@@ -628,9 +641,9 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
 
   // Key set/get
   {
-    setKvStoreKeyVals(kvs, kSpineAreaId);
-    setKvStoreKeyVals(keyValsPod, kPodAreaId);
-    setKvStoreKeyVals(keyValsPlane, kPlaneAreaId);
+    co_await co_setKvStoreKeyVals(kvs, kSpineAreaId);
+    co_await co_setKvStoreKeyVals(keyValsPod, kPodAreaId);
+    co_await co_setKvStoreKeyVals(keyValsPlane, kPlaneAreaId);
   }
 
   {

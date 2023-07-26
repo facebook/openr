@@ -356,13 +356,6 @@ OpenrCtrlHandler::getMyNodeName(std::string& _return) {
   _return = nodeName_;
 }
 
-#if FOLLY_HAS_COROUTINES
-folly::coro::Task<std::unique_ptr<std::string>>
-OpenrCtrlHandler::co_getMyNodeName() {
-  co_return folly::copy_to_unique_ptr(nodeName_);
-}
-#endif // FOLLY_HAS_COROUTINES
-
 void
 OpenrCtrlHandler::getOpenrVersion(thrift::OpenrVersions& _openrVersion) {
   _openrVersion.version() = Constants::kOpenrVersion;
@@ -715,41 +708,6 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
       std::move(*area), std::move(params));
 }
 
-#if FOLLY_HAS_COROUTINES
-
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::co_getKvStoreKeyVals(
-    std::unique_ptr<std::vector<std::string>> filterKeys) {
-  auto area = "getKvStoreKeyVals";
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
-
-  thrift::KeyGetParams params;
-  params.keys() = std::move(*filterKeys);
-
-  CHECK(kvStore_) << "no kvstore initialized";
-  auto result = co_await kvStore_->co_getKvStoreKeyVals(
-      std::move(area), std::move(params));
-  co_return result;
-}
-
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::co_getKvStoreKeyValsArea(
-    std::unique_ptr<std::vector<std::string>> filterKeys,
-    std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
-
-  thrift::KeyGetParams params;
-  params.keys() = std::move(*filterKeys);
-
-  CHECK(kvStore_) << "no kvstore initialized";
-  auto result = co_await kvStore_->co_getKvStoreKeyVals(
-      std::move(*area), std::move(params));
-  co_return result;
-}
-#endif
-
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
@@ -811,7 +769,7 @@ OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
       toString(*setParams.get()),
       *area);
 
-  CHECK(kvStore_);
+  XCHECK(kvStore_) << "no kvstore initialized";
 
   return kvStore_->semifuture_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
@@ -1379,5 +1337,60 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_clearRibPolicy() {
   return decision_->clearRibPolicy();
 }
+
+#if FOLLY_HAS_COROUTINES
+folly::coro::Task<std::unique_ptr<std::string>>
+OpenrCtrlHandler::co_getMyNodeName() {
+  co_return folly::copy_to_unique_ptr(nodeName_);
+}
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreKeyVals(
+    std::unique_ptr<std::vector<std::string>> filterKeys) {
+  auto area = "getKvStoreKeyVals";
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
+
+  thrift::KeyGetParams params;
+  params.keys() = std::move(*filterKeys);
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+  auto result = co_await kvStore_->co_getKvStoreKeyVals(
+      std::move(area), std::move(params));
+  co_return result;
+}
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreKeyValsArea(
+    std::unique_ptr<std::vector<std::string>> filterKeys,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
+
+  thrift::KeyGetParams params;
+  params.keys() = std::move(*filterKeys);
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+  auto result = co_await kvStore_->co_getKvStoreKeyVals(
+      std::move(*area), std::move(params));
+  co_return result;
+}
+
+folly::coro::Task<void>
+OpenrCtrlHandler::co_setKvStoreKeyVals(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*setParams.get()),
+      *area);
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+
+  co_await kvStore_->co_setKvStoreKeyVals(
+      std::move(*area), std::move(*setParams));
+}
+#endif // FOLLY_HAS_COROUTINES
 
 } // namespace openr

@@ -83,9 +83,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Openr Node Name
   void getMyNodeName(std::string& _return) override;
 
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
-#endif // FOLLY_HAS_COROUTINES
   //
   // config APIs
   //
@@ -263,16 +260,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::Publication>>
   semifuture_getKvStoreKeyVals(
       std::unique_ptr<std::vector<std::string>> filterKeys) override;
-
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<std::unique_ptr<thrift::Publication>>
-  co_getKvStoreKeyValsArea(
-      std::unique_ptr<std::vector<std::string>> filterKeys,
-      std::unique_ptr<std::string> area) override;
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
-      std::unique_ptr<std::vector<std::string>> filterKeys) override;
-#endif
 
   /*
    * API to return key-val pairs by given:
@@ -536,6 +523,24 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   cleanupPendingLongPollReqs() {
     longPollReqs_->clear();
   }
+
+  /* Coroutine APIs */
+ public:
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<void> co_setKvStoreKeyVals(
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
+
+  folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsArea(
+      std::unique_ptr<std::vector<std::string>> filterKeys,
+      std::unique_ptr<std::string> area) override;
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
+      std::unique_ptr<std::vector<std::string>> filterKeys) override;
+#endif
 
  private:
   // returns the single area name configured for this node or throws if not

@@ -259,36 +259,6 @@ KvStore<ClientType>::semifuture_getKvStoreKeyVals(
   return sf;
 }
 
-#if FOLLY_HAS_COROUTINES
-template <class ClientType>
-folly::coro::Task<thrift::Publication>
-KvStore<ClientType>::co_getKvStoreKeyValsInternal(
-    std::string area, thrift::KeyGetParams keyGetParams) {
-  auto& kvStoreDb = getAreaDbOrThrow(std::move(area), "getKvStoreKeyVals");
-  auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys());
-  updatePublicationTtl(
-      kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub, false);
-  co_return thriftPub;
-}
-
-template <class ClientType>
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
-KvStore<ClientType>::co_getKvStoreKeyVals(
-    std::string area, thrift::KeyGetParams keyGetParams) {
-  XLOG(DBG3) << "Get key requested for AREA: " << area;
-  try {
-    auto result =
-        co_await co_getKvStoreKeyValsInternal(area, std::move(keyGetParams))
-            .scheduleOn(getEvb());
-    co_return std::make_unique<thrift::Publication>(std::move(result));
-  } catch (thrift::KvStoreError const& e) {
-    XLOG(ERR) << fmt::format(
-        "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
-  }
-  co_return std::make_unique<thrift::Publication>();
-}
-#endif // FOLLY_HAS_COROUTINES
-
 template <class ClientType>
 folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
 KvStore<ClientType>::semifuture_dumpKvStoreSelfOriginatedKeys(
@@ -2895,4 +2865,70 @@ KvStoreDb<ClientType>::logKvEvent(
 
   kvParams_.logSampleQueue.push(std::move(sample));
 }
+
+/* Coroutines */
+#if FOLLY_HAS_COROUTINES
+template <class ClientType>
+folly::coro::Task<thrift::Publication>
+KvStore<ClientType>::co_getKvStoreKeyValsInternal(
+    std::string area, thrift::KeyGetParams keyGetParams) {
+  auto& kvStoreDb = getAreaDbOrThrow(std::move(area), "getKvStoreKeyVals");
+  auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys());
+  updatePublicationTtl(
+      kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub, false);
+  co_return thriftPub;
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+KvStore<ClientType>::co_getKvStoreKeyVals(
+    std::string area, thrift::KeyGetParams keyGetParams) {
+  XLOG(DBG3) << "Get key requested for AREA: " << area;
+  try {
+    auto result =
+        co_await co_getKvStoreKeyValsInternal(area, std::move(keyGetParams))
+            .scheduleOn(getEvb());
+    co_return std::make_unique<thrift::Publication>(std::move(result));
+  } catch (thrift::KvStoreError const& e) {
+    XLOG(ERR) << fmt::format(
+        "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw e;
+  }
+  co_return std::make_unique<thrift::Publication>();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_setKvStoreKeyValsInternal(
+    std::string area, thrift::KeySetParams keySetParams) {
+  auto& kvStoreDb = getAreaDbOrThrow(std::move(area), "setKvStoreKeyVals");
+  auto r =
+      kvStoreDb.setKeyVals(std::move(keySetParams), false /* remote update */);
+  co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_setKvStoreKeyVals(
+    std::string area, thrift::KeySetParams keySetParams) {
+  XLOG(DBG3) << fmt::format(
+      "Set key requested for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    co_return co_await co_setKvStoreKeyValsInternal(
+        area, std::move(keySetParams))
+        .scheduleOn(getEvb());
+  } catch (thrift::KvStoreError const& e) {
+    XLOG(ERR) << fmt::format(
+        "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw e;
+  }
+  co_return folly::Unit();
+}
+#endif // FOLLY_HAS_COROUTINES
 } // namespace openr
