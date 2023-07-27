@@ -120,7 +120,6 @@ dumpAllWithThriftClientFromMultiple(
   std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
-  params.prefix() = keyPrefix;
   if (not keyPrefix.empty()) {
     params.keys() = {keyPrefix};
   }

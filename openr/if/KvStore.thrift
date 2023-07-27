@@ -233,35 +233,16 @@ struct KeyGetParams {
  */
 struct KeyDumpParams {
   /**
-   * This is deprecated in favor of `keys` attribute
-   */
-  1: string prefix (deprecated);
-
-  /**
-   * Set of originator IDs to filter on
-   */
-
-  3: set<string> originatorIds;
-
-  /**
-   * If set to true (default), ignore TTL updates. This is applicable for
-   * subscriptions (aka streaming KvStore updates).
-   */
-  6: bool ignoreTtl = true;
-
-  /**
-   * If set to true, data attribute (`value.value`) will be removed from
-   * from response. This would greatly reduces the data that need to be sent to
-   * client.
-   */
-  7: bool doNotPublishValue = false;
-
-  /**
    * Optional attribute to include keyValHashes information from peer.
    * 1) If NOT empty, ONLY respond with keyVals on which hash differs;
    *  2) Otherwise, respond with flooding element to signal DB change;
    */
   2: optional KeyVals keyValHashes;
+
+  /**
+   * Set of originator IDs to filter on
+   */
+  3: set<string> originatorIds;
 
   /**
    * The default is OR for dumping KV store entries for backward compatibility.
@@ -275,7 +256,20 @@ struct KeyDumpParams {
    * kinds of updates. For example, a consumer might be interesred in
    * getting "adj:.*" keys from open/r domain.
    */
-  5: optional list<string> keys;
+  5: list<string> keys = [];
+
+  /**
+   * If set to true (default), ignore TTL updates. This is applicable for
+   * subscriptions (aka streaming KvStore updates).
+   */
+  6: bool ignoreTtl = true;
+
+  /**
+   * If set to true, data attribute (`value.value`) will be removed from
+   * from response. This would greatly reduces the data that need to be sent to
+   * client.
+   */
+  7: bool doNotPublishValue = false;
 
   /**
    * ID representing sender of the request.
@@ -303,11 +297,6 @@ struct PeerSpec {
    * Peer address over thrift for KvStore external sync
    */
   1: string peerAddr;
-
-  /**
-   * cmd url for KvStore external sync over ZMQ
-   */
-  2: string cmdUrl (deprecated);
 
   /**
    * thrift port

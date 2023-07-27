@@ -21,19 +21,11 @@ KvStorePublisher::KvStorePublisher(
       publisher_(std::move(publisher)),
       subscription_time_(subscription_time),
       total_messages_(total_messages) {
-  std::vector<std::string> keyPrefix;
-
-  if (filter.keys().has_value()) {
-    keyPrefix = std::move(*filter.keys());
-  } else if (filter.prefix().is_set()) {
-    folly::split(',', *filter.prefix(), keyPrefix, true);
-  }
-
   thrift::FilterOperator op =
       filter_.oper().has_value() ? *filter_.oper() : thrift::FilterOperator::OR;
 
   keyPrefixFilter_ =
-      KvStoreFilters(keyPrefix, std::move(*filter.originatorIds()), op);
+      KvStoreFilters(*filter.keys(), std::move(*filter.originatorIds()), op);
 }
 
 /**

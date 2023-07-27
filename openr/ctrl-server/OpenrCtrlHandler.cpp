@@ -813,14 +813,13 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
   // build thrift::KeyVals with "adj:" key ONLY
   // to ensure KvStore ONLY compare "adj:" key
   thrift::KeyVals adjKeyVals;
-  for (auto& kv : *snapshot) {
-    if (kv.first.find(Constants::kAdjDbMarker.toString()) == 0) {
-      adjKeyVals.emplace(kv.first, kv.second);
+  for (auto& [key, val] : *snapshot) {
+    if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
+      adjKeyVals.emplace(key, val);
     }
   }
 
   // Only care about "adj:" key
-  *params.prefix() = Constants::kAdjDbMarker;
   params.keys() = {Constants::kAdjDbMarker.toString()};
   // Only dump difference between KvStore and client snapshot
   params.keyValHashes() = std::move(adjKeyVals);

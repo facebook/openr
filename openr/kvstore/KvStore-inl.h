@@ -307,34 +307,26 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
         auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreKeys");
         fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
-        std::vector<std::string> keyPrefixList;
-        if (keyDumpParams.keys().has_value()) {
-          keyPrefixList = *keyDumpParams.keys();
-        } else {
-          folly::split(',', *keyDumpParams.prefix(), keyPrefixList, true);
-        }
-
+        // KvStoreFilters contains `thrift::FilterOperator`
+        // Default to thrift::FilterOperator::OR
         thrift::FilterOperator oper = thrift::FilterOperator::OR;
         if (keyDumpParams.oper().has_value()) {
           oper = *keyDumpParams.oper();
         }
-        // KvStoreFilters contains `thrift::FilterOperator`
-        // Default to thrift::FilterOperator::OR
 
         thrift::Publication thriftPub;
-
         try {
           const auto keyPrefixMatch = KvStoreFilters(
-              keyPrefixList, *keyDumpParams.originatorIds(), oper);
+              *keyDumpParams.keys(), *keyDumpParams.originatorIds(), oper);
           thriftPub = dumpAllWithFilters(
               area,
               kvStoreDb.getKeyValueMap(),
               keyPrefixMatch,
               *keyDumpParams.doNotPublishValue());
         } catch (RegexSetException const& err) {
-          XLOG(ERR) << "Fail to create KvStoreFilters:"
-                    << folly::exceptionStr(err);
-          XLOG(ERR) << "Dump without filters";
+          XLOG(ERR) << fmt::format(
+              "Fail to create KvStoreFilters with exception: {}. Dump without filter",
+              folly::exceptionStr(err));
           const auto keyPrefixMatch =
               KvStoreFilters({}, *keyDumpParams.originatorIds(), oper);
           thriftPub = dumpAllWithFilters(
@@ -352,9 +344,7 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
             kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
 
         if (keyDumpParams.keyValHashes().has_value() and
-            (*keyDumpParams.prefix()).empty() and
-            (not keyDumpParams.keys().has_value() or
-             (*keyDumpParams.keys()).empty())) {
+            (*keyDumpParams.keys()).empty()) {
           // This usually comes from neighbor nodes
           size_t numMissingKeys = 0;
           if (thriftPub.tobeUpdatedKeys().has_value()) {
@@ -395,15 +385,9 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
 
-      std::vector<std::string> keyPrefixList{};
-      if (keyDumpParams.keys().has_value()) {
-        keyPrefixList = *keyDumpParams.keys();
-      } else {
-        // TODO: prefix field is deprecated
-        folly::split(',', *keyDumpParams.prefix(), keyPrefixList, true);
-      }
       KvStoreFilters kvFilters{
-          keyPrefixList, std::set<std::string>{} /* originatorId list */};
+          *keyDumpParams.keys(),
+          std::set<std::string>{} /* originatorId list */};
       auto thriftPub =
           dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
       updatePublicationTtl(
@@ -683,9 +667,6 @@ KvStore<ClientType>::initGlobalCounters() {
       fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.co_getKvStoreKeyValsFilteredArea.secure_client.failure",
-      fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.semifuture_getStatus.secure_client.failure",
       fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_full_sync", fb303::COUNT);
@@ -1223,10 +1204,8 @@ KvStoreDb<ClientType>::checkKeyTtl() noexcept {
   // total number of unexpected keys below ttl alert threshold
   auto cnt{0};
 
-  // TODO: now the key regex is hardcoded to match `adj:` key ONLY
-  // and can be extended to serve ANY key matching from config
   KvStoreFilters filter{
-      {Constants::kAdjDbMarker.toString()}, /* key regex match */
+      {Constants::kAdjDbMarker.toString()}, /* match "adj:" key only */
       {}, /* originator match */
       thrift::FilterOperator::OR /* matching type */};
 
