@@ -135,7 +135,7 @@ class Constants {
   static constexpr std::chrono::seconds kFloodTopoDumpInterval{300}; // 5min
 
   // Default thrift client keep alive interval to avoid idle timeout
-  static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{30};
+  static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{20};
 
   // Count of maximum pending kvstore sync response before waiting for
   // kMaxBackoff to send the next sync request

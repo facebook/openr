@@ -494,8 +494,6 @@ class KvStoreDb {
     folly::SemiFuture<thrift::Publication> getKvStoreKeyValsFilteredAreaWrapper(
         const thrift::KeyDumpParams& filter, const std::string& area);
 
-    folly::SemiFuture<facebook::fb303::cpp2::fb303_status> getStatusWrapper();
-
 #if FOLLY_HAS_COROUTINES
     folly::coro::Task<thrift::Publication>
     getKvStoreKeyValsFilteredAreaCoroWrapper(
@@ -522,13 +520,6 @@ class KvStoreDb {
 
     // only if TLS is enabled
     std::unique_ptr<ClientType> secureClient{nullptr};
-
-    // [TO BE DEPRECATED]
-    // timer to periodically send keep-alive status
-    // ATTN: this mechanism serves the purpose of avoiding channel being
-    //       closed from thrift server due to IDLE timeout(i.e. 60s by
-    //       default)
-    std::unique_ptr<folly::AsyncTimeout> keepAliveTimer{nullptr};
 
     // Stores set of keys that may have changed during initialization of this
     // peer. Will flood to them in finalizeFullSync(), the last step of

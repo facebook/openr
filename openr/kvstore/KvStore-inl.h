@@ -921,25 +921,6 @@ KvStoreDb<ClientType>::KvStorePeer::getKvStoreKeyValsFilteredAreaWrapper(
 }
 
 template <class ClientType>
-folly::SemiFuture<facebook::fb303::cpp2::fb303_status>
-KvStoreDb<ClientType>::KvStorePeer::getStatusWrapper() {
-  if (not kvParams_.enable_secure_thrift_client) {
-    return plainTextClient->semifuture_getStatus();
-  }
-  // TLS fallback
-  try {
-    return secureClient->semifuture_getStatus();
-  } catch (const folly::AsyncSocketException& ex) {
-    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.semifuture_getStatus.secure_client.failure",
-        1,
-        fb303::COUNT);
-    return plainTextClient->semifuture_getStatus();
-  }
-}
-
-template <class ClientType>
 bool
 KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
     OpenrEventBase* evb, std::optional<int> maybeIpTos) {
@@ -999,13 +980,6 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
 
     fb303::fbData->addStatValue(
         "kvstore.thrift.plaintext_client", 1, fb303::COUNT);
-
-    // TODO: leverage folly::Socket's KEEP_ALIVE option to manage this
-    // instead of manipulating getStatus() call on our own.
-    // schedule periodic keepAlive time with 20% jitter variance
-    auto period = addJitter<std::chrono::seconds>(
-        Constants::kThriftClientKeepAliveInterval, 20.0);
-    keepAliveTimer->scheduleTimeout(period);
   } catch (std::exception const& e) {
     XLOG(ERR) << fmt::format(
         "{} [Thrift Sync] Failed creating thrift client with addr: {}, port: {}, peerName: {}. Exception: {}",
@@ -1020,7 +994,6 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         "kvstore.thrift.num_client_connection_failure", 1, fb303::COUNT);
 
     // clean up state for next round of scanning
-    keepAliveTimer->cancelTimeout();
     plainTextClient.reset();
     secureClient.reset();
     expBackoff.reportError(); // apply exponential backoff
@@ -1190,14 +1163,6 @@ KvStoreDb<ClientType>::stop() {
     selfOriginatedKeyTtlTimer_.reset();
     ttlCountdownTimer_.reset();
     thriftSyncTimer_.reset();
-    /*
-     * Explicitly reset the `folly::AsyncTimer` to trigger cancellation of
-     * scheduled callbacks into the evb. Then destroy the `thriftPeers_`
-     * collecation.
-     */
-    for (auto& [_, peer] : thriftPeers_) {
-      peer.keepAliveTimer.reset();
-    }
     thriftPeers_.clear();
   });
 
@@ -2042,14 +2007,13 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::disconnectPeer(
     KvStorePeer& peer, KvStorePeerEvent const& event) {
-  // reset client to reconnect later in next batch of thriftSyncTimer_
-  // scanning
-  peer.keepAliveTimer->cancelTimeout();
   // we want to correct inconsistency fast
   if (event != KvStorePeerEvent::INCONSISTENCY_DETECTED) {
     peer.expBackoff.reportError(); // apply exponential backoff
   }
 
+  // reset client to reconnect later in next batch of thriftSyncTimer_
+  // scanning
   peer.plainTextClient.reset();
   if (kvParams_.enable_secure_thrift_client) {
     peer.secureClient.reset();
@@ -2115,7 +2079,6 @@ KvStoreDb<ClientType>::addThriftPeers(
       peerIter->second.peerSpec = newPeerSpec; // update peerSpec
       peerIter->second.peerSpec.state() =
           thrift::KvStorePeerState::IDLE; // set IDLE initially
-      peerIter->second.keepAliveTimer->cancelTimeout(); // cancel timer
       peerIter->second.plainTextClient.reset(); // destruct thriftClient
       if (kvParams_.enable_secure_thrift_client) {
         peerIter->second.secureClient.reset();
@@ -2136,21 +2099,7 @@ KvStoreDb<ClientType>::addThriftPeers(
               Constants::kKvstoreSyncInitialBackoff,
               Constants::kKvstoreSyncMaxBackoff),
           kvParams_);
-
-      // TODO: remove this client call to use folly::Socket option to keep-alive
-      // initialize keepAlive timer to make sure thrift client connection
-      // will NOT be closed by thrift server due to inactivity
-      const auto name = peerName;
-      peer.keepAliveTimer =
-          folly::AsyncTimeout::make(*(evb_->getEvb()), [this, name]() noexcept {
-            auto period = addJitter(Constants::kThriftClientKeepAliveInterval);
-            auto& p = thriftPeers_.at(name);
-            CHECK(p.plainTextClient)
-                << "thrift plaintext client is NOT initialized";
-            p.getStatusWrapper();
-            p.keepAliveTimer->scheduleTimeout(period);
-          });
-      thriftPeers_.emplace(name, std::move(peer));
+      thriftPeers_.emplace(peerName, std::move(peer));
     }
 
     // create thrift client and do backoff if can't go through
@@ -2217,7 +2166,6 @@ KvStoreDb<ClientType>::delThriftPeers(std::vector<std::string> const& peers) {
                       *peerSpec.peerAddr());
 
     // destroy peer info
-    peerIter->second.keepAliveTimer.reset();
     peerIter->second.plainTextClient.reset();
     if (kvParams_.enable_secure_thrift_client) {
       peerIter->second.secureClient.reset();

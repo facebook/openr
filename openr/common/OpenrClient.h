@@ -84,15 +84,33 @@ getOpenrCtrlPlainTextClient(
         detail::getSocketOptionMap(maybeIpTos),
         bindAddr);
 
+    /*
+     * Set up socket keepalive options so that we break the connection in a
+     * timely manner in the case of ungraceful disconnect when FIN/RST is not
+     * received from the remote end.
+     */
+    int optval = 1;
+    if (transport->setSockOpt(SOL_SOCKET, SO_KEEPALIVE, &optval) != 0) {
+      XLOG(FATAL) << fmt::format(
+          "Could not set SO_KEEPALIVE flag on socket. Error: {}", errno);
+    }
+
+    // The time (in seconds) between individual keepalive probes
+    int interval = Constants::kThriftClientKeepAliveInterval.count();
+    if (transport->setSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, &interval) != 0) {
+      XLOG(FATAL) << fmt::format(
+          "Could not set TCP_KEEPINTVL value on socket. Error: {}", errno);
+    }
+    XLOG(INFO) << fmt::format(
+        "Successfully set TCP socket keepalive with interval: {}", interval);
+
     // Create channel and set timeout
     auto channel = ClientChannel::newChannel(std::move(transport));
     channel->setTimeout(processingTimeout.count());
 
     // Enable compression for efficient transport when available. This will
     // incur CPU cost but it is insignificant for usual queries.
-    if (typeid(ClientChannel) == typeid(apache::thrift::RocketClientChannel)) {
-      detail::setCompressionTransform(channel.get());
-    }
+    detail::setCompressionTransform(channel.get());
 
     // Create client
     client = std::make_unique<ClientType>(std::move(channel));
@@ -137,6 +155,26 @@ getOpenrCtrlSecureClient(
         connectTimeout.count(),
         detail::getSocketOptionMap(maybeIpTos),
         bindAddr);
+
+    /*
+     * Set up socket keepalive options so that we break the connection in a
+     * timely manner in the case of ungraceful disconnect when FIN/RST is not
+     * received from the remote end.
+     */
+    int optval = 1;
+    if (transport->setSockOpt(SOL_SOCKET, SO_KEEPALIVE, &optval) != 0) {
+      XLOG(FATAL) << fmt::format(
+          "Could not set SO_KEEPALIVE flag on socket. Error: {}", errno);
+    }
+
+    // The time (in seconds) between individual keepalive probes
+    int interval = Constants::kThriftClientKeepAliveInterval.count();
+    if (transport->setSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, &interval) != 0) {
+      XLOG(FATAL) << fmt::format(
+          "Could not set TCP_KEEPINTVL value on socket. Error: {}", errno);
+    }
+    XLOG(INFO) << fmt::format(
+        "Successfully set TCP socket keepalive with interval: {}", interval);
 
     // Create channel and set timeout
     auto channel = ClientChannel::newChannel(std::move(transport));
