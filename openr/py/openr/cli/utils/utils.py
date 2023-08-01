@@ -346,35 +346,6 @@ def collate_prefix_keys(
     return prefix_maps
 
 
-# to be deprecated
-def collate_prefix_keys_py(
-    kvstore_keyvals: kv_store_types_py.KeyVals,
-) -> Dict[str, openr_types_py.PrefixDatabase]:
-    """collate all the prefixes of node and return a map of
-    nodename - PrefixDatabase in thrift-py
-    """
-
-    prefix_maps = {}
-    for key, value in sorted(kvstore_keyvals.items()):
-        if key.startswith(Consts.PREFIX_DB_MARKER):
-
-            node_name = key.split(":")[1]
-            prefix_db = deserialize_thrift_py_object(
-                value.value, openr_types_py.PrefixDatabase
-            )
-            if prefix_db.deletePrefix:
-                continue
-            if node_name not in prefix_maps:
-                prefix_maps[node_name] = openr_types_py.PrefixDatabase(
-                    f"{node_name}", []
-                )
-
-            for prefix_entry in prefix_db.prefixEntries:
-                prefix_maps[node_name].prefixEntries.append(prefix_entry)
-
-    return prefix_maps
-
-
 def prefix_entry_to_dict(prefix_entry):
     """convert prefixEntry from thrift-py3/thrift-python instance into a dict in strings"""
 
@@ -395,24 +366,6 @@ def prefix_entry_to_dict(prefix_entry):
     return thrift_to_dict(prefix_entry, _update)
 
 
-# to be deprecated
-def prefix_entry_to_dict_py(prefix_entry):
-    """convert prefixEntry from thrift-py instance into a dict in strings"""
-
-    def _update(prefix_entry_dict, prefix_entry):
-        # prefix and data need string conversion and metric_vector can be
-        # represented as a dict so we update them
-        prefix_entry_dict.update(
-            {
-                "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
-                "metrics": thrift_py_to_dict(prefix_entry.metrics),
-                "tags": list(prefix_entry.tags if prefix_entry.tags else []),
-            }
-        )
-
-    return thrift_py_to_dict(prefix_entry, _update)
-
-
 def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
     """convert PrefixDatabase from thrift-py3/thrift-python instance to a dictionary"""
 
@@ -428,27 +381,6 @@ def prefix_db_to_dict(prefix_db: Any) -> Dict[str, Any]:
         )
 
     return thrift_to_dict(prefix_db, _update)
-
-
-# to be deprecated
-def prefix_db_to_dict_py(prefix_db: Any) -> Dict[str, Any]:
-    """convert PrefixDatabase from thrift-py instance to a dictionary"""
-
-    if isinstance(prefix_db, kv_store_types_py.Value):
-        prefix_db = deserialize_thrift_py_object(
-            prefix_db.value, openr_types_py.PrefixDatabase
-        )
-
-    def _update(prefix_db_dict, prefix_db):
-        prefix_db_dict.update(
-            {
-                "prefixEntries": list(
-                    map(prefix_entry_to_dict_py, prefix_db.prefixEntries)
-                )
-            }
-        )
-
-    return thrift_py_to_dict(prefix_db, _update)
 
 
 def print_prefixes_json(resp, nodes, prefix, client_type, iter_func) -> None:
