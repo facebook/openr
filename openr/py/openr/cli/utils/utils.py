@@ -1303,29 +1303,6 @@ def build_nexthops(nexthops: List[str]) -> List[network_types.BinaryAddress]:
     return nhs
 
 
-# to be deprecated
-def build_nexthops_py(nexthops: List[str]) -> List[network_types_py.BinaryAddress]:
-    """
-    Convert nexthops in list of string to list of binaryAddress in thrift-py
-    """
-
-    nhs = []
-    for nh_iface in nexthops:
-        iface, addr = None, None
-        # Nexthop may or may not be link-local. Handle it here well
-        if "@" in nh_iface:
-            addr, iface = nh_iface.split("@")
-        elif "%" in nh_iface:
-            addr, iface = nh_iface.split("%")
-        else:
-            addr = nh_iface
-        nexthop = ipnetwork.ip_str_to_addr_py(addr)
-        nexthop.ifName = iface
-        nhs.append(nexthop)
-
-    return nhs
-
-
 def build_routes(
     prefixes: List[str], nexthops: List[str]
 ) -> List[network_types.UnicastRoute]:
@@ -1344,34 +1321,13 @@ def build_routes(
     ]
 
 
-# to be deprecated
-def build_routes_py(
-    prefixes: List[str], nexthops: List[str]
-) -> List[network_types_py.UnicastRoute]:
-    """
-    Build list of UnicastRoute in thrift-py using prefixes and nexthops list
-    """
-
-    prefixes_str = [ipnetwork.ip_str_to_prefix_py(p) for p in prefixes]
-    nhs = build_nexthops_py(nexthops)
-    return [
-        network_types_py.UnicastRoute(
-            dest=p,
-            nextHops=[network_types_py.NextHopThrift(address=nh) for nh in nhs],
-        )
-        for p in prefixes_str
-    ]
-
-
 def get_route_as_dict_in_str(
     routes: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
     route_type: str = "unicast",
-) -> Dict[str, str]:
+) -> Dict[Any, List[str]]:
     """
     Convert a routeDb into a dict representing routes in string format
     """
@@ -1399,27 +1355,16 @@ def get_route_as_dict_in_str(
     else:
         assert 0, "Unknown route type %s" % route_type
 
-    # pyre-fixme[7]: Expected `Dict[str, str]` but got `Dict[typing.Any, List[str]]`.
     return routes_dict
 
 
 def get_route_as_dict(
     routes: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
     route_type: str = "unicast",
-) -> Dict[
-    str,
-    Union[
-        network_types_py.UnicastRoute,
-        network_types_py.MplsRoute,
-        network_types.UnicastRoute,
-        network_types.MplsRoute,
-    ],
-]:
+) -> Dict[str, Union[network_types.UnicastRoute, network_types.MplsRoute]]:
     """
     Convert a routeDb into a dict representing routes:
     (K, V) = (UnicastRoute.dest/MplsRoute.topLabel, UnicastRoute/MplsRoute)
@@ -1442,19 +1387,15 @@ def get_route_as_dict(
 
 def routes_difference(
     lhs: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
     rhs: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
     route_type: str = "unicast",
-) -> List[Union[network_types_py.UnicastRoute, network_types_py.MplsRoute]]:
+) -> List[Union[network_types.UnicastRoute, network_types.MplsRoute]]:
     """
     Get routeDb delta between provided inputs
     """
@@ -1477,14 +1418,10 @@ def routes_difference(
 
 def prefixes_with_different_nexthops(
     lhs: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
     rhs: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
@@ -1541,27 +1478,23 @@ def prefixes_with_different_nexthops(
 
 
 def _only_mpls_routes(
-    all_routes: List[Union[network_types_py.UnicastRoute, network_types_py.MplsRoute]]
-) -> List[network_types_py.MplsRoute]:
-    return [r for r in all_routes if isinstance(r, network_types_py.MplsRoute)]
+    all_routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]]
+) -> List[network_types.MplsRoute]:
+    return [r for r in all_routes if isinstance(r, network_types.MplsRoute)]
 
 
 def _only_unicast_routes(
-    all_routes: List[Union[network_types_py.UnicastRoute, network_types_py.MplsRoute]]
-) -> List[network_types_py.UnicastRoute]:
-    return [r for r in all_routes if isinstance(r, network_types_py.UnicastRoute)]
+    all_routes: List[Union[network_types.UnicastRoute, network_types.MplsRoute]]
+) -> List[network_types.UnicastRoute]:
+    return [r for r in all_routes if isinstance(r, network_types.UnicastRoute)]
 
 
 def compare_route_db(
     routes_a: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
     routes_b: Union[
-        List[network_types_py.UnicastRoute],
-        List[network_types_py.MplsRoute],
         List[network_types.UnicastRoute],
         List[network_types.MplsRoute],
     ],
@@ -2009,8 +1942,6 @@ def print_route_details(
         Union[
             ctrl_types.AdvertisedRouteDetail,
             ctrl_types.ReceivedRouteDetail,
-            ctrl_types_py.AdvertisedRouteDetail,
-            ctrl_types_py.ReceivedRouteDetail,
         ]
     ],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
@@ -2130,8 +2061,6 @@ def print_route_helper(
     route: Union[
         ctrl_types.AdvertisedRoute,
         ctrl_types.ReceivedRoute,
-        ctrl_types_py.AdvertisedRoute,
-        ctrl_types_py.ReceivedRoute,
     ],
     key_to_str_fn: Callable[[PrintAdvertisedTypes], Tuple[str, ...]],
     detailed: bool,
@@ -2156,18 +2085,8 @@ def print_route_helper(
     """
 
     key, metrics = key_to_str_fn(route.key), route.route.metrics
-    if isinstance(route, thrift_python_types.Struct):
-        # thrift-py3/thrift-python
-        fwd_algo = route.route.forwardingAlgorithm.name
-        fwd_type = route.route.forwardingType.name
-    else:
-        # thrift-py
-        fwd_algo = config_types_py.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
-            route.route.forwardingAlgorithm
-        )
-        fwd_type = config_types_py.PrefixForwardingType._VALUES_TO_NAMES.get(
-            route.route.forwardingType
-        )
+    fwd_algo = route.route.forwardingAlgorithm.name
+    fwd_type = route.route.forwardingType.name
     if detailed:
         rows.append(f"{markers} from {' '.join(key)}")
         rows.append(f"     Forwarding - algorithm: {fwd_algo}, type: {fwd_type}")
@@ -2187,18 +2106,12 @@ def print_route_helper(
         )
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
         if (
-            (
-                isinstance(route, ctrl_types.AdvertisedRoute)
-                or isinstance(route, ctrl_types_py.AdvertisedRoute)
-            )
+            isinstance(route, ctrl_types.AdvertisedRoute)
             and hasattr(route, "hitPolicy")
             and route.hitPolicy
         ):
             rows.append(f"     Policy - {route.hitPolicy}")
-        if (
-            isinstance(route, ctrl_types.AdvertisedRoute)
-            or isinstance(route, ctrl_types_py.AdvertisedRoute)
-        ) and route.igpCost is not None:
+        if isinstance(route, ctrl_types.AdvertisedRoute) and route.igpCost is not None:
             rows.append(f"     IGP Cost - {route.igpCost}")
     else:
         min_nexthop = (
