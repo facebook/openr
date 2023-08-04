@@ -438,14 +438,13 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         # Validate Open/R Initialization Event
         initialization_events = await client.getInitializationEvents()
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str = self.validate_init_event(
             initialization_events,
             kv_store_types.InitializationEvent.RIB_COMPUTED,
         )
         self.print_initialization_event_check(
             init_is_pass,
             init_err_msg_str,
-            init_dur_str,
             kv_store_types.InitializationEvent.RIB_COMPUTED,
             "decision",
         )

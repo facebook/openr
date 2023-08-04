@@ -274,50 +274,9 @@ class CliSparkTests(TestCase):
         )
 
         stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
-        tokenized_time_line = stdout_lines[3].split(": ")
         init_event_pass_state = stdout_lines[2].split(" ")[-1]
 
         self.assertEqual("PASS", init_event_pass_state)
-        self.assertEqual("2400ms", tokenized_time_line[1])
-
-        # Checking when the duration is within warning level
-        mocked_returned_connection.getInitializationEvents.return_value = (
-            MOCKED_INIT_EVEVENTS_WARNING
-        )
-        invoked_return = self.runner.invoke(
-            spark.SparkValidateCli.validate,
-            [],
-            catch_exceptions=False,
-        )
-
-        stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
-        tokenized_time_line = stdout_lines[3].split(": ")
-        init_event_pass_state = stdout_lines[2].split(" ")[-1]
-
-        self.assertEqual("PASS", init_event_pass_state)
-        self.assertEqual("38910ms", tokenized_time_line[1])
-
-        # Checking when the duration is above the time limit
-        mocked_returned_connection.getInitializationEvents.return_value = (
-            MOCKED_INIT_EVEVENTS_TIMEOUT
-        )
-        invoked_return = self.runner.invoke(
-            spark.SparkValidateCli.validate,
-            [],
-            catch_exceptions=False,
-        )
-
-        stdout_lines = self._parse_validate_stdout(invoked_return.stdout)
-        tokenized_time_line = stdout_lines[4].split(": ")
-        error_msg_line = stdout_lines[3]
-        init_event_pass_state = stdout_lines[2].split(" ")[-1]
-
-        self.assertEqual("FAIL", init_event_pass_state)
-        self.assertEqual("61040ms", tokenized_time_line[1])
-        self.assertTrue(
-            "NEIGHBOR_DISCOVERED event duration exceeds acceptable time limit"
-            in error_msg_line
-        )
 
         # Checking when the NEIGHBORS_DISCOVEREd event isn't published
         mocked_returned_connection.getInitializationEvents.return_value = (

@@ -164,7 +164,7 @@ class OpenrCtrlCmd:
         self,
         init_event_dict: Mapping[InitializationEvent, int],
         init_event: InitializationEvent,
-    ) -> Tuple[bool, Optional[str], Optional[str]]:
+    ) -> Tuple[bool, Optional[str]]:
         """
         Returns True if the init_event specified is published within it's defined time limit
         If init_event is published, returns the duration as a stylized string. If the checks fail,
@@ -177,35 +177,11 @@ class OpenrCtrlCmd:
         # If the check fails, this will hold the error msg string
         err_msg_str = None
 
-        # If the init_event is published, stores the duration as a stylized string
-        dur_str = None
-
         if init_event not in init_event_dict:
             is_pass = False
             err_msg_str = f"{init_event.name} event is not published"
-        else:
-            warning_label = InitializationEventTimeLabels[
-                f"{init_event.name}_WARNING_MS"
-            ]
-            timeout_label = InitializationEventTimeLabels[
-                f"{init_event.name}_TIMEOUT_MS"
-            ]
 
-            warning_time = InitializationEventTimeDuration[warning_label]
-            timeout_time = InitializationEventTimeDuration[timeout_label]
-
-            init_event_dur = init_event_dict[init_event]
-
-            if init_event_dur < warning_time:
-                dur_str = click.style(str(init_event_dur), fg="green")
-            elif init_event_dur < timeout_time:
-                dur_str = click.style(str(init_event_dur), fg="yellow")
-            else:
-                dur_str = click.style(str(init_event_dur), fg="red")
-                err_msg_str = f"{init_event.name} event duration exceeds acceptable time limit (>{timeout_time}ms)"
-                is_pass = False
-
-        return is_pass, err_msg_str, dur_str
+        return is_pass, err_msg_str
 
     def pass_fail_str(self, is_pass: bool) -> str:
         """
@@ -235,7 +211,6 @@ class OpenrCtrlCmd:
         self,
         is_pass: bool,
         err_msg_str: Optional[str],
-        dur_str: Optional[str],
         init_event: InitializationEvent,
         module: str,
     ) -> None:
@@ -251,11 +226,6 @@ class OpenrCtrlCmd:
 
         if err_msg_str:
             click.echo(err_msg_str)
-
-        if dur_str:
-            click.echo(
-                f"Time elapsed for event, {init_event.name}, since Open/R started: {dur_str}ms"
-            )
 
     def validate_regexes(
         self, regexes: List[str], strings_to_check: List[str], expect_match: bool

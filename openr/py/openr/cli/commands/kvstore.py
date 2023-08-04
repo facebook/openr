@@ -1422,7 +1422,7 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
 
         is_pass = is_pass and (len(area_to_invalid_keys) == 0)
 
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str = self.validate_init_event(
             initialization_events,
             InitializationEvent.KVSTORE_SYNCED,
         )
@@ -1440,7 +1440,6 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         self.print_initialization_event_check(
             init_is_pass,
             init_err_msg_str,
-            init_dur_str,
             InitializationEvent.KVSTORE_SYNCED,
             "KvStore",
         )

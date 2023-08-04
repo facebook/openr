@@ -456,7 +456,7 @@ class ValidateCmd(PrefixMgrCmd):
         initialization_events = await client.getInitializationEvents()
 
         # Run Validation Checks
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str = self.validate_init_event(
             initialization_events,
             InitializationEvent.PREFIX_DB_SYNCED,
         )
@@ -467,7 +467,6 @@ class ValidateCmd(PrefixMgrCmd):
         self.print_initialization_event_check(
             init_is_pass,
             init_err_msg_str,
-            init_dur_str,
             InitializationEvent.PREFIX_DB_SYNCED,
             "PrefixManager",
         )

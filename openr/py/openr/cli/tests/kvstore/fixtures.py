@@ -146,11 +146,3 @@ MOCKED_KVSTORE_PEERS_ONE_FAIL = {
 MOCKED_INIT_EVENTS_PASS: Dict[InitializationEvent, int] = {
     InitializationEvent.KVSTORE_SYNCED: 9204,
 }
-
-MOCKED_INIT_EVENTS_WARNING: Dict[InitializationEvent, int] = {
-    InitializationEvent.KVSTORE_SYNCED: 170000,
-}
-
-MOCKED_INIT_EVENTS_TIMEOUT: Dict[InitializationEvent, int] = {
-    InitializationEvent.KVSTORE_SYNCED: 300000,
-}

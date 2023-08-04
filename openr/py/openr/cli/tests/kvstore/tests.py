@@ -25,8 +25,6 @@ BASE_CMD_MODULE = "openr.cli.commands.kvstore"
 from .fixtures import (
     AreaId,
     MOCKED_INIT_EVENTS_PASS,
-    MOCKED_INIT_EVENTS_TIMEOUT,
-    MOCKED_INIT_EVENTS_WARNING,
     MOCKED_KVSTORE_PEERS_DIFF_STATES,
     MOCKED_KVSTORE_PEERS_ONE_FAIL,
     MOCKED_KVSTORE_PEERS_ONE_PEER,
@@ -697,58 +695,11 @@ class CliKvStoreTests(TestCase):
         stdout_lines = invoked_return.stdout.split("\n")
         # This check appears on line 6 of stdout in this case
         validation_str = stdout_lines[6]
-        duration_str = stdout_lines[7]
-        tokenized_time_line = duration_str.split(": ")
 
         self._check_validation_state(True, validation_str)
         pass_time = MOCKED_INIT_EVENTS_PASS[
             kvstore_types.InitializationEvent.KVSTORE_SYNCED
         ]
-        self.assertEqual(f"{pass_time}ms", tokenized_time_line[1])
-
-        # Check pass - event is published with warning
-        mocked_returned_connection.getInitializationEvents.return_value = (
-            MOCKED_INIT_EVENTS_WARNING
-        )
-
-        invoked_return = self.runner.invoke(
-            kvstore.ValidateCli.validate,
-            [],
-            catch_exceptions=False,
-        )
-
-        stdout_lines = invoked_return.stdout.split("\n")
-        validation_str = stdout_lines[6]
-        duration_str = stdout_lines[7]
-        tokenized_time_line = duration_str.split(": ")
-
-        self._check_validation_state(True, validation_str)
-        warning_time = MOCKED_INIT_EVENTS_WARNING[
-            kvstore_types.InitializationEvent.KVSTORE_SYNCED
-        ]
-        self.assertEqual(f"{warning_time}ms", tokenized_time_line[1])
-
-        # Check fail - event is published with timeout
-        mocked_returned_connection.getInitializationEvents.return_value = (
-            MOCKED_INIT_EVENTS_TIMEOUT
-        )
-
-        invoked_return = self.runner.invoke(
-            kvstore.ValidateCli.validate,
-            [],
-            catch_exceptions=False,
-        )
-
-        stdout_lines = invoked_return.stdout.split("\n")
-        validation_str = stdout_lines[6]
-        duration_str = stdout_lines[8]
-        tokenized_time_line = duration_str.split(": ")
-
-        self._check_validation_state(False, validation_str)
-        fail_time = MOCKED_INIT_EVENTS_TIMEOUT[
-            kvstore_types.InitializationEvent.KVSTORE_SYNCED
-        ]
-        self.assertEqual(f"{fail_time}ms", tokenized_time_line[1])
 
         # Check fail - event is not published
         mocked_returned_connection.getInitializationEvents.return_value = {}

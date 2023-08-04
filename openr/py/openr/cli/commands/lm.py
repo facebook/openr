@@ -556,7 +556,7 @@ class LMValidateCmd(LMCmdBase):
         openr_config = await client.getRunningConfigThrift()
 
         # Run the validation checks
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str = self.validate_init_event(
             initialization_events,
             InitializationEvent.LINK_DISCOVERED,
         )
@@ -573,7 +573,6 @@ class LMValidateCmd(LMCmdBase):
         self.print_initialization_event_check(
             init_is_pass,
             init_err_msg_str,
-            init_dur_str,
             InitializationEvent.LINK_DISCOVERED,
             "link monitor",
         )

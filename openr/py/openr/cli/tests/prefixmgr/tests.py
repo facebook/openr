@@ -115,59 +115,10 @@ class CliPrefixManagerTests(TestCase):
             print(i, l)
         # The check result is printed on line 0 of stdout in this case
         init_event_pass_state = stdout_lines[0].split(" ")[-1]
-        init_event_duration = stdout_lines[1].split(": ")[1]
         pass_time = MOCKED_INIT_EVENT_GOOD[
             openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED
         ]
-        self.assertEqual(f"{pass_time}ms", init_event_duration)
         self.assertEqual("PASS", init_event_pass_state)
-
-        # Test pass - duration results in warning
-        mocked_returned_connection.getInitializationEvents.return_value = (
-            MOCKED_INIT_EVENT_WARNING
-        )
-
-        invoked_return = self.runner.invoke(
-            prefix_mgr.PrefixMgrValidateCli.validate,
-            [],
-            catch_exceptions=False,
-        )
-
-        stdout_lines = invoked_return.stdout.split("\n")
-        init_event_pass_state = stdout_lines[0].split(" ")[-1]
-        init_event_duration = stdout_lines[1].split(": ")[1]
-
-        self.assertEqual("PASS", init_event_pass_state)
-        pass_time = MOCKED_INIT_EVENT_WARNING[
-            openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED
-        ]
-        self.assertEqual(f"{pass_time}ms", init_event_duration)
-
-        # Test fail - duration results in timeout
-        mocked_returned_connection.getInitializationEvents.return_value = (
-            MOCKED_INIT_EVENT_TIMEOUT
-        )
-
-        invoked_return = self.runner.invoke(
-            prefix_mgr.PrefixMgrValidateCli.validate,
-            [],
-            catch_exceptions=False,
-        )
-
-        stdout_lines = invoked_return.stdout.split("\n")
-        init_event_pass_state = stdout_lines[0].split(" ")[-1]
-        err_msg = stdout_lines[1]
-        init_event_duration = stdout_lines[2].split(": ")[1]
-
-        self.assertEqual("FAIL", init_event_pass_state)
-        self.assertEqual(
-            "PREFIX_DB_SYNCED event duration exceeds acceptable time limit (>300000ms)",
-            err_msg,
-        )
-        pass_time = MOCKED_INIT_EVENT_TIMEOUT[
-            openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED
-        ]
-        self.assertEqual(f"{pass_time}ms", init_event_duration)
 
         # Test fail - PREFIX_DB_SYNCED is not published
         mocked_returned_connection.getInitializationEvents.return_value = {}

@@ -148,7 +148,7 @@ class ValidateCmd(SparkBaseCmd):
 
         is_pass = is_pass and (len(state_non_estab_neighbors) == 0)
 
-        init_is_pass, init_err_msg_str, init_dur_str = self.validate_init_event(
+        init_is_pass, init_err_msg_str = self.validate_init_event(
             initialization_events,
             InitializationEvent.NEIGHBOR_DISCOVERED,
         )
@@ -167,7 +167,6 @@ class ValidateCmd(SparkBaseCmd):
         self.print_initialization_event_check(
             init_is_pass,
             init_err_msg_str,
-            init_dur_str,
             InitializationEvent.NEIGHBOR_DISCOVERED,
             "spark",
         )
