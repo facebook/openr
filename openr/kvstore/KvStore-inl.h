@@ -946,7 +946,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
           Constants::kServiceConnTimeout, /* client connection timeout */
           Constants::kServiceProcTimeout, /* request processing timeout */
           folly::AsyncSocket::anyAddress(), /* bindAddress */
-          maybeIpTos /* IP_TOS value for control plane */);
+          maybeIpTos, /* IP_TOS value for control plane */
+          true /* enable socket keepalive */);
       fb303::fbData->addStatValue(
           "kvstore.thrift.secure_client", 1, fb303::COUNT);
     }
@@ -957,7 +958,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
         Constants::kServiceConnTimeout, /* client connection timeout */
         Constants::kServiceProcTimeout, /* request processing timeout */
         folly::AsyncSocket::anyAddress(), /* bindAddress */
-        maybeIpTos /* IP_TOS value for control plane */);
+        maybeIpTos /* IP_TOS value for control plane */,
+        true /* enable socket keepalive */);
 
     fb303::fbData->addStatValue(
         "kvstore.thrift.plaintext_client", 1, fb303::COUNT);
