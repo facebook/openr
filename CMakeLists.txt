@@ -234,6 +234,7 @@ add_library(openrlib
   openr/common/FileUtil.cpp
   openr/common/LsdbTypes.cpp
   openr/common/LsdbUtil.cpp
+  openr/common/MainUtil.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
   openr/common/OpenrThriftCtrlServer.cpp

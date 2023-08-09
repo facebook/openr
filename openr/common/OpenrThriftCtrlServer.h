@@ -32,17 +32,19 @@ class OpenrThriftCtrlServer {
   // Stop all servers and threads.
   void stop();
 
+  // Create thrift server
+  std::shared_ptr<apache::thrift::ThriftServer> setUpThriftServer();
+
  private:
   // Helper function to start the server if you need to define different
   // behavior.
   void startDefaultThriftServer();
   void startNonDefaultThriftServer();
   void startVrfThread(
-      bool isDefaultVrf, std::unique_ptr<apache::thrift::ThriftServer> server);
-  std::unique_ptr<apache::thrift::ThriftServer> setUpThriftServer();
+      bool isDefaultVrf, std::shared_ptr<apache::thrift::ThriftServer> server);
 
   // Vector for all thrift severs and their threads
-  std::vector<std::unique_ptr<apache::thrift::ThriftServer>>
+  std::vector<std::shared_ptr<apache::thrift::ThriftServer>>
       thriftCtrlServerVec_;
   std::vector<std::thread> thriftCtrlServerThreadVec_;
 

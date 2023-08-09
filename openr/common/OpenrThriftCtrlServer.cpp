@@ -63,11 +63,11 @@ OpenrThriftCtrlServer::startDefaultThriftServer() {
   thriftCtrlServerVec_.emplace_back(std::move(server));
 };
 
-std::unique_ptr<apache::thrift::ThriftServer>
+std::shared_ptr<apache::thrift::ThriftServer>
 OpenrThriftCtrlServer::setUpThriftServer() {
   // Setup OpenrCtrl thrift server
   CHECK(ctrlHandler_);
-  auto server = std::make_unique<apache::thrift::ThriftServer>();
+  auto server = std::make_shared<apache::thrift::ThriftServer>();
   server->setInterface(ctrlHandler_);
   server->setNumIOWorkerThreads(1);
   // Intentionally kept this as (1). If you're changing to higher number please
@@ -103,7 +103,7 @@ OpenrThriftCtrlServer::startNonDefaultThriftServer() {
 
 void
 OpenrThriftCtrlServer::startVrfThread(
-    bool isDefaultVrf, std::unique_ptr<apache::thrift::ThriftServer> server) {
+    bool isDefaultVrf, std::shared_ptr<apache::thrift::ThriftServer> server) {
   XLOG(INFO)
       << "Please add your own implementation to start the thread with Vrf.";
 }
