@@ -8,8 +8,11 @@
 #pragma once
 
 #include <folly/logging/xlog.h>
+#include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/OpenrEventBase.h>
+#include <openr/common/Util.h>
+#include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
 #include <openr/watchdog/Watchdog.h>
 
@@ -55,4 +58,12 @@ startEventBase(
 
   return t;
 }
+
+std::shared_ptr<apache::thrift::ThriftServer> setUpThriftServer(
+    std::shared_ptr<const Config> config,
+    std::shared_ptr<openr::OpenrCtrlHandler>& handler,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext);
+
+void waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server);
+
 } // namespace openr

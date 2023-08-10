@@ -237,7 +237,6 @@ add_library(openrlib
   openr/common/MainUtil.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
-  openr/common/OpenrThriftCtrlServer.cpp
   openr/common/Types.cpp
   openr/common/Util.cpp
   openr/config/Config.cpp

@@ -26,7 +26,6 @@ namespace fs = std::experimental::filesystem;
 #include <openr/common/BuildInfo.h>
 #include <openr/common/Flags.h>
 #include <openr/common/MainUtil.h>
-#include <openr/common/OpenrThriftCtrlServer.h>
 #include <openr/common/Util.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
@@ -508,9 +507,15 @@ main(int argc, char** argv) {
       allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
   // Start the thrift server
-  auto thriftCtrlServer =
-      std::make_unique<OpenrThriftCtrlServer>(config, ctrlHandler, sslContext);
-  thriftCtrlServer->start();
+  auto server = setUpThriftServer(config, ctrlHandler, sslContext);
+  std::thread serverThread = std::thread([&]() {
+    XLOG(INFO) << "Starting ThriftCtrlServer thread ...";
+    folly::setThreadName("openr-ThriftCtrlServer");
+    server->serve();
+    XLOG(INFO) << "ThriftCtrlServer thread got stopped.";
+  });
+
+  waitTillStart(server);
 
   // Wait for main eventbase to stop
   signalHandlerEvbThread.join();
@@ -533,8 +538,9 @@ main(int argc, char** argv) {
   kvStorePublicationsDispatcherQueue->close();
 
   // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
-  thriftCtrlServer->stop();
-  thriftCtrlServer.reset();
+  server->stop();
+  serverThread.join();
+  server.reset();
   // Destroy ctrlHandler
   CHECK(ctrlHandler.unique()) << "Unexpected ownership of ctrlHandler pointer";
   ctrlHandler.reset();

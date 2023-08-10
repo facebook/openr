@@ -53,4 +53,50 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
   return true;
 }
 
+std::shared_ptr<apache::thrift::ThriftServer>
+setUpThriftServer(
+    std::shared_ptr<const Config> config,
+    std::shared_ptr<openr::OpenrCtrlHandler>& handler,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext) {
+  // Setup OpenrCtrl thrift server
+  CHECK(handler);
+  auto server = std::make_shared<apache::thrift::ThriftServer>();
+  server->setInterface(handler);
+  server->setNumIOWorkerThreads(1);
+  // Intentionally kept this as (1). If you're changing to higher number please
+  // address thread safety for private member variables in OpenrCtrlHandler
+  server->setNumCPUWorkerThreads(1);
+  // Enable TOS reflection on the server socket
+  server->setTosReflect(true);
+  // Set the port and interface for OpenrCtrl thrift server
+  server->setPort(*config->getThriftServerConfig().openr_ctrl_port());
+  // Set workers join timeout
+  server->setWorkersJoinTimeout(std::chrono::seconds{
+      *config->getThriftServerConfig().workers_join_timeout()});
+  // Set the time the thrift requests are allowed to stay on the queue.
+  // (if not set explicitly, the default value is 100ms)
+  server->setQueueTimeout(Constants::kThriftServerQueueTimeout);
+
+  // Setup TLS
+  if (config->isSecureThriftServerEnabled()) {
+    setupThriftServerTls(
+        *server,
+        config->getSSLThriftPolicy(),
+        config->getSSLSeedPath(),
+        sslContext);
+  }
+  return server;
+}
+
+void
+waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server) {
+  while (true) {
+    auto evb = server->getServeEventBase();
+    if (evb != nullptr and evb->isRunning()) {
+      break;
+    }
+    std::this_thread::yield();
+  }
+}
+
 } // namespace openr
