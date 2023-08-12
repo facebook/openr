@@ -208,6 +208,55 @@ def get_fib_agent_client(
     return client
 
 
+def get_openr_ctrl_cpp_sync_client(
+    host: str,
+    options: Optional[bunch.Bunch] = None,
+    client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
+) -> OpenrCtrlCppClient.Sync:
+    """
+    Utility function to get thrift-python SYNC OpenrClient.
+    Migrate all of our client use-case to thrift-python as python2 support is deprecated.
+    https://fburl.com/ef0eq78f
+    """
+
+    options = options if options else getDefaultOptions(host)
+
+    # Create and return client
+    ssl_context: Optional[SSLContext] = get_ssl_context(options)
+    try:
+        client = get_sync_client(
+            OpenrCtrlCppClient,
+            host=host,
+            port=options.openr_ctrl_port,
+            timeout=(options.timeout / 1000),  # NOTE: Timeout expected is in seconds
+            client_type=client_type,
+            ssl_context=ssl_context,
+            ssl_timeout=(
+                options.timeout / 1000
+            ),  # NOTE: Timeout expected is in seconds
+        )
+    except TransportError as e:
+        if ssl_context is not None:
+            # cannot establish tls, fallback to plain text
+            client = get_sync_client(
+                OpenrCtrlCppClient,
+                host=host,
+                port=options.openr_ctrl_port,
+                timeout=(
+                    options.timeout / 1000
+                ),  # NOTE: Timeout expected is in seconds
+                client_type=client_type,
+                ssl_context=None,
+                ssl_timeout=(
+                    options.timeout / 1000
+                ),  # NOTE: Timeout expected is in seconds
+            )
+        else:
+            raise e
+
+    return client
+
+
 def get_openr_ctrl_cpp_client(
     host: str,
     options: Optional[bunch.Bunch] = None,
