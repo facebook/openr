@@ -1466,6 +1466,14 @@ OpenrCtrlHandler::co_getKvStorePeersArea(std::unique_ptr<std::string> area) {
   auto result = co_await kvStore_->co_getKvStorePeers(std::move(*area));
   co_return result;
 }
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreKeyValsFiltered(
+    std::unique_ptr<thrift::KeyDumpParams> filter) {
+  auto result = co_await co_getKvStoreKeyValsFilteredArea(
+      std::move(filter), getSingleAreaOrThrow("getKvStoreKeyValsFiltered"));
+  co_return result;
+}
 #endif // FOLLY_HAS_COROUTINES
 
 } // namespace openr
