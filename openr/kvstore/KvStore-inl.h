@@ -284,6 +284,83 @@ KvStore<ClientType>::semifuture_dumpKvStoreSelfOriginatedKeys(
 }
 
 template <class ClientType>
+std::unique_ptr<std::vector<thrift::Publication>>
+KvStore<ClientType>::dumpKvStoreKeysImpl(
+    thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
+  const auto areaStr =
+      (selectAreas.empty()
+           ? "default areas."
+           : fmt::format("areas: {}", folly::join(", ", selectAreas)));
+  const auto senderStr =
+      (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                            : "");
+  XLOG(DBG3) << fmt::format(
+      "Dump all keys requested for {}, by sender: {}", areaStr, senderStr);
+
+  auto result = std::make_unique<std::vector<thrift::Publication>>();
+  for (auto& area : selectAreas) {
+    try {
+      auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreKeys");
+      fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
+
+      // KvStoreFilters contains `thrift::FilterOperator`
+      // Default to thrift::FilterOperator::OR
+      thrift::FilterOperator oper = thrift::FilterOperator::OR;
+      if (keyDumpParams.oper().has_value()) {
+        oper = *keyDumpParams.oper();
+      }
+
+      thrift::Publication thriftPub;
+      try {
+        const auto keyPrefixMatch = KvStoreFilters(
+            *keyDumpParams.keys(), *keyDumpParams.originatorIds(), oper);
+        thriftPub = dumpAllWithFilters(
+            area,
+            kvStoreDb.getKeyValueMap(),
+            keyPrefixMatch,
+            *keyDumpParams.doNotPublishValue());
+      } catch (RegexSetException const& err) {
+        XLOG(ERR) << fmt::format(
+            "Fail to create KvStoreFilters with exception: {}. Dump without filter",
+            folly::exceptionStr(err));
+        const auto keyPrefixMatch =
+            KvStoreFilters({}, *keyDumpParams.originatorIds(), oper);
+        thriftPub = dumpAllWithFilters(
+            area,
+            kvStoreDb.getKeyValueMap(),
+            keyPrefixMatch,
+            *keyDumpParams.doNotPublishValue());
+      }
+
+      if (keyDumpParams.keyValHashes().has_value()) {
+        thriftPub = dumpDifference(
+            area, *thriftPub.keyVals(), keyDumpParams.keyValHashes().value());
+      }
+      updatePublicationTtl(
+          kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
+
+      if (keyDumpParams.keyValHashes().has_value() and
+          (*keyDumpParams.keys()).empty()) {
+        // This usually comes from neighbor nodes
+        size_t numMissingKeys = 0;
+        if (thriftPub.tobeUpdatedKeys().has_value()) {
+          numMissingKeys = thriftPub.tobeUpdatedKeys()->size();
+        }
+        XLOG(INFO) << fmt::format(
+            "[Thrift Sync] Processed full-sync request with {}  keyValHashes item(s). Sending {} key-vals and {} missing keys.",
+            keyDumpParams.keyValHashes().value().size(),
+            thriftPub.keyVals()->size(),
+            numMissingKeys);
+      }
+      result->push_back(std::move(thriftPub));
+    } catch (thrift::KvStoreError const& e) {
+      XLOG(ERR) << fmt::format("Failed to find area {} in kvStoreDb_", area);
+    }
+  }
+  return result;
+}
+
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
 KvStore<ClientType>::semifuture_dumpKvStoreKeys(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
@@ -293,74 +370,8 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
                         p = std::move(p),
                         selectAreas = std::move(selectAreas),
                         keyDumpParams = std::move(keyDumpParams)]() mutable {
-    XLOG(DBG3) << fmt::format(
-        "Dump all keys requested for {}, by sender: {}",
-        (selectAreas.empty()
-             ? "all areas."
-             : fmt::format("areas: {}", folly::join(", ", selectAreas))),
-        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                              : ""));
-
-    auto result = std::make_unique<std::vector<thrift::Publication>>();
-    for (auto& area : selectAreas) {
-      try {
-        auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreKeys");
-        fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
-
-        // KvStoreFilters contains `thrift::FilterOperator`
-        // Default to thrift::FilterOperator::OR
-        thrift::FilterOperator oper = thrift::FilterOperator::OR;
-        if (keyDumpParams.oper().has_value()) {
-          oper = *keyDumpParams.oper();
-        }
-
-        thrift::Publication thriftPub;
-        try {
-          const auto keyPrefixMatch = KvStoreFilters(
-              *keyDumpParams.keys(), *keyDumpParams.originatorIds(), oper);
-          thriftPub = dumpAllWithFilters(
-              area,
-              kvStoreDb.getKeyValueMap(),
-              keyPrefixMatch,
-              *keyDumpParams.doNotPublishValue());
-        } catch (RegexSetException const& err) {
-          XLOG(ERR) << fmt::format(
-              "Fail to create KvStoreFilters with exception: {}. Dump without filter",
-              folly::exceptionStr(err));
-          const auto keyPrefixMatch =
-              KvStoreFilters({}, *keyDumpParams.originatorIds(), oper);
-          thriftPub = dumpAllWithFilters(
-              area,
-              kvStoreDb.getKeyValueMap(),
-              keyPrefixMatch,
-              *keyDumpParams.doNotPublishValue());
-        }
-
-        if (keyDumpParams.keyValHashes().has_value()) {
-          thriftPub = dumpDifference(
-              area, *thriftPub.keyVals(), keyDumpParams.keyValHashes().value());
-        }
-        updatePublicationTtl(
-            kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
-
-        if (keyDumpParams.keyValHashes().has_value() and
-            (*keyDumpParams.keys()).empty()) {
-          // This usually comes from neighbor nodes
-          size_t numMissingKeys = 0;
-          if (thriftPub.tobeUpdatedKeys().has_value()) {
-            numMissingKeys = thriftPub.tobeUpdatedKeys()->size();
-          }
-          XLOG(INFO) << "[Thrift Sync] Processed full-sync request with "
-                     << keyDumpParams.keyValHashes().value().size()
-                     << " keyValHashes item(s). Sending "
-                     << thriftPub.keyVals()->size() << " key-vals and "
-                     << numMissingKeys << " missing keys";
-        }
-        result->push_back(std::move(thriftPub));
-      } catch (thrift::KvStoreError const& e) {
-        XLOG(ERR) << " Failed to find area " << area << " in kvStoreDb_.";
-      }
-    }
+    auto result =
+        dumpKvStoreKeysImpl(std::move(keyDumpParams), std::move(selectAreas));
     p.setValue(std::move(result));
   });
   return sf;
@@ -376,11 +387,13 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
                         p = std::move(p),
                         keyDumpParams = std::move(keyDumpParams),
                         area]() mutable {
+    const auto senderStr =
+        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                              : "");
     XLOG(DBG3) << fmt::format(
         "Dump all hashes requested for AREA: {}, by sender: {}",
         area,
-        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                              : ""));
+        senderStr);
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
       fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
@@ -2812,6 +2825,15 @@ KvStore<ClientType>::co_getKvStoreKeyValsInternal(
 }
 
 template <class ClientType>
+folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
+KvStore<ClientType>::co_dumpKvStoreKeysImpl(
+    thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
+  auto result =
+      dumpKvStoreKeysImpl(std::move(keyDumpParams), std::move(selectAreas));
+  co_return result;
+}
+
+template <class ClientType>
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 KvStore<ClientType>::co_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
@@ -2886,6 +2908,16 @@ KvStore<ClientType>::co_setKvStoreKeyValues(
     throw;
   }
   co_return std::make_unique<thrift::SetKeyValsResult>();
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
+KvStore<ClientType>::co_dumpKvStoreKeys(
+    thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
+  auto result = co_await co_dumpKvStoreKeysImpl(
+                    std::move(keyDumpParams), std::move(selectAreas))
+                    .scheduleOn(getEvb());
+  co_return result;
 }
 
 template <class ClientType>

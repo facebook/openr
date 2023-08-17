@@ -664,18 +664,6 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<folly::Unit> co_setKvStoreKeyVals(
-      std::string area, thrift::KeySetParams keySetParams);
-
-  // same as co_setKvStoreKeyVals, but returns result instead of void.
-  folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
-  co_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams);
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
-      std::string area, thrift::KeyGetParams keyGetParams);
-#endif
-
   folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
   semifuture_setKvStoreKeyValues(
       std::string area, thrift::KeySetParams keySetParams);
@@ -726,6 +714,25 @@ class KvStore final : public OpenrEventBase {
   semifuture_getKvStorePeerState(
       std::string const& area, std::string const& peerName);
 
+// [Public APIs]
+// Coroutine versions
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<folly::Unit> co_setKvStoreKeyVals(
+      std::string area, thrift::KeySetParams keySetParams);
+
+  // same as co_setKvStoreKeyVals, but returns result instead of void.
+  folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+  co_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams);
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
+      std::string area, thrift::KeyGetParams keyGetParams);
+
+  folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
+  co_dumpKvStoreKeys(
+      thrift::KeyDumpParams keyDumpParams,
+      std::set<std::string> selectAreas = {});
+#endif
+
   // [private APIs]
  private:
 #if FOLLY_HAS_COROUTINES
@@ -773,6 +780,15 @@ class KvStore final : public OpenrEventBase {
    */
   KvStoreDb<ClientType>& getAreaDbOrThrow(
       std::string const& areaId, std::string const& caller);
+
+  std::unique_ptr<std::vector<thrift::Publication>> dumpKvStoreKeysImpl(
+      thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas);
+
+#if FOLLY_HAS_COROUTINES
+  folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
+  co_dumpKvStoreKeysImpl(
+      thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas);
+#endif
 
   /*
    * Private variables

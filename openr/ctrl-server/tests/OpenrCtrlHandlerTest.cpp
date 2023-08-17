@@ -652,39 +652,73 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
   }
 
   // Key set/get
-  {{auto result = co_await co_setKvStoreKeyValues(kvs, kSpineAreaId);
-  EXPECT_EQ(result->noMergeReasons()->size(), 0);
-}
-{
-  auto result = co_await co_setKvStoreKeyValues(keyValsPod, kPodAreaId);
-  EXPECT_EQ(result->noMergeReasons()->size(), 0);
-}
-{
-  auto result = co_await co_setKvStoreKeyValues(keyValsPlane, kPlaneAreaId);
-  EXPECT_EQ(result->noMergeReasons()->size(), 0);
-}
-}
-{
-  std::vector<std::string> filterKeys{"key11", "key2"};
-  auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-      std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-      std::make_unique<std::string>(kSpineAreaId));
-  auto keyVals = *pub->keyVals();
-  EXPECT_EQ(2, keyVals.size());
-  EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
-  EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
-}
+  // clang-format off
+  {
+    {
+      auto result = co_await co_setKvStoreKeyValues(kvs, kSpineAreaId);
+      EXPECT_EQ(result->noMergeReasons()->size(), 0);
+    }
 
-// pod keys
-{
-  std::vector<std::string> filterKeys{"keyPod1"};
-  auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-      std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-      std::make_unique<std::string>(kPodAreaId));
-  auto keyVals = *pub->keyVals();
-  EXPECT_EQ(1, keyVals.size());
-  EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
-}
+    {
+      auto result = co_await co_setKvStoreKeyValues(keyValsPod, kPodAreaId);
+      EXPECT_EQ(result->noMergeReasons()->size(), 0);
+    }
+    {
+      auto result = co_await co_setKvStoreKeyValues(keyValsPlane, kPlaneAreaId);
+      EXPECT_EQ(result->noMergeReasons()->size(), 0);
+    }
+  }
+  {
+    std::vector<std::string> filterKeys{"key11", "key2"};
+    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
+        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
+        std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
+    EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
+  }
+
+  // pod keys
+  {
+    std::vector<std::string> filterKeys{"keyPod1"};
+    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
+        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
+        std::make_unique<std::string>(kPodAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(1, keyVals.size());
+    EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
+  }
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds()->insert("node3");
+    params.keys() = {"key3"};
+
+    auto pub = co_await handler_->co_getKvStoreKeyValsFilteredArea(
+        std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+        std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
+  }
+
+  // with areas
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds()->insert("node1");
+    params.keys() = {"keyP"};
+
+    auto pub = co_await handler_->co_getKvStoreKeyValsFilteredArea(
+        std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+        std::make_unique<std::string>(kPlaneAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
+  }
+// clang-format on
 }
 #endif // FOLLY_HAS_COROUTINES
 

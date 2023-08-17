@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/experimental/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -306,6 +307,95 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   // Cleanup.
   kvStore_->stop();
 }
+
+#if FOLLY_HAS_COROUTINES
+CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
+  // Create and start KvStore.
+  const std::string nodeId = "node-for-dump";
+  auto kvStore_ = createKvStore(getTestKvConf(nodeId));
+  kvStore_->run();
+
+  const std::string prefixRegex = "10\\.0\\.0\\.";
+  const std::string badPrefixRegex = "[10\\.0\\.0\\.";
+  const std::string prefix1 = "10.0.0.96";
+  const std::string prefix2 = "10.0.0.128";
+  const std::string prefix3 = "192.10.0.0";
+  const std::string prefix4 = "192.168.0.0";
+
+  // 1. Dump keys with no matches.
+  // 2. Set keys manully. 2 include prefix, 2 do not.
+  // 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
+  std::optional<thrift::KeyVals> maybeKeyMap;
+  try {
+    thrift::KeyDumpParams params;
+    params.keys() = {prefixRegex};
+    auto pub = *kvStore_->getKvStore()
+                    ->semifuture_dumpKvStoreKeys(
+                        std::move(params), {kTestingAreaName.t})
+                    .get()
+                    ->begin();
+    maybeKeyMap = *pub.keyVals();
+  } catch (const std::exception& ex) {
+    maybeKeyMap = std::nullopt;
+  }
+  EXPECT_TRUE(maybeKeyMap.has_value());
+  EXPECT_EQ(maybeKeyMap.value().size(), 0);
+
+  const std::string genValue = "generic-value";
+  const thrift::Value thriftVal = createThriftValue(
+      1 /* version */,
+      nodeId /* originatorId */,
+      genValue /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(1, nodeId, thrift::Value().value() = std::string(genValue)));
+  kvStore_->setKey(kTestingAreaName, prefix1, thriftVal);
+  kvStore_->setKey(kTestingAreaName, prefix2, thriftVal);
+  kvStore_->setKey(kTestingAreaName, prefix3, thriftVal);
+  kvStore_->setKey(kTestingAreaName, prefix4, thriftVal);
+
+  // Check that keys retrieved are those with prefix "10.0.0".
+  std::optional<thrift::KeyVals> maybeKeysAfterInsert;
+  try {
+    thrift::KeyDumpParams params;
+    params.keys() = {prefixRegex};
+    auto pub = co_await kvStore_->getKvStore()->co_dumpKvStoreKeys(
+        std::move(params), {kTestingAreaName.t});
+    maybeKeysAfterInsert = *pub->begin()->keyVals();
+  } catch (const std::exception& ex) {
+    maybeKeysAfterInsert = std::nullopt;
+  }
+  EXPECT_TRUE(maybeKeysAfterInsert.has_value());
+  auto keysFromStore = maybeKeysAfterInsert.value();
+  EXPECT_EQ(keysFromStore.size(), 2);
+  EXPECT_EQ(keysFromStore.count(prefix1), 1);
+  EXPECT_EQ(keysFromStore.count(prefix2), 1);
+  EXPECT_EQ(keysFromStore.count(prefix3), 0);
+  EXPECT_EQ(keysFromStore.count(prefix4), 0);
+
+  // Check that all keys are retrieved when bad prefix "[10.0.0" (missing
+  // right bracket) is given.
+  try {
+    thrift::KeyDumpParams params;
+    params.keys() = {badPrefixRegex};
+    auto pub = co_await kvStore_->getKvStore()->co_dumpKvStoreKeys(
+        std::move(params), {kTestingAreaName.t});
+    maybeKeysAfterInsert = *pub->begin()->keyVals();
+  } catch (const std::exception& ex) {
+    maybeKeysAfterInsert = std::nullopt;
+  }
+  EXPECT_TRUE(maybeKeysAfterInsert.has_value());
+  keysFromStore = maybeKeysAfterInsert.value();
+  EXPECT_EQ(keysFromStore.size(), 4);
+  EXPECT_EQ(keysFromStore.count(prefix1), 1);
+  EXPECT_EQ(keysFromStore.count(prefix2), 1);
+  EXPECT_EQ(keysFromStore.count(prefix3), 1);
+  EXPECT_EQ(keysFromStore.count(prefix4), 1);
+
+  // Cleanup.
+  kvStore_->stop();
+}
+#endif
 
 /**
  * Verify KvStore publishes kvStoreSynced signal even when receiving empty peers

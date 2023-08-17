@@ -725,7 +725,7 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
       toString(*filter.get()),
       *area);
 
-  CHECK(kvStore_) << "kvstore not initialized";
+  XCHECK(kvStore_) << "kvstore not initialized";
 
   return kvStore_->semifuture_dumpKvStoreKeys(std::move(*filter), {*area})
       .deferValue(
@@ -1389,6 +1389,25 @@ OpenrCtrlHandler::co_setKvStoreKeyVals(
 
   co_await kvStore_->co_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
+}
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
+    std::unique_ptr<thrift::KeyDumpParams> filter,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*filter.get()),
+      *area);
+
+  XCHECK(kvStore_) << "kvstore not initialized";
+
+  auto pubs =
+      co_await kvStore_->co_dumpKvStoreKeys(std::move(*filter), {*area});
+  thrift::Publication pub =
+      pubs->empty() ? thrift::Publication{} : std::move(*pubs->begin());
+  co_return std::make_unique<thrift::Publication>(std::move(pub));
 }
 
 folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
