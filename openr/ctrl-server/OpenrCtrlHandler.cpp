@@ -1411,6 +1411,13 @@ OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
 }
 
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreHashFiltered(
+    std::unique_ptr<thrift::KeyDumpParams> filter) {
+  co_return co_await co_getKvStoreHashFilteredArea(
+      std::move(filter), getSingleAreaOrThrow("getKvStoreHashFiltered"));
+}
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
