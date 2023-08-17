@@ -668,6 +668,10 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<folly::Unit> co_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
+  // same as co_setKvStoreKeyVals, but returns result instead of void.
+  folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+  co_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams);
+
   folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 #endif
@@ -728,7 +732,7 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
       std::string area, thrift::KeyGetParams keyGetParams);
 
-  folly::coro::Task<folly::Unit> co_setKvStoreKeyValsInternal(
+  folly::coro::Task<thrift::SetKeyValsResult> co_setKvStoreKeyValsInternal(
       std::string area, thrift::KeySetParams keySetParams);
 #endif // FOLLY_HAS_COROUTINES
 

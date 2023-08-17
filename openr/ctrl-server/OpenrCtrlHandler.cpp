@@ -1390,6 +1390,23 @@ OpenrCtrlHandler::co_setKvStoreKeyVals(
   co_await kvStore_->co_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
 }
+
+folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+OpenrCtrlHandler::co_setKvStoreKeyValues(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*setParams.get()),
+      *area);
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+
+  auto result = co_await kvStore_->co_setKvStoreKeyValues(
+      std::move(*area), std::move(*setParams));
+  co_return result;
+}
 #endif // FOLLY_HAS_COROUTINES
 
 } // namespace openr

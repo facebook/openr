@@ -2830,13 +2830,13 @@ KvStore<ClientType>::co_getKvStoreKeyVals(
 }
 
 template <class ClientType>
-folly::coro::Task<folly::Unit>
+folly::coro::Task<thrift::SetKeyValsResult>
 KvStore<ClientType>::co_setKvStoreKeyValsInternal(
     std::string area, thrift::KeySetParams keySetParams) {
   auto& kvStoreDb = getAreaDbOrThrow(std::move(area), "setKvStoreKeyVals");
-  auto r =
+  auto result =
       kvStoreDb.setKeyVals(std::move(keySetParams), false /* remote update */);
-  co_return folly::Unit();
+  co_return result;
 }
 
 template <class ClientType>
@@ -2852,15 +2852,40 @@ KvStore<ClientType>::co_setKvStoreKeyVals(
            ? folly::to<std::string>(keySetParams.timestamp_ms().value())
            : ""));
   try {
-    co_return co_await co_setKvStoreKeyValsInternal(
-        area, std::move(keySetParams))
-        .scheduleOn(getEvb());
+    auto result =
+        co_await co_setKvStoreKeyValsInternal(area, std::move(keySetParams))
+            .scheduleOn(getEvb());
   } catch (thrift::KvStoreError const& e) {
     XLOG(ERR) << fmt::format(
         "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
-    throw e;
+    throw;
   }
   co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+KvStore<ClientType>::co_setKvStoreKeyValues(
+    std::string area, thrift::KeySetParams keySetParams) {
+  XLOG(DBG3) << fmt::format(
+      "Set key requested for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    auto result =
+        co_await co_setKvStoreKeyValsInternal(area, std::move(keySetParams))
+            .scheduleOn(getEvb());
+    co_return std::make_unique<thrift::SetKeyValsResult>(result);
+  } catch (thrift::KvStoreError const& e) {
+    XLOG(ERR) << fmt::format(
+        "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw;
+  }
+  co_return std::make_unique<thrift::SetKeyValsResult>();
 }
 
 template <class ClientType>

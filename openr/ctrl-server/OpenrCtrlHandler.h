@@ -531,6 +531,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 
+  folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+  co_setKvStoreKeyValues(
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
+
   folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
