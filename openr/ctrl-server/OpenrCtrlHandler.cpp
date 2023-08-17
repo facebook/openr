@@ -753,7 +753,7 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
       toString(*filter.get()),
       *area);
 
-  CHECK(kvStore_);
+  XCHECK(kvStore_);
 
   return kvStore_->semifuture_dumpKvStoreHashes(
       std::move(*area), std::move(*filter));
@@ -1408,6 +1408,23 @@ OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
   thrift::Publication pub =
       pubs->empty() ? thrift::Publication{} : std::move(*pubs->begin());
   co_return std::make_unique<thrift::Publication>(std::move(pub));
+}
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
+    std::unique_ptr<thrift::KeyDumpParams> filter,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*filter.get()),
+      *area);
+
+  XCHECK(kvStore_);
+
+  auto result = co_await kvStore_->co_dumpKvStoreHashes(
+      std::move(*area), std::move(*filter));
+  co_return result;
 }
 
 folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>

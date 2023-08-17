@@ -378,6 +378,26 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
 }
 
 template <class ClientType>
+thrift::Publication
+KvStore<ClientType>::dumpKvStoreHashesImpl(
+    std::string area, thrift::KeyDumpParams keyDumpParams) {
+  const auto senderStr =
+      (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                            : "");
+  XLOG(DBG3) << fmt::format(
+      "Dump all hashes requested for AREA: {}, by sender: {}", area, senderStr);
+  auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreHashesImpl");
+  fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
+  std::set<std::string> originatorIdList{};
+  KvStoreFilters kvFilters{*keyDumpParams.keys(), std::move(originatorIdList)};
+  auto thriftPub =
+      dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
+  updatePublicationTtl(
+      kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
+  return thriftPub;
+}
+
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 KvStore<ClientType>::semifuture_dumpKvStoreHashes(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
@@ -387,25 +407,10 @@ KvStore<ClientType>::semifuture_dumpKvStoreHashes(
                         p = std::move(p),
                         keyDumpParams = std::move(keyDumpParams),
                         area]() mutable {
-    const auto senderStr =
-        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                              : "");
-    XLOG(DBG3) << fmt::format(
-        "Dump all hashes requested for AREA: {}, by sender: {}",
-        area,
-        senderStr);
     try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_dumpKvStoreHashes");
-      fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
-
-      KvStoreFilters kvFilters{
-          *keyDumpParams.keys(),
-          std::set<std::string>{} /* originatorId list */};
-      auto thriftPub =
-          dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
-      updatePublicationTtl(
-          kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
-      p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
+      auto result =
+          dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams));
+      p.setValue(std::make_unique<thrift::Publication>(std::move(result)));
     } catch (thrift::KvStoreError const& e) {
       p.setException(e);
     }
@@ -2834,6 +2839,15 @@ KvStore<ClientType>::co_dumpKvStoreKeysImpl(
 }
 
 template <class ClientType>
+folly::coro::Task<thrift::Publication>
+KvStore<ClientType>::co_dumpKvStoreHashesImpl(
+    std::string area, thrift::KeyDumpParams keyDumpParams) {
+  auto result =
+      dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams));
+  co_return result;
+}
+
+template <class ClientType>
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 KvStore<ClientType>::co_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
@@ -2918,6 +2932,16 @@ KvStore<ClientType>::co_dumpKvStoreKeys(
                     std::move(keyDumpParams), std::move(selectAreas))
                     .scheduleOn(getEvb());
   co_return result;
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+KvStore<ClientType>::co_dumpKvStoreHashes(
+    std::string area, thrift::KeyDumpParams keyDumpParams) {
+  auto result = co_await co_dumpKvStoreHashesImpl(
+                    std::move(area), std::move(keyDumpParams))
+                    .scheduleOn(getEvb());
+  co_return std::make_unique<thrift::Publication>(result);
 }
 
 template <class ClientType>

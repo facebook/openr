@@ -550,6 +550,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   co_getKvStoreKeyValsFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreHashFilteredArea(
+      std::unique_ptr<thrift::KeyDumpParams> filter,
+      std::unique_ptr<std::string> area) override;
 #endif
 
  private:

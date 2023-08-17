@@ -718,6 +718,28 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
   }
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds()->insert("node3");
+    params.keys() = {"key3"};
+
+    auto pub =
+        co_await handler_
+            ->co_getKvStoreHashFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    auto value3 = kvs.at("key3");
+    value3.value().reset();
+    auto value33 = kvs.at("key33");
+    value33.value().reset();
+    auto value333 = kvs.at("key333");
+    value333.value().reset();
+    EXPECT_EQ(value3, keyVals["key3"]);
+    EXPECT_EQ(value33, keyVals["key33"]);
+    EXPECT_EQ(value333, keyVals["key333"]);
+  }
 // clang-format on
 }
 #endif // FOLLY_HAS_COROUTINES
