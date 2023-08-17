@@ -767,6 +767,165 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
     EXPECT_EQ(2, areaKVCountMap[kPodAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPlaneAreaId]);
   }
+
+  //
+  // Peers APIs
+  //
+  const thrift::PeersMap peers{
+      {"peer1", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer2", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer3", createPeerSpec(Constants::kPlatformHost.toString())}};
+
+  // do the same with non-default area
+  const thrift::PeersMap peersPod{
+      {"peer11", createPeerSpec(Constants::kPlatformHost.toString())},
+      {"peer21", createPeerSpec(Constants::kPlatformHost.toString())},
+  };
+
+  {
+    for (auto& peer : peers) {
+      kvStoreWrapper_->addPeer(kSpineAreaId, peer.first, peer.second);
+    }
+    for (auto& peerPod : peersPod) {
+      kvStoreWrapper_->addPeer(kPodAreaId, peerPod.first, peerPod.second);
+    }
+
+    auto ret = co_await handler_
+                   ->co_getKvStorePeersArea(
+                       std::make_unique<std::string>(kSpineAreaId));
+
+    EXPECT_EQ(3, ret->size());
+    EXPECT_TRUE(ret->count("peer1"));
+    EXPECT_TRUE(ret->count("peer2"));
+    EXPECT_TRUE(ret->count("peer3"));
+  }
+
+  {
+    kvStoreWrapper_->delPeer(kSpineAreaId, "peer2");
+
+    auto ret = co_await handler_
+                   ->co_getKvStorePeersArea(
+                       std::make_unique<std::string>(kSpineAreaId));
+    EXPECT_EQ(2, ret->size());
+    EXPECT_TRUE(ret->count("peer1"));
+    EXPECT_TRUE(ret->count("peer3"));
+  }
+
+  {
+    auto ret = co_await handler_
+                   ->co_getKvStorePeersArea(
+                       std::make_unique<std::string>(kPodAreaId));
+
+    EXPECT_EQ(2, ret->size());
+    EXPECT_TRUE(ret->count("peer11"));
+    EXPECT_TRUE(ret->count("peer21"));
+  }
+
+  {
+    kvStoreWrapper_->delPeer(kPodAreaId, "peer21");
+
+    auto ret = co_await handler_
+                   ->co_getKvStorePeersArea(
+                       std::make_unique<std::string>(kPodAreaId));
+    EXPECT_EQ(1, ret->size());
+    EXPECT_TRUE(ret->count("peer11"));
+  }
+
+  // Not using params.prefix. Instead using keys. params.prefix will be
+  // deprecated soon. There are three sub-tests with different prefix
+  // key values.
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds()->insert("node3");
+    params.keys() = {"key3"};
+
+    auto pub =
+        co_await handler_
+            ->co_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    EXPECT_EQ(kvs.at("key3"), keyVals["key3"]);
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
+  }
+
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds() = {"node33"};
+    params.keys() = {"key33"};
+
+    auto pub =
+        co_await handler_
+            ->co_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
+  }
+
+  {
+    // Two updates because the operator is OR and originator ids for keys
+    // key33 and key333 are same.
+    thrift::KeyDumpParams params;
+    params.originatorIds() = {"node33"};
+    params.keys() = {"key333"};
+    auto pub =
+        co_await handler_
+            ->co_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(kvs.at("key33"), keyVals["key33"]);
+    EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
+  }
+
+  // with areas but do not use prefix (to be deprecated). use prefixes/keys
+  // instead.
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds()->insert("node1");
+    params.keys() = {"keyP", "keyPl"};
+
+    auto pub =
+        co_await handler_
+            ->co_getKvStoreKeyValsFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kPlaneAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(2, keyVals.size());
+    EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
+    EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
+  }
+
+  // Operator is OR and params.prefix is empty.
+  // Use HashFiltered
+  {
+    thrift::KeyDumpParams params;
+    params.originatorIds() = {"node3"};
+    params.keys() = {"key3"};
+
+    auto pub =
+        co_await handler_
+            ->co_getKvStoreHashFilteredArea(
+                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
+                std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals = *pub->keyVals();
+    EXPECT_EQ(3, keyVals.size());
+    auto value3 = kvs.at("key3");
+    value3.value().reset();
+    auto value33 = kvs.at("key33");
+    value33.value().reset();
+    auto value333 = kvs.at("key333");
+    value333.value().reset();
+    EXPECT_EQ(value3, keyVals["key3"]);
+    EXPECT_EQ(value33, keyVals["key33"]);
+    EXPECT_EQ(value333, keyVals["key333"]);
+  }
 // clang-format on
 }
 #endif // FOLLY_HAS_COROUTINES

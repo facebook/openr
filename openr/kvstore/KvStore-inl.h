@@ -528,7 +528,7 @@ KvStore<ClientType>::semifuture_getKvStorePeers(std::string area) {
   folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
-    XLOG(DBG2) << "Peer dump requested for AREA: " << area;
+    XLOG(DBG2) << fmt::format("Peer dump requested for AREA: {}", area);
     try {
       p.setValue(std::make_unique<thrift::PeersMap>(
           getAreaDbOrThrow(area, "semifuture_getKvStorePeers").dumpPeers()));
@@ -2989,6 +2989,15 @@ KvStore<ClientType>::co_getKvStoreAreaSummaryInternal(
   auto result = co_await co_getKvStoreAreaSummaryImpl(std::move(selectAreas))
                     .scheduleOn(getEvb());
   co_return std::make_unique<std::vector<thrift::KvStoreAreaSummary>>(result);
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
+KvStore<ClientType>::co_getKvStorePeers(std::string area) {
+  XLOG(DBG2) << fmt::format("Peer dump requested for AREA: {}", area);
+  fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
+  auto result = getAreaDbOrThrow(area, "co_getKvStorePeers").dumpPeers();
+  co_return std::make_unique<thrift::PeersMap>(result);
 }
 #endif // FOLLY_HAS_COROUTINES
 } // namespace openr

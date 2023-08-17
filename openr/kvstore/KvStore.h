@@ -738,6 +738,9 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
   co_getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
 
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
+      std::string area);
+
   // [private APIs]
  private:
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(

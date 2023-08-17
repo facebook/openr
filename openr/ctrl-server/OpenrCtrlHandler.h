@@ -563,6 +563,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
   co_getKvStoreAreaSummary(
       std::unique_ptr<std::set<std::string>> selectAreas) override;
+
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersArea(
+      std::unique_ptr<std::string> area) override;
 #endif
 
  private:
