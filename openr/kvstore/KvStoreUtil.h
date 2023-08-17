@@ -9,6 +9,7 @@
 
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
+#include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
@@ -22,6 +23,40 @@ enum class MergeType {
   RESYNC_NEEDED = 2,
   NO_UPDATE_NEEDED = 3,
 };
+
+/*
+ * [FSM] KvStore peer event ENUM which triggers the peer state transition
+ */
+enum class KvStorePeerEvent {
+  PEER_ADD = 0,
+  PEER_DEL = 1,
+  SYNC_RESP_RCVD = 2,
+  THRIFT_API_ERROR = 3,
+  INCONSISTENCY_DETECTED = 4,
+};
+
+/*
+ * [Self Originated Key Management]
+ *
+ * This is the structure wrapper containing the:
+ *  1) self-originated value;
+ *  2) key backoff;
+ *  3) ttl backoffs;
+ */
+struct SelfOriginatedValue {
+  // Value associated with the self-originated key
+  thrift::Value value;
+  // Backoff for advertising key-val to kvstore_. Only for persisted key-vals.
+  std::optional<ExponentialBackoff<std::chrono::milliseconds>> keyBackoff;
+  // Backoff for advertising ttl updates for this key-val
+  ExponentialBackoff<std::chrono::milliseconds> ttlBackoff;
+
+  SelfOriginatedValue() {}
+  explicit SelfOriginatedValue(const thrift::Value& val) : value(val) {}
+};
+
+using SelfOriginatedKeyVals =
+    std::unordered_map<std::string, SelfOriginatedValue>;
 
 class KvStoreFilters {
  public:
