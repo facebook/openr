@@ -873,7 +873,7 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
 folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
 OpenrCtrlHandler::semifuture_getKvStoreAreaSummary(
     std::unique_ptr<std::set<std::string>> selectAreas) {
-  CHECK(kvStore_);
+  XCHECK(kvStore_);
   return kvStore_->semifuture_getKvStoreAreaSummaryInternal(
       std::move(*selectAreas));
 }
@@ -1448,6 +1448,15 @@ OpenrCtrlHandler::co_setKvStoreKeyValues(
 
   auto result = co_await kvStore_->co_setKvStoreKeyValues(
       std::move(*area), std::move(*setParams));
+  co_return result;
+}
+
+folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
+OpenrCtrlHandler::co_getKvStoreAreaSummary(
+    std::unique_ptr<std::set<std::string>> selectAreas) {
+  XCHECK(kvStore_);
+  auto result = co_await kvStore_->co_getKvStoreAreaSummaryInternal(
+      std::move(*selectAreas));
   co_return result;
 }
 #endif // FOLLY_HAS_COROUTINES

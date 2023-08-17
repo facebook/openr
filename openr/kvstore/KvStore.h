@@ -735,6 +735,9 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::unique_ptr<thrift::Publication>> co_dumpKvStoreHashes(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
+  folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+  co_getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
+
   // [private APIs]
  private:
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
@@ -742,6 +745,16 @@ class KvStore final : public OpenrEventBase {
 
   folly::coro::Task<thrift::SetKeyValsResult> co_setKvStoreKeyValsInternal(
       std::string area, thrift::KeySetParams keySetParams);
+
+  folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
+  co_dumpKvStoreKeysImpl(
+      thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas);
+
+  folly::coro::Task<thrift::Publication> co_dumpKvStoreHashesImpl(
+      std::string area, thrift::KeyDumpParams keyDumpParams);
+
+  folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
+  co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
 #endif // FOLLY_HAS_COROUTINES
 
  private:
@@ -788,14 +801,8 @@ class KvStore final : public OpenrEventBase {
   thrift::Publication dumpKvStoreHashesImpl(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
-  co_dumpKvStoreKeysImpl(
-      thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas);
-
-  folly::coro::Task<thrift::Publication> co_dumpKvStoreHashesImpl(
-      std::string area, thrift::KeyDumpParams keyDumpParams);
-#endif
+  std::vector<thrift::KvStoreAreaSummary> getKvStoreAreaSummaryImpl(
+      std::set<std::string> selectAreas);
 
   /*
    * Private variables

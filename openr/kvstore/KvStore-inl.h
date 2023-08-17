@@ -361,6 +361,31 @@ KvStore<ClientType>::dumpKvStoreKeysImpl(
 }
 
 template <class ClientType>
+std::vector<thrift::KvStoreAreaSummary>
+KvStore<ClientType>::getKvStoreAreaSummaryImpl(
+    std::set<std::string> selectAreas) {
+  const auto area =
+      (selectAreas.empty()
+           ? "all areas."
+           : fmt::format("areas: {}.", folly::join(", ", selectAreas)));
+  XLOG(INFO) << fmt::format("KvStore Summary requested for {}", area);
+
+  std::vector<thrift::KvStoreAreaSummary> result;
+  for (auto& [area, kvStoreDb] : kvStoreDb_) {
+    thrift::KvStoreAreaSummary areaSummary;
+
+    areaSummary.area() = area;
+    auto kvDbCounters = kvStoreDb.getCounters();
+    areaSummary.keyValsCount() = kvDbCounters["kvstore.num_keys"];
+    areaSummary.peersMap() = kvStoreDb.dumpPeers();
+    areaSummary.keyValsBytes() = kvStoreDb.getKeyValsSize();
+
+    result.emplace_back(std::move(areaSummary));
+  }
+  return result;
+}
+
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
 KvStore<ClientType>::semifuture_dumpKvStoreKeys(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
@@ -521,29 +546,12 @@ KvStore<ClientType>::semifuture_getKvStoreAreaSummaryInternal(
     std::set<std::string> selectAreas) {
   folly::Promise<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        selectAreas = std::move(selectAreas)]() mutable {
-    XLOG(INFO)
-        << "KvStore Summary requested for "
-        << (selectAreas.empty()
-                ? "all areas."
-                : fmt::format("areas: {}.", folly::join(", ", selectAreas)));
-
-    auto result = std::make_unique<std::vector<thrift::KvStoreAreaSummary>>();
-    for (auto& [area, kvStoreDb] : kvStoreDb_) {
-      thrift::KvStoreAreaSummary areaSummary;
-
-      areaSummary.area() = area;
-      auto kvDbCounters = kvStoreDb.getCounters();
-      areaSummary.keyValsCount() = kvDbCounters["kvstore.num_keys"];
-      areaSummary.peersMap() = kvStoreDb.dumpPeers();
-      areaSummary.keyValsBytes() = kvStoreDb.getKeyValsSize();
-
-      result->emplace_back(std::move(areaSummary));
-    }
-    p.setValue(std::move(result));
-  });
+  runInEventBaseThread(
+      [this, p = std::move(p), selectAreas = std::move(selectAreas)]() mutable {
+        auto result = getKvStoreAreaSummaryImpl(std::move(selectAreas));
+        p.setValue(std::make_unique<std::vector<thrift::KvStoreAreaSummary>>(
+            std::move(result)));
+      });
   return sf;
 }
 
@@ -2848,6 +2856,14 @@ KvStore<ClientType>::co_dumpKvStoreHashesImpl(
 }
 
 template <class ClientType>
+folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
+KvStore<ClientType>::co_getKvStoreAreaSummaryImpl(
+    std::set<std::string> selectAreas) {
+  auto result = getKvStoreAreaSummaryImpl(std::move(selectAreas));
+  co_return result;
+}
+
+template <class ClientType>
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 KvStore<ClientType>::co_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
@@ -2964,6 +2980,15 @@ KvStoreDb<ClientType>::KvStorePeer::getKvStoreKeyValsFilteredAreaCoroWrapper(
         fb303::COUNT);
     co_return plainTextClient->co_getKvStoreKeyValsFilteredArea(filter, area);
   }
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+KvStore<ClientType>::co_getKvStoreAreaSummaryInternal(
+    std::set<std::string> selectAreas) {
+  auto result = co_await co_getKvStoreAreaSummaryImpl(std::move(selectAreas))
+                    .scheduleOn(getEvb());
+  co_return std::make_unique<std::vector<thrift::KvStoreAreaSummary>>(result);
 }
 #endif // FOLLY_HAS_COROUTINES
 } // namespace openr
