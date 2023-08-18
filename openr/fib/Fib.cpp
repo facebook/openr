@@ -121,11 +121,37 @@ Fib::stop() {
   XLOG(DBG1) << fmt::format(
       "[Exit] Send terminiation signals to stop {} tasks.", getFiberTaskNum());
 
-  // Send stop signal to internal fibers
-  updateRoutesSemaphore_.signal();
-  retryRoutesSemaphore_.signal();
+  /*
+   * Send stop signal to internal fibers.
+   *
+   * Attention:
+   * `retryRoutesStopSignal_` baton should be posted first before
+   * `retryRoutesSemaphore_` to avoid race-condition of forever waiting inside
+   * `retryRoutesTask()`.
+   *
+   * A potential race-condition:
+   *
+   * t0: retryRoutesSemaphore_.signal()
+   *
+   * ----------context-switch----------
+   *
+   * t1: retryRoutesSemaphore_.wait() in retryRoutesTask() got unblocked.
+   * Finish execution till next loop.
+   *
+   * t2: while loop condition check, keepAliveStopSignal_ NOT yet posted.
+   * Continue to go to be blocked at:
+   *
+   * retryRoutesSemaphore_.wait()
+   *
+   * ----------context-switch----------
+   *
+   * t3: retryRoutesStopSignal_.post() <------ NEVER get a chance to unblock
+   * semaphore again.
+   */
   keepAliveStopSignal_.post();
   retryRoutesStopSignal_.post();
+  updateRoutesSemaphore_.signal();
+  retryRoutesSemaphore_.signal();
 
   // Close socket/client created
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
@@ -959,7 +985,12 @@ Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
       *getEvb(), [this]() noexcept { retryRoutesSemaphore_.signal(); });
 
   // Repeat in loop
-  while (not stopSignal.ready()) {
+  while (true) {
+    // Once stop signal is received, break to finish fiber task
+    if (stopSignal.ready()) {
+      break;
+    }
+
     // Wait for signal & retry routes
     retryRoutesSemaphore_.wait();
     retryRoutes();
