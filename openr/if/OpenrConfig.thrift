@@ -196,11 +196,11 @@ struct SparkConfig {
    * SparkHeartbeatMsg are used to detect if neighbor is up running when
    * adjacency is established.
    */
-  4: i32 keepalive_time_s = 2;
+  4: i32 keepalive_time_s = 10;
   /**
    * Expiration time if node does NOT receive ‘keepAlive’ info from neighbor node.
    */
-  5: i32 hold_time_s = 10;
+  5: i32 hold_time_s = 30;
   /**
    * Max time in seconds to hold neighbor's adjacency after receiving neighbor
    * restarting message
