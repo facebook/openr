@@ -7,6 +7,7 @@
 import click
 from fastcli.click import inject_fastcli
 from openr.cli.clis import (
+    baseGroup,
     config,
     decision,
     dispatcher,
@@ -33,7 +34,7 @@ except ImportError:
     pass
 
 
-@click.group(name="breeze")
+@click.group(name="breeze", cls=baseGroup.deduceCommandGroup)
 # make host eager (option callback is called before others) sice some default
 # options can depend on this
 @breeze_option("--host", "-H", help="Host to connect to", is_eager=True)
