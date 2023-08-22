@@ -7,6 +7,7 @@
 
 import click
 from bunch import Bunch
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import config
 
 
@@ -24,7 +25,7 @@ class ConfigCli:
         self.config.add_command(ConfigEraseCli().config_erase, name="erase")
         self.config.add_command(ConfigStoreCli().config_store, name="store")
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def config(ctx: Bunch) -> None:  # noqa: B902
         """CLI tool to peek into Config Store module."""

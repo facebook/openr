@@ -9,6 +9,7 @@ from typing import AbstractSet, Any, List, Optional, Set
 
 import click
 from bunch import Bunch
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import kvstore
 from openr.cli.utils.options import breeze_option
 from openr.cli.utils.utils import parse_nodes
@@ -34,7 +35,7 @@ class KvStoreCli(object):
         )
         self.kvstore.add_command(ValidateCli().validate)
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @breeze_option("--area", type=str, help="area identifier")
     @click.pass_context
     def kvstore(ctx, area):  # noqa: B902

@@ -8,6 +8,7 @@ from typing import List
 
 import bunch
 import click
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import kvstore, lm
 from openr.cli.utils import utils
 from openr.cli.utils.utils import parse_nodes
@@ -60,7 +61,7 @@ class LMCli:
             name="clear-adj-metric-override",
         )
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def lm(ctx):  # noqa: B902
         """CLI tool to peek into Link Monitor module."""

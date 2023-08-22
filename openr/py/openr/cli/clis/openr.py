@@ -8,6 +8,7 @@
 
 import click
 from bunch import Bunch
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.clis.decision import (
     DecisionAdjCli,
     DecisionRibPolicyCli,
@@ -32,7 +33,7 @@ class OpenrCli:
         self.openr.add_command(VersionCli().version, name="version")
         self.openr.add_command(OpenrValidateCli().validate, name="validate")
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
     @breeze_option("--client-id", type=int, help="FIB Client ID")
     @breeze_option("--area", type=str, help="area identifier")

@@ -4,6 +4,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import click
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import dispatcher
 
 
@@ -12,7 +13,7 @@ class DispatcherCli:
         self.dispatcher.add_command(FiltersCli().filters)
         self.dispatcher.add_command(QueuesCli().queues)
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def dispatcher(ctx):  # noqa: B902
         """CLI tool to peek into Dispatcher module."""

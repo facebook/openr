@@ -6,6 +6,7 @@
 
 
 import click
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import monitor
 from openr.cli.utils.options import breeze_option
 
@@ -16,7 +17,7 @@ class MonitorCli(object):
         self.monitor.add_command(MonitorLogs().logs)
         self.monitor.add_command(MonitorStatistics().statistics)
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def monitor(ctx):  # noqa: B902
         """CLI tool to peek into Monitor module."""

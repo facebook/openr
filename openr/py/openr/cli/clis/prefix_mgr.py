@@ -9,6 +9,7 @@ from typing import List, Optional
 
 import bunch
 import click
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import prefix_mgr
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 
@@ -22,7 +23,7 @@ class PrefixMgrCli:
         self.prefixmgr.add_command(OriginatedRoutesCli().show)
         self.prefixmgr.add_command(PrefixMgrValidateCli().validate)
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def prefixmgr(ctx):  # noqa: B902
         """CLI tool to peek into Prefix Manager module."""

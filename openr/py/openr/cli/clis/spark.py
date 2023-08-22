@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 import click
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import spark
 
 
@@ -14,7 +15,7 @@ class SparkCli:
         self.spark.add_command(SparkNeighborCli().neighbors, name="neighbors")
         self.spark.add_command(SparkValidateCli().validate, name="validate")
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def spark(ctx):  # noqa: B902
         """CLI tool to peek into Spark information."""

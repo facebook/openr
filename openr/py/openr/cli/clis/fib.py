@@ -10,6 +10,7 @@ from typing import List
 
 import click
 from bunch import Bunch
+from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import fib
 from openr.cli.utils.options import breeze_option
 
@@ -33,7 +34,7 @@ class FibCli(object):
         self.fib.add_command(FibValidateRoutesCli().validate)
         self.fib.add_command(StreamSummaryCli()._stream_summary, name="stream-summary")
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
     @breeze_option("--client-id", type=int, help="FIB Client ID")
     @click.pass_context

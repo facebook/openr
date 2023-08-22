@@ -9,6 +9,8 @@ from typing import Any, List, Optional, Sequence
 
 import bunch
 import click
+from openr.cli.clis.baseGroup import deduceCommandGroup
+
 from openr.cli.commands import decision
 from openr.cli.utils.utils import parse_nodes
 
@@ -22,7 +24,7 @@ class DecisionCli:
         self.decision.add_command(ReceivedRoutesCli().show)
         self.decision.add_command(DecisionValidateCli().validate)
 
-    @click.group()
+    @click.group(cls=deduceCommandGroup)
     @click.pass_context
     def decision(ctx):  # noqa: B902
         """CLI tool to peek into Decision module."""
