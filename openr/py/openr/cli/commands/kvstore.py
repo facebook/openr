@@ -313,21 +313,24 @@ class KvStoreWithInitAreaCmdBase(KvStoreCmdBase):
         return asyncio.run(_wrapper())
 
 
-class KvPrefixesCmd(KvStoreWithInitAreaCmdBase):
+class PrefixesCmd(KvStoreWithInitAreaCmdBase):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
         nodes: set,
         json: bool,
-        prefix: str,
-        client_type: str,
+        prefix: str = "",
+        client_type: str = "",
         *args,
         **kwargs,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
-        resp = await client.getKvStoreKeyValsFiltered(keyDumpParams)
-        self.print_prefix({"": resp}, nodes, json, prefix, client_type)
+        keyDumpParams = self.buildKvStoreKeyDumpParams(prefix=Consts.PREFIX_DB_MARKER)
+        area_kv = {}
+        for area in self.areas:
+            resp = await client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            area_kv[area] = resp
+        self.print_prefix(area_kv, nodes, json, prefix, client_type)
 
     def print_prefix(
         self,
@@ -351,29 +354,7 @@ class KvPrefixesCmd(KvStoreWithInitAreaCmdBase):
             )
 
 
-class PrefixesCmd(KvPrefixesCmd):
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        nodes: set,
-        json: bool,
-        prefix: str = "",
-        client_type: str = "",
-        *args,
-        **kwargs,
-    ) -> None:
-        if not self.area_feature:
-            await super()._run(client, nodes, json, prefix, client_type)
-            return
-        keyDumpParams = self.buildKvStoreKeyDumpParams(prefix=Consts.PREFIX_DB_MARKER)
-        area_kv = {}
-        for area in self.areas:
-            resp = await client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
-            area_kv[area] = resp
-        self.print_prefix(area_kv, nodes, json, prefix, client_type)
-
-
-class KvKeysCmd(KvStoreWithInitAreaCmdBase):
+class KeysCmd(KvStoreWithInitAreaCmdBase):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
@@ -385,28 +366,6 @@ class KvKeysCmd(KvStoreWithInitAreaCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(
-            prefix, {originator} if originator else None
-        )
-        resp = await client.getKvStoreKeyValsFiltered(keyDumpParams)
-        self.print_kvstore_keys({"": resp}, ttl, json)
-
-
-class KeysCmd(KvKeysCmd):
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        json: bool,
-        prefix: Any,
-        originator: Any = None,
-        ttl: bool = False,
-        *args,
-        **kwargs,
-    ) -> None:
-        if not self.area_feature:
-            await super()._run(client, json, prefix, originator, ttl)
-            return
-
         keyDumpParams = self.buildKvStoreKeyDumpParams(
             prefix, {originator} if originator else None
         )
@@ -501,23 +460,35 @@ class KeyValsCmd(KvKeyValsCmd):
                 self.print_kvstore_values(resp, area)
 
 
-class KvNodesCmd(KvStoreWithInitAreaCmdBase):
+class NodesCmd(KvStoreWithInitAreaCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
         *args,
         **kwargs,
     ) -> None:
-        prefix_keys = await client.getKvStoreKeyValsFiltered(
-            self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
-        )
-        adj_keys = await client.getKvStoreKeyValsFiltered(
-            self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
-        )
-        host_id = await client.getMyNodeName()
-        self.print_kvstore_nodes(
-            self.get_connected_nodes(adj_keys, host_id), prefix_keys, host_id
-        )
+        key_vals = {}
+        node_area = {}
+        nodes = set()
+        for area in self.areas:
+            prefix_keys = await client.getKvStoreKeyValsFilteredArea(
+                self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER), area
+            )
+            key_vals.update(prefix_keys.keyVals)
+            adj_keys = await client.getKvStoreKeyValsFilteredArea(
+                self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER), area
+            )
+            host_id = await client.getMyNodeName()
+            node_set = self.get_connected_nodes(adj_keys, host_id)
+            # save area associated with each node
+            for node in node_set:
+                node_area[node] = area
+            nodes.update(node_set)
+
+        all_kv = Publication(keyVals=key_vals)
+
+        # pyre-fixme[61]: `host_id` may not be initialized here.
+        self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
 
     def get_connected_nodes(self, adj_keys: Publication, node_id: str) -> Set[str]:
         """
@@ -597,41 +568,6 @@ class KvNodesCmd(KvStoreWithInitAreaCmdBase):
         print(printing.render_horizontal_table(rows, label))
 
 
-class NodesCmd(KvNodesCmd):
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        *args,
-        **kwargs,
-    ) -> None:
-        if not self.area_feature:
-            await super()._run(client)
-            return
-
-        key_vals = {}
-        node_area = {}
-        nodes = set()
-        for area in self.areas:
-            prefix_keys = await client.getKvStoreKeyValsFilteredArea(
-                self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER), area
-            )
-            key_vals.update(prefix_keys.keyVals)
-            adj_keys = await client.getKvStoreKeyValsFilteredArea(
-                self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER), area
-            )
-            host_id = await client.getMyNodeName()
-            node_set = self.get_connected_nodes(adj_keys, host_id)
-            # save area associated with each node
-            for node in node_set:
-                node_area[node] = area
-            nodes.update(node_set)
-
-        all_kv = Publication(keyVals=key_vals)
-
-        # pyre-fixme[61]: `host_id` may not be initialized here.
-        self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
-
-
 class Areas(KvStoreWithInitAreaCmdBase):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
@@ -641,16 +577,13 @@ class Areas(KvStoreWithInitAreaCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        if not self.area_feature:
-            return
-
         if in_json:
             print(json.dumps(list(self.areas)))
         else:
             print(f"Areas configured: {self.areas}")
 
 
-class KvShowAdjNodeCmd(KvStoreWithInitAreaCmdBase):
+class ShowAdjNodeCmd(KvStoreWithInitAreaCmdBase):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
@@ -661,31 +594,6 @@ class KvShowAdjNodeCmd(KvStoreWithInitAreaCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
-        publication = await client.getKvStoreKeyValsFiltered(keyDumpParams)
-        self.printAdjNode(publication, nodes, node, interface)
-
-    def printAdjNode(self, publication, nodes, node, interface):
-        adjs_map = utils.adj_dbs_to_dict(
-            publication, nodes, True, self.iter_publication
-        )
-        utils.print_adjs_table(adjs_map, node, interface)
-
-
-class ShowAdjNodeCmd(KvShowAdjNodeCmd):
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        nodes: set,
-        node: Any,
-        interface: Any,
-        *args,
-        **kwargs,
-    ) -> None:
-        if not self.area_feature:
-            await super()._run(client, nodes, node, interface, args, kwargs)
-            return
-
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ADJ_DB_MARKER)
 
         key_vals = {}
@@ -698,6 +606,12 @@ class ShowAdjNodeCmd(KvShowAdjNodeCmd):
         resp = Publication(keyVals=key_vals)
 
         self.printAdjNode(resp, nodes, node, interface)
+
+    def printAdjNode(self, publication, nodes, node, interface):
+        adjs_map = utils.adj_dbs_to_dict(
+            publication, nodes, True, self.iter_publication
+        )
+        utils.print_adjs_table(adjs_map, node, interface)
 
 
 class KvCompareCmd(KvStoreWithInitAreaCmdBase):
