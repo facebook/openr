@@ -64,7 +64,6 @@ from thrift.python.serializer import deserialize
 class KvStoreCmdBase(OpenrCtrlCmd):
     def __init__(self, cli_opts: bunch.Bunch):
         super().__init__(cli_opts)
-        self.area_feature: bool = False
         self.areas: Set = set()
 
     def print_publication_delta(
@@ -120,13 +119,10 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         node_dict = {}
         keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.PREFIX_DB_MARKER)
         resp = Publication()
-        if not self.area_feature:
-            resp = await client.getKvStoreKeyValsFiltered(keyDumpParams)
-        else:
-            if area is None:
-                print(f"Error: Must specify one of the areas: {self.areas}")
-                sys.exit(1)
-            resp = await client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+        if area is None:
+            print(f"Error: Must specify one of the areas: {self.areas}")
+            sys.exit(1)
+        resp = await client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
 
         prefix_maps = utils.collate_prefix_keys(resp.keyVals)
         for node, prefix_db in prefix_maps.items():
@@ -146,9 +142,6 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         return None
 
     def get_area_id(self) -> str:
-        if not self.area_feature:
-            print("Try to call get_area_id() without enabling area feature.")
-            sys.exit(1)
         if 1 != len(self.areas):
             print(f"Error: Must specify one of the areas: {self.areas}")
             sys.exit(1)
@@ -170,10 +163,8 @@ class KvStoreCmdBase(OpenrCtrlCmd):
                     peerspec.state.name,
                     peerspec.peerAddr,
                     peerspec.ctrlPort,
+                    area,
                 ]
-
-                if self.area_feature:
-                    row.append(area)
 
                 rows.append(row)
 
@@ -276,10 +267,6 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
 class KvStoreWithInitAreaCmdBase(KvStoreCmdBase):
     async def _init_area(self, client: OpenrCtrlCppClient.Async) -> None:
-        # find out if area feature is supported
-        # TODO: remove self.area_feature as it will be supported by default
-        self.area_feature = True
-
         # get list of areas if area feature is supported.
         self.areas = await utils.get_areas_list(client)
         if hasattr(self.cli_opts, "area"):
@@ -378,7 +365,7 @@ class KeysCmd(KvStoreWithInitAreaCmdBase):
         self.print_kvstore_keys(area_kv, ttl, json)
 
 
-class KvKeyValsCmd(KvStoreWithInitAreaCmdBase):
+class KeyValsCmd(KvStoreWithInitAreaCmdBase):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
         self,
@@ -387,8 +374,10 @@ class KvKeyValsCmd(KvStoreWithInitAreaCmdBase):
         *args,
         **kwargs,
     ) -> None:
-        resp = await client.getKvStoreKeyVals(keys)
-        self.print_kvstore_values(resp)
+        for area in self.areas:
+            resp = await client.getKvStoreKeyValsArea(keys, area)
+            if len(resp.keyVals):
+                self.print_kvstore_values(resp, area)
 
     def deserialize_kvstore_publication(self, key, value):
         """classify kvstore prefix and return the corresponding deserialized obj"""
@@ -440,24 +429,6 @@ class KvKeyValsCmd(KvStoreWithInitAreaCmdBase):
         area = f"in area {area}" if area is not None else ""
         caption = f"Dump key-value pairs in KvStore {area}"
         print(printing.render_vertical_table(rows, caption=caption))
-
-
-class KeyValsCmd(KvKeyValsCmd):
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        keys: List[str],
-        *args,
-        **kwargs,
-    ) -> None:
-        if not self.area_feature:
-            await super()._run(client, keys)
-            return
-
-        for area in self.areas:
-            resp = await client.getKvStoreKeyValsArea(keys, area)
-            if len(resp.keyVals):
-                self.print_kvstore_values(resp, area)
 
 
 class NodesCmd(KvStoreWithInitAreaCmdBase):
@@ -635,11 +606,7 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
                 nodes.remove(host_id)
 
             keyDumpParams = self.buildKvStoreKeyDumpParams(Consts.ALL_DB_MARKER)
-            pub = None
-            if not self.area_feature:
-                pub = await client.getKvStoreKeyValsFiltered(keyDumpParams)
-            else:
-                pub = await client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
+            pub = await client.getKvStoreKeyValsFilteredArea(keyDumpParams, area)
             kv_dict = self.dump_nodes_kvs(nodes, all_nodes_to_ips, area)
             for node in kv_dict:
                 self.compare(pub.keyVals, kv_dict[node], host_id, node)
