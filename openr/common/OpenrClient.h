@@ -168,14 +168,14 @@ getOpenrCtrlSecureClient(
        */
       int optval = 1;
       if (transport->setSockOpt(SOL_SOCKET, SO_KEEPALIVE, &optval) != 0) {
-        XLOG(FATAL) << fmt::format(
+        XLOG(WARNING) << fmt::format(
             "Could not set SO_KEEPALIVE flag on socket. Error: {}", errno);
       }
 
       // The time (in seconds) between individual keepalive probes
       int interval = Constants::kThriftClientKeepAliveInterval.count();
       if (transport->setSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, &interval) != 0) {
-        XLOG(FATAL) << fmt::format(
+        XLOG(WARNING) << fmt::format(
             "Could not set TCP_KEEPINTVL value on socket. Error: {}", errno);
       }
       XLOG(INFO) << fmt::format(
