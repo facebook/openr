@@ -267,16 +267,13 @@ class KvStoreCmdBase(OpenrCtrlCmd):
 
 class KvStoreWithInitAreaCmdBase(KvStoreCmdBase):
     async def _init_area(self, client: OpenrCtrlCppClient.Async) -> None:
-        # get list of areas if area feature is supported.
-        self.areas = await utils.get_areas_list(client)
+        # area provided, validate or deduce
         if hasattr(self.cli_opts, "area"):
             if self.cli_opts.area != "":
-                if self.cli_opts.area in self.areas:
-                    self.areas = {self.cli_opts.area}
-                else:
-                    print(f"Invalid area specified: {self.cli_opts.area}")
-                    print(f"Valid areas: {self.areas}")
-                    sys.exit(1)
+                self.areas = {await utils.deduce_area(client, self.cli_opts.area)}
+                return
+        # no area provided, return all areas
+        self.areas = await utils.get_areas_list(client)
 
     # @override
     def run(self, *args, **kwargs) -> int:
