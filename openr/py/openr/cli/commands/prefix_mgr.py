@@ -100,26 +100,6 @@ class WithdrawCmd(PrefixMgrCmd):
         print(f"Withdrew {len(prefixes)} prefixes")
 
 
-class AdvertiseCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        prefix_type: str,
-        forwarding_type: str,
-        *args,
-        **kwargs,
-    ) -> None:
-        tprefixes = to_thrift_prefixes(
-            prefixes,
-            to_thrift_prefix_type(prefix_type),
-            to_thrift_forwarding_type(forwarding_type),
-        )
-        await client.advertisePrefixes(tprefixes)
-        print(f"Advertised {len(prefixes)} prefixes with type {prefix_type}")
-
-
 class SyncCmd(PrefixMgrCmd):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
