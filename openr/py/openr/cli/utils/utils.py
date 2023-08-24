@@ -1900,6 +1900,29 @@ async def get_areas_list(client: OpenrCtrlCppClient.Async) -> Set[str]:
     return {a.area_id for a in (await client.getRunningConfigThrift()).areas}
 
 
+async def deduce_area(
+    client: OpenrCtrlCppClient.Async,
+    area: str,
+    configured_areas: Optional[Set[str]] = None,
+) -> str:
+    """
+    Deduce full area name from configured areas, if not ambiguous
+    If configured areas is not provided, then get it from running config
+    """
+    areas = configured_areas or await get_areas_list(client)
+    # exact match
+    if area in areas:
+        return area
+    # substring match
+    matches = [candidate for candidate in areas if area in candidate]
+    if not matches:
+        raise Exception(f"Invalid area {area}, configured areas: {', '.join(areas)}")
+    elif len(matches) > 1:
+        raise Exception(f"Ambiguous area {area}, found {', '.join(matches)}.")
+    print(f"Operating on area: {matches[0]}")
+    return matches[0]
+
+
 # This API is used by commands that need one and only one
 # area ID. For older images that don't support area feature, this API will
 # return 'None'. If area ID is passed, API checks if it's valid and returns

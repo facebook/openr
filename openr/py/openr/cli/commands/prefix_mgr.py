@@ -399,6 +399,9 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         **kwargs,
     ) -> None:
 
+        # Deduce / Validate area
+        area = await utils.deduce_area(client, area)
+
         # Get data
         routes = await self.fetch(
             client, area, route_filter_type, prefixes, prefix_type
