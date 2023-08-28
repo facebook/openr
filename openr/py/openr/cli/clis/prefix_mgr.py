@@ -193,12 +193,14 @@ class OriginatedRoutesCli(object):
     @click.command("originated-routes")
     @click.option(
         "--detail/--no-detail",
-        default=False,
+        "-d/-D",
+        default=True,
         help="Show all details including tags and area-stack",
     )
     @click.option(
         "--tag2name/--no-tag2name",
-        default=False,
+        "-n/-N",
+        default=True,
         help="Translate tag string to human readable name",
     )
     @click.pass_obj
