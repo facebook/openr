@@ -33,6 +33,7 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
         prefixes: Any,
         labels: Any,
         json_opt: bool,
+        hostnames: bool = True,
         *args,
         **kwargs,
     ) -> None:
@@ -43,9 +44,16 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
                 route_db_dict[node] = utils.route_db_to_dict(route_db)
             utils.print_routes_json(route_db_dict, prefixes, labels)
         else:
+            nexthops_to_neighbor_names = None
+            if hostnames:
+                nexthops_to_neighbor_names = await utils.adjs_nexthop_to_neighbor_name(
+                    client
+                )
             for node in nodes:
                 route_db = await client.getRouteDbComputed(node)
-                utils.print_route_db(route_db, prefixes, labels)
+                utils.print_route_db(
+                    route_db, prefixes, labels, nexthops_to_neighbor_names
+                )
 
 
 class DecisionAdjCmd(OpenrCtrlCmd):

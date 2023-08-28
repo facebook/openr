@@ -65,15 +65,21 @@ class DecisionRoutesComputedCli:
         multiple=True,
         help="Get route for specific labels.",
     )
+    @click.option(
+        "--hostnames/--no-hostnames",
+        default=True,
+        show_default=True,
+        help="Show Hostnames rather than IP addresses",
+    )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.argument("prefixes", nargs=-1, type=str, required=False)
     @click.pass_obj
-    def routes(cli_opts, nodes, prefixes, labels, json):  # noqa: B902
+    def routes(cli_opts, nodes, prefixes, labels, hostnames, json):  # noqa: B902
         """Request the routing table from Decision module"""
 
         nodes_set = parse_nodes(cli_opts, nodes)
         decision.DecisionRoutesComputedCmd(cli_opts).run(
-            nodes_set, prefixes, labels, json
+            nodes_set, prefixes, labels, json, hostnames
         )
 
 

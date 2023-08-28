@@ -944,6 +944,7 @@ def print_route_db(
     route_db: openr_types.RouteDatabase,
     prefixes: Optional[List[str]] = None,
     labels: Optional[List[int]] = None,
+    nexthops_to_neighbor_names: Optional[Dict[bytes, str]] = None,
 ) -> None:
     """print the routes from Decision/Fib module"""
 
@@ -952,6 +953,7 @@ def print_route_db(
             "Unicast Routes for {}".format(route_db.thisNodeName),
             route_db.unicastRoutes,
             prefixes=prefixes,
+            nexthops_to_neighbor_names=nexthops_to_neighbor_names,
         )
     if labels or not prefixes:
         print_mpls_routes(
@@ -1789,6 +1791,7 @@ def build_unicast_route(
         ]
     else:
         nexthops = [ip_nexthop_to_str(nh) for nh in route.nextHops]
+    nexthops.sort()
     return dest, nexthops
 
 
