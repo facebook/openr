@@ -1763,7 +1763,7 @@ def build_unicast_route(
     ] = None,
     filter_exact_match: bool = False,
     nexthops_to_neighbor_names: Optional[Dict[bytes, str]] = None,
-) -> Tuple[str, List[str]]:
+) -> Optional[Tuple[str, List[str]]]:
     """
     Build unicast route.
         :param route: Unicast Route
@@ -1775,10 +1775,10 @@ def build_unicast_route(
     if filter_for_networks:
         if filter_exact_match:
             if not ipaddress.ip_network(dest) in filter_for_networks:
-                return ("", [])
+                return None
         else:
             if not ipnetwork.contain_any_prefix(dest, filter_for_networks):
-                return ("", [])
+                return None
     if nexthops_to_neighbor_names:
         nexthops = [
             (

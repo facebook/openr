@@ -59,13 +59,6 @@ class DecisionRoutesComputedCli:
         "host's routes. Get routes for all nodes if 'all' is given.",
     )
     @click.option(
-        "--prefixes",
-        "-p",
-        default=[],
-        multiple=True,
-        help="Get route for specific IPs or Prefixes.",
-    )
-    @click.option(
         "--labels",
         "-l",
         type=click.INT,
@@ -73,6 +66,7 @@ class DecisionRoutesComputedCli:
         help="Get route for specific labels.",
     )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
+    @click.argument("prefixes", nargs=-1, type=str, required=False)
     @click.pass_obj
     def routes(cli_opts, nodes, prefixes, labels, json):  # noqa: B902
         """Request the routing table from Decision module"""
