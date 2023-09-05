@@ -15,7 +15,7 @@ from openr.cli.commands import fib
 from openr.cli.utils.options import breeze_option
 
 
-class FibCli(object):
+class FibCli:
     def __init__(self):
         # ATTN: get unicast + mpls routes installed on platform, aka,
         # fibAgent via thrift port.
@@ -43,7 +43,7 @@ class FibCli(object):
         pass
 
 
-class FibCountersCli(object):
+class FibCountersCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
@@ -54,7 +54,7 @@ class FibCountersCli(object):
         sys.exit(return_code)
 
 
-class FibRoutesInstalledCli(object):
+class FibRoutesInstalledCli:
     @click.command()
     @click.option(
         "--prefixes",
@@ -92,7 +92,7 @@ class FibRoutesInstalledCli(object):
         sys.exit(return_code)
 
 
-class FibUnicastRoutesCli(object):
+class FibUnicastRoutesCli:
     @click.command()
     @click.argument("prefix_or_ip", nargs=-1)
     @click.option(
@@ -116,7 +116,7 @@ class FibUnicastRoutesCli(object):
         fib.FibUnicastRoutesCmd(cli_opts).run(prefix_or_ip, json, hostnames)
 
 
-class FibMplsRoutesCli(object):
+class FibMplsRoutesCli:
     @click.command()
     @click.argument("labels", nargs=-1)
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
@@ -127,7 +127,7 @@ class FibMplsRoutesCli(object):
         fib.FibMplsRoutesCmd(cli_opts).run(labels, json)
 
 
-class FibAddRoutesCli(object):
+class FibAddRoutesCli:
     @click.command()
     @click.argument("prefixes")  # Comma separated list of prefixes
     @click.argument("nexthops")  # Comma separated list of nexthops
@@ -138,7 +138,7 @@ class FibAddRoutesCli(object):
         fib.FibAddRoutesCmd(cli_opts).run(prefixes, nexthops)
 
 
-class FibDelRoutesCli(object):
+class FibDelRoutesCli:
     @click.command()
     @click.argument("prefixes")  # Comma separated list of prefixes
     @click.pass_obj
@@ -148,7 +148,7 @@ class FibDelRoutesCli(object):
         fib.FibDelRoutesCmd(cli_opts).run(prefixes)
 
 
-class FibSyncRoutesCli(object):
+class FibSyncRoutesCli:
     @click.command()
     @click.argument("prefixes")  # Comma separated list of prefixes
     @click.argument("nexthops")  # Comma separated list of nexthops
@@ -159,7 +159,7 @@ class FibSyncRoutesCli(object):
         fib.FibSyncRoutesCmd(cli_opts).run(prefixes, nexthops)
 
 
-class FibValidateRoutesCli(object):
+class FibValidateRoutesCli:
     @click.command()
     @click.option(
         "--suppress-error/--print-all-info",
@@ -173,7 +173,7 @@ class FibValidateRoutesCli(object):
         sys.exit(fib.FibValidateRoutesCmd(cli_opts).run(suppress_error))
 
 
-class FibSnoopCli(object):
+class FibSnoopCli:
     @click.command()
     @click.option(
         "--duration",
@@ -203,7 +203,7 @@ class FibSnoopCli(object):
         fib.FibSnoopCmd(cli_opts).run(duration, initial_dump, prefixes)
 
 
-class StreamSummaryCli(object):
+class StreamSummaryCli:
     @click.command()
     @click.pass_obj
     def _stream_summary(cli_opts):  # noqa: B902

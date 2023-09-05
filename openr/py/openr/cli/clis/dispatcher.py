@@ -20,7 +20,7 @@ class DispatcherCli:
         pass
 
 
-class FiltersCli(object):
+class FiltersCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
@@ -28,7 +28,7 @@ class FiltersCli(object):
         dispatcher.FiltersCmd(cli_opts).run(json)
 
 
-class QueuesCli(object):
+class QueuesCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj

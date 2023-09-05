@@ -11,7 +11,7 @@ from openr.cli.commands import monitor
 from openr.cli.utils.options import breeze_option
 
 
-class MonitorCli(object):
+class MonitorCli:
     def __init__(self):
         self.monitor.add_command(CountersCli().counters)
         self.monitor.add_command(MonitorLogs().logs)
@@ -24,7 +24,7 @@ class MonitorCli(object):
         pass
 
 
-class CountersCli(object):
+class CountersCli:
     @click.command()
     @click.option("--json", is_flag=True, help="Output JSON object")
     @click.option(
@@ -37,7 +37,7 @@ class CountersCli(object):
         monitor.CountersCmd(cli_opts).run(prefix, json)
 
 
-class MonitorLogs(object):
+class MonitorLogs:
     @click.command()
     @click.option("--prefix", default="", help="Show log events")
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
@@ -48,7 +48,7 @@ class MonitorLogs(object):
         monitor.LogCmd(cli_opts).run(json)
 
 
-class MonitorStatistics(object):
+class MonitorStatistics:
     @click.command()
     @click.pass_obj
     def statistics(cli_opts):  # noqa: B902

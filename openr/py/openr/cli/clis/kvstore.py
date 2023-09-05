@@ -16,7 +16,7 @@ from openr.cli.utils.utils import parse_nodes
 from openr.utils.consts import Consts
 
 
-class KvStoreCli(object):
+class KvStoreCli:
     def __init__(self):
         self.kvstore.add_command(PrefixesCli().prefixes)
         self.kvstore.add_command(NodesCli().nodes)
@@ -43,7 +43,7 @@ class KvStoreCli(object):
         pass
 
 
-class ValidateCli(object):
+class ValidateCli:
     @click.command()
     @click.pass_obj
     def validate(cli_opts):
@@ -52,7 +52,7 @@ class ValidateCli(object):
         kvstore.ValidateCmd(cli_opts).run()
 
 
-class PrefixesCli(object):
+class PrefixesCli:
     @click.command()
     @click.option(
         "--nodes",
@@ -82,7 +82,7 @@ class PrefixesCli(object):
         kvstore.PrefixesCmd(cli_opts).run(nodes_set, json, prefix, client_type)
 
 
-class KeysCli(object):
+class KeysCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.option("--prefix", default="", help="string to filter keys")
@@ -97,7 +97,7 @@ class KeysCli(object):
         kvstore.KeysCmd(cli_opts).run(json, prefix, originator, ttl)
 
 
-class KeyValsCli(object):
+class KeyValsCli:
     @click.command()
     @click.argument("keys", nargs=-1, required=True)
     @click.pass_obj
@@ -107,7 +107,7 @@ class KeyValsCli(object):
         kvstore.KeyValsCmd(cli_opts).run(keys)
 
 
-class NodesCli(object):
+class NodesCli:
     @click.command()
     @click.pass_obj
     def nodes(cli_opts):  # noqa: B902
@@ -116,7 +116,7 @@ class NodesCli(object):
         kvstore.NodesCmd(cli_opts).run()
 
 
-class AreasCli(object):
+class AreasCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
@@ -125,7 +125,7 @@ class AreasCli(object):
         kvstore.Areas(cli_opts).run(json)
 
 
-class KvCompareCli(object):
+class KvCompareCli:
     @click.command()
     @click.option(
         "--nodes",
@@ -141,7 +141,7 @@ class KvCompareCli(object):
         kvstore.KvCompareCmd(cli_opts).run(nodes)
 
 
-class PeersCli(object):
+class PeersCli:
     @click.command()
     @click.pass_obj
     def peers(cli_opts):  # noqa: B902
@@ -150,7 +150,7 @@ class PeersCli(object):
         kvstore.PeersCmd(cli_opts).run()
 
 
-class EraseKeyCli(object):
+class EraseKeyCli:
     @click.command()
     @click.argument("key")
     @click.pass_obj
@@ -160,7 +160,7 @@ class EraseKeyCli(object):
         kvstore.EraseKeyCmd(cli_opts).run(key)
 
 
-class SetKeyCli(object):
+class SetKeyCli:
     @click.command()
     @click.argument("key")
     @click.argument("value")
@@ -184,7 +184,7 @@ class SetKeyCli(object):
         kvstore.SetKeyCmd(cli_opts).run(key, value, originator, version, ttl)
 
 
-class KvSignatureCli(object):
+class KvSignatureCli:
     @click.command()
     @click.option(
         "--prefix",
@@ -203,7 +203,7 @@ class KvSignatureCli(object):
         kvstore.KvSignatureCmd(cli_opts).run(prefix)
 
 
-class SnoopCli(object):
+class SnoopCli:
     @click.command()
     @click.option("--delta/--no-delta", default=True, help="Output incremental changes")
     @click.option("--ttl/--no-ttl", default=False, help="Print ttl updates")
@@ -263,7 +263,7 @@ class SnoopCli(object):
         )
 
 
-class SummaryCli(object):
+class SummaryCli:
     default_area_list: List[str] = []
 
     @click.command()
@@ -283,7 +283,7 @@ class SummaryCli(object):
         kvstore.SummaryCmd(cli_opts).run(set(area))
 
 
-class StreamSummaryCli(object):
+class StreamSummaryCli:
     @click.command()
     @click.pass_obj
     def stream_summary(cli_opts):  # noqa: B902
