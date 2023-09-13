@@ -200,6 +200,9 @@ class PrefixManager final : public OpenrEventBase {
           typeFilter);
 
  private:
+  // initialize counters
+  void initCounters() noexcept;
+
   // Process thrift publication from KvStore.
   void processPublication(thrift::Publication&& thriftPub);
 

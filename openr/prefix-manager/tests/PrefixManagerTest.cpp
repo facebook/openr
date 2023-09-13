@@ -416,6 +416,18 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
   evb.run();
 }
 
+TEST_F(PrefixManagerTestFixture, CounterInitialization) {
+  auto counters = fb303::fbData->getCounters();
+
+  // Verify the counter keys exist
+  ASSERT_TRUE(counters.count("prefix_manager.route_advertisements.sum"));
+  ASSERT_TRUE(counters.count("prefix_manager.route_withdraws.sum"));
+
+  // Verify the value of counter keys
+  EXPECT_EQ(0, counters.at("prefix_manager.route_advertisements.sum"));
+  EXPECT_EQ(0, counters.at("prefix_manager.route_withdraws.sum"));
+}
+
 /**
  * Test prefix advertisement in KvStore with multiple clients.
  * NOTE: Priority LOOPBACK > DEFAULT > BGP

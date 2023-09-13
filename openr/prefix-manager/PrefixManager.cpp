@@ -79,6 +79,8 @@ PrefixManager::PrefixManager(
     areaToPolicy_.emplace(areaId, areaConf.getImportPolicyName());
   }
 
+  initCounters();
+
   // Create throttled update state
   syncKvStoreThrottled_ = std::make_unique<AsyncThrottle>(
       getEvb(), Constants::kKvStoreSyncThrottleTimeout, [this]() noexcept {
@@ -1629,6 +1631,14 @@ PrefixManager::storeProgrammedRoutes(
 
   // schedule `syncKvStore` after throttled timeout
   syncKvStoreThrottled_->operator()();
+}
+
+void
+PrefixManager::initCounters() noexcept {
+  fb303::fbData->addStatExportType(
+      "prefix_manager.route_advertisements", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "prefix_manager.route_withdraws", fb303::SUM);
 }
 
 namespace {
