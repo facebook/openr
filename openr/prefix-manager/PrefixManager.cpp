@@ -359,6 +359,10 @@ PrefixManager::buildOriginatedPrefixes(
             std::move(unicastEntry),
             std::unordered_set<folly::CIDRNetwork>{}));
   }
+  fb303::fbData->addStatValue(
+      "prefix_manager.originated_routes",
+      originatedPrefixDb_.size(),
+      fb303::SUM);
 
   // Publish static routes for config originated prefixes. This makes sure
   // initial RIB/FIB after warmboot still includes routes for config originated
@@ -1639,6 +1643,8 @@ PrefixManager::initCounters() noexcept {
       "prefix_manager.route_advertisements", fb303::SUM);
   fb303::fbData->addStatExportType(
       "prefix_manager.route_withdraws", fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "prefix_manager.originated_routes", fb303::SUM);
 }
 
 namespace {
