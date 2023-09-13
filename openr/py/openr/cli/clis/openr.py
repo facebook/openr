@@ -9,29 +9,41 @@
 import click
 from bunch import Bunch
 from openr.cli.clis.baseGroup import deduceCommandGroup
+from openr.cli.clis.config import ConfigShowCli
 from openr.cli.clis.decision import (
     DecisionAdjCli,
     DecisionRibPolicyCli,
     ReceivedRoutesCli,
 )
 from openr.cli.clis.fib import FibMplsRoutesCli, FibUnicastRoutesCli
+from openr.cli.clis.kvstore import PeersCli, SummaryCli
 from openr.cli.clis.lm import LMLinksCli
-from openr.cli.clis.prefix_mgr import AdvertisedRoutesCli
+from openr.cli.clis.prefix_mgr import AdvertisedRoutesCli, OriginatedRoutesCli
 from openr.cli.commands import openr
 from openr.cli.utils.options import breeze_option
 
 
 class OpenrCli:
     def __init__(self) -> None:
+        # prefixmgr
+        self.openr.add_command(OriginatedRoutesCli().show, name="originated-routes")
         self.openr.add_command(AdvertisedRoutesCli().show, name="advertised-routes")
+        # decision
         self.openr.add_command(DecisionRibPolicyCli().show, name="rib-policy")
+        self.openr.add_command(DecisionAdjCli().adj, name="neighbors")
+        self.openr.add_command(ReceivedRoutesCli().show, name="received-routes")
+        # fib
         self.openr.add_command(FibMplsRoutesCli().routes, name="mpls-routes")
         self.openr.add_command(FibUnicastRoutesCli().routes, name="unicast-routes")
-        self.openr.add_command(DecisionAdjCli().adj, name="neighbors")
+        # lm
         self.openr.add_command(LMLinksCli().links, name="interfaces")
-        self.openr.add_command(ReceivedRoutesCli().show, name="received-routes")
+        # kvstore
+        self.openr.add_command(SummaryCli().summary, name="summary")
+        self.openr.add_command(PeersCli().peers, name="peers")
+        # openr
         self.openr.add_command(VersionCli().version, name="version")
         self.openr.add_command(OpenrValidateCli().validate, name="validate")
+        self.openr.add_command(ConfigShowCli().show, name="config")
 
     @click.group(cls=deduceCommandGroup)
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
