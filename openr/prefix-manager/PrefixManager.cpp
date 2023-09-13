@@ -543,6 +543,9 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
                    << "(Type, PrefixEntry): (" << toString(type) << ", "
                    << toString(*tPrefixEntry, true) << "), hit term ("
                    << hitPolicyName << ")";
+        fb303::fbData->addStatValue("prefix_manager.rejected", 1, fb303::SUM);
+        fb303::fbData->addStatValue(
+            fmt::format("prefix_manager.rejected.{}", toArea), 1, fb303::SUM);
         continue;
       }
 
@@ -568,9 +571,14 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
 
     fb303::fbData->addStatValue(
         "prefix_manager.route_advertisements", 1, fb303::SUM);
+    fb303::fbData->addStatValue(
+        fmt::format("prefix_manager.route_advertisements.{}", toArea),
+        1,
+        fb303::SUM);
     XLOG(DBG1) << "[Prefix Advertisement] "
                << "Area: " << toArea << ", "
                << "Type: " << toString(type) << ", "
+               << toString(*postPolicyTPrefixEntry->prefix())
                << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
     areasToUpdate.emplace(toArea);
   }
@@ -1645,6 +1653,14 @@ PrefixManager::initCounters() noexcept {
       "prefix_manager.route_withdraws", fb303::SUM);
   fb303::fbData->addStatExportType(
       "prefix_manager.originated_routes", fb303::SUM);
+  fb303::fbData->addStatExportType("prefix_manager.rejected", fb303::SUM);
+  for (auto const& area : allAreaIds()) {
+    fb303::fbData->addStatExportType(
+        fmt::format("prefix_manager.route_advertisements.{}", area),
+        fb303::SUM);
+    fb303::fbData->addStatExportType(
+        fmt::format("prefix_manager.rejected.{}", area), fb303::SUM);
+  }
 }
 
 namespace {

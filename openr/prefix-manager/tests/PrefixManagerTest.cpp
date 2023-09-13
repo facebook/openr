@@ -423,11 +423,13 @@ TEST_F(PrefixManagerTestFixture, CounterInitialization) {
   ASSERT_TRUE(counters.count("prefix_manager.route_advertisements.sum"));
   ASSERT_TRUE(counters.count("prefix_manager.route_withdraws.sum"));
   ASSERT_TRUE(counters.count("prefix_manager.originated_routes.sum"));
+  ASSERT_TRUE(counters.count("prefix_manager.rejected.sum"));
 
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("prefix_manager.route_advertisements.sum"));
   EXPECT_EQ(0, counters.at("prefix_manager.route_withdraws.sum"));
   EXPECT_EQ(0, counters.at("prefix_manager.originated_routes.sum"));
+  EXPECT_EQ(0, counters.at("prefix_manager.rejected.sum"));
 }
 
 /**
