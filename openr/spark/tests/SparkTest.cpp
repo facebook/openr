@@ -283,11 +283,11 @@ class InitializationTestFixture : public SimpleSparkFixture {
 };
 
 /*
- * This is the test fixture used for Open/R Initialization sequence
- * testing. Config will be explicitly overridden and more test cases
- * will be added.
+ * This test fixture is used for negotiation purpose check with 2 different
+ * spark configs to make sure handshake message exchange will honor the shorter
+ * duration of hold time/keepalive.
  */
-class SparkConfigFixture : public SimpleSparkFixture {
+class SparkHandshakeConfigFixture : public SimpleSparkFixture {
  protected:
   void
   createConfig() override {
@@ -295,11 +295,14 @@ class SparkConfigFixture : public SimpleSparkFixture {
     auto tConfig2 = getBasicOpenrConfig(nodeName2_);
     // ATTN: specify different hold_time in purpose
     auto sparkConfig1 = *tConfig1.spark_config();
-    sparkConfig1.hold_time_s() = 4;
+    sparkConfig1.hold_time_s() = 3;
+    sparkConfig1.keepalive_time_s() = 1;
     tConfig1.spark_config() = sparkConfig1;
 
     auto sparkConfig2 = *tConfig2.spark_config();
-    sparkConfig2.hold_time_s() = 2;
+    sparkConfig2.hold_time_s() = 18;
+    sparkConfig2.keepalive_time_s() = 6;
+    sparkConfig2.graceful_restart_time_s() = 24;
     tConfig2.spark_config() = sparkConfig2;
 
     config1_ = std::make_shared<Config>(tConfig1);
@@ -307,7 +310,24 @@ class SparkConfigFixture : public SimpleSparkFixture {
   }
 };
 
-TEST_F(SparkConfigFixture, MinHeartbeatHoldTimerTest) {
+TEST_F(SparkHandshakeConfigFixture, MinKeepAliveTimerTest) {
+  // create 2 Spark instances with proper config and connect them
+  createAndConnect();
+
+  // should NOT receive any event( e.g.NEIGHBOR_DOWN)
+  const auto holdTime1 =
+      std::chrono::seconds(*node1_->getSparkConfig().hold_time_s());
+  const auto holdTime2 =
+      std::chrono::seconds(*node2_->getSparkConfig().hold_time_s());
+  auto maxHoldTime = std::max(holdTime1, holdTime2);
+
+  EXPECT_FALSE(
+      node1_->waitForEvents(NB_DOWN, maxHoldTime, maxHoldTime * 2).has_value());
+  EXPECT_FALSE(
+      node2_->waitForEvents(NB_DOWN, maxHoldTime, maxHoldTime * 2).has_value());
+}
+
+TEST_F(SparkHandshakeConfigFixture, MinHoldTimerTest) {
   // create 2 Spark instances with proper config and connect them
   createAndConnect();
 

@@ -279,8 +279,6 @@ Spark::Spark(
           *config->getSparkConfig().min_neighbor_discovery_interval_s())),
       maxNeighborDiscoveryInterval_(std::chrono::seconds(
           *config->getSparkConfig().max_neighbor_discovery_interval_s())),
-      keepAliveTime_(
-          std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
       handshakeHoldTime_(
           std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
       holdTime_(std::chrono::seconds(*config->getSparkConfig().hold_time_s())),
@@ -293,10 +291,8 @@ Spark::Spark(
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
       config_(std::move(config)) {
-  CHECK(gracefulRestartTime_ >= 3 * keepAliveTime_)
-      << "Keepalive time must be less than GR-time.";
-  CHECK(keepAliveTime_ > std::chrono::milliseconds(0))
-      << "heartbeatMsg interval can't be 0";
+  CHECK(gracefulRestartTime_ >= holdTime_)
+      << "Heartbeat hold-time must be less than GR hold-time.";
   CHECK(helloTime_ > std::chrono::milliseconds(0))
       << "helloMsg interval can't be 0";
   CHECK(fastInitHelloTime_ > std::chrono::milliseconds(0))
@@ -1485,6 +1481,24 @@ Spark::getActiveNeighborCount() {
 }
 
 void
+Spark::updateKeepAliveTimer(
+    std::chrono::milliseconds updatedHoldTime, const std::string& ifName) {
+  // heartBeatTimer was started when intf came up
+  auto heartbeatTimer = folly::AsyncTimeout::make(
+      *getEvb(), [this, ifName, updatedHoldTime]() noexcept {
+        sendHeartbeatMsg(ifName);
+        // schedule heartbeatTimers periodically as soon as intf is UP
+        ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+            addJitter<std::chrono::milliseconds>(updatedHoldTime / 3));
+      });
+
+  // update the heartbeat timer
+  ifNameToHeartbeatTimers_.insert_or_assign(ifName, std::move(heartbeatTimer));
+  ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+      addJitter<std::chrono::milliseconds>(updatedHoldTime / 3));
+}
+
+void
 Spark::processHelloMsg(
     thrift::SparkHelloMsg const& helloMsg,
     std::string const& ifName,
@@ -1556,7 +1570,7 @@ Spark::processHelloMsg(
             ifName, // interface name which neighbor is discovered on
             remoteIfName, // remote interface on neighborNode
             remoteSeqNum, // seqNum reported by neighborNode
-            keepAliveTime_, // stepDetector sample period
+            holdTime_ / 3, // stepDetector sample period
             std::move(rttChangeCb),
             areaId.value()));
     numTotalNeighbors_++;
@@ -1811,6 +1825,13 @@ Spark::processHandshakeMsg(
   neighbor.gracefulRestartHoldTime = std::min(
       std::chrono::milliseconds(*handshakeMsg.gracefulRestartTime()),
       gracefulRestartTime_);
+
+  // peer has a lower hold time value. We will reconfigure the heartbeat timer
+  // to honor a higher frequency of sending heartbeat.
+  // TODO: we can consider using fiber task/corotine to manage the keepalive.
+  if (neighbor.heartbeatHoldTime < holdTime_) {
+    updateKeepAliveTimer(neighbor.heartbeatHoldTime, ifName);
+  }
 
   // v4 subnet validation if v4 is enabled. If we're using v4-over-v6 we no
   // longer need to validate the address reported by neighbor node
@@ -2267,12 +2288,12 @@ Spark::addInterface(
             sendHeartbeatMsg(ifName);
             // schedule heartbeatTimers periodically as soon as intf is UP
             ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
-                addJitter<std::chrono::milliseconds>(keepAliveTime_));
+                addJitter<std::chrono::milliseconds>(holdTime_ / 3));
           });
 
       ifNameToHeartbeatTimers_.emplace(ifName, std::move(heartbeatTimer));
       ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
-          addJitter<std::chrono::milliseconds>(keepAliveTime_));
+          addJitter<std::chrono::milliseconds>(holdTime_ / 3));
     }
 
     auto timePoint = std::chrono::steady_clock::now();

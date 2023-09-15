@@ -432,6 +432,10 @@ class Spark final : public OpenrEventBase {
   // complete.
   bool isInitialNeighborDiscoveryComplete();
 
+  // Util method to update keepalive method/timer
+  void updateKeepAliveTimer(
+      std::chrono::milliseconds updatedHoldTime, const std::string& ifName);
+
   //
   // Private state
   //
@@ -460,9 +464,6 @@ class Spark final : public OpenrEventBase {
   // Spark must notify LinkMonitor that neighbor discovery process is
   // complete.
   const std::chrono::milliseconds maxNeighborDiscoveryInterval_{0};
-
-  // Spark heartbeat msg sendout interval (keepAliveTime)
-  const std::chrono::milliseconds keepAliveTime_{0};
 
   // Spark negotiate stage hold time
   const std::chrono::milliseconds handshakeHoldTime_{0};
