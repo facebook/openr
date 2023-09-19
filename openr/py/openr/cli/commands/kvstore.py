@@ -1369,10 +1369,11 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         self,
         publications: Dict[str, Publication],
         ttl: int,
-        threshold: float = 0.75,
+        threshold: float = 0.5,
     ) -> Dict[str, Publication]:
         """
-        Checks if the ttl of each key is above 3/4 of the max ttl
+        Checks if the ttl of each key is above 1/2 of the max ttl,
+        We allow one miss since drain could delay the refresh
         """
 
         area_to_invalid_keyvals = {}
@@ -1380,8 +1381,6 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
             invalid_keyvals = {
                 k: v
                 for (k, v) in publication.keyVals.items()
-                # - the left ttl should be over ttl * 3/4 given refreshing
-                #   interval is every ttl/4;
                 # - ttl can be INFINITY(represented by -1). Skip alerting;
                 if (v.ttl >= 0 and v.ttl < threshold * ttl)
                 or (v.ttl < 0 and v.ttl != Consts.CONST_TTL_INF)
@@ -1396,7 +1395,7 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         self,
         area_to_invalid_keys: Dict[str, Publication],
         ttl: int,
-        threshold: float = 0.75,
+        threshold: float = 0.5,
     ) -> None:
         """
         Prints result of the ttl check along with information about keys with too low ttl

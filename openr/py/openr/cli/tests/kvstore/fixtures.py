@@ -52,7 +52,7 @@ class MockedInvalidKeyVals(Enum):
         version=1,
         originatorId=NodeNames.MOCKED_NODE1.value,
         value=None,
-        ttl=2000000,
+        ttl=1700000,
         ttlVersion=1,
         hash=12345,
     )
@@ -60,7 +60,7 @@ class MockedInvalidKeyVals(Enum):
         version=2,
         originatorId=NodeNames.MOCKED_NODE2.value,
         value=None,
-        ttl=2599990,
+        ttl=1699990,
         ttlVersion=2,
         hash=-23456,
     )
@@ -68,7 +68,7 @@ class MockedInvalidKeyVals(Enum):
         version=2,
         originatorId=NodeNames.MOCKED_NODE1.value,
         value=None,
-        ttl=7400000,
+        ttl=4900000,
         ttlVersion=6,
         hash=34567,
     )
