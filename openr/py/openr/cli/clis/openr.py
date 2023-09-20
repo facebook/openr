@@ -31,7 +31,7 @@ class OpenrCli:
         # decision
         self.openr.add_command(DecisionRibPolicyCli().show, name="rib-policy")
         self.openr.add_command(DecisionAdjCli().adj, name="neighbors")
-        self.openr.add_command(ReceivedRoutesCli().show, name="received-routes")
+        self.openr.add_command(ReceivedRoutesCli().show, name="table")
         # fib
         self.openr.add_command(FibMplsRoutesCli().routes, name="mpls-routes")
         self.openr.add_command(FibUnicastRoutesCli().routes, name="unicast-routes")
