@@ -43,21 +43,6 @@ def get_advertised_route_filter(
     )
 
 
-def to_thrift_prefixes(
-    prefixes: List[str],
-    prefix_type: PrefixType,
-    forwarding_type: PrefixForwardingType = PrefixForwardingType.IP,
-) -> List[PrefixEntry]:
-    return [
-        PrefixEntry(
-            prefix=ipnetwork.ip_str_to_prefix(prefix),
-            type=prefix_type,
-            forwardingType=forwarding_type,
-        )
-        for prefix in prefixes
-    ]
-
-
 def to_thrift_prefix_type(prefix_type: str) -> PrefixType:
     PREFIX_TYPE_TO_VALUES = {e.name: e for e in PrefixType}
     if prefix_type.upper() not in PREFIX_TYPE_TO_VALUES:
@@ -70,53 +55,8 @@ def to_thrift_prefix_type(prefix_type: str) -> PrefixType:
     return PREFIX_TYPE_TO_VALUES[prefix_type.upper()]
 
 
-def to_thrift_forwarding_type(forwarding_type: str) -> PrefixForwardingType:
-    FORWARDING_TYPE_TO_VALUES = {e.name: e for e in PrefixForwardingType}
-    if forwarding_type not in FORWARDING_TYPE_TO_VALUES:
-        raise Exception(
-            "Unknown forwarding type {}. Use any of {}".format(
-                forwarding_type, ", ".join(FORWARDING_TYPE_TO_VALUES.keys())
-            )
-        )
-    return FORWARDING_TYPE_TO_VALUES[forwarding_type]
-
-
 class PrefixMgrCmd(OpenrCtrlCmd):
     pass
-
-
-class WithdrawCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        prefix_type: str,
-        *args,
-        **kwargs,
-    ) -> None:
-        tprefixes = to_thrift_prefixes(prefixes, to_thrift_prefix_type(prefix_type))
-        await client.withdrawPrefixes(tprefixes)
-        print(f"Withdrew {len(prefixes)} prefixes")
-
-
-class SyncCmd(PrefixMgrCmd):
-    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
-    async def _run(
-        self,
-        client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        prefix_type: str,
-        forwarding_type: str,
-        *args,
-        **kwargs,
-    ) -> None:
-        tprefix_type = to_thrift_prefix_type(prefix_type)
-        tprefixes = to_thrift_prefixes(
-            prefixes, tprefix_type, to_thrift_forwarding_type(forwarding_type)
-        )
-        await client.syncPrefixesByType(tprefix_type, tprefixes)
-        print(f"Synced {len(prefixes)} prefixes with type {prefix_type}")
 
 
 class AdvertisedRoutesCmd(PrefixMgrCmd):

@@ -16,8 +16,6 @@ from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 
 class PrefixMgrCli:
     def __init__(self):
-        self.prefixmgr.add_command(WithdrawCli().withdraw)
-        self.prefixmgr.add_command(SyncCli().sync)
         self.prefixmgr.add_command(AdvertisedRoutesCli().show)
         self.prefixmgr.add_command(OriginatedRoutesCli().show)
         self.prefixmgr.add_command(PrefixMgrValidateCli().validate)
@@ -27,45 +25,6 @@ class PrefixMgrCli:
     def prefixmgr(ctx):  # noqa: B902
         """CLI tool to peek into Prefix Manager module."""
         pass
-
-
-class WithdrawCli(object):
-    @click.command()
-    @click.argument("prefixes", nargs=-1)
-    @click.option(
-        "--prefix-type",
-        "-t",
-        default="BREEZE",
-        help="Type or client-ID associated with prefix.",
-    )
-    @click.pass_obj
-    def withdraw(
-        cli_opts: bunch.Bunch, prefixes: List[str], prefix_type: str  # noqa: B902
-    ):
-        """Withdraw the prefixes being advertised from this node"""
-
-        prefix_mgr.WithdrawCmd(cli_opts).run(prefixes, prefix_type)
-
-
-class SyncCli(object):
-    @click.command()
-    @click.argument("prefixes", nargs=-1)
-    @click.option(
-        "--prefix-type",
-        "-t",
-        default="BREEZE",
-        help="Type or client-ID associated with prefix.",
-    )
-    @click.option(
-        "--forwarding-type",
-        default="IP",
-        help="Use label forwarding instead of IP forwarding in data path",
-    )
-    @click.pass_obj
-    def sync(cli_opts, prefixes, prefix_type, forwarding_type):  # noqa: B902
-        """Sync the prefixes from this node with specific type"""
-
-        prefix_mgr.SyncCmd(cli_opts).run(prefixes, prefix_type, forwarding_type)
 
 
 class AdvertisedRoutesCli(object):
