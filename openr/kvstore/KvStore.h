@@ -523,6 +523,9 @@ class KvStoreDb {
 
   // event loop
   OpenrEventBase* evb_{nullptr};
+
+  // vector to store all child fiber tasks
+  std::vector<folly::Future<folly::Unit>> kvStoreDbWorkers_;
 };
 
 /*
@@ -735,6 +738,9 @@ class KvStore final : public OpenrEventBase {
   // Boolean flag to indicate if kvStoreSynced signal is published in OpenR
   // initialization process.
   bool initialSyncSignalSent_{false};
+
+  // vector to store all child fiber tasks
+  std::vector<folly::Future<folly::Unit>> kvStoreWorkers_;
 };
 
 } // namespace openr
