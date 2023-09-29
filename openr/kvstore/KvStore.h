@@ -67,6 +67,11 @@ class KvStoreDb {
     return initialSyncCompleted_;
   }
 
+  inline bool
+  getIsStopped() const {
+    return isStopped_;
+  }
+
   // get all active (ttl-refreshable) self-originated key-vals
   SelfOriginatedKeyVals const&
   getSelfOriginatedKeyVals() const {
@@ -77,6 +82,7 @@ class KvStoreDb {
   getKeyValueMap() const {
     return kvStore_;
   }
+
   inline TtlCountdownQueue const&
   getTtlCountdownQueue() const {
     return ttlCountdownQueue_;
@@ -524,6 +530,9 @@ class KvStoreDb {
   // event loop
   OpenrEventBase* evb_{nullptr};
 
+  // Boolean flag to mark KvStoreDb terminated and not processing callbacks
+  std::atomic<bool> isStopped_{false};
+
   // vector to store all child fiber tasks
   std::vector<folly::Future<folly::Unit>> kvStoreDbWorkers_;
 };
@@ -554,6 +563,14 @@ class KvStore final : public OpenrEventBase {
   ~KvStore() override = default;
 
   void stop() override;
+
+  inline bool
+  getIsStopped(std::string const& area) {
+    if (not kvStoreDb_.count(area)) {
+      throw std::runtime_error(std::string{"area not found"});
+    }
+    return kvStoreDb_.at(area).getIsStopped();
+  }
 
   /*
    * [Open/R Initialization]

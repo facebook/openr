@@ -38,8 +38,9 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
 
   void
   TearDown() override {
-    kvStoreWrapper_->stop();
+    // release handler_ first with kvStoreWrapper_'s ref count
     handler_.reset();
+    kvStoreWrapper_->stop();
   }
 
  protected:

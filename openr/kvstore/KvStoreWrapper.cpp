@@ -62,11 +62,12 @@ KvStoreWrapper<ClientType>::run() noexcept {
 template <class ClientType>
 void
 KvStoreWrapper<ClientType>::stop() {
-  XLOG(DBG1) << "Stopping KvStoreWrapper";
   // Return immediately if not running
-  if (!kvStore_->isRunning()) {
+  if (not kvStore_->isRunning()) {
     return;
   }
+
+  XLOG(DBG1) << fmt::format("Stopping kvStore: {}", nodeId_);
 
   // Close queue
   kvStoreUpdatesQueue_.close();
@@ -78,10 +79,10 @@ KvStoreWrapper<ClientType>::stop() {
     stopThriftServer();
   }
 
-  // Stop kvstore
+  // Stop kvstore. Destructor will automatically be called when out-of-scope
   kvStore_->stop();
   kvStoreThread_.join();
-  XLOG(DBG1) << "KvStoreWrapper stopped.";
+  XLOG(DBG1) << fmt::format("Successfully stopped kvStore: {}", nodeId_);
 }
 
 template <class ClientType>

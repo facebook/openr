@@ -73,11 +73,9 @@ class KvStoreTestFixture : public ::testing::Test {
 
   void
   TearDown() override {
-    // nothing to do
     for (auto& store : stores_) {
       store->stop();
     }
-    stores_.clear();
   }
 
   /**
@@ -208,8 +206,6 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
   EXPECT_EQ(valueFromStore.value(), value);
   EXPECT_EQ(*valueFromStore.version(), 1);
   EXPECT_EQ(*valueFromStore.ttlVersion(), 0);
-
-  kvStore_->stop();
 }
 
 /**
@@ -303,9 +299,6 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix2), 1);
   EXPECT_EQ(keysFromStore.count(prefix3), 1);
   EXPECT_EQ(keysFromStore.count(prefix4), 1);
-
-  // Cleanup.
-  kvStore_->stop();
 }
 
 #if FOLLY_HAS_COROUTINES
@@ -391,9 +384,6 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix2), 1);
   EXPECT_EQ(keysFromStore.count(prefix3), 1);
   EXPECT_EQ(keysFromStore.count(prefix4), 1);
-
-  // Cleanup.
-  kvStore_->stop();
 }
 #endif
 
@@ -866,8 +856,6 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   counters = fb303::fbData->getCounters();
   EXPECT_EQ(2, counters.at("kvstore.cmd_key_set.count"));
   EXPECT_EQ(2, counters.at("kvstore.received_publications.count"));
-
-  kvStore->stop();
 }
 
 //
@@ -998,8 +986,6 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
 
   LOG(INFO) << "Counters received, yo";
-  kvStore->stop();
-  LOG(INFO) << "KvStore thread finished";
 }
 
 /**
@@ -1206,8 +1192,6 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(*value.ttlVersion() + 3, *getRes->ttlVersion());
     EXPECT_EQ(value.value(), getRes->value());
   }
-
-  kvStore->stop();
 }
 
 /**
@@ -1859,9 +1843,6 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   EXPECT_EQ(
       expectedKeyVals,
       myStore->dumpAll(kTestingAreaName, std::move(kvFilters)));
-
-  // cleanup
-  myStore->stop();
 }
 
 /**

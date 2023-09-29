@@ -34,9 +34,7 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
   TearDown() override {
     // close queue before stopping kvstore so fiber task can end
     kvRequestQueue_.close();
-
     kvStore_->stop();
-    kvStore_.reset();
   }
 
   /**

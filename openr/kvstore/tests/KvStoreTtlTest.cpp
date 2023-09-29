@@ -31,11 +31,9 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
 
   void
   TearDown() override {
-    // nothing to do
     for (auto& store : stores_) {
       store->stop();
     }
-    stores_.clear();
   }
 
   /**

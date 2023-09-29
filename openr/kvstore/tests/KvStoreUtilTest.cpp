@@ -45,9 +45,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
     // ATTN: kvStoreUpdatesQueue must be closed before destructing
     //       KvStoreClientInternal as fiber future is depending on RQueue
     kvStoreWrapper1_->stop();
-    kvStoreWrapper1_.reset();
     kvStoreWrapper2_->stop();
-    kvStoreWrapper2_.reset();
   }
 
   // var used to conmmunicate to kvStore through openrCtrl thrift server

@@ -34,11 +34,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     // tear down kvStore instances
     for (auto& store : stores_) {
       store->stop();
-      store.reset();
     }
-
-    // clean up vector content
-    stores_.clear();
   }
 
   void
@@ -247,7 +243,6 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     store2.reset(); // shared_ptr needs to be cleaned up everywhere!
     stores_.back()->closeQueue();
     stores_.back()->stop();
-    stores_.back().reset();
     stores_.pop_back();
 
     // recreate store2 and corresponding thriftServer
@@ -333,6 +328,22 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   // verify no initial sync event
   EXPECT_EQ(1, store1->dumpAll(kTestingAreaName).size());
   EXPECT_EQ(1, store2->dumpAll(kTestingAreaName).size());
+}
+
+TEST_F(KvStoreThriftTestFixture, KvStoreTermination) {
+  const std::string node1{"node-1"};
+
+  createKvStore(node1);
+  auto store = stores_.back();
+  EXPECT_FALSE(store->getKvStore()->getIsStopped(kTestingAreaName));
+
+  // random areaId will throw exception
+  EXPECT_THROW(
+      store->getKvStore()->getIsStopped("random-areaId"), std::runtime_error);
+
+  // trigger termination/stop
+  store->stop();
+  EXPECT_TRUE(store->getKvStore()->getIsStopped(kTestingAreaName));
 }
 
 //

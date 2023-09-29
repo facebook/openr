@@ -107,30 +107,36 @@ KvStore<ClientType>::KvStore(
 template <class ClientType>
 void
 KvStore<ClientType>::stop() {
-  XLOG(DBG1) << fmt::format(
-      "[Exit] Send termination signal to stop {} tasks.", getFiberTaskNum());
-
   const auto num = kvStoreDb_.size();
-  XLOG(DBG1) << fmt::format("[Exit] Terminating {} kvStoreDbs", num);
+
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Stopping {} kvStoreDbs with {} tasks.", num, getFiberTaskNum());
 
   /*
-   * NOTE: destructor of every instance inside `kvStoreDb_` will gracefully
-   * exit and wait for all pending thrift requests to be processed before
-   * eventbase stops.
+   * NOTE: mark each individual kvStoreDb terminated and cleanup:
+   *  - AsyncThrottle
+   *  - AsyncTimeout
+   *  - release all KvStorePeer and thrift client resource
+   *  -etc.
    */
   for (auto& [area, kvDb] : kvStoreDb_) {
     kvDb.stop();
   }
 
-  XLOG(DBG1)
-      << fmt::format("[Exit] Successfully terminated {} kvStoreDbs", num);
+  XLOG(DBG1) << fmt::format("[Exit] Successfully stop {} kvStoreDbs", num);
 
   // waits for all child fibers to complete
   folly::collectAll(kvStoreWorkers_.begin(), kvStoreWorkers_.end()).get();
 
+  // NOTE: folly::AsyncTimeout and AsyncThrottle must be tear-down in evb loop
+  getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this]() { counterUpdateTimer_.reset(); });
+
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "[Exit] Successfully stopped KvStore eventbase.";
+
+  XLOG(DBG1) << fmt::format(
+      "[Exit] Successfully stopped KvStore evb along with {} kvStoreDb.", num);
 }
 
 template <class ClientType>
@@ -1166,10 +1172,11 @@ KvStoreDb<ClientType>::KvStoreDb(
 template <class ClientType>
 void
 KvStoreDb<ClientType>::stop() {
-  XLOG(DBG1) << fmt::format(
-      "[Exit] {} Send termination signal to stop {} tasks.",
-      AreaTag(),
-      evb_->getFiberTaskNum());
+  XLOG(DBG1)
+      << fmt::format("[Exit] Mark kvStoreDb with area {} stopped", AreaTag());
+
+  // Mark this kvStoreDb stopped to no longer processing data
+  isStopped_ = true;
 
   // Send stop signal for internal fibers
   floodTopoStopSignal_.post();
@@ -1190,6 +1197,10 @@ KvStoreDb<ClientType>::stop() {
     selfOriginatedKeyTtlTimer_.reset();
     ttlCountdownTimer_.reset();
     thriftSyncTimer_.reset();
+
+    if (kvParams_.floodRate) {
+      pendingPublicationTimer_.reset();
+    }
 
     // Clean up peer with client connection
     thriftPeers_.clear();
@@ -1879,6 +1890,11 @@ KvStoreDb<ClientType>::processThriftSuccess(
     std::string const& peerName,
     thrift::Publication&& pub,
     std::chrono::milliseconds timeDelta) {
+  // check if this kvStore is destructed and stop processing callbacks
+  if (isStopped_) {
+    return;
+  }
+
   // check if it is valid peer(i.e. peer removed in process of syncing)
   if (not thriftPeers_.count(peerName)) {
     XLOG(WARNING)
@@ -2013,6 +2029,11 @@ KvStoreDb<ClientType>::processThriftFailure(
     std::string const& peerName,
     folly::fbstring const& exceptionStr,
     std::chrono::milliseconds timeDelta) {
+  // check if this kvStore is destructed and stop processing callbacks
+  if (isStopped_) {
+    return;
+  }
+
   // check if it is valid peer(i.e. peer removed in process of syncing)
   auto it = thriftPeers_.find(peerName);
   if (it == thriftPeers_.end()) {
