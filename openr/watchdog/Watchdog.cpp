@@ -116,7 +116,9 @@ Watchdog::monitorThreadStatus() {
 
     if (timeDiff > threadTimeout_) {
       XLOG(WARNING) << fmt::format(
-          "[Dead Thread Detector] {} thread detected to be dead.", name);
+          "[Dead Thread Detector] {} thread detected to be dead. Time since last activity: {}",
+          name,
+          timeDiff.count());
       stuckThreads.emplace_back(name);
     }
   }
