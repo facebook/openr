@@ -16,6 +16,7 @@ namespace wiki Open_Routing.Thrift_APIs.Types
 include "openr/if/Network.thrift"
 include "openr/if/OpenrConfig.thrift"
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/hack.thrift"
 
 /*
  * [Spark Neighbor FSM]
@@ -585,6 +586,7 @@ struct LinkMonitorState {
    *
    * Custom metric override for an adjacency
    */
+  @hack.SkipCodegen{reason = "Invalid key type"}
   5: map<AdjKey, i32> adjMetricOverrides;
 
   /**
