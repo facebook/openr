@@ -2082,6 +2082,43 @@ Spark::sendHelloMsg(
 }
 
 void
+Spark::setupFastDiscoveryHelloTimer(std::string const& ifName) {
+  auto timePoint = std::chrono::steady_clock::now();
+
+  // NOTE: We do not send hello packet immediately after adding new interface
+  // this is due to the fact that it may not have yet configured a link-local
+  // address. The hello packet will be sent later and will have good chances
+  // of making it out if small delay is introduced.
+  auto helloTimer = folly::AsyncTimeout::make(
+      *getEvb(), [this, ifName, timePoint]() mutable noexcept {
+        bool inFastInitState = false;
+        // Under Spark context, hello pkt will be sent in relatively low
+        // frequency. However, when node comes up initially or restarting,
+        // send multiple helloMsg to promote to 'NEGOTIATE' state ASAP.
+        // To form adj, at least 2 helloMsg is needed( i.e. with second
+        // hello contain myNodeName_ info ). To give enough margin, send
+        // 3 times of necessary packets.
+        inFastInitState = (std::chrono::steady_clock::now() - timePoint) <=
+            6 * fastInitHelloTime_;
+
+        sendHelloMsg(ifName, inFastInitState);
+
+        // Schedule next run (add 20% variance)
+        // overriding timeoutPeriod if I am in fast initial state
+        std::chrono::milliseconds timeoutPeriod =
+            inFastInitState ? fastInitHelloTime_ : helloTime_;
+
+        ifNameToHelloTimers_.at(ifName)->scheduleTimeout(
+            addJitter<std::chrono::milliseconds>(timeoutPeriod));
+      });
+
+  // should be in fast init state when the node just starts
+  helloTimer->scheduleTimeout(
+      addJitter<std::chrono::milliseconds>(fastInitHelloTime_));
+  ifNameToHelloTimers_[ifName] = std::move(helloTimer);
+}
+
+void
 Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
   CHECK(event == thrift::InitializationEvent::PREFIX_DB_SYNCED) << fmt::format(
       "Unexpected initialization event: {}",
@@ -2104,26 +2141,34 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
 void
 Spark::processAddressEvent(AddressEvent&& event) {
   // Process Address Event reported by neighborMonitor(FSDB)
-  // [ATTN] We assume the only event received is neighbor_unresolvable
-
-  const auto& v6 = event.v6Addr;
+  const auto& v6Addr = event.v6Addr;
   const auto& ifName = event.ifName;
-  auto it = sparkNeighbors_.find(ifName);
 
-  // Find the unresolvable sparkNeighbor by comparing interface name
-  // and V6 address
-  if (it != sparkNeighbors_.end()) {
-    auto& ifNeighbors = it->second;
-    for (const auto& [name, neighbor] : ifNeighbors) {
-      if (neighbor.transportAddressV6 == v6) {
-        XLOG(INFO) << fmt::format(
-            "Bringing down neighbor {} on {} due to unreachability",
-            name,
-            ifName);
-        neighborDownWrapper(neighbor, ifName, name);
-        eraseSparkNeighbor(ifNeighbors, name);
-        return;
-      }
+  // DOWN -> UP. Perform fast neighbor discovery.
+  if (event.resolvable) {
+    XLOG(INFO) << fmt::format(
+        "Bringing up neighbor over {} with reachability resolved", ifName);
+    setupFastDiscoveryHelloTimer(ifName);
+    return;
+  }
+
+  // UP -> DOWN. Find the unresolvable neighbor by comparing ifName and address
+  auto it = sparkNeighbors_.find(ifName);
+  if (it == sparkNeighbors_.end()) {
+    // Skip processing since this is unknown neighbor
+    return;
+  }
+
+  auto& ifNeighbors = it->second;
+  for (const auto& [name, neighbor] : ifNeighbors) {
+    if (neighbor.transportAddressV6 == v6Addr) {
+      XLOG(INFO) << fmt::format(
+          "Bringing down neighbor {} over {} due to unreachability",
+          name,
+          ifName);
+      neighborDownWrapper(neighbor, ifName, name);
+      eraseSparkNeighbor(ifNeighbors, name);
+      return;
     }
   }
 }
@@ -2296,39 +2341,8 @@ Spark::addInterface(
           addJitter<std::chrono::milliseconds>(holdTime_ / 3));
     }
 
-    auto timePoint = std::chrono::steady_clock::now();
-
-    // NOTE: We do not send hello packet immediately after adding new interface
-    // this is due to the fact that it may not have yet configured a link-local
-    // address. The hello packet will be sent later and will have good chances
-    // of making it out if small delay is introduced.
-    auto helloTimer = folly::AsyncTimeout::make(
-        *getEvb(), [this, ifName, timePoint]() mutable noexcept {
-          bool inFastInitState = false;
-          // Under Spark context, hello pkt will be sent in relatively low
-          // frequency. However, when node comes up initially or restarting,
-          // send multiple helloMsg to promote to 'NEGOTIATE' state ASAP.
-          // To form adj, at least 2 helloMsg is needed( i.e. with second
-          // hello contain myNodeName_ info ). To give enough margin, send
-          // 3 times of necessary packets.
-          inFastInitState = (std::chrono::steady_clock::now() - timePoint) <=
-              6 * fastInitHelloTime_;
-
-          sendHelloMsg(ifName, inFastInitState);
-
-          // Schedule next run (add 20% variance)
-          // overriding timeoutPeriod if I am in fast initial state
-          std::chrono::milliseconds timeoutPeriod =
-              inFastInitState ? fastInitHelloTime_ : helloTime_;
-
-          ifNameToHelloTimers_.at(ifName)->scheduleTimeout(
-              addJitter<std::chrono::milliseconds>(timeoutPeriod));
-        });
-
-    // should be in fast init state when the node just starts
-    helloTimer->scheduleTimeout(
-        addJitter<std::chrono::milliseconds>(fastInitHelloTime_));
-    ifNameToHelloTimers_[ifName] = std::move(helloTimer);
+    // create hello timer over this interface with fast neighbor discovery
+    setupFastDiscoveryHelloTimer(ifName);
   }
 }
 

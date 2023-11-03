@@ -398,6 +398,9 @@ class Spark final : public OpenrEventBase {
   // process Address Event from NeighborMonitor
   void processAddressEvent(AddressEvent&& event);
 
+  // wrapper to setup hello timer per interface with fast neighbor discovery
+  void setupFastDiscoveryHelloTimer(std::string const& ifName);
+
   // Util function for state transition
   static thrift::SparkNeighState getNextState(
       std::optional<thrift::SparkNeighState> const& currState,
