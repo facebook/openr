@@ -62,7 +62,7 @@ const auto RESTART = thrift::SparkNeighState::RESTART;
 
 // Domain name (same for all Tests except in DomainTest)
 const std::string kDomainName("Fire_and_Blood");
-} // namespace
+}; // namespace
 
 class SparkFixture : public testing::Test {
  protected:

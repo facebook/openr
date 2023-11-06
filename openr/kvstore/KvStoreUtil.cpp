@@ -736,4 +736,4 @@ updatePublicationTtl(
     kv->second.ttl() = timeLeft.count() - ttlDecr.count();
   }
 }
-} // namespace openr
+}; // namespace openr
