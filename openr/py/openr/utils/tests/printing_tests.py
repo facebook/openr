@@ -8,7 +8,7 @@
 from openr.utils import printing
 
 
-if __name__ == "__main__":
+def main() -> None:
     data1 = [
         ["eb01.frc3", 126, "10.254.104.25", "fe80::21c:73ff:fed6:1718"],
         ["eb01.sjc1", 32, "10.254.105.34", "fe80::21c:73ff:dasg:3425"],
@@ -38,3 +38,7 @@ if __name__ == "__main__":
             data2, column_labels2, "A sample for peers table"
         )
     )
+
+
+if __name__ == "__main__":
+    main()  # pragma: no cover
