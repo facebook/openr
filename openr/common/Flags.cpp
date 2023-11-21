@@ -8,16 +8,6 @@
 #include <openr/common/Flags.h>
 
 DEFINE_string(config, "", "OpenR config file path");
-DEFINE_int32(bgp_thrift_port, 2029, "port for thrift service");
-DEFINE_string(
-    spr_ha_state_file,
-    "/dev/shm/spr_ha_state.txt",
-    "File in which HA stateful information is stored across bgp restarts");
-DEFINE_bool(bgp_enable_stateful_ha, true, "Is Bgp peer stateful HA required");
-DEFINE_bool(
-    enable_secure_thrift_server,
-    false,
-    "Flag to enable TLS for our thrift server");
 DEFINE_string(
     x509_cert_path,
     "",
@@ -45,17 +35,6 @@ DEFINE_string(
     "If we are running an SSL thrift server, this option specifies the "
     "eccCurveName for the associated wangle::SSLContextConfig");
 DEFINE_string(
-    tls_acceptable_peers,
-    "",
-    "A comma separated list of strings. Strings are x509 common names to "
-    "accept SSL connections from. If an empty string is provided, the server "
-    "will accept connections from any authenticated peer.");
-DEFINE_string(
     rib_policy_file,
     "/dev/shm/rib_policy.txt",
     "File in which thrift::RibPolicy is stored across Open/R restarts");
-
-DEFINE_int32(
-    stream_expire_time,
-    0,
-    "Server side streaming expiration timeout in millisecond. If 0, then it's infinite.");

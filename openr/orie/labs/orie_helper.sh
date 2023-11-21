@@ -43,8 +43,7 @@ elif [ "$1" == "start" ]; then
     "$openr_binary" \
         --config="$config" \
         --logtostderr \
-        --v=2 \
-        --enable_secure_thrift_server=false |& tee "/tmp/$(ip netns identify).log"
+        --v=2 |& tee "/tmp/$(ip netns identify).log"
     exit $?
 fi
 

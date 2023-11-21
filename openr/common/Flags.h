@@ -12,24 +12,13 @@
 // openr config file
 DECLARE_string(config);
 
-// migration workflow flags
-DECLARE_int32(bgp_thrift_port);
-
-// bgp stateful ha
-DECLARE_string(spr_ha_state_file);
-DECLARE_bool(bgp_enable_stateful_ha);
-
+// [TO_BE_DEPRECATED]
 // security related flags
-DECLARE_bool(enable_secure_thrift_server);
 DECLARE_string(x509_cert_path);
 DECLARE_string(x509_key_path);
 DECLARE_string(x509_ca_path);
 DECLARE_string(tls_ticket_seed_path);
 DECLARE_string(tls_ecc_curve_name);
-DECLARE_string(tls_acceptable_peers);
 
 // file storing thrift::RibPolicy
 DECLARE_string(rib_policy_file);
-
-// streaming related property
-DECLARE_int32(stream_expire_time);
