@@ -40,9 +40,7 @@ PrefixManager::PrefixManager(
       config_(config),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvRequestQueue_(kvRequestQueue),
-      initializationEventQueue_(initializationEventQueue),
-      preferOpenrOriginatedRoutes_(
-          *config->getConfig().prefer_openr_originated_routes()) {
+      initializationEventQueue_(initializationEventQueue) {
   CHECK(config);
 
   // Always add RIB type prefixes, since Fib routes updates are always expected
@@ -374,55 +372,26 @@ PrefixManager::getBestPrefixEntry(
   // select the best entry/entries by comparing metric field
   const auto bestTypes = selectBestPrefixMetrics(prefixTypeToEntry);
   auto bestType = *bestTypes.begin();
-  // if best route is BGP, and an equivalent CONFIG route exists,
-  // then prefer config route if knob prefer_openr_originated_config_=true
-  if (bestType == thrift::PrefixType::BGP and preferOpenrOriginatedRoutes_ and
-      bestTypes.count(thrift::PrefixType::CONFIG)) {
-    bestType = thrift::PrefixType::CONFIG;
-  }
   return std::make_pair(bestType, prefixTypeToEntry.at(bestType));
 }
 
 void
 PrefixManager::sendStaticUnicastRoutes(thrift::PrefixType prefixType) {
   DecisionRouteUpdate routeUpdatesForDecision;
-  DecisionRouteUpdate routeUpdatesForBgp;
   routeUpdatesForDecision.prefixType = prefixType;
 
-  // During initialization, when PrefixManager receives prefixes of a particular
-  // type, this function is used to send prefixEntries corresponding that type
-  // to Decision.
-
+  /*
+   * During initialization, when PrefixManager receives prefixes of a particular
+   * type, this function is used to send prefixEntries corresponding that type
+   * to Decision.
+   */
   for (const auto& [prefix, prefixEntries] : prefixMap_) {
-    // When preferOpenrOriginatedRoutes_ is set, CONFIG routes should be
-    // preferred over BGP routes
-
-    // TODO: Ideally the following logic should be covered by the
-    // getBestPrefixEntry below. However, getBestPrefixEntry could work only
-    // when prefixMap_ has the entry of the type hrift::PrefixType::CONFIG.
-    // If we add an entry when buildOriginatedPrefixes (e.g., by performing
-    // processOriginatedPrefixes after building), several exiting tests would
-    // break. Currently, PrefixManager sends the originated routes to
-    // Decision and Decision would then configure the routes by triggerring
-    // redistributePrefixesAcrossAreas on PrefixManager. To simplify the logic
-    // below, we need to revisit that process.
-    if (preferOpenrOriginatedRoutes_ and
-        (prefixType == thrift::PrefixType::BGP)) {
-      // check if thrift::PrefixType::CONFIG exists already
-      if (originatedPrefixDb_.count(prefix)) {
-        // if so, prioritize CONFIG route over BGP routes, and hence we
-        // shouldn't update
-        continue;
-      }
-    }
-
     // Only populate the best entry
     auto [bestType, bestEntry] = getBestPrefixEntry(prefixEntries);
     if (bestType != prefixType) {
       continue;
     }
-    populateRouteUpdates(
-        prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
+    populateRouteUpdates(prefix, bestEntry, routeUpdatesForDecision);
   }
   staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
 }
@@ -431,8 +400,7 @@ void
 PrefixManager::populateRouteUpdates(
     const folly::CIDRNetwork& prefix,
     const PrefixEntry& prefixEntry,
-    DecisionRouteUpdate& routeUpdatesForDecision,
-    DecisionRouteUpdate& routeUpdatesForBgp) {
+    DecisionRouteUpdate& routeUpdatesForDecision) {
   // Propogate route update to Decision (if necessary)
   auto& advertiseStatus = advertiseStatus_[prefix];
   if (prefixEntry.shouldInstall()) {
@@ -450,20 +418,7 @@ PrefixManager::populateRouteUpdates(
     advertiseStatus.publishedRoute = unicastEntry;
     routeUpdatesForDecision.addRouteToUpdate(std::move(unicastEntry));
   } else {
-    // shouldInstall() is false, need to send to bgprib here
-    // When shouldInstall() is true, prefix will be sent to bgprib after
-    // fib installs
-
-    // ATTN: This does not support GR with install_to_fib = false and min
-    // supporting routes > 0
-    // Do not reflect back the prefixes just learned from BGP Rib
-    if (thrift::PrefixType::BGP != *prefixEntry.tPrefixEntry->type()) {
-      RibUnicastEntry unicastEntry = RibUnicastEntry(prefix, {});
-      unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
-      routeUpdatesForBgp.addRouteToUpdate(std::move(unicastEntry));
-    }
-    // If was installed to fib, but now lose in tie break, withdraw from
-    // fib.
+    // If was installed to fib, but now lose in tie break, withdraw from fib.
     if (advertiseStatus.publishedRoute.has_value()) {
       routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
       advertiseStatus.publishedRoute.reset();
@@ -665,7 +620,6 @@ PrefixManager::syncKvStore() {
              << " pending updates.";
 
   DecisionRouteUpdate routeUpdatesForDecision;
-  DecisionRouteUpdate routeUpdatesForBgp;
   size_t receivedPrefixCnt = 0;
   size_t syncedPrefixCnt = 0;
   size_t awaitingPrefixCnt = 0;
@@ -695,11 +649,9 @@ PrefixManager::syncKvStore() {
     bool hasPrefixUpdate = pendingUpdates_.hasPrefix(prefix);
     bool readyToBeAdvertised = prefixEntryReadyToBeAdvertised(bestEntry);
 
-    // TODO: deprecate BGP logic once the use case is deprecated
     // Get route updates from updated prefix entry.
     if (hasPrefixUpdate) {
-      populateRouteUpdates(
-          prefix, bestEntry, routeUpdatesForDecision, routeUpdatesForBgp);
+      populateRouteUpdates(prefix, bestEntry, routeUpdatesForDecision);
     }
 
     if (readyToBeAdvertised) {

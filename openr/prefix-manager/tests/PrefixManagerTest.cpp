@@ -430,22 +430,18 @@ TEST_F(PrefixManagerTestFixture, CounterInitialization) {
 
 /**
  * Test prefix advertisement in KvStore with multiple clients.
- * NOTE: Priority LOOPBACK > DEFAULT > BGP
- * 1. Inject prefix1 with client-bgp - Verify KvStore
- * 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
- * 3. Withdraw prefix1 with client-loopback - Verify KvStore
- * 4. Withdraw prefix1 with client-bgp - Verify KvStore
- * 5. Withdraw prefix1 with client-default - Verify KvStore
+ * NOTE: Priority LOOPBACK > DEFAULT
+ * 1. Inject prefix1 with client-loopback and client-default - Verify KvStore
+ * 2. Withdraw prefix1 with client-loopback - Verify KvStore
+ * 3. Withdraw prefix1 with client-default - Verify KvStore
  */
 TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   int scheduleAt{0};
-  // Order of prefix-entries -> loopback > bgp > default
+  // Order of prefix-entries -> loopback > default
   const auto loopback_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
   const auto default_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
-  const auto bgp_prefix = createPrefixEntryWithMetrics(
-      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
 
   auto keyStr =
       PrefixKey(nodeId_, toIPNetwork(addr1), kTestingAreaName).getPrefixKeyV2();
@@ -474,10 +470,10 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
 
   auto q = kvStoreWrapper->getKvStore()->getKvStoreUpdatesReader();
   //
-  // 1. Inject prefix1 with client-bgp - Verify KvStore
+  // 1. Inject prefix1 with client-loopback and client-default - Verify KvStore
   //
-  prefixManager->advertisePrefixes({bgp_prefix}).get();
-  expectedPrefix = bgp_prefix;
+  expectedPrefix = loopback_prefix; // lowest client-id will win
+  prefixManager->advertisePrefixes({loopback_prefix, default_prefix}).get();
   auto maybePub = q.get();
   folly::variant_match(
       std::move(maybePub).value(),
@@ -491,26 +487,9 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   //
-  // 2. Inject prefix1 with client-loopback and client-default - Verify KvStore
+  // 2. Withdraw prefix1 with client-loopback - Verify KvStore
   //
-  expectedPrefix = loopback_prefix; // lowest client-id will win
-  prefixManager->advertisePrefixes({loopback_prefix, default_prefix}).get();
-  maybePub = q.get();
-  folly::variant_match(
-      std::move(maybePub).value(),
-      [&](thrift::Publication&& pub) {
-        for (auto const& [key, rcvdValue] : *pub.keyVals()) {
-          cb(rcvdValue);
-        }
-      },
-      [](thrift::InitializationEvent&&) {
-        // Do not interested in initialization event
-      });
-
-  //
-  // 3. Withdraw prefix1 with client-loopback - Verify KvStore
-  //
-  expectedPrefix = bgp_prefix;
+  expectedPrefix = default_prefix;
   prefixManager->withdrawPrefixes({loopback_prefix}).get();
   maybePub = q.get();
   folly::variant_match(
@@ -525,24 +504,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   //
-  // 4. Withdraw prefix1 with client-bgp - Verify KvStore
-  //
-  expectedPrefix = default_prefix;
-  prefixManager->withdrawPrefixes({bgp_prefix}).get();
-  maybePub = q.get();
-  folly::variant_match(
-      std::move(maybePub).value(),
-      [&](thrift::Publication&& pub) {
-        for (auto const& [key, rcvdValue] : *pub.keyVals()) {
-          cb(rcvdValue);
-        }
-      },
-      [](thrift::InitializationEvent&&) {
-        // Do not interested in initialization event
-      });
-
-  //
-  // 5. Withdraw prefix1 with client-default - Verify KvStore
+  // 3. Withdraw prefix1 with client-default - Verify KvStore
   //
   expectedPrefix = std::nullopt;
   prefixManager->withdrawPrefixes({default_prefix}).get();
@@ -2425,27 +2387,15 @@ class RouteOriginationKnobTestFixture : public PrefixManagerTestFixture {
   }
 };
 
-// Verify that thrift::PrefixType::CONFIG prefixes (Open/R originated)
-// take precedence over thrift::PrefixType::BGP prefixes when they both
-// both have the same metrics, and when prefer_openr_originated_routes KNOB
-// is turned ON
-// Also verify that this KNOB does not interfere with any other
-// thrift::PrefixType prefixes, like thrift::PrefixType::LOOPBACK
-// This ensures that no other existing functionality has changed
 TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
   /*
-   * Order of prefix-entries without config knob:
-   *    loopback > bgp > config > default
-   *
-   * With knob turned on, just BGP and CONFIG get swapped:
-   *    loopback > config > bgp > default
+   * Order of prefix-entries:
+   *    loopback > config > default
    */
   const auto loopback_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
   const auto default_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
-  const auto bgp_prefix = createPrefixEntryWithMetrics(
-      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
   const auto openr_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::CONFIG, createMetrics(200, 0, 0));
 
@@ -2476,10 +2426,12 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
 
   auto q = kvStoreWrapper->getKvStore()->getKvStoreUpdatesReader();
   //
-  // 1. Inject prefix1 with client-bgp - Verify KvStore
+  // 1. Inject prefix1 with client-loopback, default and config - Verify KvStore
   //
-  expectedPrefix = bgp_prefix;
-  prefixManager->advertisePrefixes({bgp_prefix}).get();
+  expectedPrefix = loopback_prefix; // lowest client-id will win
+  prefixManager
+      ->advertisePrefixes({loopback_prefix, default_prefix, openr_prefix})
+      .get();
   auto maybePub = q.get();
   folly::variant_match(
       std::move(maybePub).value(),
@@ -2493,28 +2445,8 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   //
-  // 2. Inject prefix1 with client-loopback, default and config - Verify KvStore
-  //
-  expectedPrefix = loopback_prefix; // lowest client-id will win
-  prefixManager
-      ->advertisePrefixes({loopback_prefix, default_prefix, openr_prefix})
-      .get();
-  maybePub = q.get();
-  folly::variant_match(
-      std::move(maybePub).value(),
-      [&](thrift::Publication&& pub) {
-        for (auto const& [key, rcvdValue] : *pub.keyVals()) {
-          cb(rcvdValue);
-        }
-      },
-      [](thrift::InitializationEvent&&) {
-        // Do not interested in initialization event
-      });
-
-  //
-  // 3. Withdraw prefix1 with client-loopback - Verify KvStore
-  // with loopback gone, BGP will become lowest client_id.
-  // Since config KNOB is turned on, and CONFIG is present, CONFIG will win
+  // 2. Withdraw prefix1 with client-loopback - Verify KvStore
+  // Since CONFIG is present, CONFIG will win
   //
   expectedPrefix = openr_prefix;
   prefixManager->withdrawPrefixes({loopback_prefix}).get();
@@ -2531,9 +2463,9 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   //
-  // 4. Withdraw prefix1 with client-config - Verify KvStore
+  // 3. Withdraw prefix1 with client-config - Verify KvStore
   //
-  expectedPrefix = bgp_prefix;
+  expectedPrefix = default_prefix;
   prefixManager->withdrawPrefixes({openr_prefix}).get();
   maybePub = q.get();
   folly::variant_match(
@@ -2548,24 +2480,7 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
       });
 
   //
-  // 5. Withdraw prefix1 with client-bgp - Verify KvStore
-  //
-  expectedPrefix = default_prefix;
-  prefixManager->withdrawPrefixes({bgp_prefix}).get();
-  maybePub = q.get();
-  folly::variant_match(
-      std::move(maybePub).value(),
-      [&](thrift::Publication&& pub) {
-        for (auto const& [key, rcvdValue] : *pub.keyVals()) {
-          cb(rcvdValue);
-        }
-      },
-      [](thrift::InitializationEvent&&) {
-        // Do not interested in initialization event
-      });
-
-  //
-  // 6. Withdraw prefix1 with client-default - Verify KvStore
+  // 4. Withdraw prefix1 with client-default - Verify KvStore
   //
   expectedPrefix = std::nullopt;
   prefixManager->withdrawPrefixes({default_prefix}).get();
@@ -2594,8 +2509,6 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyKvStoreMultipleClients) {
 TEST_F(RouteOriginationKnobTestFixture, VerifyCLIWithMultipleClients) {
   const auto defaultPrefixLower = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(100, 0, 0));
-  const auto bgpPrefix = createPrefixEntryWithMetrics(
-      addr1, thrift::PrefixType::BGP, createMetrics(200, 0, 0));
   const auto openrPrefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::CONFIG, createMetrics(200, 0, 0));
   const auto defaultPrefixHigher = createPrefixEntryWithMetrics(
@@ -2603,21 +2516,7 @@ TEST_F(RouteOriginationKnobTestFixture, VerifyCLIWithMultipleClients) {
 
   thrift::AdvertisedRouteFilter emptyFilter;
   {
-    // With only the BGP prefix, this will be advertised
-    prefixManager->advertisePrefixes({bgpPrefix});
-    const auto routes = prefixManager
-                            ->getAreaAdvertisedRoutes(
-                                kTestingAreaName,
-                                thrift::RouteFilterType::POSTFILTER_ADVERTISED,
-                                emptyFilter)
-                            .get();
-
-    EXPECT_EQ(1, routes->size());
-    const auto& route = routes->at(0);
-    EXPECT_EQ(thrift::PrefixType::BGP, *route.key());
-  }
-  {
-    // Between BGP and CONFIG prefix, CONFIG will be advertised
+    // With only the CONFIG prefix, this will be advertised
     prefixManager->advertisePrefixes({openrPrefix});
     const auto routes = prefixManager
                             ->getAreaAdvertisedRoutes(

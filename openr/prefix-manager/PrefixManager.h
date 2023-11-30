@@ -312,8 +312,8 @@ class PrefixManager final : public OpenrEventBase {
   void populateRouteUpdates(
       const folly::CIDRNetwork& prefix,
       const PrefixEntry& prefixEntry,
-      DecisionRouteUpdate& routeUpdatesForDecision,
-      DecisionRouteUpdate& routeUpdatesForBgp);
+      DecisionRouteUpdate& routeUpdatesForDecision);
+
   /*
    * [Route Origination/Aggregation]
    *
@@ -518,12 +518,6 @@ class PrefixManager final : public OpenrEventBase {
           *originatedPrefix.minimum_supporting_routes();
     }
   };
-
-  /*
-   * prefer local originated prefix over BGP originated prefix
-   * Turned on/off via thrift::OpenrConfig::prefer_openr_originated_config
-   */
-  bool preferOpenrOriginatedRoutes_{false};
 
   /*
    * prefixes to be originated from prefix-manager
