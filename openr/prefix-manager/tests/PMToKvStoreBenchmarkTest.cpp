@@ -56,7 +56,6 @@ class PMToKvStoreBMTestFixture {
     prefixManager_ = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue_,
         kvRequestQueue_,
-        prefixMgrRouteUpdatesQueue_,
         prefixMgrInitializationEventsQueue_,
         kvStoreWrapper_->getReader(),
         prefixUpdatesQueue_.getReader(),
@@ -75,7 +74,6 @@ class PMToKvStoreBMTestFixture {
   ~PMToKvStoreBMTestFixture() {
     staticRouteUpdatesQueue_.close();
     prefixUpdatesQueue_.close();
-    prefixMgrRouteUpdatesQueue_.close();
     prefixMgrInitializationEventsQueue_.close();
 
     fibRouteUpdatesQueue_.close();
@@ -159,7 +157,6 @@ class PMToKvStoreBMTestFixture {
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue_;
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue_;
-  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue_;
   messaging::ReplicateQueue<thrift::InitializationEvent>
       prefixMgrInitializationEventsQueue_;
   messaging::ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue_;

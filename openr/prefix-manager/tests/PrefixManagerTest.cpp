@@ -105,7 +105,6 @@ class PrefixManagerTestFixture : public testing::Test {
   closeQueue() {
     kvRequestQueue.close();
     prefixUpdatesQueue.close();
-    prefixMgrRouteUpdatesQueue.close();
     prefixMgrInitializationEventsQueue.close();
     staticRouteUpdatesQueue.close();
     fibRouteUpdatesQueue.close();
@@ -116,7 +115,6 @@ class PrefixManagerTestFixture : public testing::Test {
   openQueue() {
     kvRequestQueue.open();
     prefixUpdatesQueue.open();
-    prefixMgrRouteUpdatesQueue.open();
     prefixMgrInitializationEventsQueue.open();
     staticRouteUpdatesQueue.open();
     fibRouteUpdatesQueue.open();
@@ -152,7 +150,6 @@ class PrefixManagerTestFixture : public testing::Test {
     prefixManager = std::make_unique<PrefixManager>(
         staticRouteUpdatesQueue,
         kvRequestQueue,
-        prefixMgrRouteUpdatesQueue,
         prefixMgrInitializationEventsQueue,
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
@@ -239,7 +236,6 @@ class PrefixManagerTestFixture : public testing::Test {
   // Queue for publishing entries to PrefixManager
   messaging::ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
-  messaging::ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
   messaging::ReplicateQueue<thrift::InitializationEvent>
       prefixMgrInitializationEventsQueue;
   messaging::RQueue<thrift::InitializationEvent>
@@ -3158,119 +3154,6 @@ class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
   }
 };
 
-/**
- * Verifies that in OpenR initialization procedure, initial syncKvStore() is
- * triggered after all dependent signals are received.
- */
-TEST_P(
-    PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
-    TriggerInitialKvStoreTest) {
-  const bool v4_install_to_fib = GetParam();
-  // Expect to publish static routes for config originated prefixes with
-  // install_to_fib set.
-  auto update = waitForRouteUpdate(
-      *getEarlyStaticRoutesReaderPtr(), thrift::PrefixType::CONFIG);
-  EXPECT_TRUE(update.has_value());
-  if (v4_install_to_fib) {
-    EXPECT_EQ(update.value().unicastRoutesToUpdate()->size(), 1);
-  } else {
-    // Always send CONFIG type empty static routes to Decision, even there are
-    // none unicast routes generated.
-    EXPECT_TRUE(update.value().unicastRoutesToUpdate()->empty());
-  }
-
-  auto prefixMgrRouteUpdatesReader = prefixMgrRouteUpdatesQueue.getReader();
-
-  auto prefixDbMarker = Constants::kPrefixDbMarker.toString() + nodeId_;
-  auto prefixKey = PrefixKey(
-      nodeId_, toIPNetwork(*prefixEntry1Bgp.prefix()), kTestingAreaName);
-
-  // Initial prefix updates from BGP
-  PrefixEvent bgpPrefixEvent(
-      PrefixEventType::ADD_PREFIXES, thrift::PrefixType::BGP, {prefixEntry7});
-  prefixUpdatesQueue.push(std::move(bgpPrefixEvent));
-
-  // wait for kvstore sync throttle time and check no prefixes are advertised
-  // into KvStore, waiting for FIB + KvStore Synced signal
-  /* sleep override */
-  std::this_thread::sleep_for(std::chrono::milliseconds(
-      2 * Constants::kKvStoreSyncThrottleTimeout.count()));
-  EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
-  EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
-
-  // wait for kvstore sync throttle time and check no prefixes are advertised
-  // into KvStore, waiting for full fib sync
-  // TODO: replace sleep override with scheduled callbacks
-  std::this_thread::sleep_for(std::chrono::milliseconds(
-      2 * Constants::kKvStoreSyncThrottleTimeout.count()));
-  EXPECT_EQ(0, getNumPrefixes(prefixDbMarker));
-  EXPECT_EQ(0, prefixMgrRouteUpdatesReader.size());
-
-  // Initial full Fib sync.
-  DecisionRouteUpdate fullSyncUpdates;
-  fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
-  fullSyncUpdates.mplsRoutesToUpdate = {
-      {label1, RibMplsEntry(label1)}, {label2, RibMplsEntry(label2)}};
-  fullSyncUpdates.addRouteToUpdate(RibUnicastEntry(
-      toIPNetwork(addr4),
-      {},
-      prefixEntry4,
-      Constants::kDefaultArea.toString()));
-  fibRouteUpdatesQueue.push(std::move(fullSyncUpdates));
-
-  // kvstore should receive publication with 3 routes 2 config + 1 bgp
-  auto pub = kvStoreWrapper->recvPublication();
-  EXPECT_EQ(3, pub.keyVals()->size());
-
-  // first update to bgp rib should include all routes programmed by fib.
-  {
-    auto msg = prefixMgrRouteUpdatesReader.get();
-    auto update = msg.value();
-    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
-
-    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
-    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
-    EXPECT_EQ(
-        folly::IPAddress::createNetwork(toString(addr4)),
-        update.unicastRoutesToUpdate.begin()->first);
-  }
-
-  // second update to bgp rib should include all config routes with
-  // install_to_fib = false
-  {
-    auto msg = prefixMgrRouteUpdatesReader.get();
-    auto update = msg.value();
-    EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, update.type);
-    if (v4_install_to_fib) {
-      // Only v4 prefix with install_to_fib = false
-      EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(1));
-    } else {
-      // Both v4 and v6 prefixes with install_to_fib = false
-      EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(2));
-    }
-    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
-
-    EXPECT_EQ(
-        folly::IPAddress::createNetwork(toString(addr6)),
-        update.unicastRoutesToUpdate.begin()->first);
-  }
-
-  // third update with full_sync signal and empty route
-  {
-    auto msg = prefixMgrRouteUpdatesReader.get();
-    auto update = msg.value();
-    EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, update.type);
-
-    EXPECT_THAT(update.unicastRoutesToUpdate, testing::SizeIs(0));
-    EXPECT_THAT(update.unicastRoutesToDelete, testing::SizeIs(0));
-  }
-}
-
-INSTANTIATE_TEST_CASE_P(
-    PrefixManagerInitialKvStoreSyncBgpEnabledTest,
-    PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture,
-    ::testing::Values(false, true));
-
 class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
     : public PrefixManagerInitialKvStoreSyncTestFixture {
  protected:
@@ -3353,59 +3236,6 @@ TEST_F(
       });
   // let magic happen
   evb.run();
-}
-
-class SingleProtocolRoutingTestFixture
-    : public PrefixManagerInitialKvStoreSyncTestFixture {
- protected:
-  thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
-    // Single protocol routing settings
-    tConfig.prefer_openr_originated_routes() = true;
-    tConfig.enable_best_route_selection() = true;
-    tConfig.enable_bgp_peering() = true;
-    tConfig.bgp_config() = thrift::BgpConfig();
-
-    // Set originated prefixes.
-    thrift::OriginatedPrefix originatedPrefixV4;
-    originatedPrefixV4.prefix() = toString(addr4);
-    originatedPrefixV4.install_to_fib() = true;
-    thrift::OriginatedPrefix originatedPrefixV6;
-    originatedPrefixV6.prefix() = toString(addr6);
-    originatedPrefixV6.minimum_supporting_routes() = 0;
-    originatedPrefixV6.install_to_fib() = true;
-
-    tConfig.originated_prefixes() = {originatedPrefixV4, originatedPrefixV6};
-
-    // Enable BGP peering.
-    tConfig.enable_bgp_peering() = true;
-    tConfig.bgp_config() = thrift::BgpConfig();
-
-    return tConfig;
-  }
-};
-
-TEST_F(SingleProtocolRoutingTestFixture, LocalRouteWinsOverBgpRoutesTest) {
-  auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
-
-  // install the orignated routes
-  auto update = waitForRouteUpdate(staticRoutesReader);
-  EXPECT_THAT(*update->unicastRoutesToUpdate(), testing::SizeIs(2));
-  EXPECT_THAT(*update->unicastRoutesToDelete(), testing::SizeIs(0));
-
-  // Send the bgp prefix addr6
-  PrefixEvent event(
-      PrefixEventType::ADD_PREFIXES,
-      thrift::PrefixType::BGP,
-      {createPrefixEntry(addr6, thrift::PrefixType::BGP)});
-  prefixUpdatesQueue.push(std::move(event));
-
-  // BGP route should not win over originated routes
-  // And hence, no updated should be found
-  update = waitForRouteUpdate(staticRoutesReader);
-  EXPECT_THAT(*update->unicastRoutesToUpdate(), testing::SizeIs(0));
-  EXPECT_THAT(*update->unicastRoutesToDelete(), testing::SizeIs(0));
 }
 
 int

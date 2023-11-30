@@ -160,8 +160,6 @@ main(int argc, char** argv) {
    *  - Producer will be marked and passed in with messaging::ReplicateQueue
    *  - Consumer will be marked and passed in with messaging::RQueue
    */
-  std::unique_ptr<messaging::RQueue<DecisionRouteUpdate>> pluginRouteReaderPtr;
-
   // DispatcherQueue is the KvStore -> subscribers queue with filtering enabled
   auto kvStorePublicationsDispatcherQueue = std::make_unique<DispatcherQueue>();
 
@@ -174,14 +172,6 @@ main(int argc, char** argv) {
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   auto decisionStaticRouteUpdatesQueueReader =
       staticRouteUpdatesQueue.getReader("decision");
-
-  // PrefixManager -> BgpRib
-  ReplicateQueue<DecisionRouteUpdate> prefixMgrRouteUpdatesQueue;
-  if (config->isBgpPeeringEnabled()) {
-    pluginRouteReaderPtr =
-        std::make_unique<messaging::RQueue<DecisionRouteUpdate>>(
-            prefixMgrRouteUpdatesQueue.getReader("pluginRouteUpdates"));
-  }
 
   // Fib -> PrefixManager
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
@@ -353,7 +343,6 @@ main(int argc, char** argv) {
       std::make_unique<PrefixManager>(
           staticRouteUpdatesQueue,
           kvRequestQueue,
-          prefixMgrRouteUpdatesQueue,
           prefixMgrInitializationEventsQueue,
           prefixMgrKvStoreUpdatesReader,
           prefixMgrPrefixUpdatesQueueReader,
@@ -361,7 +350,6 @@ main(int argc, char** argv) {
           config));
   watchdog->addQueue(kvRequestQueue, "kvRequestQueue");
   watchdog->addQueue(staticRouteUpdatesQueue, "staticRouteUpdatesQueue");
-  watchdog->addQueue(prefixMgrRouteUpdatesQueue, "prefixMgrRouteUpdatesQueue");
   watchdog->addQueue(prefixUpdatesQueue, "prefixUpdatesQueue");
 
   // Start NeighborMonitor
@@ -431,15 +419,6 @@ main(int argc, char** argv) {
     std::vector<std::string> acceptableNames;
     folly::split(',', config->getSSLAcceptablePeers(), acceptableNames, true);
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
-  }
-
-  // Create bgp speaker module
-  if (config->isBgpPeeringEnabled()) {
-    assert(pluginRouteReaderPtr);
-    auto pluginArgs = PluginArgs{
-        prefixUpdatesQueue, *pluginRouteReaderPtr, config, sslContext};
-
-    pluginStart(pluginArgs);
   }
 
   // Create vip service module
@@ -532,7 +511,6 @@ main(int argc, char** argv) {
   staticRouteUpdatesQueue.close();
   fibRouteUpdatesQueue.close();
   netlinkEventsQueue.close();
-  prefixMgrRouteUpdatesQueue.close();
   logSampleQueue.close();
   addrEventsQueue.close();
   kvStorePublicationsDispatcherQueue->close();
@@ -550,11 +528,6 @@ main(int argc, char** argv) {
        ++riter) {
     (*riter)->stop();
     (*riter)->waitUntilStopped();
-  }
-
-  // stop bgp speaker
-  if (config->isBgpPeeringEnabled()) {
-    pluginStop();
   }
 
   if (config->isVipServiceEnabled()) {

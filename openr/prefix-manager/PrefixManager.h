@@ -72,8 +72,6 @@ class PrefixManager final : public OpenrEventBase {
       // producer queue
       messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
-      messaging::ReplicateQueue<DecisionRouteUpdate>&
-          prefixMgrRouteUpdatesQueue,
       messaging::ReplicateQueue<thrift::InitializationEvent>&
           initializationEventQueue,
       // consumer queue
@@ -398,9 +396,6 @@ class PrefixManager final : public OpenrEventBase {
 
   // queue to send key-value update requests to KvStore
   messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
-
-  // Queue to publish prefix updates to bgprib
-  messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue_;
 
   // Queue to publish thrift::InitializationEvent to downstream consumer
   messaging::ReplicateQueue<thrift::InitializationEvent>&

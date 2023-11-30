@@ -30,7 +30,6 @@ namespace fb303 = facebook::fb303;
 PrefixManager::PrefixManager(
     messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
-    messaging::ReplicateQueue<DecisionRouteUpdate>& prefixMgrRouteUpdatesQueue,
     messaging::ReplicateQueue<thrift::InitializationEvent>&
         initializationEventQueue,
     messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
@@ -41,7 +40,6 @@ PrefixManager::PrefixManager(
       config_(config),
       staticRouteUpdatesQueue_(staticRouteUpdatesQueue),
       kvRequestQueue_(kvRequestQueue),
-      prefixMgrRouteUpdatesQueue_(prefixMgrRouteUpdatesQueue),
       initializationEventQueue_(initializationEventQueue),
       preferOpenrOriginatedRoutes_(
           *config->getConfig().prefer_openr_originated_routes()) {
@@ -51,13 +49,6 @@ PrefixManager::PrefixManager(
   // in OpenR initialization procedure.
   XLOG(INFO) << "[Initialization] PrefixManager should wait for RIB updates.";
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
-
-  // [TO_BE_DEPRECATED]
-  if (config->isBgpPeeringEnabled()) {
-    XLOG(INFO)
-        << "[Initialization] PrefixManager should wait for BGP prefixes.";
-    uninitializedPrefixTypes_.emplace(thrift::PrefixType::BGP);
-  }
 
   if (config->isVipServiceEnabled()) {
     XLOG(INFO)
@@ -644,15 +635,6 @@ PrefixManager::triggerInitialPrefixDbSync() {
     // types and all inital prefix keys from KvStore.
     syncKvStore();
 
-    // ATTN: when BGP peersing is NOT enabled, do NOT push to this queue since
-    // there is NO reader!
-    if (config_->isBgpPeeringEnabled()) {
-      // Send FULL_SYNC to bgp speaker, signal bgp speaker to send EoR
-      DecisionRouteUpdate routeUpdatesForBgp;
-      routeUpdatesForBgp.type = DecisionRouteUpdate::FULL_SYNC;
-      prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
-    }
-
     // Logging for initialization stage duration computation
     logInitializationEvent(
         "PrefixManager", thrift::InitializationEvent::PREFIX_DB_SYNCED);
@@ -765,19 +747,6 @@ PrefixManager::syncKvStore() {
   // Push originatedRoutes update to staticRouteUpdatesQueue_.
   if (not routeUpdatesForDecision.empty()) {
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
-  }
-
-  // Push originatedRoutes that does not go through fib to
-  // prefixMgrRouteUpdatesQueue_. Note: the routes that do go through fib will
-  // be pushed to this queue once fib finishes installing
-  // ATTN: when BGP peersing is NOT enabled, do NOT push to this queue since
-  // there is NO reader!
-  if (config_->isBgpPeeringEnabled()) {
-    if (not routeUpdatesForBgp.empty()) {
-      CHECK(routeUpdatesForBgp.mplsRoutesToUpdate.empty());
-      CHECK(routeUpdatesForBgp.mplsRoutesToDelete.empty());
-      prefixMgrRouteUpdatesQueue_.push(std::move(routeUpdatesForBgp));
-    }
   }
 
   XLOG(DBG1) << fmt::format(
@@ -1585,23 +1554,6 @@ PrefixManager::processOriginatedPrefixes() {
 
 void
 PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
-  // Forward fib update to bgprib for route announcement.
-  // NOTE: fib update does not include routes that do not need fib
-  // programming, which are send to bgprib in syncKvStore().
-  //
-  // FULL_SYNC signal will be sent explicitly in triggerInitialPrefixDbSync().
-  // We send fib update as INCREMENTAL, this has to be done before
-  // triggerInitialPrefixDbSync().
-  //
-  // TODO: remove this when openr -> bgp redistribution is gone
-  if (config_->isBgpPeeringEnabled()) {
-    // ATTN: when BGP peersing is NOT enabled, do NOT push to this queue since
-    // there is NO reader!
-    auto fibRouteUpdateCp = fibRouteUpdate;
-    fibRouteUpdateCp.type = DecisionRouteUpdate::INCREMENTAL;
-    prefixMgrRouteUpdatesQueue_.push(std::move(fibRouteUpdateCp));
-  }
-
   // Store update type first
   auto type = fibRouteUpdate.type;
 
