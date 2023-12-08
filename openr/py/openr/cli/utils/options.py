@@ -12,7 +12,7 @@ from typing import Any, Callable, Tuple
 import bunch
 import click
 from openr.cli.utils.default_option_overrides import getDefaultOption
-from openr.Platform import ttypes as platform_types
+from openr.thrift.Platform import thrift_types as platform_types
 from openr.utils.consts import Consts
 
 
