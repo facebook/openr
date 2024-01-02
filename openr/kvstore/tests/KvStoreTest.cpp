@@ -670,9 +670,13 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentVersion) {
   evb.waitUntilStopped();
 }
 
-// Demo for the scenario
-TEST_F(KvStoreTestFixture, noTtlCountdownForSelfOriginatedKey) {
-  const auto ttlMe{200000}; // Just discovered other bug preventing me to use infinity here. Will fix the bug
+// When you receive a update from 'other' about a key you originates,
+//  with some inconsistency (higher ttl_version)
+// 1. you should never delete it
+// 2. you should update ttl (so other's keyVal do not expire)
+TEST_F(KvStoreTestFixture, noDeleteForSelfOriginatedKey) {
+  const auto ttlMe{200000}; // Just discovered other bug preventing me to use
+                            // infinity here. Will fix the bug
   const auto ttlOther{1};
   const auto nodeName{"test-node"};
   auto config = getTestKvConf(nodeName);
@@ -703,16 +707,25 @@ TEST_F(KvStoreTestFixture, noTtlCountdownForSelfOriginatedKey) {
 
   store->setKey(kTestingAreaName, key, thriftVal, {});
 
+  const thrift::Value thriftValExp = createThriftValue(
+      version /* version */,
+      nodeName /* originatorId */,
+      value /* value */,
+      ttlMe /* ttl */,
+      version /* ttl version */);
+
   OpenrEventBase evb;
   int scheduleAt{0};
 
   evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += ttlOther + 2000), [&]() noexcept {
+      std::chrono::milliseconds(scheduleAt += ttlOther + 3000), [&]() noexcept {
         // Wait 2 seconds
         {
           auto allKeyVals = store->dumpAll(kTestingAreaName);
-          // deleted when it shouldn't
-          EXPECT_EQ(0, allKeyVals.size());
+          // Not deleted
+          EXPECT_EQ(1, allKeyVals.size());
+          const auto& val = allKeyVals[key];
+          validateThriftValue(val, thriftValExp);
         }
         evb.stop();
       });

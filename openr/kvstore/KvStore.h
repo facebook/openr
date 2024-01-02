@@ -292,7 +292,8 @@ class KvStoreDb {
    * add new query entries into ttlCountdownQueue from publication
    * and reschedule ttl expiry timer if needed
    */
-  void updateTtlCountdownQueue(const thrift::Publication& publication);
+  void updateTtlCountdownQueue(
+      const thrift::Publication& publication, bool isSelfOriginatedUpdate);
 
   /*
    * [Ttl Management]

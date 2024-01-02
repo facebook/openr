@@ -1693,8 +1693,14 @@ KvStoreDb<ClientType>::setKeyVals(
 template <class ClientType>
 void
 KvStoreDb<ClientType>::updateTtlCountdownQueue(
-    const thrift::Publication& publication) {
+    const thrift::Publication& publication, bool isSelfOriginatedUpdate) {
   for (const auto& [key, value] : *publication.keyVals()) {
+    // self originated key should never expire
+    // Explicit deletion use separate logic
+    if (not isSelfOriginatedUpdate and selfOriginatedKeyVals_.count(key) > 0) {
+      continue;
+    }
+
     if (*value.ttl() != Constants::kTtlInfinity) {
       TtlCountdownQueueEntry queueEntry;
       queueEntry.expiryTime = std::chrono::steady_clock::now() +
@@ -2663,6 +2669,7 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
       // It works fine to just update to latest ttlVersion, instead of +1.
       if (*currValue.ttlVersion() < *rcvdValue.ttlVersion()) {
         currValue.ttlVersion() = *rcvdValue.ttlVersion();
+        scheduleTtlUpdates(key, true /* advertiseImmediately*/);
       }
     }
   }
@@ -2815,7 +2822,7 @@ KvStoreDb<ClientType>::mergePublication(
   }
 
   // Update ttl values of keys
-  updateTtlCountdownQueue(deltaPublication);
+  updateTtlCountdownQueue(deltaPublication, isSelfOriginatedUpdate);
 
   if (not deltaPublication.keyVals()->empty()) {
     // Flood change to all of our neighbors/subscribers
