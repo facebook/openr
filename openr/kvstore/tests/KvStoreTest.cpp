@@ -670,6 +670,58 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentVersion) {
   evb.waitUntilStopped();
 }
 
+// Demo for the scenario
+TEST_F(KvStoreTestFixture, noTtlCountdownForSelfOriginatedKey) {
+  const auto ttlMe{200000}; // Just discovered other bug preventing me to use infinity here. Will fix the bug
+  const auto ttlOther{1};
+  const auto nodeName{"test-node"};
+  auto config = getTestKvConf(nodeName);
+  config.key_ttl_ms() = ttlMe;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
+  auto* store = createKvStore(
+      std::move(config),
+      {kTestingAreaName},
+      std::nullopt,
+      kvRequestQueue_.getReader());
+  store->run();
+
+  const std::string key{"key"};
+  const std::string value{"val"};
+  const auto version{1};
+
+  // Store originates key, with default version=1
+  kvRequestQueue_.push(PersistKeyValueRequest(kTestingAreaName, key, value));
+  waitForKeyInStoreWithTimeout(store, kTestingAreaName, key);
+
+  // Receives a pub of the same key from "others", that is expiring soon
+  const thrift::Value thriftVal = createThriftValue(
+      version /* version */,
+      nodeName /* originatorId */,
+      value /* value */,
+      ttlOther /* ttl */,
+      version /* ttl version */);
+
+  store->setKey(kTestingAreaName, key, thriftVal, {});
+
+  OpenrEventBase evb;
+  int scheduleAt{0};
+
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(scheduleAt += ttlOther + 2000), [&]() noexcept {
+        // Wait 2 seconds
+        {
+          auto allKeyVals = store->dumpAll(kTestingAreaName);
+          // deleted when it shouldn't
+          EXPECT_EQ(0, allKeyVals.size());
+        }
+        evb.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
+
 /*
  * Verify if an inconsistent update (a ttl update with a diff originator) is
  * received, kvStores will resync and reach eventual consistency.
