@@ -201,7 +201,7 @@ KvStore<ClientType>::processKeyValueRequest(KeyValueRequest&& kvRequest) {
       XLOG(ERR)
           << "Error processing key value request. Request type not recognized.";
     }
-  } catch (thrift::KvStoreError const& e) {
+  } catch (thrift::KvStoreError const&) {
     XLOG(ERR) << " Failed to find area " << area.t << " in kvStoreDb_.";
   }
 }
@@ -369,7 +369,7 @@ KvStore<ClientType>::dumpKvStoreKeysImpl(
             numMissingKeys);
       }
       result->push_back(std::move(thriftPub));
-    } catch (thrift::KvStoreError const& e) {
+    } catch (thrift::KvStoreError const&) {
       XLOG(ERR) << fmt::format("Failed to find area {} in kvStoreDb_", area);
     }
   }

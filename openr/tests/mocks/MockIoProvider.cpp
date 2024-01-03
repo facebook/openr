@@ -217,14 +217,14 @@ MockIoProvider::sendmsg(int sockFd, const struct msghdr* msg, int /* flags */) {
 
     try {
       dstIfIndex = ifNameToIfIndex_.at(dstIfName);
-    } catch (std::exception const& err) {
+    } catch (std::exception const&) {
       VLOG(1) << "ifname " << dstIfName << " is not bound to an ifIndex";
       continue;
     }
 
     try {
       otherFd = ifIndexToFd_.at(dstIfIndex);
-    } catch (std::out_of_range const& err) {
+    } catch (std::out_of_range const&) {
       LOG(ERROR) << "No sockets bound to " << dstIfName;
       continue;
     }
@@ -279,7 +279,7 @@ MockIoProvider::setsockopt(
     std::string ifName;
     try {
       ifName = ifIndexToIfName_.at(ifIndex);
-    } catch (std::exception const& err) {
+    } catch (std::exception const&) {
       LOG(ERROR) << "ifIndex " << ifIndex << " is not bound to an ifName";
       errno = ERANGE;
       return -1;
