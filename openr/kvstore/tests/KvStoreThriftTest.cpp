@@ -216,12 +216,28 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     // dump peers to make sure they are aware of each other
     peerSpec1.state() = thrift::KvStorePeerState::INITIALIZED;
     peerSpec2.state() = thrift::KvStorePeerState::INITIALIZED;
+
+    auto store2NodeId = store2->getNodeId();
     std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
-        {store2->getNodeId(), peerSpec2}};
+        {store2NodeId, peerSpec2}};
+    auto store1NodeId = store1->getNodeId();
     std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
-        {store1->getNodeId(), peerSpec1}};
-    EXPECT_EQ(expPeer1_1, store1->getPeers(kTestingAreaName));
-    EXPECT_EQ(expPeer2_1, store2->getPeers(kTestingAreaName));
+        {store1NodeId, peerSpec1}};
+
+    auto cmpPeer = store1->getPeers(kTestingAreaName);
+    const auto cmpElapsedTime{2000};
+    EXPECT_EQ(*cmpPeer[store2NodeId].peerAddr(), *peerSpec2.peerAddr());
+    EXPECT_EQ(*cmpPeer[store2NodeId].ctrlPort(), *peerSpec2.ctrlPort());
+    EXPECT_EQ(*cmpPeer[store2NodeId].state(), *peerSpec2.state());
+    EXPECT_LT(*cmpPeer[store2NodeId].stateElapsedTimeMs(), cmpElapsedTime);
+    EXPECT_EQ(*cmpPeer[store2NodeId].flaps(), 0);
+
+    cmpPeer = store2->getPeers(kTestingAreaName);
+    EXPECT_EQ(*cmpPeer[store1NodeId].peerAddr(), *peerSpec1.peerAddr());
+    EXPECT_EQ(*cmpPeer[store1NodeId].ctrlPort(), *peerSpec1.ctrlPort());
+    EXPECT_EQ(*cmpPeer[store1NodeId].state(), *peerSpec1.state());
+    EXPECT_LT(*cmpPeer[store1NodeId].stateElapsedTimeMs(), cmpElapsedTime);
+    EXPECT_EQ(*cmpPeer[store1NodeId].flaps(), 0);
 
     EXPECT_TRUE(
         verifyKvStoreKeyVal(store1.get(), key2, thriftVal2, kTestingAreaName));
@@ -262,9 +278,16 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
         kTestingAreaName));
 
     newPeerSpec.state() = thrift::KvStorePeerState::INITIALIZED;
+    store2NodeId = store2->getNodeId();
     std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
-        {store2->getNodeId(), newPeerSpec}};
-    EXPECT_EQ(newExpPeer, store1->getPeers(kTestingAreaName));
+        {store2NodeId, newPeerSpec}};
+
+    cmpPeer = store1->getPeers(kTestingAreaName);
+    EXPECT_EQ(*cmpPeer[store2NodeId].peerAddr(), *newPeerSpec.peerAddr());
+    EXPECT_EQ(*cmpPeer[store2NodeId].ctrlPort(), *newPeerSpec.ctrlPort());
+    EXPECT_EQ(*cmpPeer[store2NodeId].state(), *newPeerSpec.state());
+    EXPECT_LT(*cmpPeer[store2NodeId].stateElapsedTimeMs(), cmpElapsedTime);
+    EXPECT_EQ(*cmpPeer[store2NodeId].flaps(), 0);
 
     EXPECT_TRUE(
         verifyKvStoreKeyVal(store1.get(), key2, thriftVal2, kTestingAreaName));

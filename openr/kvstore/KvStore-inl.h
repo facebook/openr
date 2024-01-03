@@ -538,6 +538,89 @@ KvStore<ClientType>::semifuture_getKvStorePeerState(
   return sf;
 }
 
+/**
+ * @brief utility function to get epoch time of a given peer, from a given area,
+ * when it has seen last state change
+ *
+ * @param area      name of area kvstore peer belongs
+ * @param peerName  name of the kvstore peer
+ *
+ * @return folly::SemiFuture<int64_t> epoch time in ms
+ */
+template <class ClientType>
+folly::SemiFuture<int64_t>
+KvStore<ClientType>::semifuture_getKvStorePeerStateEpochTimeMs(
+    std::string const& area, std::string const& peerName) {
+  folly::Promise<int64_t> promise;
+  auto sf = promise.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(promise), peerName, area]() mutable {
+        try {
+          p.setValue(getAreaDbOrThrow(
+                         area, "semifuture_getKvStorePeerStateEpochTimeMs")
+                         .getCurrentStateEpochTimeMs(peerName));
+        } catch (thrift::KvStoreError const& e) {
+          p.setException(e);
+        }
+      });
+  return sf;
+}
+
+/**
+ * @brief utility function to get elapsed time of a given peer, from a given
+ * area, since last state peer has been in
+ *
+ * @param area      name of area kvstore peer belongs
+ * @param peerName  name of the kvstore peer
+ *
+ * @return folly::SemiFuture<int64_t> elapsed time in ms
+ */
+template <class ClientType>
+folly::SemiFuture<int64_t>
+KvStore<ClientType>::semifuture_getKvStorePeerStateElapsedTimeMs(
+    std::string const& area, std::string const& peerName) {
+  folly::Promise<int64_t> promise;
+  auto sf = promise.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(promise), peerName, area]() mutable {
+        try {
+          p.setValue(getAreaDbOrThrow(
+                         area, "semifuture_getKvStorePeerStateElapsedTimeMs")
+                         .getCurrentStateElapsedTimeMs(peerName));
+        } catch (thrift::KvStoreError const& e) {
+          p.setException(e);
+        }
+      });
+  return sf;
+}
+
+/**
+ * @brief utility function to get number of flaps to a specific peer (either
+ * from INITIALIZED state or to INITIALIZED state)
+ *
+ * @param area      name of area kvstore peer belongs
+ * @param peerName  name of the kvstore peer
+ *
+ * @return folly::SemiFuture<int32_t> number of flaps
+ */
+template <class ClientType>
+folly::SemiFuture<int32_t>
+KvStore<ClientType>::semifuture_getKvStorePeerFlaps(
+    std::string const& area, std::string const& peerName) {
+  folly::Promise<int32_t> promise;
+  auto sf = promise.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(promise), peerName, area]() mutable {
+        try {
+          p.setValue(getAreaDbOrThrow(area, "semifuture_getKvStorePeerFlaps")
+                         .getCurrentFlaps(peerName));
+        } catch (thrift::KvStoreError const& e) {
+          p.setException(e);
+        }
+      });
+  return sf;
+}
+
 template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
 KvStore<ClientType>::semifuture_getKvStorePeers(std::string area) {
@@ -815,6 +898,73 @@ KvStoreDb<ClientType>::getCurrentState(std::string const& peerName) {
     return *thriftPeerIt->second.peerSpec.state();
   }
   return std::nullopt;
+}
+
+/**
+ * @brief static util function to get epoch time
+ *
+ * @return int64_t  elapsed time in ms
+ */
+inline int64_t
+getTimeSinceEpochMs(void) {
+  auto curTime = std::chrono::steady_clock::now();
+  return (std::chrono::duration_cast<std::chrono::milliseconds>(
+              curTime.time_since_epoch())
+              .count());
+}
+
+/**
+ * @brief static util function to fetch current peer state epoch time
+ *
+ * @param peerName  name of the kvstore peer
+ *
+ * @return int64_t  epoch time in ms
+ */
+template <class ClientType>
+int64_t
+KvStoreDb<ClientType>::getCurrentStateEpochTimeMs(std::string const& peerName) {
+  auto thriftPeerIt = thriftPeers_.find(peerName);
+  if (thriftPeerIt != thriftPeers_.end()) {
+    return *thriftPeerIt->second.peerSpec.stateEpochTimeMs();
+  }
+  return 0;
+}
+
+/**
+ * @brief static util function to fetch current peer state elapsed time
+ *
+ * @param peerName  name of the kvstore peer
+ *
+ * @return int64_t  elapsed time in ms
+ */
+template <class ClientType>
+int64_t
+KvStoreDb<ClientType>::getCurrentStateElapsedTimeMs(
+    std::string const& peerName) {
+  auto thriftPeerIt = thriftPeers_.find(peerName);
+  if (thriftPeerIt != thriftPeers_.end()) {
+    return (
+        getTimeSinceEpochMs() -
+        *thriftPeerIt->second.peerSpec.stateElapsedTimeMs());
+  }
+  return 0;
+}
+
+/**
+ * @brief static util function to fetch peer flaps
+ *
+ * @param peerName  name of the kvstore peer
+ *
+ * @return <int32_t>  number of flaps
+ */
+template <class ClientType>
+int32_t
+KvStoreDb<ClientType>::getCurrentFlaps(std::string const& peerName) {
+  auto thriftPeerIt = thriftPeers_.find(peerName);
+  if (thriftPeerIt != thriftPeers_.end()) {
+    return *thriftPeerIt->second.peerSpec.flaps();
+  }
+  return 0;
 }
 
 // static util function for state transition
@@ -1801,6 +1951,7 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     // state transition
     auto oldState = *peerSpec.state();
     peerSpec.state() = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
+    peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
     logStateTransition(peerName, oldState, *peerSpec.state());
 
     // mark peer from IDLE -> SYNCING
@@ -1964,6 +2115,13 @@ KvStoreDb<ClientType>::processThriftSuccess(
   auto oldState = *peer.peerSpec.state();
   peer.peerSpec.state() =
       getNextState(oldState, KvStorePeerEvent::SYNC_RESP_RCVD);
+
+  if (oldState != *peer.peerSpec.state()) {
+    peer.peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
+    if (*peer.peerSpec.state() == thrift::KvStorePeerState::INITIALIZED) {
+      peer.peerSpec.flaps() = *peer.peerSpec.flaps() + 1;
+    }
+  }
   logStateTransition(peerName, oldState, *peer.peerSpec.state());
 
   // Log full-sync event via replicate queue
@@ -2076,6 +2234,13 @@ KvStoreDb<ClientType>::disconnectPeer(
   // state transition
   auto oldState = *peer.peerSpec.state();
   peer.peerSpec.state() = getNextState(oldState, event);
+
+  if (oldState != *peer.peerSpec.state()) {
+    peer.peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
+    if (oldState == thrift::KvStorePeerState::INITIALIZED) {
+      peer.peerSpec.flaps() = *peer.peerSpec.flaps() + 1;
+    }
+  }
   logStateTransition(peer.nodeName, oldState, *peer.peerSpec.state());
 
   // Thrift error is treated as a completion signal of syncing with peer. Check
@@ -2133,6 +2298,10 @@ KvStoreDb<ClientType>::addThriftPeers(
       peerIter->second.peerSpec = newPeerSpec; // update peerSpec
       peerIter->second.peerSpec.state() =
           thrift::KvStorePeerState::IDLE; // set IDLE initially
+
+      peerIter->second.peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
+      peerIter->second.peerSpec.flaps() = -1;
+
       peerIter->second.plainTextClient.reset(); // destruct thriftClient
       if (kvParams_.enable_secure_thrift_client) {
         peerIter->second.secureClient.reset();
@@ -2153,6 +2322,8 @@ KvStoreDb<ClientType>::addThriftPeers(
               Constants::kKvstoreSyncInitialBackoff,
               Constants::kKvstoreSyncMaxBackoff),
           kvParams_);
+      peer.peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
+      peer.peerSpec.flaps() = -1;
       thriftPeers_.emplace(peerName, std::move(peer));
     }
 
@@ -2233,7 +2404,10 @@ template <class ClientType>
 thrift::PeersMap
 KvStoreDb<ClientType>::dumpPeers() {
   thrift::PeersMap peers;
-  for (auto const& [peerName, thriftPeer] : thriftPeers_) {
+  for (auto& [peerName, thriftPeer] : thriftPeers_) {
+    thriftPeer.peerSpec.stateElapsedTimeMs() =
+        getTimeSinceEpochMs() - *thriftPeer.peerSpec.stateEpochTimeMs();
+
     peers.emplace(peerName, thriftPeer.peerSpec);
   }
   return peers;

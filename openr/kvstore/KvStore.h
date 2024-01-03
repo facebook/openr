@@ -161,6 +161,15 @@ class KvStoreDb {
       std::optional<thrift::KvStorePeerState> const& currState,
       KvStorePeerEvent const& event);
 
+  // util funtion to fetch KvStorePeerStateEpochTimeMs
+  int64_t getCurrentStateEpochTimeMs(std::string const& peerName);
+
+  // util funtion to fetch KvStorePeerStateElapsedTimeMs
+  int64_t getCurrentStateElapsedTimeMs(std::string const& peerName);
+
+  // util funtion to fetch KvStorePeerFlaps
+  int32_t getCurrentFlaps(std::string const& peerName);
+
   /*
    * [Open/R Initialization]
    *
@@ -644,6 +653,18 @@ class KvStore final : public OpenrEventBase {
   // API to fetch state of peerNode, used for unit-testing
   folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
   semifuture_getKvStorePeerState(
+      std::string const& area, std::string const& peerName);
+
+  // API to fetch state epoch time of peerNode, used for unit-testing
+  folly::SemiFuture<int64_t> semifuture_getKvStorePeerStateEpochTimeMs(
+      std::string const& area, std::string const& peerName);
+
+  // API to fetch state elapsed time of peerNode, used for unit-testing
+  folly::SemiFuture<int64_t> semifuture_getKvStorePeerStateElapsedTimeMs(
+      std::string const& area, std::string const& peerName);
+
+  // API to fetch peerNode flaps, used for unit-testing
+  folly::SemiFuture<int32_t> semifuture_getKvStorePeerFlaps(
       std::string const& area, std::string const& peerName);
 
 // [Public APIs]

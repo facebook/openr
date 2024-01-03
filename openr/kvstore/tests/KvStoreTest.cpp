@@ -662,6 +662,9 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentVersion) {
           validateThriftValue(allKeyVals[key], expValue);
         }
 
+        auto cmpPeers = storeB->getPeers(kTestingAreaName);
+        EXPECT_LT(*cmpPeers["storeA"].stateElapsedTimeMs(), ttl);
+        EXPECT_EQ(*cmpPeers["storeA"].flaps(), 2);
         evb.stop();
       });
 
@@ -844,6 +847,9 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentOriginator) {
           validateThriftValue(allKeyVals[key], expValue);
         }
 
+        auto cmpPeers = storeB->getPeers(kTestingAreaName);
+        EXPECT_LT(*cmpPeers["storeA"].stateElapsedTimeMs(), ttl);
+        EXPECT_EQ(*cmpPeers["storeA"].flaps(), 2);
         evb.stop();
       });
 
@@ -1389,12 +1395,23 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   waitForAllPeersInitialized();
 
   // map of peers we expect and dump peers to expect the results.
+  auto store0NodeId = store0->getNodeId();
+  auto peerSpec0 = store0->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
   std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
-      {store0->getNodeId(),
-       store0->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+      {store0NodeId, peerSpec0},
   };
-  EXPECT_EQ(expectedPeers, store1->getPeers(kTestingAreaName));
-  EXPECT_EQ(expectedPeers, store2->getPeers(kTestingAreaName));
+
+  auto cmpPeers = store1->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+
+  cmpPeers = store2->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+
+  EXPECT_EQ(*cmpPeers[store0NodeId].peerAddr(), *peerSpec0.peerAddr());
+  EXPECT_EQ(*cmpPeers[store0NodeId].ctrlPort(), *peerSpec0.ctrlPort());
+  EXPECT_EQ(*cmpPeers[store0NodeId].state(), *peerSpec0.state());
+  EXPECT_LT(*cmpPeers[store0NodeId].stateElapsedTimeMs(), 5000);
+  EXPECT_EQ(*cmpPeers[store0NodeId].flaps(), 0);
 
   //
   // Step 1) and 2): advertise key from store1/store2 and verify
@@ -2539,19 +2556,35 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     storeB->addPeer(planeAreaId, "storeC", storeC->getPeerSpec());
     storeC->addPeer(planeAreaId, "storeB", storeB->getPeerSpec());
     // verify get peers command
+    auto storeANodeId = storeA->getNodeId();
+    auto podPeerSpec =
+        storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
     std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
-        {storeA->getNodeId(),
-         storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+        {storeANodeId, podPeerSpec},
     };
+
+    auto storeCNodeId = storeC->getNodeId();
+    auto planePeerSpec =
+        storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
     std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
-        {storeC->getNodeId(),
-         storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED)},
+        {storeCNodeId, planePeerSpec},
     };
 
     waitForAllPeersInitialized();
 
-    EXPECT_EQ(expectedPeersPod, storeB->getPeers(podAreaId));
-    EXPECT_EQ(expectedPeersPlane, storeB->getPeers(planeAreaId));
+    auto cmpPeers = storeB->getPeers(podAreaId);
+    EXPECT_EQ(*cmpPeers[storeANodeId].peerAddr(), *podPeerSpec.peerAddr());
+    EXPECT_EQ(*cmpPeers[storeANodeId].ctrlPort(), *podPeerSpec.ctrlPort());
+    EXPECT_EQ(*cmpPeers[storeANodeId].state(), *podPeerSpec.state());
+    EXPECT_LT(*cmpPeers[storeANodeId].stateElapsedTimeMs(), 5000);
+    EXPECT_EQ(*cmpPeers[storeANodeId].flaps(), 0);
+
+    cmpPeers = storeB->getPeers(planeAreaId);
+    EXPECT_EQ(*cmpPeers[storeCNodeId].peerAddr(), *planePeerSpec.peerAddr());
+    EXPECT_EQ(*cmpPeers[storeCNodeId].ctrlPort(), *planePeerSpec.ctrlPort());
+    EXPECT_EQ(*cmpPeers[storeCNodeId].state(), *planePeerSpec.state());
+    EXPECT_LT(*cmpPeers[storeCNodeId].stateElapsedTimeMs(), 5000);
+    EXPECT_EQ(*cmpPeers[storeCNodeId].flaps(), 0);
   }
 
   {

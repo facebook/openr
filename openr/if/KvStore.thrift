@@ -307,6 +307,24 @@ struct PeerSpec {
    * State of KvStore peering
    */
   5: KvStorePeerState state;
+
+  /**
+   * Epoch time in milliseconds when last state changed
+   */
+  6: optional i64 stateEpochTimeMs;
+
+  /**
+   * This is transient value, in reference to current time
+   * Elapsed time since StateEpochTimeMs
+   * Some commands running on remote hosts may retrieve PeerSpec
+   *   and hence need for elapsed time with respect to local host
+   */
+  7: optional i64 stateElapsedTimeMs;
+
+  /**
+   * Number of times session has flapped to or from INITIALIZED state
+   */
+  8: optional i32 flaps;
 }
 
 /**

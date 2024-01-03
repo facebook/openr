@@ -154,13 +154,31 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         caption = "{}'s peers".format(host_id)
 
         rows = []
-        column_labels = ["Peer", "State", "Address", "Port", "Area"]
+        column_labels = [
+            "Peer",
+            "State",
+            "Elapsed time",
+            "Flaps",
+            "Address",
+            "Port",
+            "Area",
+        ]
 
         for area, peers in peers_list.items():
             for (peer, peerspec) in sorted(peers.items(), key=lambda x: x[0]):
+                elapsed_time = ""
+                flaps = ""
+                if peerspec.stateElapsedTimeMs is not None:
+                    elapsed_time = str(
+                        datetime.timedelta(milliseconds=peerspec.stateElapsedTimeMs)
+                    )
+                if peerspec.flaps is not None:
+                    flaps = peerspec.flaps
                 row = [
                     peer,
                     peerspec.state.name,
+                    elapsed_time,
+                    flaps,
                     peerspec.peerAddr,
                     peerspec.ctrlPort,
                     area,

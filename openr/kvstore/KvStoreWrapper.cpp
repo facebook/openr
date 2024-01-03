@@ -311,6 +311,53 @@ KvStoreWrapper<ClientType>::getPeerState(
   return kvStore_->semifuture_getKvStorePeerState(area, peerName).get();
 }
 
+/**
+ * @brief util function to fetch peer state epoch time
+ *
+ * @param area      name of area kvstore peer belongs
+ * @param peerName  name of the kvstore peer
+ *
+ * @return int64_t  epoch time in ms
+ */
+template <class ClientType>
+int64_t
+KvStoreWrapper<ClientType>::getPeerStateEpochTimeMs(
+    AreaId const& area, std::string const& peerName) {
+  return kvStore_->semifuture_getKvStorePeerStateEpochTimeMs(area, peerName)
+      .get();
+}
+
+/**
+ * @brief util function to fetch peer state elapsed time
+ *
+ * @param area      name of area kvstore peer belongs
+ * @param peerName  name of the kvstore peer
+ *
+ * @return int64_t  elapsed time in ms
+ */
+template <class ClientType>
+int64_t
+KvStoreWrapper<ClientType>::getPeerStateElapsedTimeMs(
+    AreaId const& area, std::string const& peerName) {
+  return kvStore_->semifuture_getKvStorePeerStateElapsedTimeMs(area, peerName)
+      .get();
+}
+
+/**
+ * @brief util function to fetch peer state flaps
+ *
+ * @param area      name of area kvstore peer belongs
+ * @param peerName  name of the kvstore peer
+ *
+ * @return int32_t  number of flaps
+ */
+template <class ClientType>
+int32_t
+KvStoreWrapper<ClientType>::getPeerFlaps(
+    AreaId const& area, std::string const& peerName) {
+  return kvStore_->semifuture_getKvStorePeerFlaps(area, peerName).get();
+}
+
 template <class ClientType>
 std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper<ClientType>::getPeers(AreaId const& area) {
