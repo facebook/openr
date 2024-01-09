@@ -1135,7 +1135,7 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
           context,
           folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */
           *peerSpec.ctrlPort(), /* port to establish TCP connection */
-          Constants::kServiceConnTimeout, /* client connection timeout */
+          Constants::kServiceConnSSLTimeout, /* client connection timeout */
           Constants::kServiceProcTimeout, /* request processing timeout */
           folly::AsyncSocket::anyAddress(), /* bindAddress */
           maybeIpTos, /* IP_TOS value for control plane */
