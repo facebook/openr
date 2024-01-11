@@ -23,6 +23,7 @@ class DecisionCli:
         self.decision.add_command(DecisionRibPolicyCli().show, name="rib-policy")
         self.decision.add_command(ReceivedRoutesCli().show)
         self.decision.add_command(DecisionValidateCli().validate)
+        self.decision.add_command(DecisionPartialAdjCli().show, name="partial-adj")
 
     @click.group(cls=deduceCommandGroup)
     @click.pass_context
@@ -81,6 +82,16 @@ class DecisionRoutesComputedCli:
         decision.DecisionRoutesComputedCmd(cli_opts).run(
             nodes_set, prefixes, labels, json, hostnames
         )
+
+
+class DecisionPartialAdjCli:
+    @click.command()
+    @click.option("--area", "-a", help="Show partial adj for the given area")
+    @click.pass_obj
+    def show(cli_opts, area):  # noqa: B902
+        """dump the partial adjacencies of an area"""
+
+        decision.DecisionShowPartialAdjCmd(cli_opts).run(area)
 
 
 class DecisionAdjCli:

@@ -56,6 +56,41 @@ class DecisionRoutesComputedCmd(OpenrCtrlCmd):
                 )
 
 
+class DecisionShowPartialAdjCmd(OpenrCtrlCmd):
+    # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
+    async def _run(
+        self,
+        client: OpenrCtrlCppClient.Async,
+        area: str,
+        *args,
+        **kwargs,
+    ) -> None:
+        adj_dbs = await client.getDecisionAdjacenciesFiltered(
+            ctrl_types.AdjacenciesFilter(selectAreas={area})
+        )
+        # convert list<adjDb> from server to a two level map: {area: {node: adjDb}}
+        adjs_map_all_areas = utils.adj_dbs_to_area_dict(
+            adj_dbs, nodes={"all"}, bidir=False
+        )
+
+        print("\n== Area:", area, "==\n")
+        adj_set = set()
+        for _, adj_dbs in adjs_map_all_areas.items():
+            for node_name, adj_db in adj_dbs.items():
+                for adj in adj_db["adjacencies"]:
+                    adj_set.add((node_name, adj["otherNodeName"]))
+        print("Total adj (uni-directional):", len(adj_set))
+
+        missing = []
+        for node, adj in adj_set:
+            r = (adj, node)
+            if r not in adj_set:
+                missing.append(r)
+        print("Total partial adj:", len(missing))
+        for missing_adj in sorted(missing):
+            print(f"{missing_adj[0]} -X-> {missing_adj[1]}")
+
+
 class DecisionAdjCmd(OpenrCtrlCmd):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
