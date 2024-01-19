@@ -1128,9 +1128,7 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
       folly::ssl::SSLCommonOptions::setClientOptions(*context);
       // Since we are suggesting support for rocket in ALPN,
       // we should use RocketClientChannel to match what is negotiated
-      secureClient = getOpenrCtrlSecureClient<
-          ClientType,
-          apache::thrift::RocketClientChannel>(
+      secureClient = getOpenrCtrlSecureClient<ClientType>(
           *(evb->getEvb()),
           context,
           folly::IPAddress(*peerSpec.peerAddr()), /* v6LinkLocal */

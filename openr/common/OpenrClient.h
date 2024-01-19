@@ -125,9 +125,7 @@ getOpenrCtrlPlainTextClient(
 /*
  * Create secured client for OpenrCtrlCpp service over AsyncSSLSocket.
  */
-template <
-    typename ClientType,
-    typename ClientChannel = apache::thrift::RocketClientChannel>
+template <typename ClientType>
 static std::unique_ptr<ClientType>
 getOpenrCtrlSecureClient(
     folly::EventBase& evb,
@@ -183,7 +181,8 @@ getOpenrCtrlSecureClient(
     }
 
     // Create channel and set timeout
-    auto channel = ClientChannel::newChannel(std::move(transport));
+    auto channel =
+        apache::thrift::RocketClientChannel::newChannel(std::move(transport));
     channel->setTimeout(processingTimeout.count());
 
     // Enable compression for efficient transport when available. This will
