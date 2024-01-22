@@ -274,7 +274,7 @@ LinkState::removeNode(const std::string& nodeName) {
     try {
       CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
       CHECK(allLinks_.erase(link));
-    } catch (std::out_of_range const& e) {
+    } catch (std::out_of_range const&) {
       XLOG(FATAL) << "std::out_of_range for " << nodeName;
     }
   }
