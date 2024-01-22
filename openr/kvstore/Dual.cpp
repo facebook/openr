@@ -225,8 +225,8 @@ Dual::diffusingComputation(
   msg.distance() = info_.reportDistance;
   msg.type() = thrift::DualMessageType::QUERY;
 
-  for (const auto& [neighbor, ld] : localDistances_) {
-    if (ld == std::numeric_limits<int64_t>::max()) {
+  for (const auto& [neighbor, ld_2] : localDistances_) {
+    if (ld_2 == std::numeric_limits<int64_t>::max()) {
       // skip down neighbor
       continue;
     }
