@@ -739,7 +739,7 @@ Spark::validateV4AddressSubnet(
 
   try {
     toIPAddress(neighV4Addr);
-  } catch (const folly::IPAddressFormatException& ex) {
+  } catch (const folly::IPAddressFormatException&) {
     XLOG(ERR) << fmt::format(
         "[SparkHandshakeMsg] Invalid ipv4 address from ifName: {}", ifName);
     fb303::fbData->addStatValue(
