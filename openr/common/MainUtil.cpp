@@ -26,7 +26,7 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
     openr::Fib::createFibClient(evb, client, port);
     try {
       switchState = client->sync_getSwitchRunState();
-    } catch (const std::exception& e) {
+    } catch (const std::exception&) {
     }
     // sleep override
     std::this_thread::sleep_for(std::chrono::seconds(1));
