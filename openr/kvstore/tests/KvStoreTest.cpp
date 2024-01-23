@@ -237,7 +237,7 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
                     .get()
                     ->begin();
     maybeKeyMap = *pub.keyVals();
-  } catch (const std::exception& ex) {
+  } catch (const std::exception&) {
     maybeKeyMap = std::nullopt;
   }
   EXPECT_TRUE(maybeKeyMap.has_value());
@@ -267,7 +267,7 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
                     .get()
                     ->begin();
     maybeKeysAfterInsert = *pub.keyVals();
-  } catch (const std::exception& ex) {
+  } catch (const std::exception&) {
     maybeKeysAfterInsert = std::nullopt;
   }
   EXPECT_TRUE(maybeKeysAfterInsert.has_value());
@@ -289,7 +289,7 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
                     .get()
                     ->begin();
     maybeKeysAfterInsert = *pub.keyVals();
-  } catch (const std::exception& ex) {
+  } catch (const std::exception&) {
     maybeKeysAfterInsert = std::nullopt;
   }
   EXPECT_TRUE(maybeKeysAfterInsert.has_value());
@@ -328,7 +328,7 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
                     .get()
                     ->begin();
     maybeKeyMap = *pub.keyVals();
-  } catch (const std::exception& ex) {
+  } catch (const std::exception&) {
     maybeKeyMap = std::nullopt;
   }
   EXPECT_TRUE(maybeKeyMap.has_value());
@@ -355,7 +355,7 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
     auto pub = co_await kvStore_->getKvStore()->co_dumpKvStoreKeys(
         std::move(params), {kTestingAreaName.t});
     maybeKeysAfterInsert = *pub->begin()->keyVals();
-  } catch (const std::exception& ex) {
+  } catch (const std::exception&) {
     maybeKeysAfterInsert = std::nullopt;
   }
   EXPECT_TRUE(maybeKeysAfterInsert.has_value());
@@ -374,7 +374,7 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
     auto pub = co_await kvStore_->getKvStore()->co_dumpKvStoreKeys(
         std::move(params), {kTestingAreaName.t});
     maybeKeysAfterInsert = *pub->begin()->keyVals();
-  } catch (const std::exception& ex) {
+  } catch (const std::exception&) {
     maybeKeysAfterInsert = std::nullopt;
   }
   EXPECT_TRUE(maybeKeysAfterInsert.has_value());
