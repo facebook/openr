@@ -97,8 +97,6 @@ SpfSolver::SpfSolver(
   fb303::fbData->addStatExportType("decision.skipped_mpls_route", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "decision.duplicate_node_label", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "decision.skipped_unicast_route", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
   fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
@@ -174,8 +172,6 @@ SpfSolver::createRouteForPrefix(
                   << folly::IPAddress::networkToString(prefix)
                   << " while v4 is not enabled, and "
                   << "we are not allowing v4 prefix over v6 nexthop.";
-    fb303::fbData->addStatValue(
-        "decision.skipped_unicast_route", 1, fb303::COUNT);
     return std::nullopt;
   }
 
