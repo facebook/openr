@@ -15,6 +15,7 @@ namespace wiki Open_Routing.Thrift_APIs.Platform
 
 include "fb303/thrift/fb303_core.thrift"
 include "openr/if/Network.thrift"
+include "thrift/annotation/thrift.thrift"
 
 /**
  * Enum to keep track of Client name to Client-ID mapping. Indicates which
@@ -45,8 +46,9 @@ enum SwitchRunState {
 }
 
 exception PlatformError {
+  @thrift.ExceptionMessage
   1: string message;
-} (message = "message")
+}
 
 exception PlatformFibUpdateError {
   1: map<i32, list<Network.IpPrefix>> vrf2failedAddUpdatePrefixes;

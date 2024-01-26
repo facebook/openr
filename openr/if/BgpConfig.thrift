@@ -11,6 +11,8 @@ namespace py openr.BgpConfig
 namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.BgpConfig
 
+include "thrift/annotation/cpp.thrift"
+
 struct BgpPeerTimers {
   1: i32 hold_time_seconds;
   2: i32 keep_alive_seconds;
@@ -20,6 +22,7 @@ struct BgpPeerTimers {
   6: optional i32 graceful_restart_end_of_rib_seconds;
 }
 
+@cpp.MinimizePadding
 struct RouteLimit {
   /* Maximum routes allow for this peer */
   1: i64 max_routes = 12000; // default 12000
@@ -27,7 +30,7 @@ struct RouteLimit {
   2: bool warning_only = false; // default false
   /* # of routes at which warning is to be issued. */
   3: i64 warning_limit = 0; // default 0, not using warning_limit
-} (cpp.minimize_padding)
+}
 
 /**
  * Control knob for advertising link bandwidth community to a peer or
@@ -103,6 +106,7 @@ enum AddPath {
   BOTH = 3,
 }
 
+@cpp.MinimizePadding
 struct PeerGroup {
   1: string name;
   2: optional string description;
@@ -149,11 +153,12 @@ struct PeerGroup {
   31: optional AddPath add_path;
   /* Advertising ipv4 nlri over v6 nexthop # RFC-5549 */
   32: optional bool v4_over_v6_nexthop;
-} (cpp.minimize_padding)
+}
 
 /**
  * The configuration of a single BGP peer
  */
+@cpp.MinimizePadding
 struct BgpPeer {
   /**
    * the peer's BGP ASN
@@ -271,11 +276,12 @@ struct BgpPeer {
    * functionality to this peer.
    */
   100: optional AddPath add_path;
-} (cpp.minimize_padding)
+}
 
 /**
  * BGP configuration
  */
+@cpp.MinimizePadding
 struct BgpConfig {
   /**
    * this is normally the loopback IP
@@ -323,4 +329,4 @@ struct BgpConfig {
   17: optional bool compute_ucmp_from_link_bandwidth_community;
 
   18: i32 eor_time_s = 45;
-} (cpp.minimize_padding)
+}

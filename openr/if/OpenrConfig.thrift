@@ -15,6 +15,8 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
 include "openr/if/BgpConfig.thrift"
 include "configerator/structs/neteng/config/routing_policy.thrift"
 include "configerator/structs/neteng/config/vip_service_config.thrift"
+include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/thrift.thrift"
 
 enum PrefixForwardingType {
   /** IP nexthop is used for routing to the prefix. */
@@ -39,14 +41,16 @@ enum PrefixForwardingAlgorithm {
 }
 
 exception ConfigError {
+  @thrift.ExceptionMessage
   1: string message;
-} (message = "message")
+}
 
 struct KvstoreFloodRate {
   1: i32 flood_msg_per_sec;
   2: i32 flood_msg_burst_size;
 }
 
+@cpp.MinimizePadding
 struct KvstoreConfig {
   /**
    * Set the TTL (in ms) of a key in the KvStore. For larger networks where
@@ -74,7 +78,7 @@ struct KvstoreConfig {
    */
   6: optional list<string> key_prefix_filters;
   7: optional list<string> key_originator_id_filters;
-} (cpp.minimize_padding)
+}
 
 /*
  * Enum to customize the best route selection algorithm amongst all areas. SHORTEST_DISTANCE
@@ -111,18 +115,20 @@ enum RouteSelectionAlgorithm {
 }
 
 /* Path computation rules for a specific area */
+@cpp.MinimizePadding
 struct AreaPathComputationRules {
   1: PrefixForwardingAlgorithm forwardingAlgo = PrefixForwardingAlgorithm.SP_ECMP;
   2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
-} (cpp.minimize_padding)
+}
 
+@cpp.MinimizePadding
 struct RouteComputationRules {
   /* Route selection algorithm the route will use */
   1: RouteSelectionAlgorithm routeSelectionAlgo = RouteSelectionAlgorithm.SHORTEST_DISTANCE;
 
   /* Map of path computation rules per area. Key is the areaId string */
   2: map<string, AreaPathComputationRules> areaPathComputationRules;
-} (cpp.minimize_padding)
+}
 
 struct DecisionConfig {
   /** Fast reaction time to update decision SPF upon receiving adj db update
@@ -358,6 +364,7 @@ struct ThriftClientConfig {
   2: VerifyServerType verify_server_type;
 }
 
+@cpp.MinimizePadding
 struct OriginatedPrefix {
   1: string prefix;
 
@@ -396,7 +403,7 @@ struct OriginatedPrefix {
    * set, Decision will not do extra check the number of nexthops.
    */
   11: optional i64 minNexthop;
-} (cpp.minimize_padding)
+}
 
 struct LabelRange {
   1: i32 start_label;
@@ -417,6 +424,7 @@ enum SegmentRoutingNodeLabelType {
   STATIC = 1,
 }
 
+@cpp.MinimizePadding
 struct SegmentRoutingNodeLabel {
   /**
    * The way node segment label should be allocated.
@@ -435,7 +443,7 @@ struct SegmentRoutingNodeLabel {
    * sr_node_label_type is AUTO.
    */
   3: optional LabelRange node_segment_label_range;
-} (cpp.minimize_padding)
+}
 
 /**
  * The area config specifies the area name, interfaces to perform discovery
@@ -494,6 +502,7 @@ struct SegmentRoutingNodeLabel {
  *
  */
 
+@cpp.MinimizePadding
 struct AreaConfig {
   1: string area_id;
   3: list<string> neighbor_regexes;
@@ -517,7 +526,7 @@ struct AreaConfig {
    * should be unique per device per area.
    */
   8: optional SegmentRoutingNodeLabel area_sr_node_label;
-} (cpp.minimize_padding)
+}
 
 /**
  * Configuration to facilitate route translation between BGP <-> Open/R
@@ -530,6 +539,7 @@ struct AreaConfig {
  * - metrics.source_preference => BGP Local Preference
  * ```
  */
+@cpp.MinimizePadding
 struct BgpRouteTranslationConfig {
   /**
    * Map that defines communities in '{asn}:{value}' format to their human
@@ -596,8 +606,9 @@ struct BgpRouteTranslationConfig {
    * When translating bgp->openr, these community will be stripped
    */
   12: map<i32, string> igp_cost_to_community;
-} (cpp.minimize_padding)
+}
 
+@cpp.MinimizePadding
 struct OpenrConfig {
   1: string node_name;
   3: list<AreaConfig> areas = [];
@@ -809,4 +820,4 @@ struct OpenrConfig {
  * ATTN: All of the temp config knobs serving for gradual rollout purpose use
  * id range of 200 - 300
  */
-} (cpp.minimize_padding)
+}

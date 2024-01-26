@@ -14,6 +14,7 @@ namespace wiki Open_Routing.Thrift_APIs.KvStore
 
 include "fb303/thrift/fb303_core.thrift"
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/thrift.thrift"
 
 /*
  * Events in OpenR initialization process.
@@ -82,8 +83,9 @@ enum InitializationEvent {
 }
 
 exception KvStoreError {
+  @thrift.ExceptionMessage
   1: string message;
-} (message = "message")
+}
 
 /**
  * `V` of `KV` Store. It encompasses the data that needs to be synchronized
@@ -92,6 +94,7 @@ exception KvStoreError {
  * NOTE: Version 0 is undefined - Treat the struct as uninitialized.
  * Please set version > 0 for valid input.
  */
+@cpp.MinimizePadding
 struct Value {
   /**
    * Current version of this value. Higher version value replaces the lower one.
@@ -142,7 +145,7 @@ struct Value {
    * operation.
    */
   6: optional i64 hash;
-} (cpp.minimize_padding)
+}
 
 /**
  * Map of key to value. This is a representation of KvStore data-base. Using
@@ -194,6 +197,7 @@ enum FilterOperator {
 /**
  * Request object for setting keys in KvStore.
  */
+@cpp.MinimizePadding
 struct KeySetParams {
   /**
    * Entries, aka list of Key-Value, that are requested to be updated in a
@@ -218,7 +222,7 @@ struct KeySetParams {
    * ID representing sender of the request.
    */
   8: optional string senderId;
-} (cpp.minimize_padding)
+}
 
 /**
  * Request object for retrieving specific keys from KvStore
@@ -231,6 +235,7 @@ struct KeyGetParams {
  * Request object for retrieving KvStore entries or subscribing KvStore updates.
  * This is more powerful version than KeyGetParams.
  */
+@cpp.MinimizePadding
 struct KeyDumpParams {
   /**
    * Optional attribute to include keyValHashes information from peer.
@@ -275,7 +280,7 @@ struct KeyDumpParams {
    * ID representing sender of the request.
    */
   8: optional string senderId;
-} (cpp.minimize_padding)
+}
 
 /**
  * Define KvStorePeerState to maintain peer's state transition
@@ -336,6 +341,7 @@ typedef map<string, PeerSpec> PeersMap
 /**
  * KvStore Response specification. This is also used to respond to GET requests
  */
+@cpp.MinimizePadding
 struct Publication {
   /**
    * KvStore entries
@@ -375,13 +381,14 @@ struct Publication {
    * in milliseconds since epoch
    */
   8: optional i64 timestamp_ms;
-} (cpp.minimize_padding)
+}
 
 /**
  * Struct summarizing KvStoreDB for a given area. This is currently used for
  * sending responses to 'breeze kvstore summary'
  */
 
+@cpp.MinimizePadding
 struct KvStoreAreaSummary {
   /**
    * KvStore area for this summary
@@ -402,7 +409,7 @@ struct KvStoreAreaSummary {
    * Total size in bytes of KvStoreDB for this area
    */
   4: i32 keyValsBytes;
-} (cpp.minimize_padding)
+}
 
 struct KvStoreFloodRate {
   1: i32 flood_msg_per_sec;
@@ -412,6 +419,7 @@ struct KvStoreFloodRate {
 /**
  * KvStoreConfig is the centralized place to configure
  */
+@cpp.MinimizePadding
 struct KvStoreConfig {
   /**
    * Set the TTL (in ms) of a key in the KvStore. For larger networks where
@@ -462,7 +470,7 @@ struct KvStoreConfig {
   13: optional string x509_ca_path;
   /** Knob to enable/disable TLS thrift client. */
   14: bool enable_secure_thrift_client = false;
-} (cpp.minimize_padding)
+}
 
 /**
  * Thrift service - exposes RPC APIs for interaction with KvStore module.

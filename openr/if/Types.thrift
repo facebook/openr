@@ -97,6 +97,7 @@ struct InterfaceInfo {
  * Relation or session with the neighbor is termed as Adjacency. This struct
  * represents an Adjacency object.
  */
+@cpp.MinimizePadding
 struct Adjacency {
   /**
    * Neighbor or peer node name
@@ -167,13 +168,14 @@ struct Adjacency {
    * adj for route computation.
    */
   12: bool adjOnlyUsedByOtherNode = false;
-} (cpp.minimize_padding)
+}
 
 /**
  * Link-State (LS) of a node for a particular area. It is collection of all
  * established adjacencies with few more attributes. Announced in KvStore
  * with key prefix - "adj:"
  */
+@cpp.MinimizePadding
 struct AdjacencyDatabase {
   /**
    * Name of the node
@@ -215,7 +217,7 @@ struct AdjacencyDatabase {
    * of a route.
    */
   7: i32 nodeMetricIncrementVal = 0;
-} (cpp.minimize_padding)
+}
 
 /**
  * PrefixMetrics - Structs represents the core set of metrics used in best
@@ -231,6 +233,7 @@ struct AdjacencyDatabase {
  *                origination can never be modified after-wards. `mutable`
  *                attributes can be modified by policy on re-distribution
  */
+@cpp.MinimizePadding
 struct PrefixMetrics {
   /**
    * Version of prefix metrics. This should be updated everytime any changes
@@ -287,11 +290,12 @@ struct PrefixMetrics {
    * the node. Every node will have different behavior for forwarding algorithm
    * based on topology. And hence we're not include `igp_cost` metric in here
    */
-} (cpp.minimize_padding)
+}
 
 /**
  * PrefixEntry, a structure that represents an advertised route in the KvStore
  */
+@cpp.MinimizePadding
 struct PrefixEntry {
   /**
    * IPv4 or IPv6 prefix indicating reachability to CIDR network
@@ -351,12 +355,13 @@ struct PrefixEntry {
   12: list<string> area_stack;
 
   13: optional i64 weight;
-} (cpp.minimize_padding)
+}
 
 /**
  * Route advertisement object in KvStore. All prefixes that are bound to a given
  * router announced under keys starting with "prefixes:".
  */
+@cpp.MinimizePadding
 struct PrefixDatabase {
   /**
    * Name of the node announcing route
@@ -377,7 +382,7 @@ struct PrefixDatabase {
    * Flag to indicate prefix(s) must be deleted
    */
   5: bool deletePrefix;
-} (cpp.minimize_padding)
+}
 
 /**
  * @deprecated - Map of node name to adjacency database. This is deprecated
@@ -451,6 +456,7 @@ struct RouteDatabaseDelta {
 /**
  * Perf log buffer maintained by Fib
  */
+@cpp.MinimizePadding
 struct PerfDatabase {
   /**
    * Name of local node.
@@ -462,11 +468,12 @@ struct PerfDatabase {
    * Ordered list of historical performance events in ascending order of time
    */
   2: list<PerfEvents> eventInfo;
-} (cpp.minimize_padding)
+}
 
 /**
  * Details about an interface in Open/R
  */
+@cpp.MinimizePadding
 struct InterfaceDetails {
   /**
    * Interface information such as name and addresses
@@ -499,11 +506,12 @@ struct InterfaceDetails {
    * the other end of the interface.
    */
   5: i32 linkMetricIncrementVal;
-} (cpp.minimize_padding)
+}
 
 /**
  * Information of all links of this node
  */
+@cpp.MinimizePadding
 struct DumpLinksReply {
   /**
    * @deprecated - Name of the node. This is no longer of any relevance.
@@ -525,7 +533,7 @@ struct DumpLinksReply {
    */
   @cpp.Type{template = "std::unordered_map"}
   6: map<string, InterfaceDetails> interfaceDetails;
-} (cpp.minimize_padding)
+}
 
 /**
  * Set of attributes to uniquely identify an adjacency. It is identified by
@@ -557,6 +565,7 @@ struct AdjKey {
  *    - NOTE: this metric override will overthrow all previously accumulated
  *      metric value for this specific adjacency;
  */
+@cpp.MinimizePadding
 struct LinkMonitorState {
   /**
    * [HARD-DRAIN]
@@ -608,12 +617,13 @@ struct LinkMonitorState {
    * Custom metric increment for a specifc set of links.
    */
   8: map<string, i32> linkMetricIncrementMap;
-} (cpp.minimize_padding)
+}
 
 /**
  * Struct representing build information. Attributes are described in detail
  * in `openr/common/BuildInfo.h`
  */
+@cpp.MinimizePadding
 struct BuildInfo {
   1: string buildUser;
   2: string buildTime;
@@ -632,11 +642,12 @@ struct BuildInfo {
   15: string buildType;
   16: string buildTool;
   17: string buildMode;
-} (cpp.minimize_padding)
+}
 
 /**
  * Struct to represent originated prefix from PrefixManager's view
  */
+@cpp.MinimizePadding
 struct OriginatedPrefixEntry {
   /**
    * Originating prefix information from config
@@ -653,7 +664,7 @@ struct OriginatedPrefixEntry {
    * drop next-hops.
    */
   3: bool installed = 0;
-} (cpp.minimize_padding)
+}
 
 /**
  * Describe timestamp information about send/recv of hello packets. We use this
@@ -699,6 +710,7 @@ struct OpenrVersions {
  *      3) To notify for its own "RESTART" to neighbors;
  *    - SparkHelloMsg will be sent per interface;
  */
+@cpp.MinimizePadding
 struct SparkHelloMsg {
   /**
    * Name of the node originating this hello message.
@@ -753,7 +765,7 @@ struct SparkHelloMsg {
    * Timestamp to indicate when this helloMsg is sent for RTT calculation
    */
   9: i64 sentTsInUs;
-} (cpp.minimize_padding)
+}
 
 /**
  * SparkHeartbeatMsg
@@ -788,6 +800,7 @@ struct SparkHeartbeatMsg {
  *      To exchange param information to establish adjacency;
  *    - SparkHandshakeMsg will be sent per (interface, neighbor)
  */
+@cpp.MinimizePadding
 struct SparkHandshakeMsg {
   /**
    * Name of the node originating this handshake message
@@ -832,7 +845,7 @@ struct SparkHandshakeMsg {
    * be treated as a multicast and all nodes will process it.
    */
   11: optional string neighborNodeName;
-} (cpp.minimize_padding)
+}
 
 /**
  * SparkHelloPacket will define 3 types of messages inside thrift structure:
@@ -868,6 +881,7 @@ struct SparkHelloPacket {
  * Data structure to send with SparkNeighborEvent to convey
  * info for a single unique neighbor for upper module usage
  */
+@cpp.MinimizePadding
 struct SparkNeighbor {
   /**
    * Name of the node sending hello packets
@@ -931,4 +945,4 @@ struct SparkNeighbor {
    * timestamp of last sent SparkHandshakeMsg for this neighbor
    */
   13: i64 lastHeartbeatMsgSentTimeDelta = 0;
-} (cpp.minimize_padding)
+}

@@ -16,6 +16,8 @@ namespace wiki Open_Routing.Thrift_APIs.Network
 
 // Using the defaults from here:
 // https://en.wikipedia.org/wiki/Administrative_distance
+include "thrift/annotation/cpp.thrift"
+
 enum AdminDistance {
   DIRECTLY_CONNECTED = 0,
   STATIC_ROUTE = 1,
@@ -33,24 +35,28 @@ enum MplsActionCode {
   NOOP = 4,
 }
 
+@cpp.MinimizePadding
 struct MplsAction {
   1: MplsActionCode action;
   2: optional i32 swapLabel; // Required if action == SWAP
   // front() (index=0) in list will be bottom of stack and back()
   // element is top of the stack
   3: optional list<i32> pushLabels; // Required if action == PUSH
-} (cpp.minimize_padding)
+}
 
+@cpp.MinimizePadding
 struct BinaryAddress {
   1: binary addr;
   3: optional string ifName;
-} (cpp.minimize_padding)
+}
 
+@cpp.MinimizePadding
 struct IpPrefix {
   1: BinaryAddress prefixAddress;
   2: i16 prefixLength;
-} (cpp.minimize_padding)
+}
 
+@cpp.MinimizePadding
 struct NextHopThrift {
   1: BinaryAddress address;
   // Default weight of 0 represents an ECMP route.
@@ -82,13 +88,14 @@ struct NextHopThrift {
 
   // Name of next-hop device
   54: optional string neighborNodeName;
-} (cpp.minimize_padding)
+}
 
+@cpp.MinimizePadding
 struct MplsRoute {
   1: i32 topLabel;
   3: optional AdminDistance adminDistance;
   4: list<NextHopThrift> nextHops;
-} (cpp.minimize_padding)
+}
 
 enum PrefixType {
   LOOPBACK = 1,
@@ -113,9 +120,10 @@ enum PrefixType {
 // Route counter ID type
 typedef string RouteCounterID
 
+@cpp.MinimizePadding
 struct UnicastRoute {
   1: IpPrefix dest;
   3: optional AdminDistance adminDistance;
   4: list<NextHopThrift> nextHops;
   7: optional RouteCounterID counterID;
-} (cpp.minimize_padding)
+}

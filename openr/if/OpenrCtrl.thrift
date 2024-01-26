@@ -18,10 +18,12 @@ include "openr/if/Network.thrift"
 include "openr/if/KvStore.thrift"
 include "openr/if/OpenrConfig.thrift"
 include "openr/if/Types.thrift"
+include "thrift/annotation/thrift.thrift"
 
 exception OpenrError {
+  @thrift.ExceptionMessage
   1: string message;
-} (message = "message")
+}
 
 struct NodeAndArea {
   1: string node;
@@ -206,7 +208,8 @@ struct RibPolicy {
  * is not downloaded to FibService
  */
 struct UnicastRouteDetail {
-  1: Network.UnicastRoute unicastRoute (cpp.mixin);
+  @thrift.Mixin
+  1: Network.UnicastRoute unicastRoute;
   2: optional Types.PrefixEntry bestRoute;
 }
 
@@ -215,7 +218,8 @@ struct UnicastRouteDetail {
  * is not downloaded to FibService
  */
 struct MplsRouteDetail {
-  1: Network.MplsRoute mplsRoute (cpp.mixin);
+  @thrift.Mixin
+  1: Network.MplsRoute mplsRoute;
 }
 
 /*
