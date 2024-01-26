@@ -531,6 +531,9 @@ class FibSnoopCmd(FibCmdBase):
             # Await for an update
             if not awaited_updates:
                 awaited_updates = [updates.__anext__()]
+            # pyre-fixme[6]: For 1st argument expected `Iterable[Variable[_FT (bound
+            #  to Future[typing.Any])]]` but got
+            #  `Union[List[Awaitable[RouteDatabaseDelta]], Set[typing.Any]]`.
             done, awaited_updates = await asyncio.wait(awaited_updates, timeout=1)
             if not done:
                 continue
