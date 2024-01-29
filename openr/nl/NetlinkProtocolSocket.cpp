@@ -487,7 +487,7 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
       // NOTE: We ignore the error for the deleteRoute
       deleteRoute(route);
     }
-    FOLLY_FALLTHROUGH;
+    [[fallthrough]];
   case AF_INET:
     status = rtmMsg->addRoute(route);
     break;
