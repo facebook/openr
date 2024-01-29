@@ -7,13 +7,8 @@
 
 #pragma once
 
-#if __has_include("filesystem")
 #include <filesystem>
 namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <folly/IPAddress.h>
 #include <folly/io/async/SSLContext.h>
 #include <openr/common/FileUtil.h>

@@ -8,13 +8,8 @@
 #pragma once
 
 #include <chrono>
-#if __has_include("filesystem")
 #include <filesystem>
 namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <string>
 
 #include <folly/futures/Future.h>

@@ -8,13 +8,8 @@
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <re2/re2.h>
 
-#if __has_include("filesystem")
 #include <filesystem>
 namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 
 #include <folly/ExceptionString.h>
 #include <folly/logging/xlog.h>

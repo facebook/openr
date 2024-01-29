@@ -5,13 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#if __has_include("filesystem")
 #include <filesystem>
 namespace fs = std::filesystem;
-#else
-#include <experimental/filesystem>
-namespace fs = std::experimental::filesystem;
-#endif
 #include <syslog.h>
 #include <fstream>
 #include <stdexcept>
