@@ -17,6 +17,8 @@ TimeoutStopSec=10
 LimitNOFILE=10000000
 LimitCORE=2G
 SyslogIdentifier=openr
+# Place in unrestricted workload.slice
+Slice=workload.slice
 
 [Install]
 WantedBy=multi-user.target
