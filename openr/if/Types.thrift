@@ -12,6 +12,7 @@ namespace py openr.Types
 namespace py3 openr.thrift
 namespace lua openr.Types
 namespace wiki Open_Routing.Thrift_APIs.Types
+namespace hack OpenrTypes
 
 include "openr/if/Network.thrift"
 include "openr/if/OpenrConfig.thrift"

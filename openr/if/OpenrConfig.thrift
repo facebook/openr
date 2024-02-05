@@ -11,6 +11,7 @@ namespace py openr.OpenrConfig
 namespace py.asyncio openr.OpenrConfig
 namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
+namespace hack OpenrConfig
 
 include "openr/if/BgpConfig.thrift"
 include "configerator/structs/neteng/config/routing_policy.thrift"
