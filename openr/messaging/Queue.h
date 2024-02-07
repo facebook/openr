@@ -19,8 +19,7 @@
 #include <folly/experimental/coro/Task.h>
 #endif
 
-namespace openr {
-namespace messaging {
+namespace openr::messaging {
 
 enum class QueueError {
   QUEUE_CLOSED,
@@ -44,7 +43,7 @@ template <typename ValueType>
 class RQueue {
  public:
   explicit RQueue(std::shared_ptr<RWQueue<ValueType>> queue);
-  virtual ~RQueue() {}
+  virtual ~RQueue() = default;
 
   /**
    * Blocking read for native threads/fibers. In-case of fibers, the fiber
@@ -145,7 +144,7 @@ class RWQueue {
 
  private:
   // Name/id of the queue
-  std::string queueId_{""};
+  std::string queueId_;
 
   struct PendingRead {
     folly::fibers::Baton baton;
@@ -179,7 +178,6 @@ class RWQueue {
   size_t reads_{0};
 };
 
-} // namespace messaging
-} // namespace openr
+} // namespace openr::messaging
 
 #include <openr/messaging/Queue-inl.h>

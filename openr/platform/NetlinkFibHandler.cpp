@@ -47,7 +47,7 @@ NetlinkFibHandler::NetlinkFibHandler(
       routeTable_(routeTable) {
   CHECK_NOTNULL(nlSock);
 }
-NetlinkFibHandler::~NetlinkFibHandler() {}
+NetlinkFibHandler::~NetlinkFibHandler() = default;
 
 std::optional<int16_t>
 NetlinkFibHandler::getProtocol(int16_t clientId) {
@@ -487,7 +487,6 @@ NetlinkFibHandler::buildMplsAction(
       throw fbnl::NlException("POP action, loopback interface not available");
     }
   }
-  return;
 }
 
 void

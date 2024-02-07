@@ -9,8 +9,7 @@
 
 #include <string>
 #include "openr/messaging/Queue.h"
-namespace openr {
-namespace messaging {
+namespace openr::messaging {
 
 template <typename ValueType>
 RQueue<ValueType>::RQueue(std::shared_ptr<RWQueue<ValueType>> queue)
@@ -46,7 +45,7 @@ RQueue<ValueType>::getReaderId() {
 }
 
 template <typename ValueType>
-RWQueue<ValueType>::RWQueue() {}
+RWQueue<ValueType>::RWQueue() = default;
 
 template <typename ValueType>
 RWQueue<ValueType>::RWQueue(const std::string& queueId) : queueId_(queueId) {}
@@ -227,5 +226,4 @@ RWQueue<ValueType>::getStats() {
   return RWQueueStats{"", reads_, writes_, queue_.size()};
 }
 
-} // namespace messaging
-} // namespace openr
+} // namespace openr::messaging

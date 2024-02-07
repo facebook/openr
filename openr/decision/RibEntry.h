@@ -14,7 +14,6 @@
 
 #include <folly/IPAddress.h>
 #include <openr/common/NetworkUtil.h>
-#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrl.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -53,7 +52,7 @@ struct RibUnicastEntry : RibEntry {
   bool localRouteConsidered{false};
 
   // constructor
-  explicit RibUnicastEntry() {}
+  explicit RibUnicastEntry() = default;
   explicit RibUnicastEntry(const folly::CIDRNetwork& prefix) : prefix(prefix) {}
 
   RibUnicastEntry(
@@ -119,7 +118,7 @@ struct RibMplsEntry : RibEntry {
   explicit RibMplsEntry(int32_t label) : label(label) {}
 
   // constructor
-  explicit RibMplsEntry() {}
+  explicit RibMplsEntry() = default;
   RibMplsEntry(
       int32_t label, std::unordered_set<thrift::NextHopThrift> nexthops)
       : RibEntry(std::move(nexthops)), label(label) {}

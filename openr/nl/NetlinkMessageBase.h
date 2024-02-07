@@ -10,12 +10,12 @@
 #include <memory>
 #include <queue>
 
-#include <limits.h>
 #include <linux/lwtunnel.h>
 #include <linux/mpls.h>
 #include <linux/rtnetlink.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <climits>
 
 #include <folly/futures/Future.h>
 

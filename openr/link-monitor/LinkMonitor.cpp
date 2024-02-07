@@ -437,7 +437,7 @@ LinkMonitor::neighborUpEvent(
       << ", onlyUsedByOtherNode: " << std::boolalpha << onlyUsedByOtherNode;
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
-  std::string peerAddr{""};
+  std::string peerAddr;
   if (not mockMode_) {
     // peer address used for KvStore external sync over thrift
     peerAddr = fmt::format("{}%{}", toString(neighborAddrV6), localIfName);

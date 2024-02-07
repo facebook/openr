@@ -292,7 +292,7 @@ class OpenrCtrlFixture : public ::testing::Test {
 };
 
 TEST_F(OpenrCtrlFixture, GetMyNodeName) {
-  std::string res{""};
+  std::string res;
   handler_->getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
 }

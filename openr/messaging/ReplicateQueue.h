@@ -10,8 +10,7 @@
 #include <openr/messaging/Queue.h>
 #include <list>
 
-namespace openr {
-namespace messaging {
+namespace openr::messaging {
 
 class ReplicateQueueBase {
  public:
@@ -98,7 +97,6 @@ class ReplicateQueue : public ReplicateQueueBase {
   size_t writes_{0};
 };
 
-} // namespace messaging
-} // namespace openr
+} // namespace openr::messaging
 
 #include <openr/messaging/ReplicateQueue-inl.h>

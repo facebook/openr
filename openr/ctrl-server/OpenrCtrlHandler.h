@@ -585,7 +585,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   void closeKvStorePublishers();
   void closeFibPublishers();
 
-  const std::string nodeName_{""};
+  const std::string nodeName_;
   const std::unordered_set<std::string> acceptablePeerCommonNames_;
 
   // Pointers to Open/R modules

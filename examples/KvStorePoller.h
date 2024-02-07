@@ -16,7 +16,7 @@ class KvStorePoller {
  public:
   /* implicit */ KvStorePoller(std::vector<folly::SocketAddress>& sockAddrs);
 
-  ~KvStorePoller() {}
+  ~KvStorePoller() = default;
 
   std::pair<
       std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,

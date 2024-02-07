@@ -277,7 +277,7 @@ createGrid(
           prefixGenerator.ipv6PrefixGenerator(numPrefixes, kBitMaskLen);
 
       // prefixes
-      for (auto prefix : prefixes) {
+      for (const auto& prefix : prefixes) {
         auto [key, db] = createPrefixKeyAndDb(
             nodeName,
             createPrefixEntry(

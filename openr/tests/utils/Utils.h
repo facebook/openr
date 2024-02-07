@@ -145,7 +145,7 @@ struct CheckTimeoutException : public std::exception {
   explicit CheckTimeoutException(const std::string& msg) : msg_(msg) {}
 
   inline const char*
-  what(void) const noexcept override {
+  what() const noexcept override {
     return msg_.c_str();
   }
 
@@ -184,7 +184,6 @@ checkUntilTimeout(
     /* sleep override */
     std::this_thread::sleep_for(retryInterval);
   }
-  return;
 }
 
 #if FOLLY_HAS_COROUTINES

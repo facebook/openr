@@ -11,11 +11,10 @@
 #include <vector>
 #include "openr/messaging/Queue.h"
 #include "openr/messaging/ReplicateQueue.h"
-namespace openr {
-namespace messaging {
+namespace openr::messaging {
 
 template <typename ValueType>
-ReplicateQueue<ValueType>::ReplicateQueue() {}
+ReplicateQueue<ValueType>::ReplicateQueue() = default;
 
 template <typename ValueType>
 ReplicateQueue<ValueType>::~ReplicateQueue() {
@@ -136,5 +135,4 @@ ReplicateQueue<ValueType>::getReplicationStats() {
   return stats;
 }
 
-} // namespace messaging
-} // namespace openr
+} // namespace openr::messaging

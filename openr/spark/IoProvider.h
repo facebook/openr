@@ -28,7 +28,7 @@ namespace openr {
 class IoProvider {
  public:
   IoProvider() = default;
-  virtual ~IoProvider() {}
+  virtual ~IoProvider() = default;
 
   //
   // mocked syscalls

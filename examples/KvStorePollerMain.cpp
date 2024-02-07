@@ -24,8 +24,7 @@ main(int argc, char** argv) {
 
   // Create Open/R client connected through thrift port
   std::vector<folly::SocketAddress> sockAddrs;
-  sockAddrs.emplace_back(
-      folly::SocketAddress{FLAGS_host, static_cast<uint16_t>(FLAGS_port)});
+  sockAddrs.emplace_back(FLAGS_host, static_cast<uint16_t>(FLAGS_port));
   auto poller = std::make_unique<openr::KvStorePoller>(sockAddrs);
 
   LOG(INFO) << "KvStorePoller initialized. Periodic dump will follow";

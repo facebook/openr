@@ -254,7 +254,6 @@ class DualTestNode final : public DualNode {
     std::string newNhStr = newNh.has_value() ? *newNh : "none";
     VLOG(1) << "node: " << nodeId << " at root: " << rootId << " nexthop"
             << " change " << oldNhStr << " -> " << newNhStr;
-    return;
   }
 
   // event base loop

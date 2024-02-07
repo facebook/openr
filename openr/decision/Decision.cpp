@@ -643,7 +643,6 @@ Decision::readRibPolicy() {
       "{} seconds",
       FLAGS_rib_policy_file,
       ttlDurationSec);
-  return;
 }
 
 void

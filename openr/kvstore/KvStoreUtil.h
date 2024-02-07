@@ -51,7 +51,7 @@ struct SelfOriginatedValue {
   // Backoff for advertising ttl updates for this key-val
   ExponentialBackoff<std::chrono::milliseconds> ttlBackoff;
 
-  SelfOriginatedValue() {}
+  SelfOriginatedValue() = default;
   explicit SelfOriginatedValue(const thrift::Value& val) : value(val) {}
 };
 

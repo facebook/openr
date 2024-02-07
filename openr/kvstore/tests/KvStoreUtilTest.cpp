@@ -305,10 +305,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
 
   std::vector<folly::SocketAddress> sockAddrs;
-  sockAddrs.emplace_back(
-      folly::SocketAddress{Constants::kPlatformHost.toString(), port1});
-  sockAddrs.emplace_back(
-      folly::SocketAddress{Constants::kPlatformHost.toString(), port2});
+  sockAddrs.emplace_back(Constants::kPlatformHost.toString(), port1);
+  sockAddrs.emplace_back(Constants::kPlatformHost.toString(), port2);
 
   // Step1: insert (k1, v1) and (k2, v2) to different KvStore instances
   {

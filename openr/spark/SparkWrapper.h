@@ -102,7 +102,7 @@ class SparkWrapper {
   uint64_t getActiveNeighborCount();
 
  private:
-  std::string myNodeName_{""};
+  std::string myNodeName_;
   std::shared_ptr<const Config> config_{nullptr};
 
   // Queue to send neighbor event to LinkMonitor

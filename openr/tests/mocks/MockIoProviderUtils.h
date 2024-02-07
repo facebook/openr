@@ -21,8 +21,7 @@
 
 #include <folly/IPAddress.h>
 
-namespace openr {
-namespace MockIoProviderUtils {
+namespace openr::MockIoProviderUtils {
 
 template <typename T>
 union AlignedCtrlBuf {
@@ -62,5 +61,4 @@ int createSocketAndJoinGroup(
     int ifIndex,
     folly::IPAddress /* mcastGroup */);
 
-} // namespace MockIoProviderUtils
-} // namespace openr
+} // namespace openr::MockIoProviderUtils

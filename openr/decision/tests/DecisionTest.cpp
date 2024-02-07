@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <stdio.h>
+#include <cstdio>
 
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
@@ -2979,7 +2979,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
 class ParallelAdjRingTopologyFixture
     : public ::testing::TestWithParam<std::optional<thrift::PrefixType>> {
  public:
-  ParallelAdjRingTopologyFixture() {}
+  ParallelAdjRingTopologyFixture() = default;
 
  protected:
   void
@@ -5779,8 +5779,9 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
     // Create adjDb value
     vector<thrift::Adjacency> adjs;
     for (int j = std::max(1, i - 3); j <= std::min(1000, i + 3); j++) {
-      if (i == j)
+      if (i == j) {
         continue;
+      }
       const std::string dst = folly::to<std::string>(j);
       auto adj = createAdjacency(
           dst,

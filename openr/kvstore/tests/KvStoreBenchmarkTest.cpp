@@ -630,8 +630,9 @@ BM_KvStoreDumpHashWithFilters(
       auto keyVal =
           genRandomKvStoreKeyVal(kKeyLen, kValLen, 1, std::to_string(deviceId));
       keyVals[keyVal.first] = keyVal.second;
-      if (prefixSet.size() <= numOfKeysToFilter)
+      if (prefixSet.size() <= numOfKeysToFilter) {
         prefixSet.emplace(keyVal.first);
+      }
     }
 
     keyPrefixList.insert(

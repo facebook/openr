@@ -63,19 +63,20 @@ class PrefixStateTestFixture : public ::testing::Test {
     for (const auto& [key, innerMap1] : map1) {
       const auto& iter = map2.find(key);
       EXPECT_TRUE(iter != map2.end());
-      if (iter == map2.end())
+      if (iter == map2.end()) {
         continue;
+      }
       const auto& innerMap2 = iter->second;
       EXPECT_EQ(innerMap1.size(), innerMap2.size());
       for (const auto& [k, v] : innerMap1) {
         const auto& innerIter = innerMap2.find(k);
         EXPECT_TRUE(innerIter != innerMap2.end());
-        if (innerIter == innerMap2.end())
+        if (innerIter == innerMap2.end()) {
           continue;
+        }
         EXPECT_EQ(*innerIter->second, *v);
       }
     }
-    return;
   }
 };
 

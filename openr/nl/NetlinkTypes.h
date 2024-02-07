@@ -33,8 +33,8 @@ const uint8_t DEFAULT_PROTOCOL_ID = 99;
 class NextHop;
 class NextHopBuilder final {
  public:
-  NextHopBuilder() {}
-  ~NextHopBuilder() {}
+  NextHopBuilder() = default;
+  ~NextHopBuilder() = default;
 
   NextHop build() const;
 
@@ -152,8 +152,8 @@ class Route;
 class RouteBuilder {
  public:
   // Default values for are set as aforementioned
-  RouteBuilder() {}
-  ~RouteBuilder() {}
+  RouteBuilder() = default;
+  ~RouteBuilder() = default;
 
   /**
    * Build route (default: unicast)
@@ -262,7 +262,7 @@ class RouteBuilder {
 
 class Route final {
  public:
-  Route() {} // Empty constructor
+  Route() = default; // Empty constructor
   explicit Route(const RouteBuilder& builder);
   ~Route();
 
@@ -335,8 +335,8 @@ bool operator==(const Route& lhs, const Route& rhs);
 class IfAddress;
 class IfAddressBuilder final {
  public:
-  IfAddressBuilder() {}
-  ~IfAddressBuilder() {}
+  IfAddressBuilder() = default;
+  ~IfAddressBuilder() = default;
 
   IfAddress build() const;
 
@@ -428,8 +428,8 @@ bool operator==(const IfAddress& lhs, const IfAddress& rhs);
 class Neighbor;
 class NeighborBuilder final {
  public:
-  NeighborBuilder() {}
-  ~NeighborBuilder() {}
+  NeighborBuilder() = default;
+  ~NeighborBuilder() = default;
 
   /**
    * Build Neighbor object to add/del neighbors
@@ -550,8 +550,8 @@ bool operator==(const GreInfo& lhs, const GreInfo& rhs);
 class Link;
 class LinkBuilder final {
  public:
-  LinkBuilder() {}
-  ~LinkBuilder() {}
+  LinkBuilder() = default;
+  ~LinkBuilder() = default;
 
   Link build() const;
 
@@ -590,7 +590,7 @@ class LinkBuilder final {
 
 class Link final {
  public:
-  Link() {}
+  Link() = default;
   explicit Link(const LinkBuilder& builder);
   ~Link();
 

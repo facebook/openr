@@ -569,16 +569,16 @@ class NlMessageFixture : public ::testing::Test {
 
 TEST(NetlinkRouteMessage, EncodeLabel) {
   std::vector<std::pair<uint32_t, uint32_t>> labels;
-  labels.push_back(std::make_pair(0x0, 0 | 0x100));
-  labels.push_back(std::make_pair(0x1, 0x1000 | 0x100));
-  labels.push_back(std::make_pair(0xF, 0xF000 | 0x100));
-  labels.push_back(std::make_pair(0xFF, 0xFF000 | 0x100));
-  labels.push_back(std::make_pair(0xFFF, 0xFFF000 | 0x100));
-  labels.push_back(std::make_pair(0xFFFF, 0xFFFF000 | 0x100));
-  labels.push_back(std::make_pair(0x8000, 0x8000000 | 0x100));
-  labels.push_back(std::make_pair(0x80000, 0x80000000 | 0x100));
-  labels.push_back(std::make_pair(0x100000, 0x100));
-  labels.push_back(std::make_pair(0x1F0000, 0x100));
+  labels.emplace_back(0x0, 0 | 0x100);
+  labels.emplace_back(0x1, 0x1000 | 0x100);
+  labels.emplace_back(0xF, 0xF000 | 0x100);
+  labels.emplace_back(0xFF, 0xFF000 | 0x100);
+  labels.emplace_back(0xFFF, 0xFFF000 | 0x100);
+  labels.emplace_back(0xFFFF, 0xFFFF000 | 0x100);
+  labels.emplace_back(0x8000, 0x8000000 | 0x100);
+  labels.emplace_back(0x80000, 0x80000000 | 0x100);
+  labels.emplace_back(0x100000, 0x100);
+  labels.emplace_back(0x1F0000, 0x100);
 
   for (const auto& x : labels) {
     EXPECT_EQ(x.second, ntohl(NetlinkRouteMessage::encodeLabel(x.first, true)));

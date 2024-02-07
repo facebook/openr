@@ -13,8 +13,6 @@
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/io/async/EventBase.h>
 
-#include <openr/messaging/ReplicateQueue.h>
-
 using namespace openr::messaging;
 
 TEST(ReplicateQueueTest, Test) {

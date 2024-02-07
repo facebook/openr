@@ -310,8 +310,8 @@ Spark::Spark(
     const int32_t numBuckets = *maybeMaxAllowedPps_ / 3;
     for (size_t i = 0; i < Constants::kNumTimeSeries; i++) {
       timeSeriesVector_.emplace_back(
-          folly::BucketedTimeSeries<int64_t, std::chrono::steady_clock>(
-              numBuckets, sec));
+
+          numBuckets, sec);
     }
   }
   // Timer scheduled with lower bound timeout, after which  NEIGHBOR_DISCOVERED

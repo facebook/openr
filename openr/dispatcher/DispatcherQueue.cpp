@@ -16,7 +16,7 @@
 
 namespace openr {
 
-DispatcherQueue::DispatcherQueue() {}
+DispatcherQueue::DispatcherQueue() = default;
 
 DispatcherQueue::~DispatcherQueue() {
   close();

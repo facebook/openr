@@ -40,12 +40,12 @@ main(int argc, char** argv) {
       netlinkEventsQueue;
   auto nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
       nlEvb.get(), netlinkEventsQueue);
-  allThreads.emplace_back(std::thread([&nlEvb]() {
+  allThreads.emplace_back([&nlEvb]() {
     XLOG(INFO) << "Starting NetlinkProtolSocketEvl thread...";
     folly::setThreadName("NetlinkProtolSocketEvl");
     nlEvb->loopForever();
     XLOG(INFO) << "NetlinkProtolSocketEvl thread stopped.";
-  }));
+  });
   nlEvb->waitUntilRunning();
 
   apache::thrift::ThriftServer linuxFibAgentServer;

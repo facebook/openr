@@ -22,7 +22,7 @@ class KvStorePublisher {
           std::chrono::steady_clock::now(),
       int64_t total_messages = 0);
 
-  ~KvStorePublisher() {}
+  ~KvStorePublisher() = default;
 
   // Invoked whenever there is change. Apply filter and publish changes
   void publish(const thrift::Publication& pub);

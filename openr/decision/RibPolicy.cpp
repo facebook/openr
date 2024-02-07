@@ -176,7 +176,7 @@ RibPolicy::RibPolicy(thrift::RibPolicy const& policy)
 
   // Populate policy statements
   for (auto const& statement : *policy.statements()) {
-    policyStatements_.emplace_back(RibPolicyStatement(statement));
+    policyStatements_.emplace_back(statement);
   }
 }
 

@@ -587,7 +587,7 @@ class DijkstraQSpfNode {
     return result.metric();
   }
 
-  const std::string nodeName{""};
+  const std::string nodeName;
   LinkState::NodeSpfResult result;
 };
 

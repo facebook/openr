@@ -243,7 +243,7 @@ Route::Route(const RouteBuilder& builder)
       oif_(builder.getOIf()),
       prefSrc_(builder.getPrefSrc()) {}
 
-Route::~Route() {}
+Route::~Route() = default;
 
 Route::Route(Route&& other) noexcept {
   *this = std::move(other);
@@ -775,7 +775,7 @@ IfAddress::IfAddress(const IfAddressBuilder& builder)
       family_(builder.getFamily()),
       preferredLft_(builder.getPreferredLft()) {}
 
-IfAddress::~IfAddress() {}
+IfAddress::~IfAddress() = default;
 
 IfAddress::IfAddress(IfAddress&& other) noexcept {
   *this = std::move(other);
@@ -958,7 +958,7 @@ Neighbor::Neighbor(const NeighborBuilder& builder)
       linkAddress_(builder.getLinkAddress()),
       state_(builder.getState()) {}
 
-Neighbor::~Neighbor() {}
+Neighbor::~Neighbor() = default;
 
 Neighbor::Neighbor(Neighbor&& other) noexcept {
   *this = std::move(other);
@@ -1060,7 +1060,7 @@ GreInfo::GreInfo(
     uint8_t ttl)
     : localAddr_(localAddr), remoteAddr_(remoteAddr), ttl_(ttl) {}
 
-GreInfo::~GreInfo() {}
+GreInfo::~GreInfo() = default;
 
 GreInfo::GreInfo(GreInfo&& other) noexcept {
   *this = std::move(other);
@@ -1206,7 +1206,7 @@ Link::Link(const LinkBuilder& builder)
       greInfo_(builder.getGreInfo()),
       linkGroup_(builder.getLinkGroup()) {}
 
-Link::~Link() {}
+Link::~Link() = default;
 
 Link::Link(Link&& other) noexcept {
   *this = std::move(other);
