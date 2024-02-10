@@ -50,7 +50,7 @@ disruptions during software upgrades or restarts.
 
 The operation of graceful restart can be described in two domains
 
-### Restarting Node
+### Restarting Node [TO BE UPDATED]
 
 Restart of a node can happen anytime (admin, crash or just software upgrade). GR
 is implemented to handle not-anticipated restart of neighbor. When a node
@@ -66,7 +66,7 @@ restarts, it does the following:
 It is assumed that network is not changing much when a node is restarting.
 However local link down events are taken into immediate effect.
 
-### Node whose neighbor is restarting
+### Graceful Restart (GR) Helper [TO BE UPDATED]
 
 Spark-hello packets are exchanged between neighbors as a keep-alive mechanism.
 Each hello packet has a sequence number which is monotonically increasing on
@@ -81,28 +81,6 @@ neighbors adjacency (will be updated only if needed). However, spark doesn't
 reset the **holdTimer** for the neighbor which has been detected as restarted
 and it doesn't do unless it sees itself in the subsequent neighbor's hello
 packets.
-
-### Notes on Timers
-
-Restarting node has to form adjacencies with all of its neighbors within it's
-holdTime from its last hello message sent before restarting.
-
-**adjHoldTime** = 2 \* keepAliveTime
-
-Reason: At worst case 2 hello message needs to be exchanged between nodes to
-form adjacency
-
-**fibHoldTime** = 3 \* keepAliveTime
-
-Reason: Giving out extra buffer of **keepAliveTime** to let our latest adjacency
-accepted by KvStore and then proceed with route programming.
-
-**holdTime** = >> keepAliveTime
-
-We should keep much higher holdTime than keepAliveTime for graceful restart to
-be complete. On my testing having 30s of holdTime and 2s keepAliveTime works
-great and we see no traffic disruptions even when two adjacent neighbors are
-restarting together.
 
 ## Parallel link Support
 

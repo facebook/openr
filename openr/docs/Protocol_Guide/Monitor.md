@@ -30,11 +30,6 @@ important event, packs it as a LogSample object and pushes it into the queue.
     - `NEIGHBOR_RESTARTED`
     - `NEIGHBOR_RTT_CHANGE`
     - `NEIGHBOR_RESTARTING`
-- [Producer `PrefixAllocator`]:
-  - `ALLOC_PARAMS_UPDATE`
-  - `PREFIX_ELECTED`
-  - `PREFIX_ELECTED`
-  - `PREFIX_LOST`
 - [Consumer `RQueue<LogSample>`]: Read `LogSample` object and process all event
   logs.
 

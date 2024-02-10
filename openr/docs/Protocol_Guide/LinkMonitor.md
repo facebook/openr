@@ -145,14 +145,3 @@ SPF computation. For now, we support two kinds of metrics:
 
 > NOTE: `rtt` is measured dynamically by `Spark` as part of neighbor discovery
 > and keep-alive mechanisms. RTT changes are observed handled dynamically.
-
-### Segment Routing Support
-
-To Support `Segment Routing`, `LinkMonitor` injects:
-
-- **Node Label** by leveraging `RangeAllocator` to assign a globally unique
-  label across the network(via `KvStore` to detect collision);
-- **Adjacency Label** by leveraging `Spark` to assign a unique label derived
-  from **ifIndex**;
-
-> NOTE: **Adjacency Label** is locally unique per node.
