@@ -1266,16 +1266,21 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
 }
 
 /**
- * Test to verify that during peer sync TTLs are sent with remaining
- * time to expire, and new keys are added with that TTL while TTL for
- * existing keys is not updated.
+ * Test
+ * -  when KvStore peers are synced, TTL of keys are sent with remaining
+ * time to expire,
+ * - when keys are received with some TTL, TTL for
+ * existing local keys is not updated.
+ *
+ * Test Scenario:
  * 1. Start store0,
- * 2. Add two keys to store0
- * 3. Sleep for 200msec
+ * 2. Add two keys to store0,
+ * 3. Sleep for 200msec,
  * 4. Start store1 and add one of the keys
  * 5  Sync with keys from store0
- * 6. Check store1 adds a new key with TTL equal to [default value - 200msec]
- * 7. Check TTL for existing key in store1 does not get updated
+ * 6. Wait for KvStores to sync.
+ * 7. Check store1 adds a new key with TTL equal to [default value - 200msec]
+ * 8. Check TTL for existing key in store1 does not get updated
  */
 TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   auto store0 = createKvStore(getTestKvConf("store0"));
@@ -1330,28 +1335,17 @@ TEST_F(KvStoreTestFixture, PeerSyncTtlExpiry) {
   EXPECT_TRUE(store1->addPeer(
       kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
 
-  OpenrEventBase evb;
-  folly::Baton waitBaton;
-  int scheduleAt{0};
-  // wait 250ms for kvstore to sync.
-  evb.scheduleTimeout(
-      std::chrono::milliseconds(scheduleAt += 250), [&]() noexcept {
-        // std::this_thread::sleep_for(std::chrono::milliseconds(100));
-        // key 'test1' should be added with remaining TTL
-        maybeThriftVal = store1->getKey(kTestingAreaName, "test1");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_GE(kTtlMs - 200, *maybeThriftVal.value().ttl());
+  waitForAllPeersInitialized();
 
-        // key 'test2' should not be updated, it should have kTtlMs
-        maybeThriftVal = store1->getKey(kTestingAreaName, "test2");
-        ASSERT_TRUE(maybeThriftVal.has_value());
-        EXPECT_GE(kTtlMs, *maybeThriftVal.value().ttl());
-        evb.stop();
-      });
+  // key 'test1' should be added with remaining TTL
+  maybeThriftVal = store1->getKey(kTestingAreaName, "test1");
+  ASSERT_TRUE(maybeThriftVal.has_value());
+  EXPECT_GE(kTtlMs - 200, *maybeThriftVal.value().ttl());
 
-  // Start the event loop and wait until it is finished execution.
-  evb.run();
-  evb.waitUntilStopped();
+  // key 'test2' should not be updated, it should have kTtlMs
+  maybeThriftVal = store1->getKey(kTestingAreaName, "test2");
+  ASSERT_TRUE(maybeThriftVal.has_value());
+  EXPECT_GE(kTtlMs, *maybeThriftVal.value().ttl());
 }
 
 /**
