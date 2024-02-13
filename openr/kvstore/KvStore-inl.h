@@ -2566,12 +2566,11 @@ KvStoreDb<ClientType>::finalizeFullSync(
     return;
   }
   params.senderId() = kvParams_.nodeId;
-  XLOG(INFO)
-      << AreaTag()
-      << fmt::format(
-             "[Thrift Sync] Finalize full-sync back to: {} with keys: {}",
-             senderId,
-             folly::join(",", keys));
+  XLOG(INFO) << AreaTag()
+             << fmt::format(
+                    "[Thrift Sync] Finalize full-sync back to: {} with {} keys",
+                    senderId,
+                    keys.size());
 
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
