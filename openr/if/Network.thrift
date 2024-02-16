@@ -12,6 +12,7 @@ namespace py openr.Network
 namespace py3 openr.thrift
 namespace php Openr
 namespace lua openr.Network
+namespace rust openr_network_thrift
 namespace wiki Open_Routing.Thrift_APIs.Network
 
 // Using the defaults from here:

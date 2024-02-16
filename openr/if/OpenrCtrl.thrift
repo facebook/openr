@@ -12,6 +12,7 @@ namespace py openr.OpenrCtrl
 namespace py3 openr.thrift
 namespace php Openr
 namespace lua openr.OpenrCtrl
+namespace rust openr_thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "openr/if/Network.thrift"

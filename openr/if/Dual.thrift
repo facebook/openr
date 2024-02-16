@@ -10,6 +10,7 @@ namespace go openr.Dual
 namespace py openr.Dual
 namespace py3 openr.thrift
 namespace lua openr.Dual
+namespace rust openr_dual_thrift
 
 /**
  * DUAL message type

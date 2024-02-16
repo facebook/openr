@@ -12,6 +12,7 @@ namespace py3 openr.thrift
 namespace lua openr.KvStore
 namespace wiki Open_Routing.Thrift_APIs.KvStore
 namespace hack OpenrKvStore
+namespace rust openr_kvstore_thrift
 
 include "fb303/thrift/fb303_core.thrift"
 include "thrift/annotation/cpp.thrift"
