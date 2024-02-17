@@ -38,6 +38,11 @@ InterfaceEntry::updateAttrs(int ifIndex, bool isUp) {
   isUpdated |= ((std::exchange(info_.ifIndex, ifIndex) != ifIndex) ? 1 : 0);
   isUpdated |= ((std::exchange(info_.isUp, isUp) != isUp) ? 1 : 0);
 
+  // Update timestamp only at when link status changed
+  if (wasUp != isUp) {
+    info_.statusChangeTimestamp = getUnixTimeStampMs();
+  }
+
   // Look for specific case of interface state transition to DOWN
   if (wasUp != isUp and wasUp) {
     // Penalize backoff on transitioning to DOWN state

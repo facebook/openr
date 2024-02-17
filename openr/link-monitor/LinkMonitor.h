@@ -293,6 +293,11 @@ class LinkMonitor final : public OpenrEventBase {
   // Total # of adjacencies stored.
   size_t getTotalAdjacencies();
 
+  void updateLinkStatusRecords(
+      const std::string& ifName,
+      thrift::LinkStatusEnum ifStatus,
+      int64_t ifStatusChangeTimestamp);
+
   /*
    * [Logging]
    *
@@ -326,6 +331,9 @@ class LinkMonitor final : public OpenrEventBase {
   const std::string nodeId_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
+  // keep track of current status of all links in router
+  // with timestamps at when they change their status.
+  const bool enableLinkStatusMeasurement_{false};
   // enable v4
   bool enableV4_{false};
   // enable segment routing
@@ -389,6 +397,9 @@ class LinkMonitor final : public OpenrEventBase {
   // Keyed by interface Name
   std::unordered_map<std::string /* interface name */, InterfaceEntry>
       interfaces_;
+
+  // all links with their status and timestamp at when they change status
+  thrift::LinkStatusRecords linkStatusRecords_;
 
   // Container storing map of advertised prefixes - Map<prefix, list<area>>
   std::map<folly::CIDRNetwork, std::vector<std::string>> advertisedPrefixes_;

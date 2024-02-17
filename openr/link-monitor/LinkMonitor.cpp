@@ -112,6 +112,8 @@ LinkMonitor::LinkMonitor(
     : nodeId_(config->getNodeName()),
       enablePerfMeasurement_(
           *config->getLinkMonitorConfig().enable_perf_measurement()),
+      enableLinkStatusMeasurement_(
+          *config->getLinkMonitorConfig().enable_link_status_measurement()),
       enableV4_(config->isV4Enabled()),
       enableSegmentRouting_(config->isSegmentRoutingEnabled()),
       prefixForwardingType_(*config->getConfig().prefix_forwarding_type()),
@@ -518,6 +520,20 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
   SYSLOG(INFO) << EventTag() << "Neighbor " << remoteNodeName
                << " is down on interface " << localIfName;
   fb303::fbData->addStatValue("link_monitor.neighbor_down", 1, fb303::SUM);
+
+  // A neighbor is down, but it's not necessary that link is down.
+  // So we may not receive down netlink event.
+  // However, we consider a down neighbor event indicates link to the
+  // neighbor is down in link event database context.
+  auto linkStatus = linkStatusRecords_.linkStatusMap()->find(localIfName);
+  if (linkStatus != linkStatusRecords_.linkStatusMap()->end() &&
+      *linkStatus->second.status() == thrift::LinkStatusEnum::UP) {
+    // If link is up, change it to down
+    updateLinkStatusRecords(
+        localIfName,
+        thrift::LinkStatusEnum::DOWN,
+        getUnixTimeStampMs() /* now */);
+  }
 
   auto areaAdjIt = adjacencies_.find(area);
   // No corresponding adj, ignore.
@@ -1040,6 +1056,13 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
     DCHECK(!adjDb.perfEvents().has_value());
   }
 
+  // Add link events if enabled
+  if (enableLinkStatusMeasurement_) {
+    adjDb.linkStatusRecords() = linkStatusRecords_;
+  } else {
+    DCHECK(!adjDb.linkStatusRecords().has_value());
+  }
+
   return adjDb;
 }
 
@@ -1159,6 +1182,12 @@ LinkMonitor::syncInterfaces() {
     // Update link attributes
     const bool wasUp = interfaceEntry->isUp();
     interfaceEntry->updateAttrs(info.ifIndex, info.isUp);
+    // If link status changes, keep its status/timestamp into record
+    updateLinkStatusRecords(
+        info.ifName,
+        interfaceEntry->isUp() ? thrift::LinkStatusEnum::UP
+                               : thrift::LinkStatusEnum::DOWN,
+        interfaceEntry->getStatusChangeTimestamp());
 
     // Event logging
     logLinkEvent(
@@ -1201,6 +1230,12 @@ LinkMonitor::processLinkEvent(fbnl::Link&& link) {
   if (interfaceEntry) {
     const bool wasUp = interfaceEntry->isUp();
     interfaceEntry->updateAttrs(ifIndex, isUp);
+    // If link status changes, keep its status/timestamp into record
+    updateLinkStatusRecords(
+        ifName,
+        interfaceEntry->isUp() ? thrift::LinkStatusEnum::UP
+                               : thrift::LinkStatusEnum::DOWN,
+        interfaceEntry->getStatusChangeTimestamp());
     logLinkEvent(
         interfaceEntry->getIfName(),
         wasUp,
@@ -1953,6 +1988,17 @@ LinkMonitor::getTotalAdjacencies() {
     numAdjacencies += areaAdjacencies.size();
   }
   return numAdjacencies;
+}
+
+void
+LinkMonitor::updateLinkStatusRecords(
+    const std::string& ifName,
+    thrift::LinkStatusEnum ifStatus,
+    int64_t ifStatusChangeTimestamp) {
+  thrift::LinkStatus linkStatus;
+  linkStatus.status() = ifStatus;
+  linkStatus.unixTs() = ifStatusChangeTimestamp;
+  linkStatusRecords_.linkStatusMap()[ifName] = std::move(linkStatus);
 }
 
 } // namespace openr

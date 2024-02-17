@@ -50,6 +50,11 @@ enum SparkNeighEvent {
   NEGOTIATION_FAILURE = 8,
 }
 
+enum LinkStatusEnum {
+  DOWN = 0,
+  UP = 1,
+}
+
 /**
  * Event object to track the key attribute and timestamp used for performance
  * measurement.
@@ -70,6 +75,25 @@ struct PerfEvents {
    * Ordered list of event. Most recent event is appended at the back
    */
   1: list<PerfEvent> events;
+}
+
+/**
+ * Link status object to track timestamp at when link changes its status.
+ */
+struct LinkStatus {
+  1: LinkStatusEnum status;
+  2: i64 unixTs = 0;
+}
+
+/**
+ * Dictionary of link status objects with key which is interface name
+ * and value which is information about link status. We don't need
+ * to keep node name here because LinkStatusRecords is inside AdjacencyDatabase
+ * which already has name of the node.
+ */
+struct LinkStatusRecords {
+  @cpp.Type{template = "std::unordered_map"}
+  1: map<string/* interfaceName */ , LinkStatus> linkStatusMap;
 }
 
 /**
@@ -219,6 +243,12 @@ struct AdjacencyDatabase {
    * of a route.
    */
   7: i32 nodeMetricIncrementVal = 0;
+
+  /**
+   * Optional attribute to store status of all links in router
+   * which are up and even down.
+   */
+  8: optional LinkStatusRecords linkStatusRecords;
 }
 
 /**

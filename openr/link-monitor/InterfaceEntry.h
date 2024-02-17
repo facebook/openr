@@ -71,6 +71,11 @@ class InterfaceEntry final {
     return info_.isUp;
   }
 
+  int64_t
+  getStatusChangeTimestamp() const {
+    return info_.statusChangeTimestamp;
+  }
+
   // returns const references for optimization
   const std::unordered_set<folly::CIDRNetwork>&
   getNetworks() const {

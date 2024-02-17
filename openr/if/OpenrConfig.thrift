@@ -178,6 +178,12 @@ struct LinkMonitorConfig {
   * Enable convergence performance measurement for adjacency updates.
   */
   7: bool enable_perf_measurement = true;
+
+  /**
+  * Enable storing link events in adjacent database.
+  * By default, disable it.
+  */
+  8: bool enable_link_status_measurement = false;
 }
 
 struct StepDetectorConfig {

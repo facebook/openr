@@ -14,6 +14,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Types.h>
+#include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/policy/PolicyStructs.h>
@@ -351,6 +352,11 @@ struct InterfaceInfo {
    * Link status
    */
   bool isUp{false};
+
+  /**
+   * Unix timestamp at when link status changed.
+   */
+  int64_t statusChangeTimestamp{0};
 
   /**
    * Interface index

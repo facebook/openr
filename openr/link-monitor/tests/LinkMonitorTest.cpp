@@ -161,10 +161,23 @@ const auto adj_3_2 = createThriftAdjacency(
 
 void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
+  std::string linkStatusRecordStr = "";
+  if (adjDb.linkStatusRecords().has_value()) {
+    for (auto const& [ifName, linkStatusRecord] :
+         *adjDb.linkStatusRecords()->linkStatusMap()) {
+      linkStatusRecordStr += fmt::format(
+          "{} {} at {},",
+          ifName,
+          *linkStatusRecord.status() == thrift::LinkStatusEnum::UP ? "UP"
+                                                                   : "DOWN",
+          *linkStatusRecord.unixTs());
+    }
+  }
   LOG(INFO) << "Node: " << *adjDb.thisNodeName()
             << ", Overloaded: " << *adjDb.isOverloaded()
             << ", Node Metric Increment: " << *adjDb.nodeMetricIncrementVal()
-            << ", Label: " << *adjDb.nodeLabel() << ", area: " << *adjDb.area();
+            << ", Label: " << *adjDb.nodeLabel() << ", area: " << *adjDb.area()
+            << ", Link Status Records: " << linkStatusRecordStr;
   for (auto const& adj : *adjDb.adjacencies()) {
     LOG(INFO) << "  " << *adj.otherNodeName() << "@" << *adj.ifName()
               << ", metric: " << *adj.metric() << ", label: " << *adj.adjLabel()
@@ -2895,6 +2908,100 @@ TEST_F(LinkMonitorTestFixture, NotAllNeighborsUpInitializationTest) {
     // based initialization.
     // Publication should have been received prior to adj_hold_time expiry.
     // ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+  }
+}
+
+class LinkStatusTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+
+    // enable feature that keeps track of link status changes
+    tConfig.link_monitor_config()->enable_link_status_measurement() = true;
+
+    return tConfig;
+  }
+};
+
+// Test that link status record is updated with link status change.
+TEST_F(LinkStatusTestFixture, LinkStatusRecords) {
+  const std::string ifName = "iface_2_1";
+  std::string key = "adj:node-1";
+  std::string area = kTestingAreaName;
+  int64_t ifTs = INT64_MAX;
+
+  // Create an UP interface with UP neighbor.
+  // KvStore should have an entry in LinkStatusRecords with status UP.
+  {
+    nlEventsInjector->sendLinkEvent(ifName, 100, true /* up */);
+    recvAndReplyIfUpdate();
+    auto neighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+
+    std::optional<thrift::Value> value = getPublicationValueForKey(key);
+    auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+        value->value().value(), serializer);
+    printAdjDb(adjDb);
+    ASSERT_TRUE(adjDb.linkStatusRecords().has_value());
+    auto linkStatusMap = adjDb.linkStatusRecords()->linkStatusMap();
+    EXPECT_EQ(linkStatusMap->size(), 1);
+    EXPECT_EQ(linkStatusMap->count(ifName), 1);
+    EXPECT_EQ(*linkStatusMap->at(ifName).status(), thrift::LinkStatusEnum::UP);
+    ifTs = *linkStatusMap->at(ifName).unixTs();
+  }
+
+  // Flip the interface DOWN and so neighbor is DOWN.
+  // KvStore should still have one entry in LinkStatusRecords, but status is
+  // now DOWN and timestamp is larger.
+  {
+    nlEventsInjector->sendLinkEvent(ifName, 100, false /* down */);
+    recvAndReplyIfUpdate();
+    auto neighborEvent = nb2_down_event;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
+
+    std::optional<thrift::Value> value = getPublicationValueForKey(key);
+    auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+        value->value().value(), serializer);
+    printAdjDb(adjDb);
+    ASSERT_TRUE(adjDb.linkStatusRecords().has_value());
+    auto linkStatusMap = adjDb.linkStatusRecords()->linkStatusMap();
+    EXPECT_EQ(linkStatusMap->size(), 1);
+    EXPECT_EQ(linkStatusMap->count(ifName), 1);
+    EXPECT_EQ(
+        *linkStatusMap->at(ifName).status(), thrift::LinkStatusEnum::DOWN);
+    EXPECT_GE(*linkStatusMap->at(ifName).unixTs(), ifTs);
+    ifTs = *linkStatusMap->at(ifName).unixTs();
+  }
+
+  // Flip the interface back to UP with UP neighbor. And then, push
+  // neighbor DOWN but link to it is still UP (i.e., neighbor crashes).
+  // KvStore should still have one entry in LinkStatusRecords, but status is
+  // now DOWN (last status) and timestamp is the largest.
+  {
+    nlEventsInjector->sendLinkEvent(ifName, 100, true /* up */);
+    recvAndReplyIfUpdate();
+    auto upNeighborEvent = nb2_up_event;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(upNeighborEvent)})));
+
+    auto downNeighborEvent = nb2_down_event;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(downNeighborEvent)})));
+
+    std::optional<thrift::Value> value = getPublicationValueForKey(key);
+    auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+        value->value().value(), serializer);
+    printAdjDb(adjDb);
+    ASSERT_TRUE(adjDb.linkStatusRecords().has_value());
+    auto linkStatusMap = adjDb.linkStatusRecords()->linkStatusMap();
+    EXPECT_EQ(linkStatusMap->size(), 1);
+    EXPECT_EQ(linkStatusMap->count(ifName), 1);
+    EXPECT_EQ(
+        *linkStatusMap->at(ifName).status(), thrift::LinkStatusEnum::DOWN);
+    EXPECT_GE(*linkStatusMap->at(ifName).unixTs(), ifTs);
   }
 }
 
