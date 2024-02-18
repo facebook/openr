@@ -530,7 +530,9 @@ class NlMessageFixture : public ::testing::Test {
         ifIndexX,
         1));
     struct v6Addr addr6 {
-      0
+      {
+        { 0 }
+      }
     };
     for (uint32_t i = 0; i < count; i++) {
       addr6.u32_addr[0] = htonl(0x50210000 + i);
@@ -1321,7 +1323,9 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
 
   std::vector<NextHop> paths;
   struct v6Addr addr6 {
-    0
+    {
+      { 0 }
+    }
   };
   for (uint32_t i = 0; i < 200; i++) {
     addr6.u32_addr[0] = htonl(0xfe800000 + i);
