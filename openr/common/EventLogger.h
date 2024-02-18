@@ -17,7 +17,7 @@ constexpr auto kOpenrEventPrefix("OPENR_EVENT");
 struct EventTag {
   explicit EventTag(
       std::string prefix = kOpenrEventPrefix, std::string sub_type = "")
-      : prefix_(std::move(prefix)), sub_type_(std::move(sub_type)){};
+      : prefix_(std::move(prefix)), sub_type_(std::move(sub_type)) {}
 
   friend std::ostream&
   operator<<(std::ostream& out, const EventTag& tag) {

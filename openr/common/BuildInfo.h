@@ -116,7 +116,7 @@ class BuildInfo {
   static void exportBuildInfo();
 
  private:
-  BuildInfo(){};
+  BuildInfo() {}
 };
 
 } // namespace openr
