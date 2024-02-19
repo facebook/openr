@@ -1,4 +1,4 @@
-# Monitoring
+# Counters and Log Events
 
 Each module internally generates its own list of counters using the `ThreadData`
 library (which has supports for stats like SUM/RATE/COUNT over various

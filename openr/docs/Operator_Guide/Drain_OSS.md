@@ -18,24 +18,38 @@ Open/R has thrift endpoints to ask the daemon to drain itself. Open/R supports
 draining a link and whole device/node. Using the `breeze` CLI is an option to
 hit these endpoints and see/control the drain state.
 
-### See Drain Status
+### Check Drain Status
 
 - `breeze openr interfaces`
   - alias of `breeze lm links`
 
-### Drain
+### Hard-Drain
 
 - A link
   - `breeze lm set-link-overload INTERFACE`
 - A device/node
   - `breeze lm set-node-overload`
 
-### Undrain
+### Undrain (Hard-Drain)
 
 - A link
   - `breeze lm unset-link-overload INTERFACE`
 - A device/node
   - `breeze lm unset-node-overload`
+
+### Soft-Drain
+
+- A link
+  - `breeze lm increase-link-metric INTERFACE METRIC`
+- A device/node
+  - `breeze lm increase-node-metric METRIC`
+
+### Undrain (Soft-Drain)
+
+- A link
+  - `breeze lm clear-link-metric-increase INTERFACE`
+- A device/node
+  - `breeze lm clear-node-metric-increase`
 
 #### API
 
