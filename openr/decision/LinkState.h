@@ -519,6 +519,11 @@ class LinkState {
 
   bool updateNodeOverloaded(const std::string& nodeName, bool isOverloaded);
 
+  std::string mayHaveLinkEventPropagationTime(
+      thrift::AdjacencyDatabase const& adjDb,
+      const std::string& ifName,
+      bool isUp);
+
   /*
    * [Dijkstra's Shortest-Path-First(SPF) Algorithm]
    *

@@ -6527,6 +6527,43 @@ TEST(DecisionPendingUpdates, updatedPrefixes) {
   EXPECT_TRUE(updates.updatedPrefixes().empty());
 }
 
+// Verify that if we report counters of link event propagation time correclty.
+TEST_F(DecisionTestFixture, LinkEventPropagationTime) {
+  auto now = getUnixTimeStampMs();
+  std::string nodeName("1");
+  auto linkState = LinkState(kTestingAreaName, nodeName);
+  fb303::fbData->resetAllData();
+
+  auto adj1 =
+      createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 100002);
+  auto adjDb1 = createAdjDb("1", {adj1}, 1);
+  linkState.updateAdjacencyDatabase(adjDb1, kTestingAreaName);
+
+  // Up link event
+  auto adj2 =
+      createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 100001);
+  auto adjDb2 = createAdjDb("2", {adj2}, 2);
+  thrift::LinkStatusRecords rec1;
+  rec1.linkStatusMap()["2/1"].status() = thrift::LinkStatusEnum::UP;
+  rec1.linkStatusMap()["2/1"].unixTs() = now - 10;
+  adjDb2.linkStatusRecords() = rec1;
+  linkState.updateAdjacencyDatabase(adjDb2, kTestingAreaName);
+
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_GE(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 10);
+
+  // Down link event
+  adjDb2 = createAdjDb("2", {}, 2);
+  rec1.linkStatusMap()["2/1"].status() = thrift::LinkStatusEnum::DOWN;
+  rec1.linkStatusMap()["2/1"].unixTs() = now - 100;
+  adjDb2.linkStatusRecords() = rec1;
+  linkState.updateAdjacencyDatabase(adjDb2, kTestingAreaName);
+
+  counters = fb303::fbData->getCounters();
+  EXPECT_GE(
+      counters["decision.linkstate.down.propagation_time_ms.avg.60"], 100);
+}
+
 TEST(DecisionPendingUpdates, perfEvents) {
   openr::detail::DecisionPendingUpdates updates("node1");
   LinkState::LinkStateChange linkStateChange;

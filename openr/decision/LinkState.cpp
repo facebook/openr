@@ -332,6 +332,31 @@ LinkState::updateNodeOverloaded(
   return not inserted;
 }
 
+std::string
+LinkState::mayHaveLinkEventPropagationTime(
+    thrift::AdjacencyDatabase const& adjDb,
+    const std::string& linkName,
+    bool isUp) {
+  std::string propagationTimeLogStr = "";
+  if (adjDb.linkStatusRecords().has_value()) { // link status not recorded
+    auto linkStatus =
+        adjDb.linkStatusRecords()->linkStatusMap()->find(linkName);
+    if (linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end()) {
+      int64_t propagationTime =
+          getUnixTimeStampMs() - *linkStatus->second.unixTs();
+      if (propagationTime >= 0) { // ignore negative delta (NTP issue)
+        // log to fb303
+        std::string key = fmt::format(
+            "decision.linkstate.{}.propagation_time_ms", isUp ? "up" : "down");
+        fb303::fbData->addStatValue(key, propagationTime, fb303::AVG);
+        propagationTimeLogStr =
+            fmt::format("propagation time {} ms", propagationTime);
+      }
+    }
+  }
+  return propagationTimeLogStr;
+}
+
 bool
 LinkState::isNodeOverloaded(const std::string& nodeName) const {
   return nodeOverloads_.count(nodeName) and nodeOverloads_.at(nodeName);
@@ -438,7 +463,15 @@ LinkState::updateAdjacencyDatabase(
       // same hold twice
       addLink(*newIter);
       change.addedLinks.emplace_back(*newIter);
-      XLOG(DBG1) << "[LINK UP]" << (*newIter)->toString();
+      std::string propagationTimeStr = mayHaveLinkEventPropagationTime(
+          newAdjacencyDb,
+          (*newIter)->getIfaceFromNode(*newAdjacencyDb.thisNodeName()),
+          true /* up */);
+      XLOG(DBG1) << fmt::format(
+          "[LINK UP] {} [from {}] {}",
+          (*newIter)->toString(),
+          *newAdjacencyDb.thisNodeName(),
+          propagationTimeStr);
       ++newIter;
       continue;
     }
@@ -450,7 +483,15 @@ LinkState::updateAdjacencyDatabase(
       // change the topology.
       change.topologyChanged |= (*oldIter)->isUp();
       removeLink(*oldIter);
-      XLOG(DBG1) << "[LINK DOWN] " << (*oldIter)->toString();
+      std::string propagationTimeStr = mayHaveLinkEventPropagationTime(
+          newAdjacencyDb,
+          (*oldIter)->getIfaceFromNode(*newAdjacencyDb.thisNodeName()),
+          false /* down */);
+      XLOG(DBG1) << fmt::format(
+          "[LINK DOWN] {} [from {}] {}",
+          (*oldIter)->toString(),
+          *newAdjacencyDb.thisNodeName(),
+          propagationTimeStr);
       ++oldIter;
       continue;
     }
