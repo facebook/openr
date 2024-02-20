@@ -1,34 +1,5 @@
 publish(
-    wiki_root_path = "Network_Routing_Control/Routing_Protocol/Open-R/Operator_Guide",
-    srcs = [
-        "CLI.md",
-        "Configuration.md",
-        "Control_Plane_IO.md",
-        "Drain_OSS.md",
-        "Route_Representation.md",
-        "Version.md",
-    ],
-    oncall = "routing_protocol",
-)
-
-publish(
-    wiki_root_path = "Network_Routing_Control/Routing_Protocol/Open-R/Protocol_Guide",
-    srcs = [
-        "Architecture.md",
-        "Config.md",
-        "Decision.md",
-        "Dispatcher.md",
-        "Fib.md",
-        "Initialization_Process.md",
-        "KvStore.md",
-        "LinkMonitor.md",
-        "Messaging.md",
-        "Miscellaneous.md",
-        "Monitor.md",
-        "Netlink.md",
-        "Platform.md",
-        "PrefixManager.md",
-        "Spark.md",
-    ],
+    wiki_root_path = "Network_Routing_Control/Routing_Protocol/Open-R",
+    folder = "./",
     oncall = "routing_protocol",
 )
