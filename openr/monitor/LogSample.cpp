@@ -7,8 +7,8 @@
 
 #include "openr/monitor/LogSample.h"
 
-#include <folly/DynamicConverter.h>
-#include <folly/json.h>
+#include <folly/json/DynamicConverter.h>
+#include <folly/json/json.h>
 
 namespace {
 
