@@ -90,7 +90,7 @@ class OpenrCtrlCmd:
         @param: nodes - set: the set of nodes for parsing
         @param: parse_func - function: the parsing function
         """
-        for (node, db) in sorted(dbs.items()):
+        for node, db in sorted(dbs.items()):
             if "all" not in nodes and node not in nodes:
                 continue
             parse_func(container, db)

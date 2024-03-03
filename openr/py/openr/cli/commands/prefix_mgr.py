@@ -36,9 +36,9 @@ def get_advertised_route_filter(
     prefixes: List[str], prefix_type: Optional[str]
 ) -> ctrl_types.AdvertisedRouteFilter:
     return ctrl_types.AdvertisedRouteFilter(
-        prefixes=[ipnetwork.ip_str_to_prefix(p) for p in prefixes]
-        if prefixes
-        else None,
+        prefixes=(
+            [ipnetwork.ip_str_to_prefix(p) for p in prefixes] if prefixes else None
+        ),
         prefixType=to_thrift_prefix_type(prefix_type) if prefix_type else None,
     )
 

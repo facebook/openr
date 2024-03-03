@@ -104,7 +104,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         @param: parse_func - function: the parsing function
         """
 
-        for (key, value) in sorted(publication.keyVals.items(), key=lambda x: x[0]):
+        for key, value in sorted(publication.keyVals.items(), key=lambda x: x[0]):
             reported_node_name = key.split(":")[1]
             if "all" not in nodes and reported_node_name not in nodes:
                 continue
@@ -165,7 +165,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         ]
 
         for area, peers in peers_list.items():
-            for (peer, peerspec) in sorted(peers.items(), key=lambda x: x[0]):
+            for peer, peerspec in sorted(peers.items(), key=lambda x: x[0]):
                 elapsed_time = ""
                 flaps = ""
                 if peerspec.stateElapsedTimeMs is not None:
@@ -1376,8 +1376,8 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         """
 
         invalid_peers = defaultdict(dict)
-        for (area, peers) in area_to_peers.items():
-            for (peer_name, peer_spec) in peers.items():
+        for area, peers in area_to_peers.items():
+            for peer_name, peer_spec in peers.items():
                 if peer_spec.state != KvStorePeerState.INITIALIZED:
                     invalid_peers[area][peer_name] = peer_spec
 

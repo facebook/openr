@@ -107,14 +107,14 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
         print(printing.render_vertical_table([["linkMetricOverrides:"]]))
         column_labels = ["Interface", "Metric Override"]
         rows = []
-        for (k, v) in sorted(lm_config.linkMetricOverrides.items()):
+        for k, v in sorted(lm_config.linkMetricOverrides.items()):
             rows.append([k, v])
         print(printing.render_horizontal_table(rows, column_labels=column_labels))
 
         print(printing.render_vertical_table([["adjMetricOverrides:"]]))
         column_labels = ["Adjacency", "Metric Override"]
         rows = []
-        for (k, v) in sorted(lm_config.adjMetricOverrides.items()):
+        for k, v in sorted(lm_config.adjMetricOverrides.items()):
             adj_str = k.nodeName + " " + k.ifName
             rows.append([adj_str, v])
         print(printing.render_horizontal_table(rows, column_labels=column_labels))

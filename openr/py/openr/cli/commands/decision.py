@@ -560,9 +560,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         return errors
 
-    async def get_dbs(
-        self, client: OpenrCtrlCppClient.Async, area: str
-    ) -> Tuple[
+    async def get_dbs(self, client: OpenrCtrlCppClient.Async, area: str) -> Tuple[
         Sequence[openr_types.AdjacencyDatabase],
         Sequence[ctrl_types.ReceivedRouteDetail],
         Mapping[str, kv_store_types.Value],
@@ -829,9 +827,9 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
 
         # Create filter
         route_filter = ctrl_types.ReceivedRouteFilter(
-            prefixes=[ipnetwork.ip_str_to_prefix(p) for p in prefixes]
-            if prefixes
-            else None,
+            prefixes=(
+                [ipnetwork.ip_str_to_prefix(p) for p in prefixes] if prefixes else None
+            ),
             nodeName=node,
             areaName=area,
         )

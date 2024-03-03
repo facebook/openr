@@ -421,7 +421,7 @@ def build_global_adj_db(resp):
     # map: (node) -> AdjacencyDatabase)
     global_adj_db = {}
 
-    for (key, value) in resp.keyVals.items():
+    for key, value in resp.keyVals.items():
         if not key.startswith(Consts.ADJ_DB_MARKER):
             continue
         adj_db = deserialize_thrift_py_object(
@@ -452,9 +452,7 @@ def build_global_prefix_db(resp):
     return global_prefix_db
 
 
-def dump_adj_db_full(
-    global_adj_db, adj_db, bidir
-) -> Tuple[
+def dump_adj_db_full(global_adj_db, adj_db, bidir) -> Tuple[
     int,
     bool,
     Union[List[openr_types_py.Adjacency], Sequence[openr_types.Adjacency]],

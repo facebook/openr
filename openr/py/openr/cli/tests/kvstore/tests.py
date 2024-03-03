@@ -213,7 +213,7 @@ class CliKvStoreTests(TestCase):
         If there is no next validation string, returns None
         """
 
-        for (idx, line) in enumerate(stdout_lines[start_idx:], start_idx):
+        for idx, line in enumerate(stdout_lines[start_idx:], start_idx):
             if re.match(r"\[Kvstore\]", line):
                 return idx
 
@@ -226,7 +226,7 @@ class CliKvStoreTests(TestCase):
         """
 
         key_start_idx = None
-        for (idx, line) in enumerate(
+        for idx, line in enumerate(
             stdout_lines[validation_str_idx:], validation_str_idx
         ):
             if re.match("Key", line):
