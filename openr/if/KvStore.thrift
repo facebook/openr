@@ -472,6 +472,8 @@ struct KvStoreConfig {
   13: optional string x509_ca_path;
   /** Knob to enable/disable TLS thrift client. */
   14: bool enable_secure_thrift_client = false;
+  15: i32 sync_initial_backoff_ms = 4000;
+  16: i32 sync_max_backoff_ms = 256000;
 }
 
 /**

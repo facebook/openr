@@ -673,6 +673,134 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentVersion) {
   evb.waitUntilStopped();
 }
 
+/**
+ * 1) Inject thrift failure for one of the established peer
+ * 2) Verify syncing for the peer at configured "Initial" backoff period
+ * 3) Re-inject thrift failure for same peer multiple times (twice)
+ *    With configured backoff, 2nd thrift failure shall push backoff to max
+ * 4) Verify syncing for the peer at configured "Max" backoff period
+ */
+TEST_F(KvStoreTestFixture, PeerResyncWithConfiguredBackoff) {
+  const std::chrono::milliseconds ksyncInitialBackoff(1000);
+  const std::chrono::milliseconds ksyncMaxBackoff(1800);
+  const std::chrono::milliseconds ksyncValidationTime(2500);
+
+  auto config = getTestKvConf("storeA");
+  config.sync_initial_backoff_ms() = ksyncInitialBackoff.count();
+  config.sync_max_backoff_ms() = ksyncMaxBackoff.count();
+
+  auto* storeA = createKvStore(config, {kTestingAreaName});
+  auto* storeB = createKvStore(getTestKvConf("storeB"));
+  auto* storeC = createKvStore(getTestKvConf("storeC"));
+  storeA->run();
+  storeB->run();
+  storeC->run();
+
+  // A - B
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()));
+  EXPECT_TRUE(storeA->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+
+  // B - C
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName, storeC->getNodeId(), storeC->getPeerSpec()));
+  EXPECT_TRUE(storeC->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+
+  waitForAllPeersInitialized();
+  auto cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
+
+  storeA->injectThriftFailure(kTestingAreaName, "storeB");
+  auto start = std::chrono::steady_clock::now();
+
+  cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::IDLE);
+
+  waitForAllPeersInitialized();
+  auto elapsedTime =
+      duration_cast<milliseconds>(steady_clock::now() - start).count();
+  EXPECT_GT(elapsedTime, ksyncInitialBackoff.count());
+  EXPECT_LT(elapsedTime, ksyncMaxBackoff.count());
+
+  cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
+
+  start = steady_clock::now();
+  storeA->injectThriftFailure(kTestingAreaName, "storeB");
+
+  OpenrEventBase evb;
+  int scheduleAt{0};
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(
+          scheduleAt += (ksyncInitialBackoff.count() / 2)),
+      [&]() noexcept {
+        storeA->injectThriftFailure(kTestingAreaName, "storeB");
+        evb.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+
+  waitForAllPeersInitialized();
+  elapsedTime =
+      duration_cast<milliseconds>(steady_clock::now() - start).count();
+  EXPECT_GT(elapsedTime, ksyncMaxBackoff.count());
+  EXPECT_LT(elapsedTime, ksyncValidationTime.count());
+
+  cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
+}
+
+TEST_F(KvStoreTestFixture, PeerResyncWithDefaultBackoff) {
+  auto* storeA = createKvStore(getTestKvConf("storeA"));
+  auto* storeB = createKvStore(getTestKvConf("storeB"));
+  auto* storeC = createKvStore(getTestKvConf("storeC"));
+  storeA->run();
+  storeB->run();
+  storeC->run();
+
+  // A - B
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()));
+  EXPECT_TRUE(storeA->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+
+  // B - C
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName, storeC->getNodeId(), storeC->getPeerSpec()));
+  EXPECT_TRUE(storeC->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+
+  waitForAllPeersInitialized();
+  auto cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
+
+  storeA->injectThriftFailure(kTestingAreaName, "storeB");
+  auto start = std::chrono::steady_clock::now();
+
+  cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::IDLE);
+
+  waitForAllPeersInitialized();
+  auto elapsedTime =
+      duration_cast<milliseconds>(steady_clock::now() - start).count();
+  EXPECT_GT(elapsedTime, Constants::kKvstoreSyncInitialBackoff.count());
+  EXPECT_LT(elapsedTime, Constants::kKvstoreSyncMaxBackoff.count());
+
+  cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(1, cmpPeers.size());
+  EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
+}
+
 // When you receive a update from 'other' about a key you originates,
 //  with some inconsistency (higher ttl_version)
 // 1. you should never delete it

@@ -38,6 +38,9 @@ struct KvStoreParams {
   std::chrono::milliseconds ttlDecr{Constants::kTtlDecrement};
   // TTL for self-originated keys
   std::chrono::milliseconds keyTtl{0};
+  std::chrono::milliseconds syncInitialBackoff{
+      Constants::kKvstoreSyncInitialBackoff};
+  std::chrono::milliseconds syncMaxBackoff{Constants::kKvstoreSyncMaxBackoff};
 
   // TLS knob
   bool enable_secure_thrift_client{false};
@@ -59,6 +62,10 @@ struct KvStoreParams {
             *kvStoreConfig.ttl_decrement_ms())), /* TTL decrement factor */
         keyTtl(std::chrono::milliseconds(
             *kvStoreConfig.key_ttl_ms())), /*TTL for self-originated keys */
+        syncInitialBackoff(std::chrono::milliseconds(
+            *kvStoreConfig.sync_initial_backoff_ms())),
+        syncMaxBackoff(
+            std::chrono::milliseconds(*kvStoreConfig.sync_max_backoff_ms())),
         enable_secure_thrift_client(
             *kvStoreConfig.enable_secure_thrift_client()),
         x509_cert_path(kvStoreConfig.x509_cert_path().to_optional()),

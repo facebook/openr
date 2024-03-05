@@ -45,6 +45,41 @@ KvStore<ClientType>::KvStore(
         kvParams_.maybeIpTos.value(),
         *kvStoreConfig.node_name());
   }
+  if (*kvStoreConfig.sync_initial_backoff_ms() <= 0) {
+    XLOG(INFO) << fmt::format(
+        "non-zero sync initial backoff ms {}, re-setting to {}",
+        *kvStoreConfig.sync_initial_backoff_ms(),
+        std::chrono::milliseconds(Constants::kKvstoreSyncInitialBackoff)
+            .count());
+
+    kvParams_.syncInitialBackoff = Constants::kKvstoreSyncInitialBackoff;
+  } else {
+    kvParams_.syncInitialBackoff =
+        std::chrono::milliseconds(*kvStoreConfig.sync_initial_backoff_ms());
+  }
+
+  if (*kvStoreConfig.sync_max_backoff_ms() <=
+      std::chrono::milliseconds(kvParams_.syncInitialBackoff).count()) {
+    if (kvParams_.syncInitialBackoff < Constants::kKvstoreSyncMaxBackoff) {
+      kvParams_.syncMaxBackoff = Constants::kKvstoreSyncMaxBackoff;
+    } else {
+      // to be tuned if this case is of interest
+      kvParams_.syncMaxBackoff = (kvParams_.syncInitialBackoff * 2);
+    }
+
+    XLOG(INFO) << fmt::format(
+        "sync max backoff ms {} less than initial backoff, re-setting to {}",
+        *kvStoreConfig.sync_max_backoff_ms(),
+        kvParams_.syncMaxBackoff.count());
+  } else {
+    kvParams_.syncMaxBackoff =
+        std::chrono::milliseconds(*kvStoreConfig.sync_max_backoff_ms());
+  }
+
+  XLOG(INFO) << fmt::format(
+      "Initial backoff {} and Max backoff {}",
+      kvParams_.syncInitialBackoff.count(),
+      kvParams_.syncMaxBackoff.count());
 
   {
     auto fiber = addFiberTaskFuture(
@@ -517,6 +552,29 @@ KvStore<ClientType>::semifuture_setKvStoreKeyValues(
       p.setException(e);
     }
   });
+  return sf;
+}
+
+template <class ClientType>
+folly::SemiFuture<std::unique_ptr<bool>>
+KvStore<ClientType>::semifuture_injectThriftFailure(
+    std::string area, std::string peerName) {
+  folly::Promise<std::unique_ptr<bool>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [this, p = std::move(p), peerName = std::move(peerName), area]() mutable {
+        try {
+          bool r = true;
+          auto& kvStoreDb = getAreaDbOrThrow(area, "disconnectPeer");
+          kvStoreDb.processThriftFailure(
+              peerName,
+              "injected thrift failure",
+              std::chrono::milliseconds(500)); // arbitrary timeout
+          p.setValue(std::make_unique<bool>(std::move(r)));
+        } catch (thrift::KvStoreError const& e) {
+          p.setException(e);
+        }
+      });
   return sf;
 }
 
@@ -1049,6 +1107,11 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
   CHECK(not this->peerSpec.peerAddr()->empty());
   CHECK(
       this->expBackoff.getInitialBackoff() <= this->expBackoff.getMaxBackoff());
+  XLOG(INFO) << fmt::format(
+      "node: {}, initial backoff {} and max backoff {}",
+      nodeName,
+      this->expBackoff.getInitialBackoff().count(),
+      this->expBackoff.getMaxBackoff().count());
 }
 
 template <class ClientType>
@@ -1599,7 +1662,7 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
   // Build keys to be cleaned from local storage
   std::vector<std::string> keysToClear;
 
-  std::chrono::milliseconds timeout = Constants::kMaxBackoff;
+  std::chrono::milliseconds timeout = kvParams_.syncMaxBackoff;
   for (auto const& key : keysToAdvertise_) {
     // Each key was introduced through a persistSelfOriginatedKey() call.
     // Therefore, each key is in selfOriginatedKeyVals_ and has a keyBackoff.
@@ -1918,7 +1981,7 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::requestThriftPeerSync() {
   // minimal timeout for next run
-  auto timeout = std::chrono::milliseconds(Constants::kKvstoreSyncMaxBackoff);
+  auto timeout = kvParams_.syncMaxBackoff;
 
   // pre-fetch of peers in "SYNCING" state for later calculation
   uint32_t numThriftPeersInSync =
@@ -1935,7 +1998,7 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     }
 
     // update the global minimum timeout value for next try
-    if (not thriftPeer.expBackoff.canTryNow()) {
+    if (not expBackoff.canTryNow()) {
       timeout = std::min(timeout, expBackoff.getTimeRemainingUntilRetry());
       continue;
     }
@@ -2006,9 +2069,9 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
         });
 
     // in case pending peer size is over parallelSyncLimit,
-    // wait until kMaxBackoff before sending next round of sync
+    // wait until syncInitialBackoff before sending next round of sync
     if (numThriftPeersInSync > parallelSyncLimitOverThrift_) {
-      timeout = Constants::kKvstoreSyncInitialBackoff;
+      timeout = kvParams_.syncInitialBackoff;
       XLOG(INFO)
           << AreaTag()
           << fmt::format(
@@ -2317,8 +2380,7 @@ KvStoreDb<ClientType>::addThriftPeers(
           AreaTag(),
           newPeerSpec,
           ExponentialBackoff<std::chrono::milliseconds>(
-              Constants::kKvstoreSyncInitialBackoff,
-              Constants::kKvstoreSyncMaxBackoff),
+              kvParams_.syncInitialBackoff, kvParams_.syncMaxBackoff),
           kvParams_);
       peer.peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
       peer.peerSpec.flaps() = -1;

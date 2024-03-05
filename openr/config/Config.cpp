@@ -452,6 +452,8 @@ Config::toThriftKvStoreConfig() const {
   config.node_name() = getNodeName();
   config.key_ttl_ms() = *oldConfig.key_ttl_ms();
   config.ttl_decrement_ms() = *oldConfig.ttl_decrement_ms();
+  config.sync_initial_backoff_ms() = *oldConfig.sync_initial_backoff_ms();
+  config.sync_max_backoff_ms() = *oldConfig.sync_max_backoff_ms();
 
   if (auto floodRate = oldConfig.flood_rate()) {
     thrift::KvStoreFloodRate rate;

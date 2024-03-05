@@ -118,6 +118,8 @@ class KvStoreWrapper {
       const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
       std::optional<std::vector<std::string>> nodeIds = std::nullopt);
 
+  bool injectThriftFailure(AreaId const& area, std::string const& peerName);
+
   void
   publishKvStoreSynced() {
     kvStoreUpdatesQueue_.push(thrift::InitializationEvent::KVSTORE_SYNCED);

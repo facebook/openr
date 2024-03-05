@@ -135,6 +135,21 @@ KvStoreWrapper<ClientType>::setKeys(
 }
 
 template <class ClientType>
+bool
+KvStoreWrapper<ClientType>::injectThriftFailure(
+    AreaId const& area, std::string const& peerName) {
+  try {
+    kvStore_->semifuture_injectThriftFailure(area, peerName);
+  } catch (std::exception const& e) {
+    XLOG(ERR) << "Exception to thrift failure injection: "
+              << folly::exceptionStr(e);
+    return false;
+  }
+
+  return true;
+}
+
+template <class ClientType>
 void
 KvStoreWrapper<ClientType>::pushToKvStoreUpdatesQueue(
     const AreaId& area,

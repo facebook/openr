@@ -79,6 +79,11 @@ struct KvstoreConfig {
    */
   6: optional list<string> key_prefix_filters;
   7: optional list<string> key_originator_id_filters;
+  /**
+   * Configurable Initial and Max backoffs for kvstore peer full sync
+   */
+  8: i32 sync_initial_backoff_ms = 4000;
+  9: i32 sync_max_backoff_ms = 256000;
 }
 
 /*

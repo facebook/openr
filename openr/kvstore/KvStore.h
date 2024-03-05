@@ -207,6 +207,23 @@ class KvStoreDb {
   void unsetSelfOriginatedKey(std::string const& key, std::string const& value);
   void eraseSelfOriginatedKey(std::string const& key);
 
+  /*
+   * [Initial Sync]
+   *
+   * util method to process thrift sync response in:
+   *    1) Success
+   *    2) Failure
+   */
+  void processThriftSuccess(
+      std::string const& peerName,
+      thrift::Publication&& pub,
+      std::chrono::milliseconds timeDelta);
+
+  void processThriftFailure(
+      std::string const& peerName,
+      folly::fbstring const& exceptionStr,
+      std::chrono::milliseconds timeDelta);
+
  private:
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
@@ -242,23 +259,6 @@ class KvStoreDb {
    */
   void finalizeFullSync(
       const std::unordered_set<std::string>& keys, const std::string& senderId);
-
-  /*
-   * [Initial Sync]
-   *
-   * util method to process thrift sync response in:
-   *    1) Success
-   *    2) Failure
-   */
-  void processThriftSuccess(
-      std::string const& peerName,
-      thrift::Publication&& pub,
-      std::chrono::milliseconds timeDelta);
-
-  void processThriftFailure(
-      std::string const& peerName,
-      folly::fbstring const& exceptionStr,
-      std::chrono::milliseconds timeDelta);
 
   /*
    * [Version Inconsistency Mitigation]
@@ -608,6 +608,9 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
   semifuture_setKvStoreKeyValues(
       std::string area, thrift::KeySetParams keySetParams);
+
+  folly::SemiFuture<std::unique_ptr<bool>> semifuture_injectThriftFailure(
+      std::string area, std::string peerName);
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
   semifuture_dumpKvStoreKeys(
