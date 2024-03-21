@@ -1458,8 +1458,7 @@ KvStoreDb<ClientType>::checkKeyTtlTask() noexcept {
   while (true) { // Break when stop signal is ready
     // Sleep before next check
     // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
-    if (ttlCheckStopSignal_.try_wait_for(
-            5 * Constants::kFloodTopoDumpInterval)) {
+    if (ttlCheckStopSignal_.try_wait_for(Constants::kFloodTopoDumpInterval)) {
       break; // Baton was posted
     } else {
       ttlCheckStopSignal_.reset(); // Baton experienced timeout
@@ -1494,6 +1493,8 @@ KvStoreDb<ClientType>::checkKeyTtl() noexcept {
     // this is a strong signal that flooding topo is in bad state;
     if (*v.ttl() < kvParams_.keyTtl.count() / 2 and
         thriftPeers_.count(*v.originatorId())) {
+      XLOG(ERR) << fmt::format(
+          "Ttl of {} drops below 50% threshold and going to expire", k);
       cnt += 1;
     }
   }
