@@ -23,8 +23,8 @@ ExponentialBackoff<Duration>::ExponentialBackoff(
       isAbortAtMax_(isAbortAtMax) {
   XCHECK_GT(initialBackoff.count(), Duration(0).count())
       << "Backoff must be positive value";
-  XCHECK_LT(initialBackoff.count(), maxBackoff.count())
-      << "Max backoff must be greater than initial backoff.";
+  XCHECK_LE(initialBackoff.count(), maxBackoff.count())
+      << "Max backoff must be greater than or equal to initial backoff.";
 }
 
 template <typename Duration>

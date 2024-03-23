@@ -58,7 +58,7 @@ KvStore<ClientType>::KvStore(
         std::chrono::milliseconds(*kvStoreConfig.sync_initial_backoff_ms());
   }
 
-  if (*kvStoreConfig.sync_max_backoff_ms() <=
+  if (*kvStoreConfig.sync_max_backoff_ms() <
       std::chrono::milliseconds(kvParams_.syncInitialBackoff).count()) {
     if (kvParams_.syncInitialBackoff < Constants::kKvstoreSyncMaxBackoff) {
       kvParams_.syncMaxBackoff = Constants::kKvstoreSyncMaxBackoff;
