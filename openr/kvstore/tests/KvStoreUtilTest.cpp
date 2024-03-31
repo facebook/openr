@@ -21,7 +21,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
   void
   SetUp() override {
-    auto makeStoreWrapper = [this](std::string nodeId) {
+    auto makeStoreWrapper = [](std::string nodeId) {
       // create KvStoreConfig
       thrift::KvStoreConfig kvStoreConfig;
       kvStoreConfig.node_name() = nodeId;
