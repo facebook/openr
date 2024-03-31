@@ -29,12 +29,6 @@
     name(counters, iters, ##__VA_ARGS__);                              \
   }
 
-namespace detail {
-// Prefix length of a subnet
-static const uint8_t kBitMaskLen = 128;
-
-} // namespace detail
-
 namespace openr {
 
 class PMToKvStoreBMTestFixture {

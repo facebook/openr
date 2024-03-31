@@ -16,9 +16,6 @@ using namespace openr;
 
 namespace {
 
-// the size of the value string
-const uint32_t kValueStrSize = 64;
-
 // TTL in ms
 const int64_t kTtlMs = 1000;
 
