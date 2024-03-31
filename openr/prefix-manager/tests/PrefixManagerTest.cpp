@@ -46,8 +46,6 @@ const auto addr7 = toIpPrefix("ffff:10:3:7::0/64");
 const auto addr8 = toIpPrefix("ffff:10:4:8::/64");
 const auto addr9 = toIpPrefix("ffff:10:4:9::/64");
 const auto addr10 = toIpPrefix("ffff:10:4:10::/64");
-const uint32_t label1 = 65001;
-const uint32_t label2 = 65002;
 
 const auto prefixEntry1 = createPrefixEntry(addr1, thrift::PrefixType::DEFAULT);
 const auto prefixEntry2 =

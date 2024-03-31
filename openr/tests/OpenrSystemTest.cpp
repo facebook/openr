@@ -61,17 +61,7 @@ const string iface42{"4/2"};
 const string iface43{"4/3"};
 
 const int ifIndex12{12};
-const int ifIndex13{13};
-const int ifIndex14{14};
 const int ifIndex21{21};
-const int ifIndex23{23};
-const int ifIndex24{24};
-const int ifIndex41{41};
-const int ifIndex42{42};
-const int ifIndex43{43};
-const int ifIndex31{31};
-const int ifIndex32{32};
-const int ifIndex34{34};
 
 const folly::CIDRNetwork ip1V4(folly::IPAddress("192.168.0.1"), 32);
 const folly::CIDRNetwork ip2V4(folly::IPAddress("192.168.0.2"), 32);
