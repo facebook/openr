@@ -252,7 +252,7 @@ main(int argc, char** argv) {
   if (config->isNetlinkFibHandlerEnabled()) {
     netlinkFibServer = std::make_unique<apache::thrift::ThriftServer>();
     netlinkFibServer->setThreadManagerType(
-        apache::thrift::BaseThriftServer::ThreadManagerType::PRIORITY_QUEUE);
+        apache::thrift::ThriftServer::ThreadManagerType::PRIORITY_QUEUE);
     netlinkFibServer->setNumCPUWorkerThreads(2 /* num of threads */);
     netlinkFibServer->setCPUWorkerThreadName("ThriftCpuPool");
 
