@@ -6562,6 +6562,16 @@ TEST_F(DecisionTestFixture, LinkEventPropagationTime) {
   counters = fb303::fbData->getCounters();
   EXPECT_GE(
       counters["decision.linkstate.down.propagation_time_ms.avg.60"], 100);
+
+  // Down link event with timestamp is not updated, then it's skipped
+  fb303::fbData->resetAllData();
+  adjDb2 = createAdjDb("2", {}, 2);
+  rec1.linkStatusMap()["2/1"].status() = thrift::LinkStatusEnum::DOWN;
+  rec1.linkStatusMap()["2/1"].unixTs() = 0;
+  adjDb2.linkStatusRecords() = rec1;
+  linkState.updateAdjacencyDatabase(adjDb2, kTestingAreaName);
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(counters["decision.linkstate.down.propagation_time_ms.avg.60"], 0);
 }
 
 TEST(DecisionPendingUpdates, perfEvents) {

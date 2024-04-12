@@ -341,7 +341,11 @@ LinkState::mayHaveLinkEventPropagationTime(
   if (adjDb.linkStatusRecords().has_value()) { // link status not recorded
     auto linkStatus =
         adjDb.linkStatusRecords()->linkStatusMap()->find(linkName);
-    if (linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end()) {
+    // Timestamp is updated when link status changes (over Netlink). But
+    // at router boot-up, link doesn't change status, and so timestamp is
+    // not set and equals to 0 (default value). We ignore this situation.
+    if (linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end() &&
+        *linkStatus->second.unixTs()) {
       int64_t propagationTime =
           getUnixTimeStampMs() - *linkStatus->second.unixTs();
       if (propagationTime >= 0) { // ignore negative delta (NTP issue)
