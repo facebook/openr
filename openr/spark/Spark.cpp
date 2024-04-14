@@ -1734,8 +1734,7 @@ Spark::processHelloMsg(
 
     // Neighbor is back from 'restarting' state. Go back to 'ESTABLISHED'
     XLOG(DBG1) << "[SparkHelloMsg] Node: " << neighborName
-               << " is back from restart. "
-               << "Received Seq#: " << remoteSeqNum
+               << " is back from restart. " << "Received Seq#: " << remoteSeqNum
                << ", local Seq#: " << neighbor.seqNum;
 
     // Update local seqNum maintained for this neighbor
@@ -2384,8 +2383,8 @@ Spark::updateInterface(
     XLOG(INFO) << "Updating iface " << ifName << " in spark tracking from "
                << "(ifindex " << interface.ifIndex << ", addrs "
                << interface.v6LinkLocalNetwork.first << " , "
-               << interface.v4Network.first << ") to "
-               << "(ifindex " << newInterface.ifIndex << ", addrs "
+               << interface.v4Network.first << ") to " << "(ifindex "
+               << newInterface.ifIndex << ", addrs "
                << newInterface.v6LinkLocalNetwork.first << " , "
                << newInterface.v4Network.first << ")";
 

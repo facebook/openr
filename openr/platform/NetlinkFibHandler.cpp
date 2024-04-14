@@ -241,9 +241,8 @@ NetlinkFibHandler::semifuture_syncFib(
       continue;
     }
     if (it != existingRoutes.end()) {
-      XLOG(INFO) << "Updating unicast-route "
-                 << "\n[OLD] " << it->second.str() << "\n[NEW] "
-                 << nlRoute.str();
+      XLOG(INFO) << "Updating unicast-route " << "\n[OLD] " << it->second.str()
+                 << "\n[NEW] " << nlRoute.str();
     } else {
       XLOG(INFO) << "Adding unicast-route \n[NEW]" << nlRoute.str();
     }
@@ -309,9 +308,8 @@ NetlinkFibHandler::semifuture_syncMplsFib(
       continue;
     }
     if (it != existingRoutes.end()) {
-      XLOG(INFO) << "Updating mpls-route "
-                 << "\n[OLD] " << it->second.str() << "\n[NEW] "
-                 << nlRoute.str();
+      XLOG(INFO) << "Updating mpls-route " << "\n[OLD] " << it->second.str()
+                 << "\n[NEW] " << nlRoute.str();
     } else {
       XLOG(INFO) << "Adding mpls-route \n[NEW]" << nlRoute.str();
     }

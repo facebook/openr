@@ -1885,7 +1885,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     routeUpdate.addRouteToUpdate(unicastEntryV6_1);
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
-    // Verify 1): PrefixManager -> KvStore update
+    //  Verify 1): PrefixManager -> KvStore update
     {
       // v4Prefix_ is advertised to ALL areas configured
       std::unordered_map<
@@ -2103,7 +2103,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
           deletedRoutes, testing::UnorderedElementsAre(toIpPrefix(v4Prefix_)));
     }
 
-    // Verify 2): PrefixManager -> KvStore update
+    //  Verify 2): PrefixManager -> KvStore update
     {
       // both v4Prefix_ + v6Prefix_ are withdrawn from ALL areas configured
       std::unordered_set<std::pair<std::string, std::string>> expDeleted{
@@ -2694,7 +2694,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     EXPECT_FALSE(waitForRouteUpdate(staticRoutesReader).has_value());
   }
 
-  // Verify 1e and 1f: PrefixManager -> KvStore update
+  //  Verify 1e and 1f: PrefixManager -> KvStore update
   {
     // v4Prefix_ is advertised to ALL areas configured, while v6Prefix_ is NOT
     std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
@@ -2745,7 +2745,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     EXPECT_FALSE(update.has_value());
   }
 
-  // Verify 2b: PrefixManager -> KvStore update
+  //  Verify 2b: PrefixManager -> KvStore update
   {
     // v6Prefix_ is advertised to the SINGLE area configured
     std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
@@ -2805,7 +2805,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
         deletedRoutes, testing::UnorderedElementsAre(toIpPrefix(v4Prefix_)));
   }
 
-  // Verify 3b: PrefixManager -> KvStore update: both prefixes withdrawn
+  //  Verify 3b: PrefixManager -> KvStore update: both prefixes withdrawn
   {
     // both v4Prefix_ + v6Prefix_ are withdrawn from the single area configured
     std::unordered_set<std::pair<std::string, std::string>> expDeleted{

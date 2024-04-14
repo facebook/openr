@@ -1678,24 +1678,24 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   //
   // T101564784 to track and investigate
   {
-      /*
-    EXPECT_TRUE(store1->addPeer(
-      kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
+    /*
+  EXPECT_TRUE(store1->addPeer(
+    kTestingAreaName, store0->getNodeId(), store0->getPeerSpec()));
 
-    // wait for full-sync
-    waitForAllPeersInitialized();
-    EXPECT_EQ(expectedPeers, store1->getPeers(kTestingAreaName));
+  // wait for full-sync
+  waitForAllPeersInitialized();
+  EXPECT_EQ(expectedPeers, store1->getPeers(kTestingAreaName));
 
-    // store1 should have key update(full-sync with peer_spec change)
-    auto maybeVal1 = store1->getKey(kTestingAreaName, key);
-    CHECK(maybeVal1.has_value());
-    EXPECT_EQ(3, *maybeVal1.value().version());
+  // store1 should have key update(full-sync with peer_spec change)
+  auto maybeVal1 = store1->getKey(kTestingAreaName, key);
+  CHECK(maybeVal1.has_value());
+  EXPECT_EQ(3, *maybeVal1.value().version());
 
-    // store2 still NOT updated since there is no full-sync
-    auto maybeVal = store2->getKey(kTestingAreaName, key);
-    CHECK(maybeVal.has_value());
-    EXPECT_NE(3, *maybeVal.value().version());
-      */
+  // store2 still NOT updated since there is no full-sync
+  auto maybeVal = store2->getKey(kTestingAreaName, key);
+  CHECK(maybeVal.has_value());
+  EXPECT_NE(3, *maybeVal.value().version());
+    */
   }
 
   // Remove store0 and verify

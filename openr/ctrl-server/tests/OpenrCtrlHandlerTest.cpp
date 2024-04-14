@@ -923,7 +923,7 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
     EXPECT_EQ(value33, keyVals["key33"]);
     EXPECT_EQ(value333, keyVals["key333"]);
   }
-// clang-format on
+  // clang-format on
 }
 #endif // FOLLY_HAS_COROUTINES
 

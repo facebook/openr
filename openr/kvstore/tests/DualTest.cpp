@@ -598,9 +598,9 @@ class DualBaseFixture : public ::testing::Test {
       ++numConnectedNodes;
     }
     if (numConnectedNodes != boost::num_vertices(floodTopo)) {
-      LOG(ERROR)
-          << "numConnectedNodes: " << numConnectedNodes << " != "
-          << "num of flooding topology: " << boost::num_vertices(floodTopo);
+      LOG(ERROR) << "numConnectedNodes: " << numConnectedNodes
+                 << " != " << "num of flooding topology: "
+                 << boost::num_vertices(floodTopo);
       return false;
     }
 
@@ -610,8 +610,8 @@ class DualBaseFixture : public ::testing::Test {
       const auto& distance = kv.second.at(rootId).distance;
       const auto& expDistance = dists[physicalDescriptors.at(node)];
       if (expDistance != distance) {
-        LOG(ERROR) << node << " distance: " << distance << " != "
-                   << "expDistance: " << expDistance;
+        LOG(ERROR) << node << " distance: " << distance
+                   << " != " << "expDistance: " << expDistance;
         return false;
       }
     }

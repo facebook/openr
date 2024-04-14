@@ -922,11 +922,10 @@ NetlinkRouteMessage::deleteLabelRoute(const Route& route) {
 /* ATTN: debugging util function. DO NOT REMOVE */
 void
 NetlinkRouteMessage::showRtmMsg(const struct rtmsg* const hdr) {
-  XLOG(DBG3) << "Route message data"
-             << "\n\trtm_family    =>  " << +hdr->rtm_family
-             << "\n\trtm_dst_len   =>  " << +hdr->rtm_dst_len
-             << "\n\trtm_src_len   =>  " << +hdr->rtm_src_len
-             << "\n\trtm_tos       =>  " << +hdr->rtm_tos
+  XLOG(DBG3) << "Route message data" << "\n\trtm_family    =>  "
+             << +hdr->rtm_family << "\n\trtm_dst_len   =>  "
+             << +hdr->rtm_dst_len << "\n\trtm_src_len   =>  "
+             << +hdr->rtm_src_len << "\n\trtm_tos       =>  " << +hdr->rtm_tos
              << "\n\trtm_table     =>  " << +hdr->rtm_table
              << "\n\trtm_protocol  =>  " << +hdr->rtm_protocol
              << "\n\trtm_scope     =>  " << +hdr->rtm_scope
@@ -939,20 +938,19 @@ NetlinkRouteMessage::showMultiPathAttributes(const struct rtattr* const rta) {
   struct rtnexthop* rtnh = reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
   int nhLen = RTA_PAYLOAD(rta);
 
-  XLOG(DBG3) << "Multi-path nexthop data"
-             << "\n\trtnh_len      => " << rtnh->rtnh_len
-             << "\n\trtnh_flags    => " << static_cast<size_t>(rtnh->rtnh_flags)
-             << "\n\trtnh_hops     => " << static_cast<size_t>(rtnh->rtnh_hops)
-             << "\n\trtnh_ifindex  => " << rtnh->rtnh_ifindex;
+  XLOG(DBG3) << "Multi-path nexthop data" << "\n\trtnh_len      => "
+             << rtnh->rtnh_len << "\n\trtnh_flags    => "
+             << static_cast<size_t>(rtnh->rtnh_flags) << "\n\trtnh_hops     => "
+             << static_cast<size_t>(rtnh->rtnh_hops) << "\n\trtnh_ifindex  => "
+             << rtnh->rtnh_ifindex;
 
   do {
     const struct rtattr* attr;
     auto attrLen = rtnh->rtnh_len;
     for (attr = RTNH_DATA(rtnh); RTA_OK(attr, attrLen);
          attr = RTA_NEXT(attr, attrLen)) {
-      XLOG(DBG3) << "Nexthop attributes:"
-                 << "\n\trta_len       => " << attr->rta_len
-                 << "\n\trta_type      => " << attr->rta_type;
+      XLOG(DBG3) << "Nexthop attributes:" << "\n\trta_len       => "
+                 << attr->rta_len << "\n\trta_type      => " << attr->rta_type;
     }
     nhLen -= NLMSG_ALIGN(rtnh->rtnh_len);
     rtnh = RTNH_NEXT(rtnh);

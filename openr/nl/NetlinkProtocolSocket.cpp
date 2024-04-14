@@ -251,8 +251,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
     auto res = nlSeqNumMap_.insert({nlmsg_hdr->nlmsg_seq, std::move(m)});
     CHECK(res.second) << "Entry exists for " << nlmsg_hdr->nlmsg_seq;
     count++;
-    XLOG(DBG2) << "Sending netlink request."
-               << " seq=" << nlmsg_hdr->nlmsg_seq
+    XLOG(DBG2) << "Sending netlink request." << " seq=" << nlmsg_hdr->nlmsg_seq
                << ", type=" << nlmsg_hdr->nlmsg_type
                << ", len=" << nlmsg_hdr->nlmsg_len
                << ", flags=" << nlmsg_hdr->nlmsg_flags;

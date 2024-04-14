@@ -30,8 +30,7 @@ PrefixState::updatePrefix(
   }
   changed.insert(key.getCIDRNetwork());
 
-  XLOG(DBG1) << "[ROUTE ADVERTISEMENT] "
-             << "Area: " << key.getPrefixArea()
+  XLOG(DBG1) << "[ROUTE ADVERTISEMENT] " << "Area: " << key.getPrefixArea()
              << ", Node: " << key.getNodeName() << ", "
              << toString(entry, VLOG_IS_ON(1));
   return changed;
@@ -45,8 +44,7 @@ PrefixState::deletePrefix(PrefixKey const& key) {
   if (search != prefixes_.end() and
       search->second.erase(key.getNodeAndArea())) {
     changed.insert(key.getCIDRNetwork());
-    XLOG(DBG1) << "[ROUTE WITHDRAW] "
-               << "Area: " << key.getPrefixArea()
+    XLOG(DBG1) << "[ROUTE WITHDRAW] " << "Area: " << key.getPrefixArea()
                << ", Node: " << key.getNodeName() << ", "
                << folly::IPAddress::networkToString(key.getCIDRNetwork());
     // clean up data structures

@@ -485,10 +485,10 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
 
       // policy reject prefix, nothing to do.
       if (not postPolicyTPrefixEntry) {
-        XLOG(DBG2) << "[Area Policy] " << *policy << " rejected prefix: "
-                   << "(Type, PrefixEntry): (" << toString(type) << ", "
-                   << toString(*tPrefixEntry, true) << "), hit term ("
-                   << hitPolicyName << ")";
+        XLOG(DBG2) << "[Area Policy] " << *policy
+                   << " rejected prefix: " << "(Type, PrefixEntry): ("
+                   << toString(type) << ", " << toString(*tPrefixEntry, true)
+                   << "), hit term (" << hitPolicyName << ")";
         fb303::fbData->addStatValue("prefix_manager.rejected", 1, fb303::SUM);
         fb303::fbData->addStatValue(
             fmt::format("prefix_manager.rejected.{}", toArea), 1, fb303::SUM);
@@ -496,11 +496,11 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
       }
 
       // policy accept prefix, go ahread with prefix announcement.
-      XLOG(DBG2) << "[Area Policy] " << *policy << " accepted/modified prefix: "
-                 << "(Type, PrefixEntry): (" << toString(type) << ", "
-                 << toString(*tPrefixEntry, true) << "), PostPolicyEntry: ("
-                 << toString(*postPolicyTPrefixEntry) << "), hit term ("
-                 << hitPolicyName << ")";
+      XLOG(DBG2) << "[Area Policy] " << *policy
+                 << " accepted/modified prefix: " << "(Type, PrefixEntry): ("
+                 << toString(type) << ", " << toString(*tPrefixEntry, true)
+                 << "), PostPolicyEntry: (" << toString(*postPolicyTPrefixEntry)
+                 << "), hit term (" << hitPolicyName << ")";
     } else {
       postPolicyTPrefixEntry = tPrefixEntry;
     }
@@ -521,8 +521,7 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
         fmt::format("prefix_manager.route_advertisements.{}", toArea),
         1,
         fb303::SUM);
-    XLOG(DBG1) << "[Prefix Advertisement] "
-               << "Area: " << toArea << ", "
+    XLOG(DBG1) << "[Prefix Advertisement] " << "Area: " << toArea << ", "
                << "Type: " << toString(type) << ", "
                << toString(*postPolicyTPrefixEntry->prefix())
                << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
@@ -576,8 +575,8 @@ PrefixManager::deleteKvStoreKeyHelper(
         true);
     kvRequestQueue_.push(std::move(unsetPrefixRequest));
 
-    XLOG(DBG1) << "[Prefix Withdraw] "
-               << "Area: " << area << ", " << toString(*entry.prefix());
+    XLOG(DBG1) << "[Prefix Withdraw] " << "Area: " << area << ", "
+               << toString(*entry.prefix());
     fb303::fbData->addStatValue(
         "prefix_manager.route_withdraws", 1, fb303::SUM);
   }

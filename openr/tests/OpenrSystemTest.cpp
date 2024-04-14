@@ -318,7 +318,7 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
 
     LOG(INFO) << "Allocating:" << allocMem << ", Mem in use:" << memUsage
               << ", Memory limit:" << memLimitMB << "MB";
-    vector<int8_t> v((allocMem)*0x100000);
+    vector<int8_t> v((allocMem) * 0x100000);
     fill(v.begin(), v.end(), 1);
     /* sleep override */
     std::this_thread::sleep_for(std::chrono::seconds(5));
