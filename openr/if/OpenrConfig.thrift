@@ -761,14 +761,6 @@ struct OpenrConfig {
   40: i64 softdrained_node_increment = 100;
 
   /**
-   * This knob is meant for migrating BGP config routes to Open/R-originated.
-   * Currently there's no way to choose between two otherwise equivalent configs
-   * (with equal metrics) in PrefixMgr (selectBestPrefixMetrics). The following
-   * knob forces this selection in favor of Open/R originated routes
-   */
-  50: bool prefer_openr_originated_routes = 0;
-
-  /**
    * Enable best route selection based on PrefixMetrics.
    * TODO: It is temporary & will go away once new prefix metrics is rolled out
    */
