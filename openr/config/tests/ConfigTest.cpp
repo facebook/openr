@@ -219,6 +219,25 @@ TEST(ConfigTest, AreaConfiguration) {
   EXPECT_FALSE(areaConf.shouldRedistributeIface(""));
 }
 
+TEST(ConfigTest, EbbInterfaceConfiguration) {
+  openr::thrift::AreaConfig areaConfig;
+  areaConfig.area_id() = "myArea";
+  areaConfig.include_interface_regexes()->emplace_back("po[0-9]{1}");
+  areaConfig.include_interface_regexes()->emplace_back("po[0-9]{4}");
+  areaConfig.include_interface_regexes()->emplace_back("po[0-9]{6}");
+  Config cfg{getBasicOpenrConfig("node-1", {areaConfig})};
+
+  auto const& areaConf = cfg.getAreas().at("myArea");
+
+  EXPECT_TRUE(areaConf.shouldDiscoverOnIface("po1"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("po12"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("po123"));
+  EXPECT_TRUE(areaConf.shouldDiscoverOnIface("po1234"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("po12345"));
+  EXPECT_TRUE(areaConf.shouldDiscoverOnIface("po123456"));
+  EXPECT_FALSE(areaConf.shouldDiscoverOnIface("po1234567"));
+}
+
 TEST(ConfigTest, BgpTranslationConfig) {
   auto tConfig = getBasicOpenrConfig();
   tConfig.enable_bgp_peering() = true;
