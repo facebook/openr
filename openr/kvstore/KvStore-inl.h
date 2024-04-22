@@ -799,11 +799,11 @@ KvStore<ClientType>::initialKvStoreDbSynced() {
 template <class ClientType>
 folly::SemiFuture<std::map<std::string, int64_t>>
 KvStore<ClientType>::semifuture_getCounters() {
-  auto pf = folly::makePromiseContract<std::map<std::string, int64_t>>();
-  runInEventBaseThread([this, p = std::move(pf.first)]() mutable {
+  auto [p, f] = folly::makePromiseContract<std::map<std::string, int64_t>>();
+  runInEventBaseThread([this, p = std::move(p)]() mutable { //
     p.setValue(getGlobalCounters());
   });
-  return std::move(pf.second);
+  return std::move(f);
 }
 
 template <class ClientType>
