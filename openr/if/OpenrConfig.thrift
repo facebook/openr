@@ -13,7 +13,6 @@ namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
 namespace hack OpenrConfig
 
-include "openr/if/BgpConfig.thrift"
 include "configerator/structs/neteng/config/routing_policy.thrift"
 include "configerator/structs/neteng/config/vip_service_config.thrift"
 include "thrift/annotation/cpp.thrift"
@@ -540,86 +539,6 @@ struct AreaConfig {
   8: optional SegmentRoutingNodeLabel area_sr_node_label;
 }
 
-/**
- * Configuration to facilitate route translation between BGP <-> Open/R
- * ```
- * - BGP Communities <=> tags
- * - BGP AS Path <=> area_stack
- * - BGP Origin <=> metrics.path_preference (IGP=1000, EGP=900, INCOMPLETE=500)
- * - BGP Special Source AS => metrics.source_preference
- * - BGP AS Path Length => metrics.distance
- * - metrics.source_preference => BGP Local Preference
- * ```
- */
-@cpp.MinimizePadding
-struct BgpRouteTranslationConfig {
-  /**
-   * Map that defines communities in '{asn}:{value}' format to their human
-   * readable names. Open/R will use the community name as tag
-   * If not available then string representation of community will be used as
-   * tag
-   */
-  1: map<string, string> communities_to_name;
-
-  /**
-   * Map that defines ASN to Area name mapping. Mostly for readability. Open/R
-   * will use this mapping to convert as-path to area_stack and vice versa.
-   * If not mapping is found then string representation of ASN will be used.
-   */
-  2: map<i64, string> asn_to_area;
-
-  /**
-   * Source preference settings
-   * The ASN if specified will add `5 * (3 - #count_asn)` to source preference
-   * e.g. if `source_preference_asn = 65000` and AS_PATH contains the 65000 asn
-   * twice, then `source_preference = 100 + 5 ( 3 - 2) = 105`
-   */
-  4: i64 default_source_preference = 100;
-  5: optional i64 source_preference_asn;
-
-  /**
-   * ASNs to ignore for distance computation
-   */
-  6: set<i64> asns_to_ignore_for_distance;
-
-  /**
-   * Knob to enable BGP -> Open/R translation incrementally
-   */
-  8: bool enable_bgp_to_openr = 0;
-
-  /**
-   * Knob to enable Open/R -> BGP translation incrementally
-   */
-  9: bool enable_openr_to_bgp = 0;
-
-  /**
-   * Knob to disable legacy BGP route translation. e.g. `data`, `mv`
-   * will no longer be populated. For this option to be enabled, both
-   * of the above route translation options must be enabled.
-   */
-  10: bool disable_legacy_translation = 0;
-
-  /**
-   * Translate path preference to local_preference and vice versa.
-   * This is the desired behavior with IBN policy.
-   * IBN generates same preference value, assign it to local pref in
-   * bgp context; to path preference in openr context.
-   *
-   * Current implementation is translating path preference to origin.
-   * This is a migration knob for transition from legacy behavior to
-   * new behavior.
-   */
-  11: bool enable_path_pref_to_local_pref_translation = 0;
-
-  /**
-   * Translate igp cost to community. Note since igp cost is
-   * non transitive and there is no policy between openr<->bgp
-   * Note this is only one way translation: openr -> bgp
-   * When translating bgp->openr, these community will be stripped
-   */
-  12: map<i32, string> igp_cost_to_community;
-}
-
 @cpp.MinimizePadding
 struct OpenrConfig {
   1: string node_name;
@@ -796,16 +715,6 @@ struct OpenrConfig {
   # vip thrift injection service
   90: optional bool enable_vip_service;
   91: optional vip_service_config.VipServiceConfig vip_service_config;
-
-  # bgp
-  100: optional bool enable_bgp_peering;
-  102: optional BgpConfig.BgpConfig bgp_config;
-
-  /**
-   * Configuration to facilitate Open/R <-> BGP route conversions.
-   * NOTE: This must be specified if bgp_peering is enabled
-   */
-  104: optional BgpRouteTranslationConfig bgp_translation_config;
 
   /**
    * Enable FSDB subscription to detect a neighbor down event, in case

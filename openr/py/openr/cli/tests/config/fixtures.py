@@ -32,19 +32,6 @@ OPENR_CONFIG_STR = r"""
   ],
   "assume_drained": true,
   "bgp_config": {},
-  "bgp_translation_config": {
-    "asn_to_area": {},
-    "asns_to_ignore_for_distance": [
-      65000
-    ],
-    "communities_to_name": {},
-    "default_source_preference": 100,
-    "disable_legacy_translation": true,
-    "enable_bgp_to_openr": true,
-    "enable_openr_to_bgp": true,
-    "is_enabled": false,
-    "source_preference_asn": 65000
-  },
   "decision_config": {
     "debounce_max_ms": 250,
     "debounce_min_ms": 10

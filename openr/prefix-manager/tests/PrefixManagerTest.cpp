@@ -2900,32 +2900,6 @@ class PrefixManagerInitialKvStoreSyncTestFixture
   }
 };
 
-class PrefixManagerInitialKvStoreSyncBgpEnabledTestFixture
-    : public PrefixManagerInitialKvStoreSyncTestFixture,
-      public ::testing::WithParamInterface<bool> {
- protected:
-  thrift::OpenrConfig
-  createConfig() override {
-    auto tConfig = PrefixManagerInitialKvStoreSyncTestFixture::createConfig();
-    // Enable BGP peering.
-    tConfig.enable_bgp_peering() = true;
-    tConfig.bgp_config() = thrift::BgpConfig();
-
-    const bool v4_install_to_fib = GetParam();
-    // Set originated prefixes.
-    thrift::OriginatedPrefix originatedPrefixV4;
-    originatedPrefixV4.prefix() = toString(addr4);
-    originatedPrefixV4.install_to_fib() = v4_install_to_fib;
-    thrift::OriginatedPrefix originatedPrefixV6;
-    originatedPrefixV6.prefix() = toString(addr6);
-    originatedPrefixV6.minimum_supporting_routes() = 0;
-    originatedPrefixV6.install_to_fib() = false;
-    tConfig.originated_prefixes() = {originatedPrefixV4, originatedPrefixV6};
-
-    return tConfig;
-  }
-};
-
 class PrefixManagerInitialKvStoreSyncVipEnabledTestFixture
     : public PrefixManagerInitialKvStoreSyncTestFixture {
  protected:

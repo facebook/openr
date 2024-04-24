@@ -13,14 +13,11 @@ namespace fs = std::filesystem;
 #include <folly/io/async/SSLContext.h>
 #include <openr/common/FileUtil.h>
 #include <openr/common/MplsUtil.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <re2/re2.h>
 #include <re2/set.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
-#include <optional>
-
-#include <openr/if/gen-cpp2/BgpConfig_types.h>
-#include <openr/if/gen-cpp2/KvStore_types.h>
-#include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
 namespace openr {
 
@@ -219,26 +216,6 @@ class Config {
   bool
   isNeighborMonitorEnabled() const {
     return *config_.enable_neighbor_monitor();
-  }
-
-  //
-  // bgp peering
-  //
-  bool
-  isBgpPeeringEnabled() const {
-    return config_.enable_bgp_peering().value_or(false);
-  }
-
-  const thrift::BgpConfig&
-  getBgpConfig() const {
-    CHECK(isBgpPeeringEnabled());
-    return *config_.bgp_config();
-  }
-
-  const thrift::BgpRouteTranslationConfig&
-  getBgpTranslationConfig() const {
-    CHECK(isBgpPeeringEnabled());
-    return *config_.bgp_translation_config();
   }
 
   //

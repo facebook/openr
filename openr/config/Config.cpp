@@ -306,35 +306,6 @@ Config::checkVipServiceConfig() const {
 }
 
 void
-Config::checkBgpPeeringConfig() {
-  if (isBgpPeeringEnabled() and not config_.bgp_config()) {
-    throw std::invalid_argument(
-        "enable_bgp_peering = true, but bgp_config is empty");
-  }
-
-  // Set BGP Translation Config if unset
-  if (isBgpPeeringEnabled() and not config_.bgp_translation_config()) {
-    // Hack for transioning phase. TODO: Remove after coop is on-boarded
-    config_.bgp_translation_config() = thrift::BgpRouteTranslationConfig();
-    // throw std::invalid_argument(
-    //     "enable_bgp_peering = true, but bgp_translation_config is empty");
-  }
-
-  // Validate BGP Translation config
-  if (isBgpPeeringEnabled()) {
-    const auto& bgpTranslationConf = config_.bgp_translation_config();
-    CHECK(bgpTranslationConf.has_value());
-    if (*bgpTranslationConf->disable_legacy_translation() and
-        (not *bgpTranslationConf->enable_openr_to_bgp() or
-         not *bgpTranslationConf->enable_bgp_to_openr())) {
-      throw std::invalid_argument(
-          "Legacy translation can be disabled only when new translation is "
-          "enabled");
-    }
-  }
-}
-
-void
 Config::checkThriftServerConfig() const {
   const auto& thriftServerConfig = getThriftServerConfig();
 
@@ -387,13 +358,6 @@ Config::populateInternalDb() {
     }
   }
 
-  // To avoid bgp and vip service advertise the same prefixes,
-  // bgp speaker and vip service shouldn't co-exist
-  if (isBgpPeeringEnabled() && isVipServiceEnabled()) {
-    throw std::invalid_argument(
-        "Bgp Peering and Vip Service can not be both enabled");
-  }
-
   // check watchdog has config if enabled
   if (isWatchdogEnabled() and not config_.watchdog_config()) {
     throw std::invalid_argument(
@@ -422,9 +386,6 @@ Config::populateInternalDb() {
 
   // validate VipServiceConfig config
   checkVipServiceConfig();
-
-  // validate BGP Peering config and BGP Translation config
-  checkBgpPeeringConfig();
 
   // validate thrift server config
   if (isSecureThriftServerEnabled()) {

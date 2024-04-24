@@ -238,38 +238,6 @@ TEST(ConfigTest, EbbInterfaceConfiguration) {
   EXPECT_FALSE(areaConf.shouldDiscoverOnIface("po1234567"));
 }
 
-TEST(ConfigTest, BgpTranslationConfig) {
-  auto tConfig = getBasicOpenrConfig();
-  tConfig.enable_bgp_peering() = true;
-  tConfig.bgp_config() = thrift::BgpConfig();
-  tConfig.bgp_translation_config() = thrift::BgpRouteTranslationConfig();
-  auto& translationConfig = *tConfig.bgp_translation_config();
-
-  // Legacy translation disabled - But new translation hasn't been
-  {
-    translationConfig.enable_bgp_to_openr() = true;
-    translationConfig.enable_openr_to_bgp() = false;
-    translationConfig.disable_legacy_translation() = true;
-    EXPECT_THROW((Config(tConfig)), std::invalid_argument);
-  }
-
-  // Legacy translation disabled - But new translation hasn't been
-  {
-    translationConfig.enable_bgp_to_openr() = false;
-    translationConfig.enable_openr_to_bgp() = true;
-    translationConfig.disable_legacy_translation() = true;
-    EXPECT_THROW((Config(tConfig)), std::invalid_argument);
-  }
-
-  // Legacy translation disabled and new translation enabled
-  {
-    translationConfig.enable_bgp_to_openr() = true;
-    translationConfig.enable_openr_to_bgp() = true;
-    translationConfig.disable_legacy_translation() = true;
-    EXPECT_NO_THROW((Config(tConfig)));
-  }
-}
-
 TEST(ConfigTest, PopulateInternalDb) {
   // features
 
@@ -435,33 +403,6 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
 
-  // bgp peering
-
-  // bgp peering enabled with empty bgp_config
-  {
-    auto confInvalid = getBasicOpenrConfig();
-    confInvalid.enable_bgp_peering() = true;
-
-    // Both bgp-config & translation-config are none
-    confInvalid.bgp_config().reset();
-    confInvalid.bgp_translation_config().reset();
-    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
-
-    // bgp config is set but translation-config is not
-    confInvalid.bgp_config() = thrift::BgpConfig();
-    confInvalid.bgp_translation_config().reset();
-    // TODO: Expect an exception instead of default initialization
-    // EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
-    EXPECT_EQ(
-        thrift::BgpRouteTranslationConfig(),
-        Config(confInvalid).getBgpTranslationConfig());
-
-    // translation-config is set but bgp-config is not
-    confInvalid.bgp_config().reset();
-    confInvalid.bgp_translation_config() = thrift::BgpRouteTranslationConfig();
-    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
-  }
-
   // watchdog
 
   // watchdog enabled with empty watchdog_config
@@ -542,8 +483,6 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_TRUE(config.isV4Enabled());
     // enable_segment_routing
     EXPECT_FALSE(config.isSegmentRoutingEnabled());
-    // isBgpPeeringEnabled
-    EXPECT_FALSE(config.isBgpPeeringEnabled());
     // enable_best_route_selection
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
     // enable_v4_over_v6_nexthop
