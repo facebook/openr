@@ -37,9 +37,6 @@ class AreaConfiguration {
         compileRegexSet(*area.redistribute_interface_regexes());
 
     // parse optional fields
-    if (auto nodeLabel = area.area_sr_node_label()) {
-      srNodeLabel_ = *nodeLabel;
-    }
     if (auto policyName = area.import_policy_name()) {
       importPolicyName_ = *policyName;
     }
@@ -48,11 +45,6 @@ class AreaConfiguration {
   std::string const&
   getAreaId() const {
     return areaId_;
-  }
-
-  std::optional<openr::thrift::SegmentRoutingNodeLabel>
-  getNodeSegmentLabelConfig() const {
-    return srNodeLabel_;
   }
 
   bool
@@ -78,8 +70,6 @@ class AreaConfiguration {
 
  private:
   const std::string areaId_;
-  std::optional<openr::thrift::SegmentRoutingNodeLabel> srNodeLabel_{
-      std::nullopt};
 
   std::optional<std::string> importPolicyName_{std::nullopt};
 

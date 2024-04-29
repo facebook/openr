@@ -38,9 +38,6 @@ using ::testing::InSequence;
 // interface iface_3_1
 namespace {
 
-using Area2SRNodeLabel =
-    std::unordered_map<std::string, thrift::SegmentRoutingNodeLabel>;
-
 const auto nb2_v4_addr = "192.168.0.2";
 const auto nb3_v4_addr = "192.168.0.3";
 const auto nb2_v6_addr = "fe80::2";
@@ -309,7 +306,7 @@ class LinkMonitorTestFixture : public testing::Test {
 
   virtual std::vector<thrift::AreaConfig>
   createAreaConfigs() {
-    return populateAreaConfigs({}, {});
+    return populateAreaConfigs({});
   }
 
   /*
@@ -320,18 +317,8 @@ class LinkMonitorTestFixture : public testing::Test {
    *  2) validation method for unit-test usage;
    *  3) etc.
    */
-  thrift::SegmentRoutingNodeLabel
-  populateSegmentRoutingNodeLabel(
-      thrift::SegmentRoutingNodeLabelType nodeLabelType, int32_t nodeLabel) {
-    thrift::SegmentRoutingNodeLabel srNodeLabel;
-    srNodeLabel.sr_node_label_type() = nodeLabelType;
-    srNodeLabel.node_segment_label() = nodeLabel;
-    return srNodeLabel;
-  }
-
   std::vector<thrift::AreaConfig>
-  populateAreaConfigs(
-      std::unordered_set<std::string> areas, Area2SRNodeLabel areaMap) {
+  populateAreaConfigs(std::unordered_set<std::string> areas) {
     // Use kTestingAreaName by default
     if (areas.empty()) {
       areas.insert(kTestingAreaName);
@@ -347,28 +334,6 @@ class LinkMonitorTestFixture : public testing::Test {
       cfg.include_interface_regexes() = {kTestVethNamePrefix + ".*", "iface.*"};
       cfg.redistribute_interface_regexes() = {"loopback"};
 
-      auto it = areaMap.find(areaId);
-      if (it == areaMap.end()) {
-        cfg.area_sr_node_label() = populateSegmentRoutingNodeLabel(
-            thrift::SegmentRoutingNodeLabelType::STATIC, nodeLabelBase++);
-      } else {
-        thrift::SegmentRoutingNodeLabel srNodeLabel;
-        openr::thrift::LabelRange labelRange;
-        srNodeLabel.sr_node_label_type() = *it->second.sr_node_label_type();
-
-        if (it->second.node_segment_label_range().has_value()) {
-          labelRange.start_label() =
-              *it->second.node_segment_label_range()->start_label();
-          labelRange.end_label() =
-              *it->second.node_segment_label_range()->end_label();
-          srNodeLabel.node_segment_label_range() = labelRange;
-        }
-
-        if (it->second.node_segment_label().has_value()) {
-          srNodeLabel.node_segment_label() = *it->second.node_segment_label();
-        }
-        cfg.area_sr_node_label() = srNodeLabel;
-      }
       areaConfig.emplace_back(std::move(cfg));
     }
     return areaConfig;
@@ -2165,131 +2130,11 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
   }
 }
 
-class StaticNodeLabelTestFixture : public LinkMonitorTestFixture {
- public:
-  std::vector<thrift::AreaConfig>
-  createAreaConfigs() override {
-    Area2SRNodeLabel areaMap;
-    areaMap.emplace(
-        kTestingAreaName,
-        populateSegmentRoutingNodeLabel(
-            thrift::SegmentRoutingNodeLabelType::STATIC, 101));
-    areaMap.emplace(
-        kTestingSpineAreaName,
-        populateSegmentRoutingNodeLabel(
-            thrift::SegmentRoutingNodeLabelType::STATIC, 201));
-
-    // create list of thrift::AreaConfig
-    return populateAreaConfigs(
-        {kTestingAreaName, kTestingSpineAreaName}, areaMap);
-  }
-
- protected:
-  const openr::AreaId kTestingSpineAreaName{"test_spine_area_name"};
-};
-
-/**
- * Test allocation of static node segment label in mesh area and spine area
- */
-TEST_F(StaticNodeLabelTestFixture, StaticNodeLabelAlloc) {
-  // spin up kNumNodesToTest - 1 new link monitors. 1 is spun up in setup()
-  size_t kNumNodesToTest = 10;
-  std::vector<std::unique_ptr<LinkMonitor>> linkMonitors;
-  std::vector<std::unique_ptr<std::thread>> linkMonitorThreads;
-
-  for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
-    Area2SRNodeLabel mp;
-    mp.emplace(
-        kTestingAreaName,
-        populateSegmentRoutingNodeLabel(
-            thrift::SegmentRoutingNodeLabelType::STATIC, 102 + i));
-    mp.emplace(
-        kTestingSpineAreaName,
-        populateSegmentRoutingNodeLabel(
-            thrift::SegmentRoutingNodeLabelType::STATIC, 202 + i));
-
-    // create thrift::AreaConfig
-    auto areaCfgs =
-        populateAreaConfigs({kTestingAreaName, kTestingSpineAreaName}, mp);
-
-    // create thrift::OpenrConfig
-    auto tConfig = getBasicOpenrConfig("node-1", areaCfgs, true, true);
-
-    // override LM config
-    tConfig.node_name() = fmt::format("lm{}", i + 1);
-    tConfig.persistent_config_store_path() = kConfigStorePath;
-    tConfig.link_monitor_config()->linkflap_initial_backoff_ms() = 1;
-    tConfig.link_monitor_config()->linkflap_max_backoff_ms() = 8;
-    tConfig.link_monitor_config()->use_rtt_metric() = false;
-    auto currConfig = std::make_shared<Config>(tConfig);
-
-    // create lm instances
-    auto lm = std::make_unique<LinkMonitor>(
-        currConfig,
-        nlSock.get(),
-        configStore.get(),
-        interfaceUpdatesQueue,
-        prefixUpdatesQueue,
-        peerUpdatesQueue,
-        logSampleQueue,
-        kvRequestQueue,
-        neighborUpdatesQueue.getReader(),
-        nlSock->getReader());
-    linkMonitors.emplace_back(std::move(lm));
-
-    auto lmThread =
-        std::make_unique<std::thread>([&]() { linkMonitors.back()->run(); });
-    linkMonitorThreads.emplace_back(std::move(lmThread));
-    linkMonitors.back()->waitUntilRunning();
-  }
-
-  // label to node mapping to make sure unique label is assigned
-  std::unordered_map<int32_t, std::string> label2NodeMap1;
-  std::unordered_map<int32_t, std::string> label2NodeMap2;
-  auto unknownAreaPublications = 0;
-
-  // recv kv store publications until we have valid labels from each node
-  while (label2NodeMap1.size() < kNumNodesToTest or
-         label2NodeMap2.size() < kNumNodesToTest) {
-    auto pub = kvStoreWrapper->recvPublication();
-    for (auto const& [key, val] : *pub.keyVals()) {
-      // skip non-adj key update or ttl update
-      if (key.find("adj:") != 0 or (not val.value())) {
-        continue;
-      }
-
-      auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
-          val.value().value(), serializer);
-      if (*pub.area() == static_cast<std::string>(kTestingAreaName)) {
-        // kTestingAreaName node segment label
-        label2NodeMap1[*adjDb.nodeLabel()] = *adjDb.thisNodeName();
-      } else if (
-          pub.area() == static_cast<std::string>(kTestingSpineAreaName)) {
-        // kTestingSpineAreaName node segment label
-        label2NodeMap2[*adjDb.nodeLabel()] = *adjDb.thisNodeName();
-      } else {
-        unknownAreaPublications++;
-      }
-    }
-  }
-  EXPECT_EQ(unknownAreaPublications, 0);
-
-  // cleanup
-  nlSock->closeQueue();
-  neighborUpdatesQueue.close();
-  initializationEventQueue.close();
-  kvStoreWrapper->closeQueue();
-  for (size_t i = 0; i < kNumNodesToTest - 1; i++) {
-    linkMonitors[i]->stop();
-    linkMonitorThreads[i]->join();
-  }
-}
-
 class TwoAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>
   createAreaConfigs() override {
-    return populateAreaConfigs({area1_, area2_}, {});
+    return populateAreaConfigs({area1_, area2_});
   }
 
  protected:
@@ -2669,7 +2514,7 @@ class MultiAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>
   createAreaConfigs() override {
-    return populateAreaConfigs({kTestingAreaName, podArea_, planeArea_}, {});
+    return populateAreaConfigs({kTestingAreaName, podArea_, planeArea_});
   }
 
  protected:

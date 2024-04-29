@@ -416,46 +416,6 @@ struct OriginatedPrefix {
   11: optional i64 minNexthop;
 }
 
-struct LabelRange {
-  1: i32 start_label;
-  2: i32 end_label;
-}
-
-enum SegmentRoutingNodeLabelType {
-  /**
-   * Current way of allocation. Needs range parameter.
-   */
-  AUTO = 0,
-  /**
-   * Node Segment IDs are allocated statically.
-   * The uniqueness of node label will be determined
-   * by the application which generates static
-   * node label.
-   */
-  STATIC = 1,
-}
-
-@cpp.MinimizePadding
-struct SegmentRoutingNodeLabel {
-  /**
-   * The way node segment label should be allocated.
-   */
-  1: SegmentRoutingNodeLabelType sr_node_label_type;
-
-  /**
-   * Statically allocated node label for this node.
-   * Applicable if SegmentRoutingNodeLabelType is
-   * SegmentRoutingNodeLabelType::STATIC
-   */
-  2: optional i32 node_segment_label;
-
-  /**
-   * Label range for node segment label to allocate from if
-   * sr_node_label_type is AUTO.
-   */
-  3: optional LabelRange node_segment_label_range;
-}
-
 /**
  * The area config specifies the area name, interfaces to perform discovery
  * on, neighbor names to peer with, and interface addresses to redistribute
@@ -530,13 +490,6 @@ struct AreaConfig {
    * Area import policy, applied when a route enters this area
    */
   7: optional string import_policy_name;
-
-  /**
-   * The way node segment label should be allocated
-   * in this area for segment routing. Node segment
-   * should be unique per device per area.
-   */
-  8: optional SegmentRoutingNodeLabel area_sr_node_label;
 }
 
 @cpp.MinimizePadding

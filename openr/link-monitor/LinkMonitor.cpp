@@ -268,31 +268,6 @@ LinkMonitor::LinkMonitor(
     }
   }
 
-  if (enableSegmentRouting_) {
-    // create range allocator to get unique node labels
-    for (auto const& [areaId, areaCfg] : areas_) {
-      auto const& srNodeLabelCfg = areaCfg.getNodeSegmentLabelConfig();
-      if (not srNodeLabelCfg.has_value()) {
-        XLOG(INFO) << fmt::format(
-            "Area {} does not have segment rotuing node label config", areaId);
-        continue;
-      }
-
-      CHECK(
-          *srNodeLabelCfg->sr_node_label_type() ==
-          thrift::SegmentRoutingNodeLabelType::STATIC)
-          << "Unknown segment routing node label allocation type";
-      // Use statically configured node segment label as node label
-      auto nodeLbl = getStaticNodeSegmentLabel(areaCfg);
-      state_.nodeLabelMap()->insert_or_assign(areaId, nodeLbl);
-      XLOG(INFO) << fmt::format(
-          "Allocating static node segment label {} inside area {} for {}",
-          nodeLbl,
-          areaId,
-          nodeId_);
-    }
-  }
-
   // start initial dump timer
   adjHoldTimer_->scheduleTimeout(initialAdjHoldTime);
 
@@ -1959,18 +1934,6 @@ LinkMonitor::anyAreaShouldRedistributeIface(std::string const& iface) const {
     anyMatch |= areaConf.shouldRedistributeIface(iface);
   }
   return anyMatch;
-}
-
-int32_t
-LinkMonitor::getStaticNodeSegmentLabel(
-    AreaConfiguration const& areaConfig) const {
-  CHECK(areaConfig.getNodeSegmentLabelConfig().has_value());
-  if (areaConfig.getNodeSegmentLabelConfig()
-          ->node_segment_label()
-          .has_value()) {
-    return *areaConfig.getNodeSegmentLabelConfig()->node_segment_label();
-  }
-  return 0;
 }
 
 void

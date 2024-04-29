@@ -314,15 +314,6 @@ class LinkMonitor final : public OpenrEventBase {
       const std::string& peerName,
       const thrift::PeerSpec& peerSpec);
 
-  /*
-   * [Segment Routing]
-   *
-   * util functions to support label allocation in dynamic/static way
-   */
-
-  // Get static area node segment label
-  int32_t getStaticNodeSegmentLabel(AreaConfiguration const& areaConfig) const;
-
   //
   // immutable state/invariants
   //
@@ -336,9 +327,9 @@ class LinkMonitor final : public OpenrEventBase {
   const bool enableLinkStatusMeasurement_{false};
   // enable v4
   bool enableV4_{false};
-  // enable segment routing
+  // [TO_BE_DEPRECATED] enable segment routing
   bool enableSegmentRouting_{false};
-  // prefix forwarding type and algorithm
+  // [TO_BE_DEPRECATED] prefix forwarding type and algorithm
   thrift::PrefixForwardingType prefixForwardingType_;
   thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
   // Use spark measured RTT to neighbor as link metric
