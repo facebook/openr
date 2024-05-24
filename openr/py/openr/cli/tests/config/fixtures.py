@@ -59,7 +59,6 @@ OPENR_CONFIG_STR = r"""
     "enable_event_log_submission": true,
     "max_event_log": 100
   },
-  "mpls_route_delete_delay_s": 10,
   "node_name": "fsw008.p002.f01.vll2.tfbnw.net",
   "openr_ctrl_port": 2018,
   "persistent_config_store_path": "/var/facebook/fboss/openr/openr_persistent_config.bin",

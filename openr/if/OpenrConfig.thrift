@@ -517,14 +517,15 @@ struct OpenrConfig {
    */
   8: optional bool enable_netlink_fib_handler;
 
+  /* [TO_BE_DEPRECATED] */
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP;
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP;
 
   /**
    * Enables segment routing feature. Currently, it only elects node/adjacency labels.
+   * [TO_BE_DEPRECATED]
    */
   13: optional bool enable_segment_routing;
-  14: optional i32 prefix_min_nexthop;
 
   # Config for different modules
   15: KvstoreConfig kvstore_config;
@@ -637,14 +638,6 @@ struct OpenrConfig {
    * TODO: It is temporary & will go away once new prefix metrics is rolled out
    */
   51: bool enable_best_route_selection = 0;
-
-  /**
-   * Delay in seconds for MPLS route deletes. The delay would allow the remote
-   * nodes to converge to new prepend-label associated with route advertisement.
-   * This will avoid packet drops because of label route lookup.
-   * NOTE: Label route add or update will happen immediately.
-   */
-  53: i32 mpls_route_delete_delay_s = 10;
 
   /**
    * [TO BE DEPRECATED]
