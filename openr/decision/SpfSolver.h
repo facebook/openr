@@ -152,7 +152,8 @@ class SpfSolver {
   // Walk all SR Policies and return the route computation rules of the first
   // one that matches. If none of them match then the default route computation
   // rules are returned
-  thrift::RouteComputationRules getRouteComputationRules(
+  std::unordered_map<std::string, thrift::AreaPathComputationRules>
+  getAreaPathComputationRulesMap(
       const PrefixEntries& prefixEntries,
       const RouteSelectionResult& routeSelectionResult,
       const std::unordered_map<std::string, LinkState>& areaLinkStates) const;

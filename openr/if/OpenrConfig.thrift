@@ -126,15 +126,6 @@ struct AreaPathComputationRules {
   2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
 }
 
-@cpp.MinimizePadding
-struct RouteComputationRules {
-  /* Route selection algorithm the route will use */
-  1: RouteSelectionAlgorithm routeSelectionAlgo = RouteSelectionAlgorithm.SHORTEST_DISTANCE;
-
-  /* Map of path computation rules per area. Key is the areaId string */
-  2: map<string, AreaPathComputationRules> areaPathComputationRules;
-}
-
 struct DecisionConfig {
   /** Fast reaction time to update decision SPF upon receiving adj db update
   (in milliseconds). */

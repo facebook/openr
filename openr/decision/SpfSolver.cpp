@@ -257,10 +257,10 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // Match the best route's attributes (tags & area stack) to an SR Policy.
-  // If the route doesn't match to any, default rules are returned
-  auto routeComputationRules = getRouteComputationRules(
-      prefixEntries, routeSelectionResult, areaLinkStates);
+  // Return a map of area to path computation rules.
+  std::unordered_map<std::string, thrift::AreaPathComputationRules>
+      areaPathComputationRulesMap = getAreaPathComputationRulesMap(
+          prefixEntries, routeSelectionResult, areaLinkStates);
 
   /*
    * [Route Computation]
@@ -277,8 +277,7 @@ SpfSolver::createRouteForPrefix(
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
   // TODO: simplify the areaPathComputationRules usage. No more SR policy.
-  for (const auto& [area, areaRules] :
-       *routeComputationRules.areaPathComputationRules()) {
+  for (const auto& [area, areaRules] : areaPathComputationRulesMap) {
     const auto& linkState = areaLinkStates.find(area);
     if (linkState == areaLinkStates.end()) {
       // Possible if the route computation rules are based of a configured SR
@@ -914,20 +913,18 @@ SpfSolver::getNextHopsThrift(
   return nextHops;
 }
 
-thrift::RouteComputationRules
-SpfSolver::getRouteComputationRules(
+std::unordered_map<std::string, thrift::AreaPathComputationRules>
+SpfSolver::getAreaPathComputationRulesMap(
     const PrefixEntries& prefixEntries,
     const RouteSelectionResult& routeSelectionResult,
     const std::unordered_map<std::string, LinkState>& areaLinkStates) const {
-  // Construct default route computation rules.
+  // Construct a map of area to its path computation rules
   //
-  // 1. Best route selection = SHORTEST_DISTANCE
-  // 2. forwarding algorithm and forwarding type based on PrefixEntry
-  //    attributes
-  // 3. Prepend label = None
-  thrift::RouteComputationRules defaultRules;
-  defaultRules.routeSelectionAlgo() =
-      thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE;
+  // 1. forwarding algorithm and 2. forwarding type are based on PrefixEntry
+  // attributes
+
+  std::unordered_map<std::string, thrift::AreaPathComputationRules>
+      areaPathComputationRulesMap;
   for (const auto& [areaId, _] : areaLinkStates) {
     const auto areaPathComputationRules = getPrefixForwardingTypeAndAlgorithm(
         areaId, prefixEntries, routeSelectionResult.allNodeAreas);
@@ -937,13 +934,13 @@ SpfSolver::getRouteComputationRules(
     }
 
     thrift::AreaPathComputationRules areaRules;
+
     areaRules.forwardingType() = areaPathComputationRules->first;
     areaRules.forwardingAlgo() = areaPathComputationRules->second;
-    defaultRules.areaPathComputationRules()->emplace(
-        areaId, std::move(areaRules));
+    areaPathComputationRulesMap.emplace(areaId, std::move(areaRules));
   }
 
-  return defaultRules;
+  return areaPathComputationRulesMap;
 }
 
 } // namespace openr
