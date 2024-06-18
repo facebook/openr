@@ -11,10 +11,10 @@ import time
 import unittest
 
 from openr.cli.utils.utils import find_adj_list_deltas, parse_prefix_database
+from openr.py.openr.utils import ipnetwork
+from openr.py.openr.utils.serializer import object_to_dict
 from openr.thrift.Network import thrift_types as network_types
 from openr.thrift.Types import thrift_types as openr_types
-from openr.utils import ipnetwork
-from openr.utils.serializer import object_to_dict
 
 
 class UtilsTests(unittest.TestCase):

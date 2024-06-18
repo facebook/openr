@@ -7,7 +7,7 @@
 # pyre-unsafe
 
 
-from openr.utils import printing
+from openr.py.openr.utils import printing
 
 
 def main() -> None:

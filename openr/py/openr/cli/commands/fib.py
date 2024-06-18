@@ -19,11 +19,11 @@ import pytz
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.clients.openr_client import get_fib_agent_client
+from openr.py.openr.utils import ipnetwork, printing
 from openr.thrift.Network.thrift_types import IpPrefix
 from openr.thrift.OpenrCtrl.thrift_types import StreamSubscriberType
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types.thrift_types import RouteDatabase, RouteDatabaseDelta
-from openr.utils import ipnetwork, printing
 
 
 class FibCmdBase(OpenrCtrlCmd):

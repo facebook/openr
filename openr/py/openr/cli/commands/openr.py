@@ -9,8 +9,8 @@
 from openr.cli.commands import decision, fib, kvstore, lm, prefix_mgr, spark
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.utils import printing, serializer
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
-from openr.utils import printing, serializer
 
 
 class VersionCmd(OpenrCtrlCmd):

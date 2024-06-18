@@ -17,13 +17,13 @@ from openr.cli.utils.utils import (
     print_route_details,
     PrintAdvertisedTypes,
 )
+from openr.py.openr.utils import ipnetwork, serializer
 from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.Network.thrift_types import PrefixType
 from openr.thrift.OpenrConfig.thrift_types import PrefixForwardingType
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types.thrift_types import OriginatedPrefixEntry, PrefixEntry
-from openr.utils import ipnetwork, serializer
 
 
 def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:

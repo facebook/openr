@@ -38,15 +38,15 @@ from openr.KvStore import ttypes as kv_store_types_py
 from openr.Network import ttypes as network_types_py
 from openr.OpenrCtrl import ttypes as ctrl_types_py
 from openr.py.openr.clients.openr_client import get_openr_ctrl_client_py
+from openr.py.openr.utils import ipnetwork, printing
+from openr.py.openr.utils.consts import Consts
+from openr.py.openr.utils.serializer import deserialize_thrift_py_object, object_to_dict
 from openr.thrift.KvStore import thrift_types as kv_store_types
 from openr.thrift.Network import thrift_types as network_types
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types import thrift_types as openr_types
 from openr.Types import ttypes as openr_types_py
-from openr.utils import ipnetwork, printing
-from openr.utils.consts import Consts
-from openr.utils.serializer import deserialize_thrift_py_object, object_to_dict
 from thrift.python.serializer import deserialize
 
 

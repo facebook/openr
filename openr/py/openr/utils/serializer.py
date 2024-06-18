@@ -10,9 +10,9 @@ import json
 from typing import Any, Dict, Optional
 
 from openr.Network import ttypes as network_types_py
+from openr.py.openr.utils.consts import Consts
+from openr.py.openr.utils.ipnetwork import sprint_addr, sprint_prefix
 from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
-from openr.utils.consts import Consts
-from openr.utils.ipnetwork import sprint_addr, sprint_prefix
 from thrift.python import types as thrift_python_types
 from thrift.util import Serializer
 

@@ -14,11 +14,11 @@ from typing import Any, Dict, List, Optional, Sequence
 import click
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.utils import ipnetwork, printing
 from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.OpenrCtrl.thrift_types import AdjacenciesFilter
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types.thrift_types import DumpLinksReply, InterfaceDetails
-from openr.utils import ipnetwork, printing
 
 
 def interface_key(interface: str) -> int:

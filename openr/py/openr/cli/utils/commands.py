@@ -15,9 +15,9 @@ from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
 import bunch
 import click
 from openr.py.openr.clients.openr_client import get_openr_ctrl_cpp_client
+from openr.py.openr.utils import printing
+from openr.py.openr.utils.consts import Consts
 from openr.thrift.KvStore.thrift_types import InitializationEvent, KeyDumpParams, Value
-from openr.utils import printing
-from openr.utils.consts import Consts
 from thrift.python.client import ClientType
 
 

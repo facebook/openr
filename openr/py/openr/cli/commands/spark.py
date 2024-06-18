@@ -13,10 +13,10 @@ import click
 
 from openr.cli.utils import utils
 from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.utils import ipnetwork, printing, serializer
 from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types.thrift_types import SparkNeighbor
-from openr.utils import ipnetwork, printing, serializer
 
 
 class SparkBaseCmd(OpenrCtrlCmd):

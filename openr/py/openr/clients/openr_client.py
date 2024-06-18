@@ -13,10 +13,10 @@ from typing import Optional, Type
 import bunch
 from openr.cli.utils.options import getDefaultOptions
 from openr.OpenrCtrl import OpenrCtrl
+from openr.py.openr.utils import consts
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Platform.thrift_clients import FibService as FibServiceClient
 from openr.thrift.Platform.thrift_types import FibClient
-from openr.utils import consts
 from thrift.protocol import THeaderProtocol
 from thrift.python.client import ClientType, get_client, get_sync_client
 from thrift.python.client.client_wrapper import Client, TAsyncClient, TSyncClient
