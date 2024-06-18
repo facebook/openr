@@ -27,7 +27,7 @@ from .fixtures import (
 
 
 BASE_MODULE: str = prefix_mgr.__name__
-BASE_CMD_MODULE = "openr.cli.commands.prefix_mgr"
+BASE_CMD_MODULE = "openr.py.openr.cli.commands.prefix_mgr"
 
 
 class CliPrefixManagerTests(TestCase):

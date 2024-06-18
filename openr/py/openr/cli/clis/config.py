@@ -9,8 +9,8 @@
 
 import click
 from bunch import Bunch
-from openr.cli.commands import config
 from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
+from openr.py.openr.cli.commands import config
 
 
 class ConfigCli:

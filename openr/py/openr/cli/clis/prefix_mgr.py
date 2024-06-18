@@ -11,8 +11,8 @@ from typing import List, Optional
 
 import bunch
 import click
-from openr.cli.commands import prefix_mgr
 from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
+from openr.py.openr.cli.commands import prefix_mgr
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 
 

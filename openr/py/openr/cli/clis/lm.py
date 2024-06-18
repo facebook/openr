@@ -10,8 +10,8 @@ from typing import List
 
 import bunch
 import click
-from openr.cli.commands import kvstore, lm
 from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
+from openr.py.openr.cli.commands import kvstore, lm
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.cli.utils.utils import parse_nodes
 

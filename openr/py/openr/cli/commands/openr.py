@@ -6,7 +6,7 @@
 
 # pyre-unsafe
 
-from openr.cli.commands import decision, fib, kvstore, lm, prefix_mgr, spark
+from openr.py.openr.cli.commands import decision, fib, kvstore, lm, prefix_mgr, spark
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.utils import printing, serializer

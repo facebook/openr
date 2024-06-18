@@ -36,7 +36,7 @@ from .fixtures import (
 
 
 BASE_MODULE: str = spark.__name__
-BASE_CMD_MODULE = "openr.cli.commands.spark"
+BASE_CMD_MODULE = "openr.py.openr.cli.commands.spark"
 
 
 class CliSparkTests(TestCase):

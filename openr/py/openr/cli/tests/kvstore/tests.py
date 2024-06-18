@@ -20,7 +20,7 @@ from openr.thrift.KvStore import thrift_types as kvstore_types
 from openr.thrift.OpenrConfig.thrift_types import OpenrConfig
 
 BASE_MODULE: str = kvstore.__name__
-BASE_CMD_MODULE = "openr.cli.commands.kvstore"
+BASE_CMD_MODULE = "openr.py.openr.cli.commands.kvstore"
 
 from .fixtures import (
     AreaId,

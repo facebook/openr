@@ -8,7 +8,6 @@
 
 import click
 from bunch import Bunch
-from openr.cli.commands import openr
 from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.py.openr.cli.clis.config import ConfigShowCli
 from openr.py.openr.cli.clis.decision import (
@@ -20,6 +19,7 @@ from openr.py.openr.cli.clis.fib import FibMplsRoutesCli, FibUnicastRoutesCli
 from openr.py.openr.cli.clis.kvstore import PeersCli, SummaryCli
 from openr.py.openr.cli.clis.lm import LMLinksCli
 from openr.py.openr.cli.clis.prefix_mgr import AdvertisedRoutesCli, OriginatedRoutesCli
+from openr.py.openr.cli.commands import openr
 from openr.py.openr.cli.utils.options import breeze_option
 
 

@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 BASE_CTRL_MODULE = "openr.OpenrCtrl.OpenrCtrl"
 BASE_UTILS_COMMANDS_MODULE = "openr.py.openr.cli.utils.commands"
-KVSTORE_MODULE = "openr.cli.commands.kvstore"
+KVSTORE_MODULE = "openr.py.openr.cli.commands.kvstore"
 COMMANDS_GET_OPENR_CTRL_CPP_CLIENT = (
     f"{BASE_UTILS_COMMANDS_MODULE}.get_openr_ctrl_cpp_client"
 )

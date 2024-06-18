@@ -15,7 +15,7 @@ from openr.py.openr.cli.tests import helpers
 
 
 BASE_MODULE: str = lm.__name__
-BASE_CMD_MODULE = "openr.cli.commands.lm"
+BASE_CMD_MODULE = "openr.py.openr.cli.commands.lm"
 
 from .fixtures import (
     LM_LINK_EXPECTED_STDOUT_L0,

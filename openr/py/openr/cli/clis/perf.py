@@ -8,7 +8,7 @@
 
 
 import click
-from openr.cli.commands import perf
+from openr.py.openr.cli.commands import perf
 from openr.py.openr.cli.utils.options import breeze_option
 
 

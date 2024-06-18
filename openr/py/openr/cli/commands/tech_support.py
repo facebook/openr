@@ -12,7 +12,16 @@ import subprocess
 import sys
 from builtins import object
 
-from openr.cli.commands import config, decision, fib, kvstore, lm, monitor, openr, perf
+from openr.py.openr.cli.commands import (
+    config,
+    decision,
+    fib,
+    kvstore,
+    lm,
+    monitor,
+    openr,
+    perf,
+)
 from openr.py.openr.cli.utils.utils import parse_nodes
 from openr.py.openr.utils.consts import Consts
 

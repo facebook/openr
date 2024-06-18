@@ -29,7 +29,7 @@ from .fixtures import (
 
 
 BASE_MODULE: str = decision.__name__
-BASE_CMD_MODULE = "openr.cli.commands.decision"
+BASE_CMD_MODULE = "openr.py.openr.cli.commands.decision"
 
 
 class CliDecisionTests(TestCase):
