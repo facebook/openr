@@ -12,8 +12,8 @@ from string import ascii_letters
 from typing import Any, Dict, List, Optional, Sequence
 
 import click
-from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils import utils
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.utils import ipnetwork, printing
 from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.OpenrCtrl.thrift_types import AdjacenciesFilter

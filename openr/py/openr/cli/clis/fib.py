@@ -14,7 +14,7 @@ import click
 from bunch import Bunch
 from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import fib
-from openr.cli.utils.options import breeze_option
+from openr.py.openr.cli.utils.options import breeze_option
 
 
 class FibCli:

@@ -12,8 +12,8 @@ import bunch
 import click
 from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import kvstore, lm
-from openr.cli.utils import utils
-from openr.cli.utils.utils import parse_nodes
+from openr.py.openr.cli.utils import utils
+from openr.py.openr.cli.utils.utils import parse_nodes
 
 
 class LMCli:

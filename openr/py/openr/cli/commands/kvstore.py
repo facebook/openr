@@ -39,8 +39,8 @@ import click
 import hexdump
 import prettytable
 import pytz
-from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils import utils
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.clients.openr_client import get_openr_ctrl_cpp_client
 from openr.py.openr.utils import ipnetwork, printing
 from openr.py.openr.utils.consts import Consts

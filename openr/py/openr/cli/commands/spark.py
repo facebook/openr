@@ -11,8 +11,8 @@ from typing import Any, Dict, List, Sequence, Tuple
 
 import click
 
-from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils import utils
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.utils import ipnetwork, printing, serializer
 from openr.thrift.KvStore.thrift_types import InitializationEvent
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient

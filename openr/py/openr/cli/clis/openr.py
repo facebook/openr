@@ -20,7 +20,7 @@ from openr.cli.clis.kvstore import PeersCli, SummaryCli
 from openr.cli.clis.lm import LMLinksCli
 from openr.cli.clis.prefix_mgr import AdvertisedRoutesCli, OriginatedRoutesCli
 from openr.cli.commands import openr
-from openr.cli.utils.options import breeze_option
+from openr.py.openr.cli.utils.options import breeze_option
 
 
 class OpenrCli:

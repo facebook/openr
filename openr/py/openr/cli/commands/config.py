@@ -11,8 +11,8 @@ from typing import Optional, Tuple, Union
 
 import click
 import jsondiff
-from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils import utils
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.utils import printing
 from openr.py.openr.utils.consts import Consts
 from openr.thrift.OpenrCtrl.thrift_types import OpenrError

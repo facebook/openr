@@ -12,8 +12,8 @@ import time
 from typing import Dict, List, Mapping
 
 import tabulate
-from openr.cli.utils import utils
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils import utils
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.utils import printing
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 

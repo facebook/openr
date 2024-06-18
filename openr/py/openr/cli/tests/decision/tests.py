@@ -13,7 +13,7 @@ from unittest.mock import AsyncMock, patch
 from click.testing import CliRunner
 from later.unittest import TestCase
 from openr.cli.clis import decision
-from openr.cli.tests import helpers
+from openr.py.openr.cli.tests import helpers
 
 from .fixtures import (
     AREA_SUMMARIES,
@@ -71,7 +71,7 @@ class CliDecisionTests(TestCase):
             MOCKED_INIT_EVENTS_PASS
         )
 
-        with patch("openr.cli.utils.utils.get_area_id", return_value=69):
+        with patch("openr.py.openr.cli.utils.utils.get_area_id", return_value=69):
             invoked_return = self.runner.invoke(
                 decision.DecisionValidateCli.validate,
                 [],  # No args
@@ -83,7 +83,7 @@ class CliDecisionTests(TestCase):
         # Test bad - initialization event not published
         mocked_returned_connection.getInitializationEvents.return_value = {}
 
-        with patch("openr.cli.utils.utils.get_area_id", return_value=69):
+        with patch("openr.py.openr.cli.utils.utils.get_area_id", return_value=69):
             invoked_return = self.runner.invoke(
                 decision.DecisionValidateCli.validate,
                 [],  # No args

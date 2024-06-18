@@ -10,7 +10,7 @@
 import time
 import unittest
 
-from openr.cli.utils.utils import find_adj_list_deltas, parse_prefix_database
+from openr.py.openr.cli.utils.utils import find_adj_list_deltas, parse_prefix_database
 from openr.py.openr.utils import ipnetwork
 from openr.py.openr.utils.serializer import object_to_dict
 from openr.thrift.Network import thrift_types as network_types

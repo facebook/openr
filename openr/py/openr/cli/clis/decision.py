@@ -14,7 +14,7 @@ import click
 from openr.cli.clis.baseGroup import deduceCommandGroup
 
 from openr.cli.commands import decision
-from openr.cli.utils.utils import parse_nodes
+from openr.py.openr.cli.utils.utils import parse_nodes
 
 
 class DecisionCli:

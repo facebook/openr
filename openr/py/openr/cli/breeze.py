@@ -23,7 +23,7 @@ from openr.cli.clis import (
     spark,
     tech_support,
 )
-from openr.cli.utils.options import breeze_option, OPTIONS, str2cert
+from openr.py.openr.cli.utils.options import breeze_option, OPTIONS, str2cert
 from thrift.Thrift import TApplicationException
 from thrift.transport.TTransport import TTransportException
 

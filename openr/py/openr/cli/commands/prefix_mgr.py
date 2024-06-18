@@ -8,10 +8,10 @@
 
 from typing import Dict, List, Optional, Sequence, Tuple
 
-from openr.cli.utils import utils
+from openr.py.openr.cli.utils import utils
 
-from openr.cli.utils.commands import OpenrCtrlCmd
-from openr.cli.utils.utils import (
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils.utils import (
     get_tag_to_name_map,
     print_advertised_routes,
     print_route_details,

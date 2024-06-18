@@ -10,7 +10,7 @@
 from builtins import range
 
 import tabulate
-from openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 
 

@@ -13,8 +13,8 @@ import click
 from bunch import Bunch
 from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import kvstore
-from openr.cli.utils.options import breeze_option
-from openr.cli.utils.utils import parse_nodes
+from openr.py.openr.cli.utils.options import breeze_option
+from openr.py.openr.cli.utils.utils import parse_nodes
 from openr.py.openr.utils.consts import Consts
 
 
