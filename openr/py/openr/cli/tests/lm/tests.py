@@ -10,11 +10,11 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import lm
+from openr.py.openr.cli.clis import lm
 from openr.py.openr.cli.tests import helpers
 
 
-BASE_MODULE = "openr.cli.clis.lm"
+BASE_MODULE: str = lm.__name__
 BASE_CMD_MODULE = "openr.cli.commands.lm"
 
 from .fixtures import (

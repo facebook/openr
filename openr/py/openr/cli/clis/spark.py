@@ -7,8 +7,8 @@
 # pyre-unsafe
 
 import click
-from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import spark
+from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
 
 
 class SparkCli:

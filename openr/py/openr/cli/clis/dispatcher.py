@@ -6,8 +6,8 @@
 # pyre-unsafe
 
 import click
-from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import dispatcher
+from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
 
 
 class DispatcherCli:

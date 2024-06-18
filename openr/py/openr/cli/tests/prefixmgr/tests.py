@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import prefix_mgr
+from openr.py.openr.cli.clis import prefix_mgr
 from openr.py.openr.cli.tests import helpers
 from openr.thrift.KvStore import thrift_types as openr_kvstore_types
 
@@ -26,7 +26,7 @@ from .fixtures import (
 )
 
 
-BASE_MODULE = "openr.cli.clis.prefix_mgr"
+BASE_MODULE: str = prefix_mgr.__name__
 BASE_CMD_MODULE = "openr.cli.commands.prefix_mgr"
 
 

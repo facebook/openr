@@ -12,14 +12,14 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import config
+from openr.py.openr.cli.clis import config
 from openr.py.openr.cli.tests import helpers
 from openr.thrift.OpenrCtrl.thrift_types import OpenrError
 
 from .fixtures import OPENR_CONFIG_STR
 
 
-BASE_MODULE = "openr.cli.clis.config"
+BASE_MODULE: str = config.__name__
 
 
 class CliConfigTests(TestCase):

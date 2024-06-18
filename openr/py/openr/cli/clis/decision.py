@@ -11,9 +11,9 @@ from typing import Any, List, Optional, Sequence
 
 import bunch
 import click
-from openr.cli.clis.baseGroup import deduceCommandGroup
 
 from openr.cli.commands import decision
+from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.py.openr.cli.utils.utils import parse_nodes
 
 

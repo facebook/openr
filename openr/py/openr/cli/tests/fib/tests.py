@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import fib
+from openr.py.openr.cli.clis import fib
 from openr.py.openr.cli.tests import helpers
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.utils import ipnetwork

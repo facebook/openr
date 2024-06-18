@@ -12,8 +12,8 @@ from typing import List
 
 import click
 from bunch import Bunch
-from openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.cli.commands import fib
+from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
 from openr.py.openr.cli.utils.options import breeze_option
 
 

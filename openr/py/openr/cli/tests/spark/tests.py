@@ -11,7 +11,7 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import spark
+from openr.py.openr.cli.clis import spark
 from openr.py.openr.cli.tests import helpers
 
 from .fixtures import (
@@ -35,7 +35,7 @@ from .fixtures import (
 )
 
 
-BASE_MODULE = "openr.cli.clis.spark"
+BASE_MODULE: str = spark.__name__
 BASE_CMD_MODULE = "openr.cli.commands.spark"
 
 

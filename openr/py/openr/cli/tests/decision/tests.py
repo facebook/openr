@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import decision
+from openr.py.openr.cli.clis import decision
 from openr.py.openr.cli.tests import helpers
 
 from .fixtures import (
@@ -28,7 +28,7 @@ from .fixtures import (
 )
 
 
-BASE_MODULE = "openr.cli.clis.decision"
+BASE_MODULE: str = decision.__name__
 BASE_CMD_MODULE = "openr.cli.commands.decision"
 
 

@@ -13,13 +13,13 @@ from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis import kvstore
+from openr.py.openr.cli.clis import kvstore
 from openr.py.openr.cli.tests import helpers
 from openr.py.openr.utils.printing import sprint_bytes
 from openr.thrift.KvStore import thrift_types as kvstore_types
 from openr.thrift.OpenrConfig.thrift_types import OpenrConfig
 
-BASE_MODULE = "openr.cli.clis.kvstore"
+BASE_MODULE: str = kvstore.__name__
 BASE_CMD_MODULE = "openr.cli.commands.kvstore"
 
 from .fixtures import (

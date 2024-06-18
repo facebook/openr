@@ -8,7 +8,7 @@
 
 from click.testing import CliRunner
 from later.unittest import TestCase
-from openr.cli.clis.openr import OpenrCli, VersionCli
+from openr.py.openr.cli.clis.openr import OpenrCli, VersionCli
 
 
 class CliOpenrTests(TestCase):
