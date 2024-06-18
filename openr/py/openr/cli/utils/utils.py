@@ -34,10 +34,10 @@ from typing import (
 
 import bunch
 import click
-from openr.clients.openr_client import get_openr_ctrl_client_py
 from openr.KvStore import ttypes as kv_store_types_py
 from openr.Network import ttypes as network_types_py
 from openr.OpenrCtrl import ttypes as ctrl_types_py
+from openr.py.openr.clients.openr_client import get_openr_ctrl_client_py
 from openr.thrift.KvStore import thrift_types as kv_store_types
 from openr.thrift.Network import thrift_types as network_types
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
