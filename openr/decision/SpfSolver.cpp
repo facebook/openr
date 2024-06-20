@@ -257,10 +257,30 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // Return a map of area to path computation rules.
+  // A map of area to path computation rules.
   std::unordered_map<std::string, thrift::AreaPathComputationRules>
-      areaPathComputationRulesMap = getAreaPathComputationRulesMap(
-          prefixEntries, routeSelectionResult, areaLinkStates);
+      areaPathComputationRulesMap;
+
+  // Walk all SR Policies and return the route computation rules of the first
+  // one that matches. If none of them match then the default route computation
+  // rules are returned
+  for (const auto& [areaId, _] : areaLinkStates) {
+    const auto areaPathComputationRules = getPrefixForwardingTypeAndAlgorithm(
+        areaId, prefixEntries, routeSelectionResult.allNodeAreas);
+    if (not areaPathComputationRules) {
+      // There are no best routes in this area
+      continue;
+    }
+
+    thrift::AreaPathComputationRules areaRules;
+
+    areaRules.forwardingType() =
+        areaPathComputationRules->first; // thrift::PrefixForwardingType::IP
+    areaRules.forwardingAlgo() =
+        areaPathComputationRules
+            ->second; // thrift::PrefixForwardingAlgorithm::SP_ECMP
+    areaPathComputationRulesMap.emplace(areaId, std::move(areaRules));
+  }
 
   /*
    * [Route Computation]
@@ -273,7 +293,6 @@ SpfSolver::createRouteForPrefix(
    *   - Combine shortest metric next-hops from all areas;
    */
   std::unordered_set<thrift::NextHopThrift> totalNextHops;
-  std::unordered_set<thrift::NextHopThrift> ksp2NextHops;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
 
   // TODO: simplify the areaPathComputationRules usage. No more SR policy.
@@ -287,9 +306,8 @@ SpfSolver::createRouteForPrefix(
       // rules will only contains valid areas.
       continue;
     }
-
-    switch (*areaRules.forwardingAlgo()) {
-    case thrift::PrefixForwardingAlgorithm::SP_ECMP: {
+    if (*areaRules.forwardingAlgo() ==
+        thrift::PrefixForwardingAlgorithm::SP_ECMP) {
       auto spfAreaResults = selectBestPathsSpf(
           myNodeName, prefix, routeSelectionResult, area, linkState->second);
 
@@ -302,33 +320,12 @@ SpfSolver::createRouteForPrefix(
         totalNextHops.insert(
             spfAreaResults.nextHops.begin(), spfAreaResults.nextHops.end());
       }
-    } break;
-    case thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP: {
-      // T96779848: selectBestPathsKsp2() should only use selected
-      // routes with the best IGP metrics (similar to selectBestPathsSpf)
-      // Also next-hops returned by selectBestPathsKsp2() should only be
-      // used if they have the best IGP metrics compared to other areas.
-      // Comment above for T96776309 also applies here as well.
-      auto areaNextHops = selectBestPathsKsp2(
-          myNodeName,
-          prefix,
-          routeSelectionResult,
-          prefixEntries,
-          *areaRules.forwardingType(),
-          area,
-          linkState->second);
-      ksp2NextHops.insert(areaNextHops.begin(), areaNextHops.end());
-    } break;
-    default:
+    } else {
       XLOG(ERR)
           << "Unknown prefix algorithm type "
           << apache::thrift::util::enumNameSafe(*areaRules.forwardingAlgo())
           << " for prefix " << folly::IPAddress::networkToString(prefix);
-      break;
     }
-
-    // Merge nexthops from SP and KSP2 path computations.
-    totalNextHops.insert(ksp2NextHops.begin(), ksp2NextHops.end());
   }
 
   return addBestPaths(
@@ -623,122 +620,6 @@ SpfSolver::selectBestPathsSpf(
   return result;
 }
 
-std::unordered_set<thrift::NextHopThrift>
-SpfSolver::selectBestPathsKsp2(
-    const std::string& myNodeName,
-    const folly::CIDRNetwork& prefix,
-    RouteSelectionResult const& routeSelectionResult,
-    PrefixEntries const& prefixEntries,
-    thrift::PrefixForwardingType const& forwardingType,
-    const std::string& area,
-    const LinkState& linkState) {
-  std::unordered_set<thrift::NextHopThrift> nextHops;
-  std::vector<LinkState::Path> paths;
-
-  // Sanity check for forwarding type
-  if (forwardingType != thrift::PrefixForwardingType::SR_MPLS) {
-    XLOG(ERR) << "Incompatible forwarding type "
-              << apache ::thrift::util::enumNameSafe(forwardingType)
-              << " for algorithm KSPF2_ED_ECMP of "
-              << folly::IPAddress::networkToString(prefix);
-
-    fb303::fbData->addStatValue(
-        "decision.incompatible_forwarding_type", 1, fb303::COUNT);
-    return nextHops;
-  }
-
-  // find shortest and sec shortest routes towards each node.
-  for (const auto& [node, bestArea] : routeSelectionResult.allNodeAreas) {
-    // if ourself is considered as ECMP nodes.
-    if (node == myNodeName and bestArea == area) {
-      continue;
-    }
-    for (auto const& path : linkState.getKthPaths(myNodeName, node, 1)) {
-      paths.push_back(path);
-    }
-  }
-
-  // when get to second shortes routes, we want to make sure the shortest
-  // route is not part of second shortest route to avoid double spraying
-  // issue
-  size_t const firstPathsSize = paths.size();
-  for (const auto& [node, bestArea] : routeSelectionResult.allNodeAreas) {
-    if (area != bestArea) {
-      continue;
-    }
-    for (auto const& secPath : linkState.getKthPaths(myNodeName, node, 2)) {
-      bool add = true;
-      for (size_t i = 0; i < firstPathsSize; ++i) {
-        // this could happen for anycast VIPs.
-        // for example, in a full mesh topology contains A, B and C. B and C
-        // both annouce a prefix P. When A wants to talk to P, it's shortes
-        // paths are A->B and A->C. And it is second shortest path is
-        // A->B->C and A->C->B. In this case,  A->B->C containser A->B
-        // already, so we want to avoid this.
-        if (LinkState::pathAInPathB(paths[i], secPath)) {
-          add = false;
-          break;
-        }
-      }
-      if (add) {
-        paths.push_back(secPath);
-      }
-    }
-  }
-
-  if (paths.size() == 0) {
-    return nextHops;
-  }
-
-  for (const auto& path : paths) {
-    Metric cost = 0;
-    std::list<int32_t> labels;
-    std::vector<std::string> invalidNodes;
-    auto nextNodeName = myNodeName;
-    for (auto& link : path) {
-      cost += link->getMetricFromNode(nextNodeName);
-      nextNodeName = link->getOtherNodeName(nextNodeName);
-      auto& adjDb = linkState.getAdjacencyDatabases().at(nextNodeName);
-      labels.push_front(*adjDb.nodeLabel());
-      if (not isMplsLabelValid(*adjDb.nodeLabel())) {
-        invalidNodes.emplace_back(*adjDb.thisNodeName());
-      }
-    }
-    // Ignore paths including nodes with invalid node labels.
-    if (invalidNodes.size() > 0) {
-      XLOG(WARNING) << fmt::format(
-          "Ignore path for {} through [{}] because of invalid node label.",
-          folly::IPAddress::networkToString(prefix),
-          folly::join(", ", invalidNodes));
-      continue;
-    }
-    labels.pop_back(); // Remove first node's label to respect PHP
-
-    // Create nexthop
-    CHECK_GE(path.size(), 1);
-    auto const& firstLink = path.front();
-    std::optional<thrift::MplsAction> mplsAction;
-    if (labels.size()) {
-      std::vector<int32_t> labelVec{labels.cbegin(), labels.cend()};
-      mplsAction = createMplsAction(
-          thrift::MplsActionCode::PUSH, std::nullopt, std::move(labelVec));
-    }
-
-    bool isV4Prefix = prefix.first.isV4();
-    nextHops.emplace(createNextHop(
-        isV4Prefix and not v4OverV6Nexthop_
-            ? firstLink->getNhV4FromNode(myNodeName)
-            : firstLink->getNhV6FromNode(myNodeName),
-        firstLink->getIfaceFromNode(myNodeName),
-        cost,
-        mplsAction,
-        firstLink->getArea(),
-        firstLink->getOtherNodeName(myNodeName)));
-  }
-
-  return nextHops;
-}
-
 std::optional<RibUnicastEntry>
 SpfSolver::addBestPaths(
     const std::string& myNodeName,
@@ -911,36 +792,6 @@ SpfSolver::getNextHopsThrift(
         0 /* ucmp weight */));
   }
   return nextHops;
-}
-
-std::unordered_map<std::string, thrift::AreaPathComputationRules>
-SpfSolver::getAreaPathComputationRulesMap(
-    const PrefixEntries& prefixEntries,
-    const RouteSelectionResult& routeSelectionResult,
-    const std::unordered_map<std::string, LinkState>& areaLinkStates) const {
-  // Construct a map of area to its path computation rules
-  //
-  // 1. forwarding algorithm and 2. forwarding type are based on PrefixEntry
-  // attributes
-
-  std::unordered_map<std::string, thrift::AreaPathComputationRules>
-      areaPathComputationRulesMap;
-  for (const auto& [areaId, _] : areaLinkStates) {
-    const auto areaPathComputationRules = getPrefixForwardingTypeAndAlgorithm(
-        areaId, prefixEntries, routeSelectionResult.allNodeAreas);
-    if (not areaPathComputationRules) {
-      // There are no best routes in this area
-      continue;
-    }
-
-    thrift::AreaPathComputationRules areaRules;
-
-    areaRules.forwardingType() = areaPathComputationRules->first;
-    areaRules.forwardingAlgo() = areaPathComputationRules->second;
-    areaPathComputationRulesMap.emplace(areaId, std::move(areaRules));
-  }
-
-  return areaPathComputationRulesMap;
 }
 
 } // namespace openr

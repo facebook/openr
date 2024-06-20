@@ -149,15 +149,6 @@ class SpfSolver {
     return bestRoutesCache_;
   }
 
-  // Walk all SR Policies and return the route computation rules of the first
-  // one that matches. If none of them match then the default route computation
-  // rules are returned
-  std::unordered_map<std::string, thrift::AreaPathComputationRules>
-  getAreaPathComputationRulesMap(
-      const PrefixEntries& prefixEntries,
-      const RouteSelectionResult& routeSelectionResult,
-      const std::unordered_map<std::string, LinkState>& areaLinkStates) const;
-
  private:
   // no-copy
   SpfSolver(SpfSolver const&) = delete;
@@ -203,22 +194,6 @@ class SpfSolver {
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       RouteSelectionResult const& routeSelectionResult,
-      const std::string& area,
-      const LinkState& linkState);
-
-  /*
-   * [Route Calculation]: 2nd-shortest path forwarding
-   *
-   * Given the best route selection result, aka, the best node/nodes annoucing
-   * the prefix, this util function will use KSPF algorithm to find the second
-   * shortest paths(maybe ECMP) towards the destination prefix.
-   */
-  std::unordered_set<thrift::NextHopThrift> selectBestPathsKsp2(
-      const std::string& myNodeName,
-      const folly::CIDRNetwork& prefix,
-      RouteSelectionResult const& routeSelectionResult,
-      PrefixEntries const& prefixEntries,
-      thrift::PrefixForwardingType const& forwardingType,
       const std::string& area,
       const LinkState& linkState);
 

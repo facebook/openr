@@ -171,35 +171,6 @@ const thrift::AdjacencyDatabase kEmptyAdjDb;
 const apache::thrift::optional_field_ref<thrift::PerfEvents const&>
     kEmptyPerfEventRef{kEmptyAdjDb.perfEvents()};
 
-thrift::PrefixDatabase
-createPrefixDbWithKspfAlgo(
-    thrift::PrefixDatabase const& prefixDb,
-    std::optional<thrift::PrefixType> prefixType = std::nullopt,
-    std::optional<thrift::IpPrefix> prefix = std::nullopt,
-    bool v4Enabled = false) {
-  thrift::PrefixDatabase newPrefixDb = prefixDb;
-
-  for (auto& p : *newPrefixDb.prefixEntries()) {
-    p.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
-    p.forwardingAlgorithm() = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    if (prefixType == thrift::PrefixType::BGP and not prefix.has_value()) {
-      p.type() = thrift::PrefixType::BGP;
-    }
-  }
-
-  if (prefix.has_value()) {
-    thrift::PrefixEntry entry;
-    *entry.prefix() = prefix.value();
-    entry.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
-    entry.forwardingAlgorithm() =
-        thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    entry.type() = thrift::PrefixType::BGP;
-    newPrefixDb.prefixEntries()->push_back(entry);
-  }
-
-  return newPrefixDb;
-}
-
 thrift::NextHopThrift
 createNextHopFromAdj(
     thrift::Adjacency adj,
@@ -1790,7 +1761,6 @@ class SimpleRingMeshTopologyFixture
  protected:
   void
   CustomSetUp(
-      bool useKsp2Ed,
       bool useNodeSegmentLabel,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
@@ -1829,46 +1799,10 @@ class SimpleRingMeshTopologyFixture
     auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
     auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
 
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb1,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb1);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb2,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb2);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb3,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb3);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb4,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb4);
+    updatePrefixDatabase(prefixState, pdb1);
+    updatePrefixDatabase(prefixState, pdb2);
+    updatePrefixDatabase(prefixState, pdb3);
+    updatePrefixDatabase(prefixState, pdb4);
   }
 
   thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
@@ -1880,89 +1814,6 @@ class SimpleRingMeshTopologyFixture
   std::unordered_map<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 };
-
-INSTANTIATE_TEST_CASE_P(
-    SimpleRingMeshTopologyInstance,
-    SimpleRingMeshTopologyFixture,
-    ::testing::Values(
-        std::make_tuple(true, std::nullopt),
-        std::make_tuple(false, std::nullopt),
-        std::make_tuple(true, thrift::PrefixType::BGP),
-        std::make_tuple(false, thrift::PrefixType::BGP)));
-
-TEST_P(SimpleRingMeshTopologyFixture, Ksp2EdEcmp) {
-  CustomSetUp(
-      true /* useKsp2Ed */,
-      true /* enable node segment label */,
-      std::get<1>(GetParam()));
-  auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-
-  auto pushCode = thrift::MplsActionCode::PUSH;
-  auto push1 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1});
-  auto push2 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2});
-  auto push3 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3});
-  auto push4 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4});
-  auto push24 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 4});
-  auto push34 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3, 4});
-  auto push43 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4, 3});
-  auto push13 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1, 3});
-  auto push42 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4, 2});
-  auto push12 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1, 2});
-  auto push31 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3, 1});
-  auto push21 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 1});
-
-  // validate router 1
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj14, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj12, v4Enabled, 20, push4),
-           createNextHopFromAdj(adj13, v4Enabled, 20, push4)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", std::to_string(*adjacencyDb4.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj14, false, 10, labelPhpAction)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj13, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj12, v4Enabled, 20, push3),
-           createNextHopFromAdj(adj14, v4Enabled, 20, push3)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj12, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj13, v4Enabled, 20, push2),
-           createNextHopFromAdj(adj14, v4Enabled, 20, push2)}));
-
-  validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-
-  adjacencyDb3.isOverloaded() = true;
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
-                  .topologyChanged);
-  routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj14, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj12, v4Enabled, 20, push4)}));
-}
 
 //
 // Test topology:
@@ -1983,7 +1834,6 @@ class SimpleRingTopologyFixture
  protected:
   void
   CustomSetUp(
-      bool useKsp2Ed,
       bool useNodeSegmentLabel,
       std::optional<thrift::PrefixType> prefixType = std::nullopt,
       bool createNewBgpRoute = false) {
@@ -2022,46 +1872,10 @@ class SimpleRingTopologyFixture
     auto bgp3 = v4Enabled ? bgpAddr3V4 : bgpAddr3;
     auto bgp4 = v4Enabled ? bgpAddr4V4 : bgpAddr4;
 
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb1,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp1)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb1);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb2,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp2)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb2);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb3,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp3)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb3);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed
-            ? createPrefixDbWithKspfAlgo(
-                  pdb4,
-                  prefixType,
-                  createNewBgpRoute ? std::make_optional<thrift::IpPrefix>(bgp4)
-                                    : std::nullopt,
-                  v4Enabled)
-            : pdb4);
+    updatePrefixDatabase(prefixState, pdb1);
+    updatePrefixDatabase(prefixState, pdb2);
+    updatePrefixDatabase(prefixState, pdb3);
+    updatePrefixDatabase(prefixState, pdb4);
   }
 
   thrift::AdjacencyDatabase adjacencyDb1, adjacencyDb2, adjacencyDb3,
@@ -2098,7 +1912,7 @@ INSTANTIATE_TEST_CASE_P(
 // Verify SpfSolver finds the shortest path
 //
 TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* use node segment label */);
+  CustomSetUp(true /* use node segment label */);
   fb303::fbData->resetAllData();
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
@@ -2233,7 +2047,7 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
 // and no withdraw happened.
 //
 TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
-  CustomSetUp(false /* useKsp2Ed */, true /* use node segment label */);
+  CustomSetUp(true /* use node segment label */);
   fb303::fbData->resetAllData();
   // make node1's mpls label same as node2.
   adjacencyDb1.nodeLabel() = 2;
@@ -2286,7 +2100,7 @@ TEST_P(SimpleRingTopologyFixture, DuplicateMplsRoutes) {
 // Use the same topology, but test multi-path routing
 //
 TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* use node segment label */);
+  CustomSetUp(true /* use node segment label */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -2412,213 +2226,11 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
 }
 
 //
-// Validate KSP2_ED_ECMP routes on SimpleRingTopology
-//
-TEST_P(SimpleRingTopologyFixture, Ksp2EdEcmp) {
-  CustomSetUp(
-      true /* useKsp2Ed */,
-      true /* enable node segment label */,
-      std::get<1>(GetParam()));
-  fb303::fbData->resetAllData();
-  auto routeMap = getRouteMap(
-      *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
-
-  // Unicast routes => 4 * (4 - 1) = 12
-  // Node label routes => 4 * 4 = 16
-  EXPECT_EQ(28, routeMap.size());
-
-  const auto counters = fb303::fbData->getCounters();
-  // 4 + 4 * 3 peer per node (clean runs are memoized, 2nd runs  with linksTo
-  // ignore are not so we redo for each neighbor)
-  EXPECT_EQ(counters.at("decision.spf_runs.count"), 16);
-  auto pushCode = thrift::MplsActionCode::PUSH;
-  auto push1 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1});
-  auto push2 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2});
-  auto push3 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3});
-  auto push4 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4});
-  auto push24 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 4});
-  auto push34 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3, 4});
-  auto push43 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4, 3});
-  auto push13 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1, 3});
-  auto push42 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4, 2});
-  auto push12 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1, 2});
-  auto push31 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3, 1});
-  auto push21 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 1});
-
-  // validate router 1
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj12, v4Enabled, 20, push4),
-           createNextHopFromAdj(adj13, v4Enabled, 20, push4)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", std::to_string(*adjacencyDb4.nodeLabel()))],
-      NextHops(
-          {createNextHopFromAdj(adj12, false, 20, labelSwapAction4),
-           createNextHopFromAdj(adj13, false, 20, labelSwapAction4)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj13, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj12, v4Enabled, 30, push34)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", std::to_string(*adjacencyDb3.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj13, false, 10, labelPhpAction)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj12, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj13, v4Enabled, 30, push24)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", std::to_string(*adjacencyDb2.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj12, false, 10, labelPhpAction)}));
-
-  validatePopLabelRoute(routeMap, "1", *adjacencyDb1.nodeLabel());
-
-  // validate router 2
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj24, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj21, v4Enabled, 30, push43)}));
-  EXPECT_EQ(
-      routeMap[make_pair("2", std::to_string(*adjacencyDb4.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj24, false, 10, labelPhpAction)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj21, v4Enabled, 20, push3),
-           createNextHopFromAdj(adj24, v4Enabled, 20, push3)}));
-  EXPECT_EQ(
-      routeMap[make_pair("2", std::to_string(*adjacencyDb3.nodeLabel()))],
-      NextHops(
-          {createNextHopFromAdj(adj21, false, 20, labelSwapAction3),
-           createNextHopFromAdj(adj24, false, 20, labelSwapAction3)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops(
-          {createNextHopFromAdj(adj21, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj24, v4Enabled, 30, push13)}));
-  EXPECT_EQ(
-      routeMap[make_pair("2", std::to_string(*adjacencyDb1.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj21, false, 10, labelPhpAction)}));
-
-  validatePopLabelRoute(routeMap, "2", *adjacencyDb2.nodeLabel());
-
-  // validate router 3
-
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj34, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj31, v4Enabled, 30, push42)}));
-  EXPECT_EQ(
-      routeMap[make_pair("3", std::to_string(*adjacencyDb4.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj34, false, 10, labelPhpAction)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj31, v4Enabled, 20, push2),
-           createNextHopFromAdj(adj34, v4Enabled, 20, push2)}));
-  EXPECT_EQ(
-      routeMap[make_pair("3", std::to_string(*adjacencyDb2.nodeLabel()))],
-      NextHops(
-          {createNextHopFromAdj(adj31, false, 20, labelSwapAction2),
-           createNextHopFromAdj(adj34, false, 20, labelSwapAction2)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops(
-          {createNextHopFromAdj(adj31, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj34, v4Enabled, 30, push12)}));
-  EXPECT_EQ(
-      routeMap[make_pair("3", std::to_string(*adjacencyDb1.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj31, false, 10, labelPhpAction)}));
-
-  validatePopLabelRoute(routeMap, "3", *adjacencyDb3.nodeLabel());
-
-  // validate router 4
-
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj43, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj42, v4Enabled, 30, push31)}));
-  EXPECT_EQ(
-      routeMap[make_pair("4", std::to_string(*adjacencyDb3.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj43, false, 10, labelPhpAction)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(v4Enabled ? addr2V4 : addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj42, v4Enabled, 10, std::nullopt),
-           createNextHopFromAdj(adj43, v4Enabled, 30, push21)}));
-  EXPECT_EQ(
-      routeMap[make_pair("4", std::to_string(*adjacencyDb2.nodeLabel()))],
-      NextHops({createNextHopFromAdj(adj42, false, 10, labelPhpAction)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(v4Enabled ? addr1V4 : addr1))],
-      NextHops(
-          {createNextHopFromAdj(adj42, v4Enabled, 20, push1),
-           createNextHopFromAdj(adj43, v4Enabled, 20, push1)}));
-  EXPECT_EQ(
-      routeMap[make_pair("4", std::to_string(*adjacencyDb1.nodeLabel()))],
-      NextHops(
-          {createNextHopFromAdj(adj42, false, 20, labelSwapAction1),
-           createNextHopFromAdj(adj43, false, 20, labelSwapAction1)}));
-
-  validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-
-  // this is to test corner cases for traceEdgeDisjointPaths algorithm.
-  // In this example, node 3 is overloaded, and link between node 1 and node 2
-  // are overloaded. In such case, there is no route from node 1 to node 2 and 4
-  adjacencyDb1.adjacencies()[0].isOverloaded() = true;
-  adjacencyDb3.isOverloaded() = true;
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
-                  .topologyChanged);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
-                  .topologyChanged);
-  routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-
-  EXPECT_EQ(
-      routeMap.find(make_pair("1", toString(v4Enabled ? addr4V4 : addr4))),
-      routeMap.end());
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(v4Enabled ? addr3V4 : addr3))],
-      NextHops({createNextHopFromAdj(adj13, v4Enabled, 10, std::nullopt)}));
-
-  EXPECT_EQ(
-      routeMap.find(make_pair("1", toString(v4Enabled ? addr2V4 : addr2))),
-      routeMap.end());
-}
-
-//
 // attach nodes to outside world, e.g., POP
 // verify all non-POP nodes find their closest POPs
 //
 TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* enable node segment label */);
+  CustomSetUp(true /* enable node segment label */);
   // Advertise default prefixes from node-1 and node-4
   auto defaultRoutePrefix = v4Enabled ? "0.0.0.0/0" : "::/0";
   auto defaultRoute = toIpPrefix(defaultRoutePrefix);
@@ -2670,7 +2282,7 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
 // It will disconnect node-1 with node-4 but rests should be reachable
 //
 TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* enable node segment label */);
+  CustomSetUp(true /* enable node segment label */);
   adjacencyDb2.isOverloaded() = true;
   adjacencyDb3.isOverloaded() = true;
   auto& linkState = areaLinkStates.at(kTestingAreaName);
@@ -2786,7 +2398,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
 // enabled. node-3 will get disconnected
 //
 TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* enable node segment label */);
+  CustomSetUp(true /* enable node segment label */);
   adjacencyDb3.adjacencies()[0].isOverloaded() = true; // make adj31 overloaded
   auto& linkState = areaLinkStates.at(kTestingAreaName);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
@@ -2984,7 +2596,6 @@ class ParallelAdjRingTopologyFixture
  protected:
   void
   CustomSetUp(
-      bool useKsp2Ed,
       bool useNodeSegmentLabel,
       std::optional<thrift::PrefixType> prefixType = std::nullopt) {
     std::string nodeName("1");
@@ -3059,26 +2670,10 @@ class ParallelAdjRingTopologyFixture
             .topologyChanged);
 
     // Prefix db's
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed ? createPrefixDbWithKspfAlgo(
-                        prefixDb1, prefixType, std::nullopt, false)
-                  : prefixDb1);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed ? createPrefixDbWithKspfAlgo(
-                        prefixDb2, prefixType, std::nullopt, false)
-                  : prefixDb2);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed ? createPrefixDbWithKspfAlgo(
-                        prefixDb3, prefixType, std::nullopt, false)
-                  : prefixDb3);
-    updatePrefixDatabase(
-        prefixState,
-        useKsp2Ed ? createPrefixDbWithKspfAlgo(
-                        prefixDb4, prefixType, std::nullopt, false)
-                  : prefixDb4);
+    updatePrefixDatabase(prefixState, prefixDb1);
+    updatePrefixDatabase(prefixState, prefixDb2);
+    updatePrefixDatabase(prefixState, prefixDb3);
+    updatePrefixDatabase(prefixState, prefixDb4);
   }
 
   thrift::Adjacency adj12_1, adj12_2, adj12_3, adj13_1, adj21_1, adj21_2,
@@ -3092,13 +2687,8 @@ class ParallelAdjRingTopologyFixture
   PrefixState prefixState;
 };
 
-INSTANTIATE_TEST_CASE_P(
-    ParallelAdjRingTopologyInstance,
-    ParallelAdjRingTopologyFixture,
-    ::testing::Values(std::nullopt, thrift::PrefixType::BGP));
-
 TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* enable segment label */);
+  CustomSetUp(true /* enable segment label */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -3227,7 +2817,7 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
 // Use the same topology, but test multi-path routing
 //
 TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
-  CustomSetUp(false /* useKsp2Ed */, true /* enable segment label */);
+  CustomSetUp(true /* enable segment label */);
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
 
@@ -3363,194 +2953,6 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj43_1, false, 22, labelSwapAction1)}));
 
   validatePopLabelRoute(routeMap, "4", *adjacencyDb4.nodeLabel());
-}
-
-//
-// Use the same topology, but test KSP2_ED_ECMP routing
-//
-TEST_P(ParallelAdjRingTopologyFixture, Ksp2EdEcmp) {
-  std::optional<thrift::PrefixType> prefixType = GetParam();
-  CustomSetUp(
-      true /* useKsp2Ed */, true /* enable segment label */, prefixType);
-
-  auto pushCode = thrift::MplsActionCode::PUSH;
-  auto push1 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1});
-  auto push2 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2});
-  auto push3 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3});
-  auto push4 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4});
-  auto push34 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{3, 4});
-  auto push43 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{4, 3});
-  auto push12 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{1, 2});
-  auto push21 =
-      createMplsAction(pushCode, std::nullopt, std::vector<int32_t>{2, 1});
-
-  // Verify parallel link case between node-1 and node-2
-  auto routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj12_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj12_2, false, 11, std::nullopt),
-           createNextHopFromAdj(adj12_3, false, 20, std::nullopt)}));
-
-  auto prefixDBFour = getPrefixDbForNode(prefixState, "4");
-
-  // start to test minNexthop feature by injecting an ondeman prefix with
-  // threshold to be 4 at the beginning.
-  auto newPrefix = createPrefixEntry(
-      bgpAddr1,
-      thrift::PrefixType::LOOPBACK,
-      "",
-      thrift::PrefixForwardingType::SR_MPLS,
-      thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP,
-      std::make_optional<int64_t>(4));
-
-  prefixDBFour.prefixEntries()->push_back(newPrefix);
-  updatePrefixDatabase(prefixState, prefixDBFour);
-  routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-
-  // in theory, kspf will choose adj12_2, adj13_1 as nexthops,
-  // but since we set threhold to be 4, this route will get ignored.
-  EXPECT_EQ(routeMap.find(make_pair("1", toString(bgpAddr1))), routeMap.end());
-
-  // updating threshold hold to be 2.
-  // becasue we use edge disjoint algorithm, we should expect adj12_2 and
-  // adj13_1 as nexthop
-  prefixDBFour.prefixEntries()->pop_back();
-  newPrefix.minNexthop() = 2;
-  prefixDBFour.prefixEntries()->push_back(newPrefix);
-  updatePrefixDatabase(prefixState, prefixDBFour);
-  routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(bgpAddr1))],
-      NextHops(
-          {createNextHopFromAdj(adj12_2, false, 22, push4),
-           createNextHopFromAdj(adj13_1, false, 22, push4)}));
-
-  for (const auto& nexthop : routeMap[make_pair("1", toString(bgpAddr1))]) {
-    LOG(INFO) << (toString(nexthop));
-  }
-
-  // Let node 3 announcing same prefix with limit 4. In this case,
-  // threshold should be 4 instead of 2. And the ip is an anycast from node
-  // 3 and 4. so nexthops should be adj12_2, adj13_1(shortes to node 4)
-  // and adj13_1 shortest to node 3. The second shortes are all eliminated
-  // becasue of purging logic we have for any cast ip.
-  auto prefixDBThr = getPrefixDbForNode(prefixState, "3");
-  newPrefix.minNexthop() = 4;
-  prefixDBThr.prefixEntries()->push_back(newPrefix);
-  updatePrefixDatabase(prefixState, prefixDBThr);
-  routeMap = getRouteMap(*spfSolver, {"1"}, areaLinkStates, prefixState);
-
-  EXPECT_EQ(routeMap.find(make_pair("1", toString(bgpAddr1))), routeMap.end());
-
-  // Revert the setup to normal state
-  prefixDBFour.prefixEntries()->pop_back();
-  prefixDBThr.prefixEntries()->pop_back();
-  updatePrefixDatabase(prefixState, prefixDBFour);
-  updatePrefixDatabase(prefixState, prefixDBThr);
-
-  //
-  // Bring down adj12_2 and adj34_2 to make our nexthop validations easy
-  // Then validate routing table of all the nodes
-  //
-
-  adjacencyDb1.adjacencies()->at(1).isOverloaded() = true;
-  adjacencyDb3.adjacencies()->at(2).isOverloaded() = true;
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
-                  .topologyChanged);
-  EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
-                  .topologyChanged);
-
-  routeMap = getRouteMap(
-      *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
-
-  // Unicast routes => 4 * (4 - 1) = 12
-  // Node label routes => 4 * 4 = 16
-  EXPECT_EQ(28, routeMap.size());
-
-  // validate router 1
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj12_1, false, 22, push4),
-           createNextHopFromAdj(adj13_1, false, 22, push4)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj13_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj12_1, false, 33, push34)}));
-  EXPECT_EQ(
-      routeMap[make_pair("1", toString(addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj12_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj12_3, false, 20, std::nullopt)}));
-
-  // validate router 2
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj24_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj21_1, false, 33, push43)}));
-
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj21_1, false, 22, push3),
-           createNextHopFromAdj(adj24_1, false, 22, push3)}));
-  EXPECT_EQ(
-      routeMap[make_pair("2", toString(addr1))],
-      NextHops(
-          {createNextHopFromAdj(adj21_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj21_3, false, 20, std::nullopt)}));
-
-  // validate router 3
-
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(addr4))],
-      NextHops(
-          {createNextHopFromAdj(adj34_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj34_3, false, 20, std::nullopt)}));
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj31_1, false, 22, push2),
-           createNextHopFromAdj(adj34_1, false, 22, push2)}));
-  EXPECT_EQ(
-      routeMap[make_pair("3", toString(addr1))],
-      NextHops(
-          {createNextHopFromAdj(adj31_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj34_1, false, 33, push12)}));
-
-  // validate router 4
-
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(addr3))],
-      NextHops(
-          {createNextHopFromAdj(adj43_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj43_3, false, 20, std::nullopt)}));
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(addr2))],
-      NextHops(
-          {createNextHopFromAdj(adj42_1, false, 11, std::nullopt),
-           createNextHopFromAdj(adj43_1, false, 33, push21)}));
-  EXPECT_EQ(
-      routeMap[make_pair("4", toString(addr1))],
-      NextHops(
-          {createNextHopFromAdj(adj42_1, false, 22, push1),
-           createNextHopFromAdj(adj43_1, false, 22, push1)}));
 }
 
 //
@@ -5869,12 +5271,6 @@ TEST_F(DecisionTestFixture, Counters) {
   // set up first publication
 
   // Node1 and Node2 has both v4/v6 loopbacks, Node3 has only V6
-  auto mplsPrefixEntry1 = createPrefixEntry( // Incompatible forwarding type
-      toIpPrefix("10.1.0.0/16"),
-      thrift::PrefixType::LOOPBACK,
-      "",
-      thrift::PrefixForwardingType::IP,
-      thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP);
   auto bgpPrefixEntry1 = createPrefixEntry( // Missing loopback
       toIpPrefix("10.2.0.0/16"),
       thrift::PrefixType::BGP,
@@ -5914,7 +5310,6 @@ TEST_F(DecisionTestFixture, Counters) {
   pubKvs.emplace(createPrefixKeyValue("3", 1, addr3));
   pubKvs.emplace(createPrefixKeyValue("3", 1, bgpPrefixEntry1));
   pubKvs.emplace(createPrefixKeyValue("3", 1, bgpPrefixEntry3));
-  pubKvs.emplace(createPrefixKeyValue("3", 1, mplsPrefixEntry1));
 
   pubKvs.emplace(createPrefixKeyValue("4", 1, addr4));
   pubKvs.emplace(createPrefixKeyValue("4", 1, bgpPrefixEntry2));
@@ -5935,9 +5330,8 @@ TEST_F(DecisionTestFixture, Counters) {
   EXPECT_EQ(counters.at("decision.num_partial_adjacencies"), 1);
   EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes"), 4);
-  EXPECT_EQ(counters.at("decision.num_prefixes"), 9);
+  EXPECT_EQ(counters.at("decision.num_prefixes"), 8);
   EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
-  EXPECT_EQ(counters.at("decision.incompatible_forwarding_type.count.60"), 1);
   EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);
   EXPECT_EQ(counters.at("decision.no_route_to_label.count.60"), 1);
 
