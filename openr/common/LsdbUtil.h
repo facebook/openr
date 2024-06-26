@@ -112,19 +112,12 @@ thrift::RouteDatabaseDelta findDeltaRoutes(
     const thrift::RouteDatabase& oldRouteDb);
 
 /**
- * Get forwarding algorithm and type from list of prefixes for the given area.
- * We're taking map as input for efficiency purpose.
+ * Check if there are any best routes in that area by given 1. an area, 2.
+ * prefixEntries, and 3. set of NodeAndArea
  *
- * It is feasible that multiple nodes in the same area will advertise a same
- * prefix and will ask to forward on different modes and algorithms. In case
- * of conflict forwarding type and algorithm with the lowest enum value will be
- * picked.
- *
- * Returns std::nullopt if there are no best routes in the given area.
+ * Returns true if there are any best routes in the given area, otherwise false
  */
-std::optional<
-    std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>>
-getPrefixForwardingTypeAndAlgorithm(
+bool hasBestRoutesInArea(
     const std::string& area,
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& bestNodeAreas);

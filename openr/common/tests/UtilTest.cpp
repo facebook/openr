@@ -667,12 +667,11 @@ TEST(UtilTest, MplsActionValidate) {
   }
 }
 
-TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
+TEST(UtilTest, hasBestRoutesInAreaTest) {
   PrefixEntries prefixes;
 
   // Default case (empty entries)
-  EXPECT_EQ(
-      std::nullopt, getPrefixForwardingTypeAndAlgorithm("area1", prefixes, {}));
+  EXPECT_FALSE(hasBestRoutesInArea("area1", prefixes, {}));
 
   prefixes[{"node1", "area1"}] = std::make_shared<thrift::PrefixEntry>(
       createPrefixEntry(toIpPrefix("10.0.0.0/8")));
@@ -684,65 +683,45 @@ TEST(UtilTest, getPrefixForwardingTypeAndAlgorithm) {
   std::set<NodeAndArea> bestNodeAreas = {
       {"node1", "area1"}, {"node2", "area1"}, {"node3", "area1"}};
 
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
-  EXPECT_EQ(
-      std::nullopt,
-      getPrefixForwardingTypeAndAlgorithm("area2", prefixes, bestNodeAreas));
+  EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, bestNodeAreas));
+  // There are no PrefixEntry with nodes in area2 yet
+  EXPECT_FALSE(hasBestRoutesInArea("area2", prefixes, bestNodeAreas));
 
-  prefixes[{"node3", "area1"}]->forwardingType() = FwdType::SR_MPLS;
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
+  EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, {{"node1", "area1"}}));
+  EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, {{"node2", "area1"}}));
 
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(
-          "area1", prefixes, {{"node3", "area1"}}));
+  EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, {{"node3", "area1"}}));
 
-  prefixes[{"node2", "area1"}]->forwardingType() = FwdType::SR_MPLS;
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
+  EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, bestNodeAreas));
 
-  prefixes[{"node1", "area1"}]->forwardingType() = FwdType::SR_MPLS;
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
-
-  prefixes[{"node3", "area1"}]->forwardingAlgorithm() = FwdAlgo::KSP2_ED_ECMP;
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
-
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(
-          FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm(
-          "area1", prefixes, {{"node3", "area1"}}));
-
-  prefixes[{"node2", "area1"}]->forwardingAlgorithm() = FwdAlgo::KSP2_ED_ECMP;
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::SR_MPLS, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
-
-  prefixes[{"node1", "area1"}]->forwardingAlgorithm() = FwdAlgo::KSP2_ED_ECMP;
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(
-          FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
-
+  //
+  // Create a prefix entry with "node1" in "area2"
+  //
+  prefixes[{"node1", "area2"}] = std::make_shared<thrift::PrefixEntry>(
+      createPrefixEntry(toIpPrefix("10.0.0.0/8")));
+  // node1 is in both area1 and area2
+  EXPECT_TRUE(hasBestRoutesInArea("area2", prefixes, {{"node1", "area2"}}));
+  // node2 is not in area2
+  EXPECT_FALSE(hasBestRoutesInArea("area2", prefixes, {{"node2", "area2"}}));
+  // bestNodeAreas does not have {"node1":"area2"}
+  EXPECT_FALSE(hasBestRoutesInArea("area2", prefixes, bestNodeAreas));
+  //
+  // Create a prefix entry with "node4" in "area2"
+  //
   prefixes[{"node4", "area2"}] = std::make_shared<thrift::PrefixEntry>(
       createPrefixEntry(toIpPrefix("10.0.0.0/8")));
+
+  // Insert "node4" in "area2" to bestNodeAreas
   bestNodeAreas.insert({"node4", "area2"});
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(
-          FwdType::SR_MPLS, FwdAlgo::KSP2_ED_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area1", prefixes, bestNodeAreas));
-  EXPECT_EQ(
-      (std::make_pair<FwdType, FwdAlgo>(FwdType::IP, FwdAlgo::SP_ECMP)),
-      getPrefixForwardingTypeAndAlgorithm("area2", prefixes, bestNodeAreas));
+
+  EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, bestNodeAreas));
+  EXPECT_TRUE(hasBestRoutesInArea("area2", prefixes, bestNodeAreas));
+  // PrefixEntry has node4 is in area2, but no entry of node4 in area1
+  EXPECT_FALSE(hasBestRoutesInArea("area1", prefixes, {{"node4", "area1"}}));
+  EXPECT_TRUE(hasBestRoutesInArea("area2", prefixes, {{"node4", "area2"}}));
+  // this {"node4", "area1"} does not match any prefix entry
+  EXPECT_FALSE(hasBestRoutesInArea("area1", prefixes, {{"node4", "area1"}}));
+  EXPECT_FALSE(hasBestRoutesInArea("area2", prefixes, {{"node4", "area1"}}));
 }
 
 TEST(UtilTest, FunctionExecutionTime) {

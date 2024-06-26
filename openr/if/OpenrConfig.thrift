@@ -119,13 +119,6 @@ enum RouteSelectionAlgorithm {
   PER_AREA_SHORTEST_DISTANCE = 2,
 }
 
-/* Path computation rules for a specific area */
-@cpp.MinimizePadding
-struct AreaPathComputationRules {
-  1: PrefixForwardingAlgorithm forwardingAlgo = PrefixForwardingAlgorithm.SP_ECMP;
-  2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
-}
-
 struct DecisionConfig {
   /** Fast reaction time to update decision SPF upon receiving adj db update
   (in milliseconds). */

@@ -370,17 +370,11 @@ findDeltaRoutes(
   return routeDbDelta;
 }
 
-std::optional<
-    std::pair<thrift::PrefixForwardingType, thrift::PrefixForwardingAlgorithm>>
-getPrefixForwardingTypeAndAlgorithm(
+bool
+hasBestRoutesInArea(
     const std::string& area,
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& bestNodeAreas) {
-  std::optional<std::pair<
-      thrift::PrefixForwardingType,
-      thrift::PrefixForwardingAlgorithm>>
-      r = std::nullopt;
-
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
     if (not bestNodeAreas.count(nodeAndArea)) {
       continue; // Skip the prefix-entry of non best node-area
@@ -389,21 +383,9 @@ getPrefixForwardingTypeAndAlgorithm(
       continue; // Skip best routes in different areas
     }
 
-    if (!r) {
-      r = {*prefixEntry->forwardingType(), *prefixEntry->forwardingAlgorithm()};
-    } else {
-      r->first = std::min(r->first, *prefixEntry->forwardingType());
-      r->second = std::min(r->second, *prefixEntry->forwardingAlgorithm());
-    }
-
-    // Optimization case for most common algorithm and forwarding type
-    if (r->first == thrift::PrefixForwardingType::IP &&
-        r->second == thrift::PrefixForwardingAlgorithm::SP_ECMP) {
-      return r;
-    }
+    return true;
   }
-
-  return r;
+  return false;
 }
 
 thrift::PeerSpec

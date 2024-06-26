@@ -232,7 +232,7 @@ SpfSolver::createRouteForPrefix(
    *  - etc.;
    *
    * route selection procedure will find the best candidate(NodeAndArea) to run
-   * Dijkstra(SPF) or K-Shortest Path Forwarding algorithm against.
+   * Dijkstra(SPF)
    */
   auto routeSelectionResult =
       selectBestRoutes(myNodeName, prefix, prefixEntries, areaLinkStates);
@@ -257,29 +257,14 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // A map of area to path computation rules.
-  std::unordered_map<std::string, thrift::AreaPathComputationRules>
-      areaPathComputationRulesMap;
-
-  // Walk all SR Policies and return the route computation rules of the first
-  // one that matches. If none of them match then the default route computation
-  // rules are returned
+  // TODO: What if there are multiple best areas populating for the single
+  // prefix?
+  std::unordered_set<std::string> areaWithBestRoutes;
   for (const auto& [areaId, _] : areaLinkStates) {
-    const auto areaPathComputationRules = getPrefixForwardingTypeAndAlgorithm(
-        areaId, prefixEntries, routeSelectionResult.allNodeAreas);
-    if (not areaPathComputationRules) {
-      // There are no best routes in this area
-      continue;
+    if (hasBestRoutesInArea(
+            areaId, prefixEntries, routeSelectionResult.allNodeAreas)) {
+      areaWithBestRoutes.insert(areaId);
     }
-
-    thrift::AreaPathComputationRules areaRules;
-
-    areaRules.forwardingType() =
-        areaPathComputationRules->first; // thrift::PrefixForwardingType::IP
-    areaRules.forwardingAlgo() =
-        areaPathComputationRules
-            ->second; // thrift::PrefixForwardingAlgorithm::SP_ECMP
-    areaPathComputationRulesMap.emplace(areaId, std::move(areaRules));
   }
 
   /*
@@ -287,44 +272,31 @@ SpfSolver::createRouteForPrefix(
    *
    * For each area:
    * - Switch on algorithm type:
-   *   - Compute paths, algorithm type influences this step (SP or KSP2);
-   *   - Create next-hops from paths, forwarding type influences this step;
+   *   - Create next-hops from paths
    *   - Only use the next-hop set if it has the shortest metric;
    *   - Combine shortest metric next-hops from all areas;
    */
   std::unordered_set<thrift::NextHopThrift> totalNextHops;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
-
-  // TODO: simplify the areaPathComputationRules usage. No more SR policy.
-  for (const auto& [area, areaRules] : areaPathComputationRulesMap) {
+  for (const auto& area : areaWithBestRoutes) {
     const auto& linkState = areaLinkStates.find(area);
     if (linkState == areaLinkStates.end()) {
-      // Possible if the route computation rules are based of a configured SR
-      // Policy which contains area path computation rules for an invalid area.
-      //
-      // If the route computation rules are default then area path computation
+      // If the route computation rules are default, then area path computation
       // rules will only contains valid areas.
       continue;
     }
-    if (*areaRules.forwardingAlgo() ==
-        thrift::PrefixForwardingAlgorithm::SP_ECMP) {
-      auto spfAreaResults = selectBestPathsSpf(
-          myNodeName, prefix, routeSelectionResult, area, linkState->second);
 
-      // Only use next-hops in areas with the shortest IGP metric
-      if (shortestMetric >= spfAreaResults.bestMetric) {
-        if (shortestMetric > spfAreaResults.bestMetric) {
-          shortestMetric = spfAreaResults.bestMetric;
-          totalNextHops.clear();
-        }
-        totalNextHops.insert(
-            spfAreaResults.nextHops.begin(), spfAreaResults.nextHops.end());
+    auto spfAreaResults = selectBestPathsSpf(
+        myNodeName, prefix, routeSelectionResult, area, linkState->second);
+
+    // Only use next-hops in areas with the shortest IGP metric
+    if (shortestMetric >= spfAreaResults.bestMetric) {
+      if (shortestMetric > spfAreaResults.bestMetric) {
+        shortestMetric = spfAreaResults.bestMetric;
+        totalNextHops.clear();
       }
-    } else {
-      XLOG(ERR)
-          << "Unknown prefix algorithm type "
-          << apache::thrift::util::enumNameSafe(*areaRules.forwardingAlgo())
-          << " for prefix " << folly::IPAddress::networkToString(prefix);
+      totalNextHops.insert(
+          spfAreaResults.nextHops.begin(), spfAreaResults.nextHops.end());
     }
   }
 
