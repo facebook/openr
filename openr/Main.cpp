@@ -43,7 +43,7 @@ namespace fs = std::filesystem;
 #include <openr/watchdog/Watchdog.h>
 
 #ifndef NO_FOLLY_EXCEPTION_TRACER
-#include <folly/experimental/exception_tracer/ExceptionTracer.h>
+#include <folly/debugging/exception_tracer/ExceptionTracer.h>
 #endif
 
 using namespace openr;
