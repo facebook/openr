@@ -190,16 +190,35 @@ Decision::Decision(
               }
             },
             [this](thrift::InitializationEvent&& event) {
-              CHECK(event == thrift::InitializationEvent::KVSTORE_SYNCED)
+              /*
+               * NOTE: Eventually only 1 signal will be used in decision
+               * to convey both kvstore and self adjacency syncs is done.
+               * In future kvstore will make sure that self adjacencies
+               * synced only after peer kvstore synced
+               *
+               * For now, defining each signal is a stepping stone towards
+               * that goal. For now both signals are independent of each
+               * other, no ordering is enforeced by kvstore
+               */
+              CHECK(
+                  (event == thrift::InitializationEvent::KVSTORE_SYNCED) ||
+                  (event == thrift::InitializationEvent::ADJACENCY_DB_SYNCED))
                   << fmt::format(
                          "Unexpected initialization event: {}",
                          apache::thrift::util::enumNameSafe(event));
 
-              // Received all initial KvStore publications.
-              XLOG(INFO) << "[Initialization] All initial publications are "
-                            "received from KvStore.";
-              initialKvStoreSynced_ = true;
-              triggerInitialBuildRoutes();
+              if (event == thrift::InitializationEvent::KVSTORE_SYNCED) {
+                // Received all initial KvStore publications.
+                XLOG(INFO) << "[Initialization] All initial publications are "
+                              "received from KvStore.";
+                initialKvStoreSynced_ = true;
+                triggerInitialBuildRoutes();
+              } else {
+                // Received all locally originated adjacency keys
+                XLOG(INFO)
+                    << "[Initialization] Received all locally originated adjacency keys";
+                initialSelfAdjSynced_ = true;
+              }
             });
       } catch (const std::exception& e) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
@@ -670,7 +689,10 @@ Decision::updateKeyInLsdb(
       adjacencyDb.area() = area;
       pendingUpdates_.applyLinkStateChange(
           nodeName,
-          areaLinkState.updateAdjacencyDatabase(adjacencyDb, area),
+          areaLinkState.updateAdjacencyDatabase(
+              adjacencyDb,
+              area,
+              (!initialKvStoreSynced_ || !initialSelfAdjSynced_)),
           adjacencyDb.perfEvents());
       return;
     }

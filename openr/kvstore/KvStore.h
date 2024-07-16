@@ -40,7 +40,8 @@ class KvStoreDb {
       KvStoreParams& kvParams,
       const std::string& area,
       const std::string& nodeId,
-      std::function<void()> initialKvStoreSyncedCallback);
+      std::function<void()> initialKvStoreSyncedCallback,
+      std::function<void()> initialSelfOriginatedKeysSyncedCallback);
 
   ~KvStoreDb() = default;
 
@@ -65,6 +66,11 @@ class KvStoreDb {
   inline bool
   getInitialSyncedWithPeers() const {
     return initialSyncCompleted_;
+  }
+
+  inline bool
+  getInitialSelfOriginatedKeysSyncCompleted() const {
+    return initialSelfOriginatedKeysSyncCompleted_;
   }
 
   inline bool
@@ -467,6 +473,7 @@ class KvStoreDb {
   // Boolean flag indicating whether initial KvStoreDb sync with all peers
   // completed in OpenR initialization procedure.
   bool initialSyncCompleted_{false};
+  bool initialSelfOriginatedKeysSyncCompleted_{false};
 
   // store keys mapped to (version, originatoId, value)
   thrift::KeyVals kvStore_{};
@@ -525,6 +532,7 @@ class KvStoreDb {
   // Callback function to signal KvStore that KvStoreDb sync with all peers
   // are completed.
   std::function<void()> initialKvStoreSyncedCallback_;
+  std::function<void()> initialSelfOriginatedKeysSyncedCallback_;
 
   // max parallel syncs allowed. It's initialized with '2' and doubles
   // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
@@ -583,12 +591,33 @@ class KvStore final : public OpenrEventBase {
   }
 
   /*
+   * Check if initial self originated keys timer currently
+   * scheduled on or off
+   */
+  inline bool
+  isInitialSelfOriginatedKeysTimerScheduled() {
+    if (initialSelfOriginatedKeysTimer_->isScheduled()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /*
    * [Open/R Initialization]
    *
    * This is the callback function used by KvStoreDb to mark initial
    * KVSTORE_SYNC stage done during Open/R initialization sequence.
    */
   void initialKvStoreDbSynced();
+
+  /*
+   * [Open/R Initialization]
+   *
+   * This is the callback function used by KvStoreDb to mark initial
+   * SELF_ADJ_SYNC stage done during Open/R initialization sequence.
+   */
+  void initialSelfOriginatedKeysSynced();
 
   /*
    * [Public APIs]
@@ -611,6 +640,9 @@ class KvStore final : public OpenrEventBase {
 
   folly::SemiFuture<std::unique_ptr<bool>> semifuture_injectThriftFailure(
       std::string area, std::string peerName);
+
+  folly::SemiFuture<bool>
+  semifuture_checkInitialSelfOriginatedKeysTimerScheduled();
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
   semifuture_dumpKvStoreKeys(
@@ -770,6 +802,8 @@ class KvStore final : public OpenrEventBase {
   // Timer for updating and submitting counters periodically
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 
+  std::unique_ptr<folly::AsyncTimeout> initialSelfOriginatedKeysTimer_{nullptr};
+
   // kvstore parameters common to all kvstoreDB
   KvStoreParams kvParams_;
 
@@ -780,6 +814,7 @@ class KvStore final : public OpenrEventBase {
   // Boolean flag to indicate if kvStoreSynced signal is published in OpenR
   // initialization process.
   bool initialSyncSignalSent_{false};
+  bool initialSelfAdjSyncSignalSent_{false};
 
   // vector to store all child fiber tasks
   std::vector<folly::Future<folly::Unit>> kvStoreWorkers_;

@@ -11,6 +11,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
+#include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 #include <folly/ssl/SSLSessionManager.h>

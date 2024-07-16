@@ -81,7 +81,7 @@ enum InitializationEvent {
    * Adjacency database is refreshed with the up-to-date db to unblock
    * initial RIB computation.
    */
-  ADJACENCY_DB_REFRESHED = 14,
+  ADJACENCY_DB_SYNCED = 14,
 }
 
 exception KvStoreError {
@@ -474,6 +474,7 @@ struct KvStoreConfig {
   14: bool enable_secure_thrift_client = false;
   15: i32 sync_initial_backoff_ms = 4000;
   16: i32 sync_max_backoff_ms = 256000;
+  17: optional i32 self_adjacency_timeout_ms;
 }
 
 /**
@@ -578,6 +579,8 @@ enum InitializationEventTimeLabels {
   KVSTORE_SYNCED_TIMEOUT_MS = 8,
   PREFIX_DB_SYNCED_WARNING_MS = 9,
   PREFIX_DB_SYNCED_TIMEOUT_MS = 10,
+  ADJACENCY_DB_SYNCED_WARNING_MS = 11,
+  ADJACENCY_DB_SYNCED_TIMEOUT_MS = 12,
 }
 
 /**
@@ -597,4 +600,6 @@ const map<
   KVSTORE_SYNCED_TIMEOUT_MS: 300000,
   PREFIX_DB_SYNCED_WARNING_MS: 150000,
   PREFIX_DB_SYNCED_TIMEOUT_MS: 300000,
+  ADJACENCY_DB_SYNCED_WARNING_MS: 150000,
+  ADJACENCY_DB_SYNCED_TIMEOUT_MS: 300000,
 };

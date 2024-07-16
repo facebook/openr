@@ -422,7 +422,9 @@ class LinkState {
 
   // update adjacencies for the given router
   LinkStateChange updateAdjacencyDatabase(
-      thrift::AdjacencyDatabase const& adjacencyDb, std::string area);
+      thrift::AdjacencyDatabase const& adjacencyDb,
+      std::string area,
+      bool inInitialization = false);
 
   // delete a node's adjacency database
   // return true if this has caused any change in graph
@@ -522,7 +524,9 @@ class LinkState {
   std::string mayHaveLinkEventPropagationTime(
       thrift::AdjacencyDatabase const& adjDb,
       const std::string& ifName,
-      bool isUp);
+      bool isUp,
+      bool firstPub,
+      bool inInitialization);
 
   /*
    * [Dijkstra's Shortest-Path-First(SPF) Algorithm]

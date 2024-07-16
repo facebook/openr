@@ -332,19 +332,46 @@ LinkState::updateNodeOverloaded(
   return not inserted;
 }
 
+/*
+ * @brief  If link status record exists for a passed link and
+ *         if the tiemstamp is recorded for the link event,
+ *         calculate link propagation time and log to fb303.
+ *         Skip reporting of propagation time during Openr
+ *         initialization
+ *
+ * @param adjDb     New adjacency database that may have link record
+ * @param linkName  Name of the link for propagation time requested
+ * @param isUp      new status of the link up or down
+ * @param inInitialization if Openr currently being initialized,
+ *                         in another words either kvstore and/or
+ *                         local adjacencies sync is not yet complete
+ *
+ * @return std::string  a string result with calculated propagation time
+ */
 std::string
 LinkState::mayHaveLinkEventPropagationTime(
     thrift::AdjacencyDatabase const& adjDb,
     const std::string& linkName,
-    bool isUp) {
+    bool isUp,
+    bool firstPub,
+    bool inInitialization) {
   std::string propagationTimeLogStr = "";
-  if (adjDb.linkStatusRecords().has_value()) { // link status not recorded
+  if (inInitialization) {
+    return propagationTimeLogStr;
+  }
+
+  if (adjDb.linkStatusRecords().has_value()) { // link status
     auto linkStatus =
         adjDb.linkStatusRecords()->linkStatusMap()->find(linkName);
+    // Ignore link propagation time for a first publication from peer
+    // because links may have been up long before, but we are getting
+    // them as part of first publication
+    //
     // Timestamp is updated when link status changes (over Netlink). But
     // at router boot-up, link doesn't change status, and so timestamp is
     // not set and equals to 0 (default value). We ignore this situation.
-    if (linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end() &&
+    if (!firstPub &&
+        (linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end()) &&
         *linkStatus->second.unixTs()) {
       int64_t propagationTime =
           getUnixTimeStampMs() - *linkStatus->second.unixTs();
@@ -411,7 +438,9 @@ LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
 
 LinkState::LinkStateChange
 LinkState::updateAdjacencyDatabase(
-    thrift::AdjacencyDatabase const& newAdjacencyDb, std::string area) {
+    thrift::AdjacencyDatabase const& newAdjacencyDb,
+    std::string area,
+    bool inInitialization) {
   LinkStateChange change;
 
   // Area field must be specified and match with area_
@@ -426,6 +455,10 @@ LinkState::updateAdjacencyDatabase(
 
   // Default construct if it did not exist
   auto const& nodeName = *newAdjacencyDb.thisNodeName();
+  bool firstPub = false;
+  if (adjacencyDatabases_.find(nodeName) == adjacencyDatabases_.end()) {
+    firstPub = true;
+  }
   thrift::AdjacencyDatabase priorAdjacencyDb(
       std::move(adjacencyDatabases_[nodeName]));
   // replace
@@ -470,7 +503,9 @@ LinkState::updateAdjacencyDatabase(
       std::string propagationTimeStr = mayHaveLinkEventPropagationTime(
           newAdjacencyDb,
           (*newIter)->getIfaceFromNode(*newAdjacencyDb.thisNodeName()),
-          true /* up */);
+          true /* up */,
+          firstPub,
+          inInitialization);
       XLOG(DBG1) << fmt::format(
           "[LINK UP] {} [from {}] {}",
           (*newIter)->toString(),
@@ -490,7 +525,9 @@ LinkState::updateAdjacencyDatabase(
       std::string propagationTimeStr = mayHaveLinkEventPropagationTime(
           newAdjacencyDb,
           (*oldIter)->getIfaceFromNode(*newAdjacencyDb.thisNodeName()),
-          false /* down */);
+          false /* down */,
+          firstPub,
+          inInitialization);
       XLOG(DBG1) << fmt::format(
           "[LINK DOWN] {} [from {}] {}",
           (*oldIter)->toString(),

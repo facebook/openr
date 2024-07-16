@@ -19,6 +19,7 @@ namespace {
 // TTL in ms
 const uint64_t kShortTtl{2000}; // 2 seconds
 const uint64_t kLongTtl{300000}; // 5 minutes
+const uint32_t kSelfAdjTimeout{1000}; // 1 second
 
 /**
  * Fixture for abstracting out common functionality for unittests.
@@ -42,7 +43,10 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
    * KvStore uses request queue to receive key-value updates from clients.
    */
   void
-  initKvStore(std::string nodeId, uint32_t keyTtl = kLongTtl) {
+  initKvStore(
+      std::string nodeId,
+      uint32_t keyTtl = kLongTtl,
+      uint32_t selfAdjTimeout = 0) {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
     const std::unordered_set<std::string> areaIds{kTestingAreaName};
@@ -50,6 +54,9 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
     // Override ttl for kvstore self-originated keys
     kvStoreConfig.node_name() = nodeId;
     kvStoreConfig.key_ttl_ms() = keyTtl;
+    if (selfAdjTimeout) {
+      kvStoreConfig.self_adjacency_timeout_ms() = selfAdjTimeout;
+    }
 
     // start kvstore
     kvStore_ =
@@ -211,6 +218,8 @@ TEST_F(
     //         - check key-value advertisement
     //         - check ttl version update advertisement
     {
+      EXPECT_TRUE(kvStore_->checkInitialSelfOriginatedKeysTimerScheduled());
+
       // create request to persist key-val
       auto persistKvRequest =
           PersistKeyValueRequest(kTestingAreaName, key, value);
@@ -222,6 +231,8 @@ TEST_F(
       EXPECT_EQ(1, pub.keyVals()->size());
       EXPECT_EQ(0, *(pub.keyVals()->at(key).ttlVersion()));
       EXPECT_EQ(1, *(pub.keyVals()->at(key).version()));
+      EXPECT_FALSE(kvStore_->checkInitialSelfOriginatedKeysTimerScheduled());
+      kvStore_->recvSelfAdjSyncedSignal();
 
       // check advertised self-originated key-value was stored in kvstore
       auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
@@ -314,6 +325,7 @@ TEST_F(
 
     auto pub1 = kvStore_->recvPublication();
     EXPECT_EQ(1, pub1.keyVals()->size());
+    kvStore_->recvSelfAdjSyncedSignal();
 
     // validate version = 1
     const auto tVal1 = pub1.keyVals()->at(key);
@@ -474,6 +486,7 @@ TEST_F(
   // Check that key-val has been overridden and originator has changed to my
   // node.
   auto persistPub = kvStore_->recvPublication();
+  kvStore_->recvSelfAdjSyncedSignal();
   EXPECT_EQ(1, persistPub.keyVals()->size());
   EXPECT_EQ(2, *(persistPub.keyVals()->at(key).version()));
   EXPECT_EQ(myNodeId, *(persistPub.keyVals()->at(key).originatorId()));
@@ -802,6 +815,28 @@ TEST_F(
         EXPECT_EQ(val, maybeThriftVal.value().value());
 
         // End test.
+        evb.stop();
+      });
+
+  // Start the event loop and wait until it is finished execution.
+  evb.run();
+  evb.waitUntilStopped();
+}
+
+/**
+ * Validate PersistKeyValueRequest advertisement, version overriding, and
+ * ttl-refreshing. Send PersistKeyValueRequest via queue to KvStore.
+ */
+TEST_F(
+    KvStoreSelfOriginatedKeyValueRequestFixture,
+    ValidateSelfOriginatedKeyTimerTimeout) {
+  const std::string nodeId{"throttle-node"};
+  initKvStore(nodeId, kShortTtl, kSelfAdjTimeout);
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(
+      std::chrono::milliseconds(2 * kSelfAdjTimeout), [&]() noexcept {
+        EXPECT_FALSE(kvStore_->checkInitialSelfOriginatedKeysTimerScheduled());
         evb.stop();
       });
 

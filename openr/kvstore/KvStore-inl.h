@@ -76,6 +76,24 @@ KvStore<ClientType>::KvStore(
         std::chrono::milliseconds(*kvStoreConfig.sync_max_backoff_ms());
   }
 
+  if (kvStoreConfig.self_adjacency_timeout_ms().has_value()) {
+    kvParams_.selfAdjSyncTimeout =
+        std::chrono::milliseconds(*kvStoreConfig.self_adjacency_timeout_ms());
+  } else {
+    auto ret =
+        thrift::KvStore_constants::InitializationEventTimeDuration().find(
+            thrift::InitializationEventTimeLabels::
+                ADJACENCY_DB_SYNCED_TIMEOUT_MS);
+    /*
+     * We are already picking up default value, if that method also fails then
+     * where do we go? no where.. assert in that case
+     */
+    CHECK(
+        ret !=
+        thrift::KvStore_constants::InitializationEventTimeDuration().end());
+    kvParams_.selfAdjSyncTimeout = std::chrono::milliseconds(ret->second);
+  }
+
   XLOG(INFO) << fmt::format(
       "Initial backoff {} and Max backoff {}",
       kvParams_.syncInitialBackoff.count(),
@@ -100,6 +118,16 @@ KvStore<ClientType>::KvStore(
           XLOG(DBG1) << "[Exit] Peer-updates task finished";
         });
     kvStoreWorkers_.emplace_back(std::move(fiber));
+
+    // Schedule initial timer for cap on self originated keys updates
+    // this is one shot timer
+    initialSelfOriginatedKeysTimer_ =
+        folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+          XLOG(DBG1) << "[Exit] initial self originated keys timer expired";
+          initialSelfOriginatedKeysSynced();
+        });
+    initialSelfOriginatedKeysTimer_->scheduleTimeout(
+        kvParams_.selfAdjSyncTimeout.count());
   }
 
   {
@@ -135,7 +163,8 @@ KvStore<ClientType>::KvStore(
             kvParams_,
             area,
             *kvStoreConfig.node_name(),
-            std::bind(&KvStore::initialKvStoreDbSynced, this)));
+            std::bind(&KvStore::initialKvStoreDbSynced, this),
+            std::bind(&KvStore::initialSelfOriginatedKeysSynced, this)));
   }
 }
 
@@ -578,6 +607,29 @@ KvStore<ClientType>::semifuture_injectThriftFailure(
   return sf;
 }
 
+/*
+ * @brief  A wrapper/helper to check if initialSelfOriginatedKeysTimer_
+ *         currently scheduled or not
+ *
+ * @param  void
+ * @return void
+ */
+template <class ClientType>
+folly::SemiFuture<bool>
+KvStore<ClientType>::semifuture_checkInitialSelfOriginatedKeysTimerScheduled() {
+  folly::Promise<bool> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this, p = std::move(p)]() mutable {
+    try {
+      bool result = isInitialSelfOriginatedKeysTimerScheduled();
+      p.setValue(result);
+    } catch (thrift::KvStoreError const& e) {
+      p.setException(e);
+    }
+  });
+  return sf;
+}
+
 template <class ClientType>
 folly::SemiFuture<std::optional<thrift::KvStorePeerState>>
 KvStore<ClientType>::semifuture_getKvStorePeerState(
@@ -794,6 +846,52 @@ KvStore<ClientType>::initialKvStoreDbSynced() {
         fmt::format(
             "KvStoreDb sync is completed in all {} areas.", kvStoreDb_.size()));
   }
+}
+
+/*
+ * @brief  This is called when anyone kvStoreDb has learned
+ *         initial self originated keys. This function then
+ *         iterates all kvStoreDbs to see if they all have
+ *         finished learning initial self originated keys.
+ *         If so, a timeout timer is cancelled and a signal
+ *         ADJACENCY_DB_SYNCED sent out
+ *
+ * @param  void
+ * @return void
+ */
+template <class ClientType>
+void
+KvStore<ClientType>::initialSelfOriginatedKeysSynced() {
+  if (initialSelfAdjSyncSignalSent_) {
+    return;
+  }
+
+  /*
+   * If initial self originated keys timer not yet expired then
+   * check if every kvstore DB has learned local adjacencies.
+   * Otherwise no need to check each Db, just skip to
+   * initialization for ADJACENCY_DB_SYNCED
+   */
+  if (isInitialSelfOriginatedKeysTimerScheduled()) {
+    for (auto& [_, kvStoreDb] : kvStoreDb_) {
+      if (!kvStoreDb.getInitialSelfOriginatedKeysSyncCompleted()) {
+        return;
+      }
+    }
+
+    initialSelfOriginatedKeysTimer_->cancelTimeout();
+  }
+
+  // Publish Self Originated Keys synced signal.
+  kvParams_.kvStoreUpdatesQueue.push(
+      thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+  initialSelfAdjSyncSignalSent_ = true;
+  logInitializationEvent(
+      "KvStore",
+      thrift::InitializationEvent::ADJACENCY_DB_SYNCED,
+      fmt::format(
+          "Initial local adjacency update complete in all {} areas",
+          kvStoreDb_.size()));
 }
 
 template <class ClientType>
@@ -1273,11 +1371,14 @@ KvStoreDb<ClientType>::KvStoreDb(
     KvStoreParams& kvParams,
     const std::string& area,
     const std::string& nodeId,
-    std::function<void()> initialKvStoreSyncedCallback)
+    std::function<void()> initialKvStoreSyncedCallback,
+    std::function<void()> initialSelfOriginatedKeysSyncedCallback)
     : kvParams_(kvParams),
       area_(area),
       areaTag_(fmt::format("[Area {}] ", area)),
       initialKvStoreSyncedCallback_(initialKvStoreSyncedCallback),
+      initialSelfOriginatedKeysSyncedCallback_(
+          initialSelfOriginatedKeysSyncedCallback),
       evb_(evb) {
   if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
@@ -1696,6 +1797,11 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
   thrift::KeySetParams params;
   params.keyVals() = std::move(keyVals);
   setKeyVals(std::move(params), true /* self-originated update */);
+
+  if (!initialSelfOriginatedKeysSyncCompleted_) {
+    initialSelfOriginatedKeysSyncCompleted_ = true;
+    initialSelfOriginatedKeysSyncedCallback_();
+  }
 
   // clear out variable used for batching advertisements
   for (auto const& key : keysToClear) {

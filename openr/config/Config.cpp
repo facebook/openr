@@ -449,6 +449,9 @@ Config::toThriftKvStoreConfig() const {
   if (auto x509_ca_path = thriftServer.x509_ca_path()) {
     config.x509_ca_path() = *x509_ca_path;
   }
+  if (auto selfAdjTimeoutMs = oldConfig.self_adjacency_timeout_ms()) {
+    config.self_adjacency_timeout_ms() = *oldConfig.self_adjacency_timeout_ms();
+  }
   return config;
 }
 

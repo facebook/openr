@@ -286,6 +286,45 @@ KvStoreWrapper<ClientType>::recvKvStoreSyncedSignal() {
   throw std::runtime_error(std::string("timeout receiving publication"));
 }
 
+/*
+ * @brief  A wrapper/helper to read kvStoreUpdates queue and check for
+ *         ADJACENCY_DB_SYNCED event
+ *
+ * @param  void
+ * @return void
+ */
+template <class ClientType>
+void
+KvStoreWrapper<ClientType>::recvSelfAdjSyncedSignal() {
+  while (true) {
+    auto maybeEvent = kvStoreUpdatesQueueReader_.get(); // perform read
+    if (maybeEvent.hasError()) {
+      throw std::runtime_error(std::string("recvPublication failed"));
+    }
+
+    if (auto* event =
+            std::get_if<thrift::InitializationEvent>(&maybeEvent.value())) {
+      CHECK(*event == thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+      return;
+    }
+  }
+  throw std::runtime_error(std::string("timeout receiving publication"));
+}
+
+/*
+ * @brief  A wrapper/helper to check if initialSelfOriginatedKeysTimer_
+ *         currently scheduled or not
+ *
+ * @param  void
+ * @return void
+ */
+template <class ClientType>
+bool
+KvStoreWrapper<ClientType>::checkInitialSelfOriginatedKeysTimerScheduled() {
+  return (kvStore_->semifuture_checkInitialSelfOriginatedKeysTimerScheduled()
+              .get());
+}
+
 template <class ClientType>
 bool
 KvStoreWrapper<ClientType>::addPeer(

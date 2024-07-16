@@ -263,6 +263,30 @@ createAdjValue(
 }
 
 /*
+ * Util function to generate Adjacency Value with linkstatus
+ */
+thrift::Value
+createAdjValueWithLinkStatus(
+    apache::thrift::CompactSerializer serializer,
+    const std::string& node,
+    int64_t version,
+    const std::vector<thrift::Adjacency>& adjs,
+    thrift::LinkStatusRecords rec,
+    bool overloaded,
+    int32_t nodeId) {
+  auto adjDB = createAdjDb(node, adjs, nodeId);
+  adjDB.isOverloaded() = overloaded;
+  adjDB.linkStatusRecords() = rec;
+  return createThriftValue(
+      version,
+      "originator-1",
+      writeThriftObjStr(adjDB, serializer),
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      0 /* hash */);
+}
+
+/*
  * Util function to check if two publications are equal without checking
  * equality of hash and nodeIds
  */

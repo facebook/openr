@@ -83,6 +83,7 @@ struct KvstoreConfig {
    */
   8: i32 sync_initial_backoff_ms = 4000;
   9: i32 sync_max_backoff_ms = 256000;
+  10: optional i32 self_adjacency_timeout_ms;
 }
 
 /*

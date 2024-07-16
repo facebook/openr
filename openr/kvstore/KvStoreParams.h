@@ -41,6 +41,8 @@ struct KvStoreParams {
   std::chrono::milliseconds syncInitialBackoff{
       Constants::kKvstoreSyncInitialBackoff};
   std::chrono::milliseconds syncMaxBackoff{Constants::kKvstoreSyncMaxBackoff};
+  // Locally adjacency learning timeout
+  std::chrono::milliseconds selfAdjSyncTimeout;
 
   // TLS knob
   bool enable_secure_thrift_client{false};
@@ -56,8 +58,9 @@ struct KvStoreParams {
       : nodeId(*kvStoreConfig.node_name()),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         logSampleQueue(logSampleQueue),
-        floodRate(kvStoreConfig.flood_rate().to_optional()), /* Kvstore flooding
-                                                                rate */
+        floodRate(kvStoreConfig.flood_rate().to_optional()), /* Kvstore
+                                                                flooding rate
+                                                              */
         ttlDecr(std::chrono::milliseconds(
             *kvStoreConfig.ttl_decrement_ms())), /* TTL decrement factor */
         keyTtl(std::chrono::milliseconds(

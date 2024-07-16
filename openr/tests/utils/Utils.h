@@ -115,6 +115,18 @@ thrift::Value createAdjValue(
     int32_t nodeId = 0);
 
 /*
+ * Util function to generate Adjacency Value with LinkStatus record
+ */
+thrift::Value createAdjValueWithLinkStatus(
+    apache::thrift::CompactSerializer serializer,
+    const std::string& node,
+    int64_t version,
+    const std::vector<thrift::Adjacency>& adjs,
+    thrift::LinkStatusRecords rec,
+    bool overloaded = false,
+    int32_t nodeId = 0);
+
+/*
  * Util function to check if two publications are equal without checking
  * equality of hash and nodeIds
  */

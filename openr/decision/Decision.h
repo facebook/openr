@@ -341,9 +341,17 @@ class Decision : public OpenrEventBase {
    */
   AsyncDebounce<std::chrono::milliseconds> saveRibPolicyDebounced_;
 
-  // Boolean flag indicating whether KvStore synced signal is received in OpenR
-  // initialization procedure.
+  /*
+   * Boolean flag indicating whether KvStore synced signal is received in OpenR
+   * initialization procedure.
+   */
   bool initialKvStoreSynced_{false};
+
+  /*
+   * Boolean flag indicating whether SelfOriginated Keys synced signal
+   * received in OpenR intialization procedure.
+   */
+  bool initialSelfAdjSynced_{false};
 
   /**
    * Boolean flag indicating whether rib policy is read from persisted file in

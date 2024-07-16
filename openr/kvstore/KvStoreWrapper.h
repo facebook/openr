@@ -163,6 +163,14 @@ class KvStoreWrapper {
    * API to listen for KvStore sync signal on PUB queue.
    */
   void recvKvStoreSyncedSignal();
+  /**
+   * API to listen for Self Adjacency sync signal on PUB queue.
+   */
+  void recvSelfAdjSyncedSignal();
+  /**
+   * API to check initialSelfOriginatedKeysTimer_ scheduled or not
+   */
+  bool checkInitialSelfOriginatedKeysTimerScheduled();
 
   /**
    * APIs to manage (add/remove) KvStore peers. Returns true on success else
