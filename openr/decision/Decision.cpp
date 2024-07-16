@@ -918,20 +918,33 @@ Decision::rebuildRoutes(std::string const& event) {
 
 bool
 Decision::unblockInitialRoutesBuild() {
-  // Wait till receiving initial peers and bi-directional adjacencies with
-  // initial peers.
-  bool adjReceivedForPeers =
-      initialPeersReceivedBaton_.ready() and areaToPendingAdjacency_.empty();
-
-  // Initial routes build will be unblocked if all following conditions are
-  // fulfilled,
-  // - Received all types of static routes, aka, unreceivedRouteTypes_ is empty
-  // - Received initial KvStore publication, aka, initialKvStoreSynced_ is true
-  // - Read persisted Rib policy
-  // - Received adjacency with initial live peers, aka, adjReceivedForPeers is
-  //   true.
-  return unreceivedRouteTypes_.empty() and initialKvStoreSynced_ and
-      initialRibPolicyRead_ and adjReceivedForPeers;
+  constexpr auto blockedLogPrefix = "Blocking initial route computation: ";
+  if (!unreceivedRouteTypes_.empty()) {
+    XLOG(DBG1) << blockedLogPrefix
+               << "Have not yet received all static route types.";
+    return false;
+  }
+  if (!initialKvStoreSynced_) {
+    XLOG(DBG1) << blockedLogPrefix
+               << "Have not yet received initial KvStore publication.";
+    return false;
+  }
+  if (!initialRibPolicyRead_) {
+    XLOG(DBG1) << blockedLogPrefix << "Have not read persisted Rib policy.";
+    return false;
+  }
+  if (!initialPeersReceivedBaton_.ready()) {
+    XLOG(DBG1) << blockedLogPrefix << "Initial peers not yet received.";
+    return false;
+  }
+  if (!areaToPendingAdjacency_.empty()) {
+    XLOG(DBG1) << blockedLogPrefix
+               << "Missing bidirectional adjacencies with peers.";
+    return false;
+  }
+  // All conditions have been fulfilled, initial route computation is
+  // unblocked.
+  return true;
 }
 
 void
