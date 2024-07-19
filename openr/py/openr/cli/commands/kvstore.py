@@ -499,7 +499,6 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
                     graph.add_edge(adj.otherNodeName, adj_db.thisNodeName)
                     continue
                 edges.add((adj_db.thisNodeName, adj.otherNodeName, adj.ifName))
-        # pyre-ignore[16]
         return nx.node_connected_component(graph, node_id)
 
     def print_kvstore_nodes(
