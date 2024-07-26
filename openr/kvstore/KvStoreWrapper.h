@@ -16,6 +16,7 @@
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
 #include <thrift/lib/cpp2/util/ScopedServerThread.h>
+#include <wangle/ssl/SSLContextConfig.h>
 
 namespace openr {
 
@@ -241,6 +242,16 @@ class KvStoreWrapper {
     return areaIds_;
   }
 
+  /**
+   * Set the SSLContextConfig for the ThriftServer used by this KvStoreWrapper.
+   * Must be called before `run()`, otherwise it has no effect. Passing in
+   * non-null SSLContextConfig enables TLS on the ThriftServer.
+   */
+  void
+  setSslContext(std::shared_ptr<wangle::SSLContextConfig> sslContext) {
+    sslContext_ = sslContext;
+  }
+
  private:
   const std::string nodeId_;
 
@@ -276,6 +287,10 @@ class KvStoreWrapper {
 
   // Thread in which thrift server will be running
   apache::thrift::util::ScopedServerThread thriftServerThread_;
+
+  // SslContext to enable TLS on Thrift Server. If unset, only plaintext
+  // communication will be supported.
+  std::shared_ptr<wangle::SSLContextConfig> sslContext_;
 };
 
 } // namespace openr

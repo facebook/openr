@@ -52,6 +52,9 @@ KvStoreWrapper<ClientType>::run() noexcept {
   // Setup thrift server for client to connect to
   std::shared_ptr<apache::thrift::ThriftServer> server =
       std::make_shared<apache::thrift::ThriftServer>();
+  if (sslContext_) {
+    server->setSSLConfig(sslContext_);
+  }
   server->setNumIOWorkerThreads(1);
   server->setNumAcceptThreads(1);
   server->setPort(0);
