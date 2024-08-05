@@ -292,7 +292,7 @@ PersistentStore::writeIoBufToDisk(
   std::string fileData("");
   try {
     ioBuf->coalesce();
-    fileData = ioBuf->moveToFbString().toStdString();
+    fileData = ioBuf->toString();
 
     if (writeType == WriteType::WRITE) {
       // Write over
