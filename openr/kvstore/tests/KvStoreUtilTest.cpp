@@ -662,6 +662,102 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
   }
 }
 
+//
+//
+//
+TEST(KvStoreUtil, GetAreaTypeTest) {
+  //
+  // valid areas
+  //
+  {
+    {
+      // POD area
+      std::string area = "snc1.f02.p004";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "POD");
+    }
+
+    {
+      // SPINE area
+      std::string area = "snc1.f02.s001";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "SPINE");
+    }
+    {
+      // SLICE area
+      std::string area = "snc.slice001";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "SLICE");
+    }
+    {
+      // HGRID area
+      std::string area = "snc1.fa007";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "HGRID");
+    }
+  }
+  //
+  // invalid areas
+  //
+  {
+    {
+      std::string area = "snc1.f02s001";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc1.f02.s01";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc1.f02p004";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc1.f02.p04";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "abcd";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "testingarea";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "sncslice001";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc.slice01";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc.slice01a";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc1fa007";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+    {
+      std::string area = "snc1.fa07";
+      std::string result = getAreaTypeByAreaName(area);
+      EXPECT_EQ(result, "UNKNOWN");
+    }
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

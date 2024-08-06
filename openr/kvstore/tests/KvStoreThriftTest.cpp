@@ -49,6 +49,18 @@ class KvStoreThriftTestFixture : public ::testing::Test {
             areaIds, kvStoreConfig));
     stores_.back()->run();
   }
+  void
+  createKvStore(const std::string& nodeId, const std::string areaId) {
+    // create KvStoreConfig
+    thrift::KvStoreConfig kvStoreConfig;
+    kvStoreConfig.node_name() = nodeId;
+    const std::unordered_set<std::string> areaIds{areaId};
+
+    stores_.emplace_back(
+        std::make_shared<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
+            areaIds, kvStoreConfig));
+    stores_.back()->run();
+  }
 
   bool
   verifyKvStoreKeyVal(
@@ -367,6 +379,154 @@ TEST_F(KvStoreThriftTestFixture, KvStoreTermination) {
   // trigger termination/stop
   store->stop();
   EXPECT_TRUE(store->getKvStore()->getIsStopped(kTestingAreaName));
+}
+
+class KvStoreThriftTestFixtureWithAreaParams
+    : public KvStoreThriftTestFixture,
+      public ::testing::WithParamInterface<
+          std::pair<openr::AreaId, std::string>> {};
+
+INSTANTIATE_TEST_SUITE_P(
+    publishPeerStateCountersTest,
+    KvStoreThriftTestFixtureWithAreaParams,
+    ::testing::Values(
+        std::make_pair(openr::AreaId{"test_area_name"}, "UNKNOWN"),
+        std::make_pair(openr::AreaId{"snc1.fa007"}, "HGRID"),
+        std::make_pair(openr::AreaId{"snc.slice001"}, "SLICE"),
+        std::make_pair(openr::AreaId{"snc1.f02.s001"}, "SPINE"),
+        std::make_pair(openr::AreaId{"snc1.f02.p004"}, "POD")));
+
+// +-------------+-------+-------------+---------------------------+
+// | total_peers | IDLE  | INITIALIZED | all_peers_not_initialized |
+// +-------------+-------+-------------+---------------------------+
+// |             |   0   |      2      |             0             |
+// |      2      |   1   |      1      |             0             |
+// |             |   2   |      0      |             1             |
+// +-------------+-------+-------------+---------------------------+
+TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
+  fb303::fbData->resetAllData();
+
+  const std::string node1{"node-1"};
+  const std::string node2{"node-2"};
+  const std::string node3{"node-3"};
+
+  const openr::AreaId testAreaId =
+      std::get<0>(KvStoreThriftTestFixtureWithAreaParams::GetParam());
+
+  createKvStore(node1, testAreaId);
+  createKvStore(node2, testAreaId);
+  createKvStore(node3, testAreaId);
+  auto store1 = stores_[0];
+  auto store2 = stores_[1];
+  auto store3 = stores_[2];
+
+  // add 2 peers to store1
+  store1->addPeer(testAreaId, store2->getNodeId(), store2->getPeerSpec());
+  store1->addPeer(testAreaId, store3->getNodeId(), store3->getPeerSpec());
+
+  const std::string& testAreaName = testAreaId;
+  std::string areaTypeStr = getAreaTypeByAreaName(testAreaName);
+  ASSERT_EQ(
+      std::get<1>(KvStoreThriftTestFixtureWithAreaParams::GetParam()),
+      areaTypeStr);
+
+  //
+  // Construct the counters' keys string
+  //
+  // kvstore.num_peers.<UNKNOWN/HGRID/SLICE/SPINE/POD>.IDLE
+  const std::string idleKeyStr = fmt::format(
+      Constants::kKvStoreNumPeerByStateCounter, areaTypeStr, "IDLE");
+  // kvstore.num_peers.<UNKNOWN/HGRID/SLICE/SPINE/POD>.INITIALIZED
+  const std::string initializedKeyStr = fmt::format(
+      Constants::kKvStoreNumPeerByStateCounter, areaTypeStr, "INITIALIZED");
+  // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD>
+  const std::string allPeerNotInitializedKeyStr =
+      fmt::format(Constants::kKvStoreAllPeerNotInitialized, areaTypeStr);
+
+  // eventbase to schedule callbacks at certain time spot
+  OpenrEventBase evb;
+
+  evb.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
+    auto allCounters = fb303::fbData->getCounters();
+
+    // Get number of IDLE peers
+    auto numIdlePeer = allCounters[idleKeyStr];
+    // Get number of INITIALIZED peers
+    auto numInitializedPeer = allCounters[initializedKeyStr];
+    // Get boolean counter whether no peer is initialized
+    auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
+
+    EXPECT_EQ(0, numIdlePeer);
+    EXPECT_EQ(2, numInitializedPeer);
+    // If there is at least 1 peer is initialized state, this
+    // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
+    // 0
+    EXPECT_EQ(0, allPeerNotInitialized);
+
+    // inject thrift failure for this peer `node-2`, processing time is 500ms
+    // the peer from INITIALIZED state will be changed to IDLE state
+    // the next evb scheduled task will verify the number of IDLE and
+    // INITIALIZED peers
+    store1->injectThriftFailure(testAreaId, store2->getNodeId());
+  });
+
+  evb.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
+    auto allCounters = fb303::fbData->getCounters();
+
+    // Get number of IDLE peers
+    auto numIdlePeer = allCounters[idleKeyStr];
+    // Get number of INITIALIZED peers
+    auto numInitializedPeer = allCounters[initializedKeyStr];
+    // Verify if no peers is in INITIALIZED state
+    auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
+
+    // verify the number of IDLE and INITIALIZED peers
+    //
+    // IDLE peer should go from 0 to 1 after the injected thriftfailure
+    // INITIALIZED peer should go from 2 to 1 after the injected
+    // thriftfailure
+    EXPECT_EQ(1, numIdlePeer);
+    EXPECT_EQ(1, numInitializedPeer);
+    // If there is at least 1 peer is initialized state, this
+    // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
+    // 0
+    EXPECT_EQ(0, allPeerNotInitialized);
+
+    // inject thrift failure for this peer `node-3`, processing time is 500ms
+    // the peer from INITIALIZED state will be changed to IDLE state
+    // the next evb scheduled task will verify the number of IDLE and
+    // INITIALIZED peers
+    store1->injectThriftFailure(testAreaId, store3->getNodeId());
+  });
+
+  evb.scheduleTimeout(std::chrono::milliseconds(2000), [&]() noexcept {
+    auto allCounters = fb303::fbData->getCounters();
+
+    // Get number of IDLE peers
+    auto numIdlePeer = allCounters[idleKeyStr];
+    // Get number of INITIALIZED peers
+    auto numInitializedPeer = allCounters[initializedKeyStr];
+    // Verify if no peers is in INITIALIZED state
+    auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
+
+    // verify the number of IDLE and INITIALIZED peers
+    //
+    // IDLE peer should go from 1 to 2 after another injected thriftfailure
+    // INITIALIZED peer should go from 1 to 0 after another injected
+    // thriftfailure
+    EXPECT_EQ(2, numIdlePeer);
+    EXPECT_EQ(0, numInitializedPeer);
+    // If all peers are NOT in initialized state, this
+    // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
+    // 1
+    EXPECT_EQ(1, allPeerNotInitialized);
+
+    // stop the eventbase
+    evb.stop();
+  });
+
+  // start the eventbase
+  evb.run();
 }
 
 //

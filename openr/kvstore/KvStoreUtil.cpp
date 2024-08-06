@@ -6,6 +6,7 @@
  */
 
 #include <folly/logging/xlog.h>
+#include <re2/re2.h>
 
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreUtil.h>
@@ -735,5 +736,23 @@ updatePublicationTtl(
     // will avoid looping of updates between stores.
     kv->second.ttl() = timeLeft.count() - ttlDecr.count();
   }
+}
+
+std::string
+getAreaTypeByAreaName(const std::string& area) {
+  if (re2::RE2::FullMatch(area, re2::RE2(Constants::podEndingPattern))) {
+    return "POD";
+  } else if (re2::RE2::FullMatch(
+                 area, re2::RE2(Constants::spineEndingPattern))) {
+    return "SPINE";
+  } else if (re2::RE2::FullMatch(
+                 area, re2::RE2(Constants::sliceEndingPattern))) {
+    return "SLICE";
+  } else if (re2::RE2::FullMatch(
+                 area, re2::RE2(Constants::hgridEndingPattern))) {
+    return "HGRID";
+  }
+  // default
+  return "UNKNOWN";
 }
 }; // namespace openr

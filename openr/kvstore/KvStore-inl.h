@@ -1027,6 +1027,18 @@ KvStoreDb<ClientType>::getPeersByState(thrift::KvStorePeerState state) {
   return res;
 }
 
+// A util wrapper function which calls both logStateTransition and
+// publishPeerStateCounters functions
+template <class ClientType>
+void
+KvStoreDb<ClientType>::logStateTransitionWithCounterPublication(
+    std::string const& peerName,
+    thrift::KvStorePeerState oldState,
+    thrift::KvStorePeerState newState) {
+  logStateTransition(peerName, oldState, newState);
+  publishPeerStateCounters();
+}
+
 // static util function to log state transition
 template <class ClientType>
 void
@@ -1043,6 +1055,49 @@ KvStoreDb<ClientType>::logStateTransition(
              apache::thrift::util::enumNameSafe<thrift::KvStorePeerState>(
                  newState),
              peerName);
+}
+
+// a util function to publish number of peers by state as fb303 counters
+template <class ClientType>
+void
+KvStoreDb<ClientType>::publishPeerStateCounters() {
+  std::string areaType = getAreaTypeByAreaName(area_);
+
+  uint32_t numIdlePeers =
+      getPeersByState(thrift::KvStorePeerState::IDLE).size();
+  uint32_t numSyncingPeers =
+      getPeersByState(thrift::KvStorePeerState::SYNCING).size();
+  uint32_t numInitializedPeers =
+      getPeersByState(thrift::KvStorePeerState::INITIALIZED).size();
+  fb303::fbData->setCounter(
+      fmt::format(
+          Constants::kKvStoreNumPeerByStateCounter,
+          areaType,
+          apache::thrift::util::enumNameSafe(thrift::KvStorePeerState::IDLE)),
+      numIdlePeers);
+  fb303::fbData->setCounter(
+      fmt::format(
+          Constants::kKvStoreNumPeerByStateCounter,
+          areaType,
+          apache::thrift::util::enumNameSafe(
+              thrift::KvStorePeerState::SYNCING)),
+      numSyncingPeers);
+  fb303::fbData->setCounter(
+      fmt::format(
+          Constants::kKvStoreNumPeerByStateCounter,
+          areaType,
+          apache::thrift::util::enumNameSafe(
+              thrift::KvStorePeerState::INITIALIZED)),
+      numInitializedPeers);
+
+  // Publish counters for setting up Alerts monitoring
+  if ((numIdlePeers + numSyncingPeers > 0) && (numInitializedPeers == 0)) {
+    fb303::fbData->setCounter(
+        fmt::format(Constants::kKvStoreAllPeerNotInitialized, areaType), 1);
+  } else {
+    fb303::fbData->setCounter(
+        fmt::format(Constants::kKvStoreAllPeerNotInitialized, areaType), 0);
+  }
 }
 
 // static util function to fetch current peer state
@@ -1177,6 +1232,7 @@ KvStoreDb<ClientType>::getNextState(
               [static_cast<uint32_t>(event)];
 
   CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
+
   return nextState.value();
 }
 
@@ -1339,7 +1395,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
 /*
  * KvStoreDb is the class instance that maintains the KV pairs with internal
  * map per AREA. KvStoreDb will sync with peers to maintain eventual
- * consistency. It supports external message exchanging through Thrift channel.
+ * consistency. It supports external message exchanging through Thrift
+ * channel.
  *
  * NOTE Monitoring:
  * This module exposes fb303 counters that can be leveraged for monitoring
@@ -1347,7 +1404,9 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  *
  * kvstore.thrift.secure_client: # of secure client creation;
  * kvstore.thrift.plaintext_client: # of plaintext client creation;
- * kvstore.thrift.num_client_connection_failure: # of client creation failures;
+ * kvstore.thrift.num_client_connection_failure: # of client creation
+ * failures;
+ *
  * kvstore.thrift.num_full_sync: # of full-sync performed;
  * kvstore.thrift.num_missing_keys: # of missing keys from syncing with peer;
  * kvstore.thrift.num_full_sync_success: # of successful full-sync performed;
@@ -1356,9 +1415,14 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  *
  * kvstore.thrift.num_flood_pub: # of flooding req issued;
  * kvstore.thrift.num_flood_key_vals: # of keyVals one flooding req contains;
- * kvstore.thrift.num_flood_pub_success: # of successful flooding req performed;
- * kvstore.thrift.num_flood_pub_failure: # of failed flooding req performed;
- * kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a flooding req;
+ * kvstore.thrift.num_flood_pub_success: # of successful flooding req
+ * performed;
+ *
+ * kvstore.thrift.num_flood_pub_failure: # of failed flooding req
+ * performed;
+ *
+ * kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a
+ * flooding req;
  *
  * kvstore.thrift.num_finalized_sync: # of finalized finalized-sync performed;
  * kvstore.thrift.num_finalized_sync_success: # of successful finalized-sync;
@@ -1823,8 +1887,8 @@ KvStoreDb<ClientType>::unsetSelfOriginatedKey(
   // erase key
   eraseSelfOriginatedKey(key);
 
-  // Check if key is in KvStore. If key doesn't exist in KvStore no need to add
-  // it as "empty". This condition should not exist.
+  // Check if key is in KvStore. If key doesn't exist in KvStore no need to
+  // add it as "empty". This condition should not exist.
   auto keyIt = kvStore_.find(key);
   if (keyIt == kvStore_.end()) {
     return;
@@ -1912,8 +1976,8 @@ KvStoreDb<ClientType>::scheduleTtlUpdates(
       std::chrono::milliseconds(ttl / 4),
       std::chrono::milliseconds(ttl / 4 + 1));
 
-  // Delay first ttl advertisement by (ttl / 4). We have just advertised key or
-  // update and would like to avoid sending unncessary immediate ttl update
+  // Delay first ttl advertisement by (ttl / 4). We have just advertised key
+  // or update and would like to avoid sending unncessary immediate ttl update
   if (not advertiseImmediately) {
     selfOriginatedKeyVals_[key].ttlBackoff.reportError();
   }
@@ -1948,8 +2012,8 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
     // Bump ttl version
     (*thriftValue.ttlVersion())++;
 
-    // Create copy of thrift::Value without value field for bandwidth efficiency
-    // when advertising
+    // Create copy of thrift::Value without value field for bandwidth
+    // efficiency when advertising
     auto advertiseValue = createThriftValue(
         *thriftValue.version(),
         kvParams_.nodeId,
@@ -2120,7 +2184,8 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     auto oldState = *peerSpec.state();
     peerSpec.state() = getNextState(oldState, KvStorePeerEvent::PEER_ADD);
     peerSpec.stateEpochTimeMs() = getTimeSinceEpochMs();
-    logStateTransition(peerName, oldState, *peerSpec.state());
+    logStateTransitionWithCounterPublication(
+        peerName, oldState, *peerSpec.state());
 
     // mark peer from IDLE -> SYNCING
     numThriftPeersInSync += 1;
@@ -2290,7 +2355,8 @@ KvStoreDb<ClientType>::processThriftSuccess(
       peer.peerSpec.flaps() = *peer.peerSpec.flaps() + 1;
     }
   }
-  logStateTransition(peerName, oldState, *peer.peerSpec.state());
+  logStateTransitionWithCounterPublication(
+      peerName, oldState, *peer.peerSpec.state());
 
   // Log full-sync event via replicate queue
   logSyncEvent(peerName, timeDelta);
@@ -2409,10 +2475,11 @@ KvStoreDb<ClientType>::disconnectPeer(
       peer.peerSpec.flaps() = *peer.peerSpec.flaps() + 1;
     }
   }
-  logStateTransition(peer.nodeName, oldState, *peer.peerSpec.state());
+  logStateTransitionWithCounterPublication(
+      peer.nodeName, oldState, *peer.peerSpec.state());
 
-  // Thrift error is treated as a completion signal of syncing with peer. Check
-  // whether initial sync is completed.
+  // Thrift error is treated as a completion signal of syncing with peer.
+  // Check whether initial sync is completed.
   if (not initialSyncCompleted_) {
     processInitializationEvent();
   }
@@ -2458,7 +2525,7 @@ KvStoreDb<ClientType>::addThriftPeers(
                    "[Peer Update] new peer {} comes up. Previously shutdown non-gracefully",
                    peerName);
       }
-      logStateTransition(
+      logStateTransitionWithCounterPublication(
           peerName,
           *peerIter->second.peerSpec.state(),
           thrift::KvStorePeerState::IDLE);
@@ -3051,8 +3118,8 @@ KvStoreDb<ClientType>::mergePublication(
 
   if (not isSelfOriginatedUpdate) {
     /*
-     * NOTE: received* counters are ONLY used for publication received remotely.
-     * Update/publication for self-originated keys will be excluded.
+     * NOTE: received* counters are ONLY used for publication received
+     * remotely. Update/publication for self-originated keys will be excluded.
      */
     fb303::fbData->addStatValue(
         "kvstore.received_publications", 1, fb303::COUNT);

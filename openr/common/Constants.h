@@ -58,6 +58,24 @@ class Constants {
   // Kvstore
   static constexpr std::chrono::milliseconds kKvstoreSyncInitialBackoff{4s};
   static constexpr std::chrono::milliseconds kKvstoreSyncMaxBackoff{256s};
+  static constexpr auto kKvStoreNumPeerByStateCounter =
+      "kvstore.num_peers.{}.{}";
+
+  // 0 if there is at least 1 peer in initiliazed state
+  // 1 if all peers are NOT in initialized state
+  static constexpr auto kKvStoreAllPeerNotInitialized =
+      "kvstore.all_peers_not_initialized.{}";
+
+  // regex ends with .p###
+  static constexpr auto podEndingPattern = ".*\\.(p)\\d{3}$";
+  // regex ends with .s###
+  static constexpr auto spineEndingPattern = ".*\\.(s)\\d{3}$";
+
+  // regex ends with .slice###
+  static constexpr auto sliceEndingPattern = ".*\\.(slice)\\d{3}$";
+
+  // regex ends with .fa###
+  static constexpr auto hgridEndingPattern = ".*\\.(fa)\\d{3}$";
 
   // Fib
   static constexpr std::chrono::milliseconds kFibInitialBackoff{8};

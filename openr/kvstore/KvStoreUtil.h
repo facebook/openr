@@ -327,6 +327,7 @@ MergeType getMergeType(
     std::optional<std::string> const& sender,
     thrift::KvStoreMergeResult& result);
 
+std::string getAreaTypeByAreaName(const std::string& area);
 } // namespace openr
 
 #include <openr/kvstore/KvStoreUtil-inl.h>

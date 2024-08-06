@@ -239,11 +239,21 @@ class KvStoreDb {
    * Private methods
    */
 
+  // util wrapper function which calls both logStateTransition and
+  // publishPeerStateCounters functions
+  void logStateTransitionWithCounterPublication(
+      std::string const& peerName,
+      thrift::KvStorePeerState oldState,
+      thrift::KvStorePeerState newState);
+
   // util function to log state transition
   void logStateTransition(
       std::string const& peerName,
       thrift::KvStorePeerState oldState,
       thrift::KvStorePeerState newState);
+
+  // a util function to publish number of peers by state as fb303 counters
+  void publishPeerStateCounters();
 
   /*
    * [Initial Sync]
