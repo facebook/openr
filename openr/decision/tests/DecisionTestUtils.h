@@ -11,8 +11,15 @@
 #include <vector>
 
 #include <openr/decision/LinkState.h>
+#include <openr/decision/SpfSolver.h>
 
 namespace openr {
+
+// Note: use unordered_set bcoz paths in a route can be in arbitrary order
+using NextHops = std::unordered_set<thrift::NextHopThrift>;
+using RouteMap = std::unordered_map<
+    std::pair<std::string /* node name */, std::string /* prefix or label */>,
+    NextHops>;
 
 // Builds LinkState structure with interger named nodes up to 2^16.
 // Input is map of node to adjacency and adj weight. Can support parallel
@@ -43,4 +50,23 @@ LinkState getLinkState(
 LinkState getLinkState(
     std::unordered_map<int /* node */, std::vector<int /* adjNode */>> adjMap);
 
+thrift::NextHopThrift createNextHopFromAdj(
+    thrift::Adjacency adj,
+    bool isV4,
+    int32_t metric,
+    std::optional<thrift::MplsAction> mplsAction = std::nullopt,
+    const std::string& area = kTestingAreaName,
+    bool v4OverV6Nexthop = false,
+    int64_t weight = 0);
+
+// Note: routeMap will be modified
+void fillRouteMap(
+    const std::string& node,
+    RouteMap& routeMap,
+    const DecisionRouteDb& routeDb);
+
+void fillRouteMap(
+    const std::string& node,
+    RouteMap& routeMap,
+    const thrift::RouteDatabase& routeDb);
 } // namespace openr

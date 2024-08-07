@@ -54,4 +54,72 @@ getLinkState(std::unordered_map<int, std::vector<int>> adjMap) {
   return getLinkState(weightedAdjMap);
 }
 
+thrift::NextHopThrift
+createNextHopFromAdj(
+    thrift::Adjacency adj,
+    bool isV4,
+    int32_t metric,
+    std::optional<thrift::MplsAction> mplsAction,
+    const std::string& area,
+    bool v4OverV6Nexthop,
+    int64_t weight) {
+  return createNextHop(
+      isV4 and not v4OverV6Nexthop ? *adj.nextHopV4() : *adj.nextHopV6(),
+      *adj.ifName(),
+      metric,
+      std::move(mplsAction),
+      area,
+      *adj.otherNodeName(),
+      weight);
+}
+
+// Note: routeMap will be modified
+void
+fillRouteMap(
+    const std::string& node,
+    RouteMap& routeMap,
+    const DecisionRouteDb& routeDb) {
+  for (auto const& [_, entry] : routeDb.unicastRoutes) {
+    auto prefix = folly::IPAddress::networkToString(entry.prefix);
+    for (const auto& nextHop : entry.nexthops) {
+      VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
+              << toString(nextHop);
+
+      routeMap[make_pair(node, prefix)].emplace(nextHop);
+    }
+  }
+  for (auto const& [_, entry] : routeDb.mplsRoutes) {
+    auto topLabelStr = std::to_string(entry.label);
+    for (const auto& nextHop : entry.nexthops) {
+      VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
+              << toString(nextHop);
+      routeMap[make_pair(node, topLabelStr)].emplace(nextHop);
+    }
+  }
+}
+
+void
+fillRouteMap(
+    const std::string& node,
+    RouteMap& routeMap,
+    const thrift::RouteDatabase& routeDb) {
+  for (auto const& route : *routeDb.unicastRoutes()) {
+    auto prefix = toString(*route.dest());
+    for (const auto& nextHop : *route.nextHops()) {
+      VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
+              << toString(nextHop);
+
+      routeMap[make_pair(node, prefix)].emplace(nextHop);
+    }
+  }
+  for (auto const& route : *routeDb.mplsRoutes()) {
+    auto topLabelStr = std::to_string(*route.topLabel());
+    for (const auto& nextHop : *route.nextHops()) {
+      VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
+              << toString(nextHop);
+      routeMap[make_pair(node, topLabelStr)].emplace(nextHop);
+    }
+  }
+}
+
 } // namespace openr
