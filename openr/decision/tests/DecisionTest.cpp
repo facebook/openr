@@ -222,12 +222,12 @@ class DecisionTestFixture : public ::testing::Test {
       // Send KvStore initial synced event.
       kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
       kvStoreSyncEventSent = true;
+    }
 
-      if (withSelfAdj) {
-        // Send Self Adjacencies synced event.
-        kvStoreUpdatesQueue.push(
-            thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
-      }
+    if (withSelfAdj) {
+      // Send Self Adjacencies synced event.
+      kvStoreUpdatesQueue.push(
+          thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
     }
   }
 
@@ -2860,9 +2860,10 @@ TEST(DecisionPendingUpdates, updatedPrefixes) {
 
 /*
  * @brief  Verify that we report counters of link event propagation time
- *         correctly. It is verified in the context of updateAdjacencyDatabase
+ *         correctly. Verification at the unit of updateAdjacencyDatabase
+ *         API calls
  */
-TEST_F(DecisionTestFixture, LinkEventPropagationTime) {
+TEST_F(DecisionTestFixture, TestLinkPropagationWithAdjDbUpdateApi) {
   auto now = getUnixTimeStampMs();
   std::string nodeName("1");
   auto linkState = LinkState(kTestingAreaName, nodeName);
@@ -2916,10 +2917,10 @@ TEST_F(DecisionTestFixture, LinkEventPropagationTime) {
 
 /*
  * @brief  Verify that we report counters of link event propagation time
- *         correctly. It is verified in the context of decision module,
- *         around use of ADJACENCY_DB_SYNCED signal
+ *         correctly. Verified at the unit of Thrift Publications and
+ *         before/after initialization signals
  */
-TEST_F(DecisionTestFixture, LinkPropagationWithBasicOperations) {
+TEST_F(DecisionTestFixture, TestLinkPropagationInitializationSignal) {
   auto now = getUnixTimeStampMs();
   fb303::fbData->resetAllData();
 
@@ -2941,13 +2942,106 @@ TEST_F(DecisionTestFixture, LinkPropagationWithBasicOperations) {
       {},
       {},
       {});
-  sendKvPublication(publication, true, true);
-
+  sendKvPublication(publication);
   std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   /*
-   * Initial updates, before ADJACENCY_DB_SYNCED shall not produce
+   * Initial updates, before Initialization shall not produce
    * propagation time counters
+   */
+  auto counters = fb303::fbData->getCounters();
+  EXPECT_EQ(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 0);
+
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+
+  lsRec1.linkStatusMap()["1/2"].status() = thrift::LinkStatusEnum::DOWN;
+  lsRec1.linkStatusMap()["1/2"].unixTs() = now - 4;
+  lsRec2.linkStatusMap()["2/1"].status() = thrift::LinkStatusEnum::DOWN;
+  lsRec2.linkStatusMap()["2/1"].unixTs() = now - 4;
+
+  publication = createThriftPublication(
+      {{"adj:1",
+        createAdjValueWithLinkStatus(serializer, "1", 2, {}, lsRec1, false, 1)},
+       {"adj:2",
+        createAdjValueWithLinkStatus(
+            serializer, "2", 2, {}, lsRec2, false, 2)}},
+      {},
+      {},
+      {});
+  sendKvPublication(publication);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  /*
+   * Update before initialization complete
+   */
+  counters = fb303::fbData->getCounters();
+  EXPECT_EQ(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 0);
+
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+
+  lsRec1.linkStatusMap()["1/2"].status() = thrift::LinkStatusEnum::UP;
+  lsRec1.linkStatusMap()["1/2"].unixTs() = now - 4;
+  lsRec2.linkStatusMap()["2/1"].status() = thrift::LinkStatusEnum::UP;
+  lsRec2.linkStatusMap()["2/1"].unixTs() = now - 4;
+
+  publication = createThriftPublication(
+      {{"adj:1",
+        createAdjValueWithLinkStatus(
+            serializer, "1", 2, {adj12}, lsRec1, false, 1)},
+       {"adj:2",
+        createAdjValueWithLinkStatus(
+            serializer, "2", 2, {adj21}, lsRec2, false, 2)}},
+      {},
+      {},
+      {});
+  sendKvPublication(publication);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  /*
+   * This publication is after initialization, verify that it produces
+   * propagation time counters
+   */
+  counters = fb303::fbData->getCounters();
+  EXPECT_GT(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 1);
+  EXPECT_LT(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 4000);
+}
+
+/*
+ * @brief  Verify that we report counters of link event propagation time
+ *         correctly. Verified at the unit of Thrift Publications and
+ *         first/subsequent publication calls
+ */
+TEST_F(DecisionTestFixture, TestLinkPropagationWithFirstPubCall) {
+  auto now = getUnixTimeStampMs();
+  fb303::fbData->resetAllData();
+
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+
+  thrift::LinkStatusRecords lsRec1, lsRec2;
+  lsRec1.linkStatusMap()["1/2"].status() = thrift::LinkStatusEnum::UP;
+  lsRec1.linkStatusMap()["1/2"].unixTs() = now - 10;
+  lsRec2.linkStatusMap()["2/1"].status() = thrift::LinkStatusEnum::UP;
+  lsRec2.linkStatusMap()["2/1"].unixTs() = now - 10;
+
+  auto publication = createThriftPublication(
+      {{"adj:1",
+        createAdjValueWithLinkStatus(
+            serializer, "1", 1, {adj12}, lsRec1, false, 1)},
+       {"adj:2",
+        createAdjValueWithLinkStatus(
+            serializer, "2", 1, {adj21}, lsRec2, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {},
+      {},
+      {});
+  sendKvPublication(publication);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+
+  /*
+   * First publication after initialization, propagation time counters
+   * should not be updated
    */
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 0);
@@ -2967,12 +3061,12 @@ TEST_F(DecisionTestFixture, LinkPropagationWithBasicOperations) {
       {},
       {});
   sendKvPublication(publication);
+  std::this_thread::sleep_for(std::chrono::milliseconds(100));
 
   /*
-   * This publication is after ADJACENCY_DB_SYNCED, verify that it produces
-   * propagation time counters
+   * Second publication after initialization, propagation time counters
+   * should have been updated
    */
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
   counters = fb303::fbData->getCounters();
   EXPECT_GT(counters["decision.linkstate.down.propagation_time_ms.avg.60"], 1);
   EXPECT_LT(

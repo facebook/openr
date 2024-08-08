@@ -356,7 +356,9 @@ LinkState::mayHaveLinkEventPropagationTime(
     bool firstPub,
     bool inInitialization) {
   std::string propagationTimeLogStr = "";
-  if (inInitialization) {
+
+  // Skip propagation reporting during initialization or for first publication
+  if (inInitialization || firstPub) {
     return propagationTimeLogStr;
   }
 
@@ -370,8 +372,7 @@ LinkState::mayHaveLinkEventPropagationTime(
     // Timestamp is updated when link status changes (over Netlink). But
     // at router boot-up, link doesn't change status, and so timestamp is
     // not set and equals to 0 (default value). We ignore this situation.
-    if (!firstPub &&
-        (linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end()) &&
+    if ((linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end()) &&
         *linkStatus->second.unixTs()) {
       int64_t propagationTime =
           getUnixTimeStampMs() - *linkStatus->second.unixTs();
