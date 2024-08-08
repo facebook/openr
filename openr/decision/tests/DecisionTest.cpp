@@ -563,6 +563,25 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
 }
 
+TEST_F(DecisionTestFixture, MissingBidirectionalAdjacency) {
+  auto publication = createThriftPublication(
+      {// Include adjacency 1->2 but not 2-> 1. This will cause bidirectional
+       // adjacency check to fail.
+       {"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {} /* expired keys */);
+  sendKvPublication(publication);
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds{100}, [&]() {
+    // Route update is never queued because adjacency is missing.
+    EXPECT_EQ(0, routeUpdatesQueueReader.size());
+    evb.stop();
+  });
+  evb.run();
+}
+
 /*
  * Route Origination Test:
  *  - Test 1:
