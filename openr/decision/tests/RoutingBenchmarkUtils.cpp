@@ -252,10 +252,7 @@ createGridAdjacencys(const int row, const int col, const uint32_t n) {
 std::pair<
     std::unordered_map<std::string, thrift::AdjacencyDatabase>,
     std::unordered_map<std::string, thrift::PrefixDatabase>>
-createGrid(
-    const int n,
-    const int numPrefixes,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm) {
+createGrid(const int n, const int numPrefixes) {
   LOG(INFO) << "grid: " << n << " by " << n;
   LOG(INFO) << " number of prefixes " << numPrefixes;
   std::unordered_map<std::string, thrift::AdjacencyDatabase> adjDbs;
@@ -284,11 +281,8 @@ createGrid(
                 prefix,
                 thrift::PrefixType::LOOPBACK,
                 "",
-                thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
-                        forwardingAlgorithm
-                    ? thrift::PrefixForwardingType::SR_MPLS
-                    : thrift::PrefixForwardingType::IP,
-                forwardingAlgorithm));
+                thrift::PrefixForwardingType::IP,
+                thrift::PrefixForwardingAlgorithm::SP_ECMP));
         prefixDbs.emplace(key.getPrefixKeyV2(), std::move(db));
       }
     }
@@ -558,7 +552,6 @@ updateRandomGridPrefixes(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int n,
     const int numOfUpdatePrefixes,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     folly::BenchmarkSuspender& suspender) {
   PrefixGenerator prefixGenerator;
   apache::thrift::CompactSerializer serializer;
@@ -572,12 +565,9 @@ updateRandomGridPrefixes(
       auto prefixEntries =
           generatePrefixEntries(prefixGenerator, numOfUpdatePrefixes);
       for (auto& prefixEntry : prefixEntries) {
-        prefixEntry.forwardingType() =
-            (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
-                     forwardingAlgorithm
-                 ? thrift::PrefixForwardingType::SR_MPLS
-                 : thrift::PrefixForwardingType::IP);
-        prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
+        prefixEntry.forwardingType() = thrift::PrefixForwardingType::IP;
+        prefixEntry.forwardingAlgorithm() =
+            thrift::PrefixForwardingAlgorithm::SP_ECMP;
         auto keyDbPair = createPrefixKeyAndDb(nodeName, prefixEntry);
         keyVals.emplace(
             keyDbPair.first.getPrefixKeyV2(),
@@ -601,7 +591,6 @@ generatePrefixUpdatePublication(
     const uint32_t& numOfPrefixes,
     const std::unordered_map<std::string, std::vector<std::string>>&
         listOfNodenames,
-    const thrift::PrefixForwardingAlgorithm& forwardingAlgorithm,
     thrift::Publication& initialPub) {
   PrefixGenerator prefixGenerator;
   apache::thrift::CompactSerializer serializer;
@@ -611,12 +600,9 @@ generatePrefixUpdatePublication(
       auto prefixEntries =
           generatePrefixEntries(prefixGenerator, numOfPrefixes);
       for (auto& prefixEntry : prefixEntries) {
-        prefixEntry.forwardingType() =
-            (thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP ==
-                     forwardingAlgorithm
-                 ? thrift::PrefixForwardingType::SR_MPLS
-                 : thrift::PrefixForwardingType::IP);
-        prefixEntry.forwardingAlgorithm() = forwardingAlgorithm;
+        prefixEntry.forwardingType() = thrift::PrefixForwardingType::IP;
+        prefixEntry.forwardingAlgorithm() =
+            thrift::PrefixForwardingAlgorithm::SP_ECMP;
         auto keyDbPair = createPrefixKeyAndDb(nodeName, prefixEntry);
         keyVals.emplace(
             keyDbPair.first.getPrefixKeyV2(),
@@ -645,8 +631,7 @@ BM_DecisionGridInitialUpdate(
   for (uint32_t i = 0; i < iters; i++) {
     const std::string nodeName{"1"};
     int n = std::sqrt(numOfSws);
-    auto [adjs, prefixes] =
-        createGrid(n, numberOfPrefixes, forwardingAlgorithm);
+    auto [adjs, prefixes] = createGrid(n, numberOfPrefixes);
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -684,7 +669,7 @@ BM_DecisionGridAdjUpdates(
   const std::string nodeName{"1"};
   auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
   int n = std::sqrt(numOfSws);
-  auto [adjs, prefixes] = createGrid(n, numberOfPrefixes, forwardingAlgorithm);
+  auto [adjs, prefixes] = createGrid(n, numberOfPrefixes);
 
   sendRecvInitialUpdate(
       decisionWrapper, nodeName, std::move(adjs), std::move(prefixes));
@@ -719,7 +704,7 @@ BM_DecisionGridPrefixUpdates(
     const std::string nodeName{"1"};
     auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
     int n = std::sqrt(numOfNodes);
-    auto [adjs, prefixes] = createGrid(n, numOfPrefixes, forwardingAlgorithm);
+    auto [adjs, prefixes] = createGrid(n, numOfPrefixes);
 
     sendRecvInitialUpdate(
         decisionWrapper, nodeName, std::move(adjs), std::move(prefixes));
@@ -733,11 +718,7 @@ BM_DecisionGridPrefixUpdates(
 
     // Advertise new random prefix from random node to build route
     updateRandomGridPrefixes(
-        decisionWrapper,
-        n,
-        numOfUpdatePrefixes,
-        forwardingAlgorithm,
-        suspender);
+        decisionWrapper, n, numOfUpdatePrefixes, suspender);
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -787,7 +768,7 @@ BM_DecisionFabricInitialUpdate(
         listOfNodenames);
 
     generatePrefixUpdatePublication(
-        numberOfPrefixes, listOfNodenames, forwardingAlgorithm, initialPub);
+        numberOfPrefixes, listOfNodenames, initialPub);
 
     suspender.dismiss(); // Start measuring benchmark time
     //
@@ -841,7 +822,7 @@ BM_DecisionFabricPrefixUpdates(
         listOfNodenames);
 
     generatePrefixUpdatePublication(
-        numberOfPrefixes, listOfNodenames, forwardingAlgorithm, initialPub);
+        numberOfPrefixes, listOfNodenames, initialPub);
 
     //
     // Publish initial link state info to KvStore, This should trigger the
@@ -864,8 +845,7 @@ BM_DecisionFabricPrefixUpdates(
 
     thrift::Publication pub;
     pub.area() = kTestingAreaName;
-    generatePrefixUpdatePublication(
-        numOfUpdatePrefixes, listOfNodenames, forwardingAlgorithm, pub);
+    generatePrefixUpdatePublication(numOfUpdatePrefixes, listOfNodenames, pub);
 
     suspender.dismiss(); // Start measuring benchmark time
 

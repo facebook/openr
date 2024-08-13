@@ -176,8 +176,8 @@ generateDecisionRouteUpdateFromPrefixEntries(
     prefixEntry.metrics()->distance() = 1;
     prefixEntry.type() = thrift::PrefixType::DEFAULT;
     prefixEntry.forwardingAlgorithm() =
-        thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    prefixEntry.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;
+        thrift::PrefixForwardingAlgorithm::SP_ECMP;
+    prefixEntry.forwardingType() = thrift::PrefixForwardingType::IP;
     prefixEntry.minNexthop() = 10;
 
     auto unicastRoute = RibUnicastEntry(

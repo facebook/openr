@@ -89,18 +89,12 @@ route selection and can't be modified by the policy.
 #### > `forwarding-algorithm`
 
 `non-transitive`, `mutable` Link-state algorithm for route computaion. Open/R
-supports two forwarding algorithm, `SP_ECMP` (Shortest Path ECMP) and
-`KSP2_ED_ECMP` (K-Shortest Path). The algorithm with the lowest value is chosen
-in-case of conflicting advertisements.
+supports one forwarding algorithm, `SP_ECMP` (Shortest Path ECMP).
 
 #### > `forwarding-type`
 
 `non-transitive`, `mutable` Data plane forwarding mechanism to use. Open/R
-supports two forwarding types, `IP` (Usual IP routing) and `SR_MPLS` (Source
-Routing with MPLS data plane). The type with the lowest value is chosen in-case
-of conflicting advertisements.
-
-> NOTE: `KSP2_ED_ECMP` is only compatible with `SR_MPLS` forwarding type.
+supports one forwarding type, `IP` (Usual IP routing).
 
 #### > `min-nexthops`
 

@@ -46,13 +46,6 @@ BENCHMARK_COUNTERS_PARAM(BM_DecisionGridAdjUpdates, counters, 1000, SP_ECMP, 1);
 BENCHMARK_COUNTERS_PARAM(
     BM_DecisionGridAdjUpdates, counters, 10000, SP_ECMP, 1);
 
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridAdjUpdates, counters, 10, KSP2_ED_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridAdjUpdates, counters, 100, KSP2_ED_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridAdjUpdates, counters, 1000, KSP2_ED_ECMP, 1);
-
 /*
  * BM_DecisionGridPrefixUpdates:
  * @first param - integer: num of nodes in a grid topology
@@ -137,78 +130,6 @@ BENCHMARK_COUNTERS_PARAM2(
     1000,
     1000);
 
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_10_10,
-    100,
-    KSP2_ED_ECMP,
-    10,
-    10);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_100_100,
-    100,
-    KSP2_ED_ECMP,
-    100,
-    100);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_1k_1k,
-    100,
-    KSP2_ED_ECMP,
-    1000,
-    1000);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_10k_1,
-    100,
-    KSP2_ED_ECMP,
-    10000,
-    1);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_10k_10,
-    100,
-    KSP2_ED_ECMP,
-    10000,
-    10);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_10k_100,
-    100,
-    KSP2_ED_ECMP,
-    10000,
-    100);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_10k_1k,
-    100,
-    KSP2_ED_ECMP,
-    10000,
-    1000);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_100_10k_10k,
-    100,
-    KSP2_ED_ECMP,
-    10000,
-    10000);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    KSP2_ED_ECMP_1000_1k_1k,
-    1000,
-    KSP2_ED_ECMP,
-    1000,
-    1000);
 /*
  * BM_DecisionFabricInitialUpdate:
  * @first param - integer: num of pods in a fabric topology
@@ -296,10 +217,9 @@ BENCHMARK_COUNTERS_PARAM2(
  * i.e. How long does it take to incremental change routes given
  * `numOfUpdatePrefixes` per node
  *
- * total # of sws = numOfPlanes * kNumOfSswsPerPlane + numOfPods * numOfPlanes +
- *                 numOfPods * kNumOfRswsPerPod
- *                = 36 * numOfPlanes + numOfPods * numOfPlanes +
- *                 48 * kNumOfRswsPerPod
+ * total # of sws = numOfPlanes * kNumOfSswsPerPlane + numOfPods *
+ * numOfPlanes + numOfPods * kNumOfRswsPerPod = 36 * numOfPlanes + numOfPods
+ * * numOfPlanes + 48 * kNumOfRswsPerPod
  */
 // total = 85
 BENCHMARK_COUNTERS_PARAM3(

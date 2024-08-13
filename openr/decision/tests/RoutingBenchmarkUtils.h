@@ -303,10 +303,7 @@ inline std::vector<thrift::Adjacency> createGridAdjacencys(
 std::pair<
     std::unordered_map<std::string, thrift::AdjacencyDatabase>,
     std::unordered_map<std::string, thrift::PrefixDatabase>>
-createGrid(
-    const int n,
-    const int numPrefixes,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
+createGrid(const int n, const int numPrefixes);
 
 /**
  * Create Adjacencies for spine switches.
@@ -384,7 +381,6 @@ void updateRandomGridPrefixes(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
     const int n,
-    thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     folly::BenchmarkSuspender& suspender);
 
 //
@@ -401,13 +397,11 @@ void generatePrefixUpdatePublication(
     const uint32_t& numOfPrefixes,
     const std::unordered_map<std::string, std::vector<std::string>>&
         listOfNodenames,
-    const thrift::PrefixForwardingAlgorithm& forwardingAlgorithm,
     thrift::Publication& initialPub);
 
 //
 // Benchmark tests for grid topology
 //
-
 void BM_DecisionGridInitialUpdate(
     folly::UserCounters& counters,
     uint32_t iters,
@@ -433,6 +427,7 @@ void BM_DecisionGridAdjUpdates(
 //
 // Benchmark test for fabric topology.
 //
+
 void BM_DecisionFabricInitialUpdate(
     folly::UserCounters& counters,
     uint32_t iters,
@@ -451,5 +446,4 @@ void BM_DecisionFabricPrefixUpdates(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm);
 
 const auto SP_ECMP = thrift::PrefixForwardingAlgorithm::SP_ECMP;
-const auto KSP2_ED_ECMP = thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
 } // namespace openr
