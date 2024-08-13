@@ -137,6 +137,8 @@ class DecisionTestFixture : public ::testing::Test {
     tConfig.enable_best_route_selection() = true;
     tConfig.decision_config()->save_rib_policy_min_ms() = 500;
     tConfig.decision_config()->save_rib_policy_max_ms() = 2000;
+    // Set a shorter timeout so we don't have to wait as long.
+    tConfig.decision_config()->unblock_initial_routes_ms() = 1000;
     return tConfig;
   }
 
@@ -580,6 +582,26 @@ TEST_F(DecisionTestFixture, MissingBidirectionalAdjacency) {
     evb.stop();
   });
   evb.run();
+}
+
+TEST_F(DecisionTestFixture, UnblockInitialRoutesTimeout) {
+  // Publish adjacency 1->2 but not 2-> 1. This will cause bidirectional
+  // adjacency check to fail.
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {} /* expired keys */);
+  sendKvPublication(publication);
+  // If we wait long enough, the timeout will expire and route computation will
+  // be unblocked.
+  recvRouteUpdates();
+  facebook::fb303::fbData->flushAllData();
+  // For some reason, we have to call getCounters first or else hasCounter will
+  // return false.
+  facebook::fb303::fbData->getCounters();
+  EXPECT_TRUE(facebook::fb303::fbData->hasCounter(
+      "initialization.RIB_COMPUTED.duration_ms"));
 }
 
 /*

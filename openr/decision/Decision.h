@@ -271,6 +271,9 @@ class Decision : public OpenrEventBase {
   // Read persisted Rib policy from file
   void readRibPolicy();
 
+  // Force initial routes build if it's not done yet.
+  void forceInitialRoutesBuild() noexcept;
+
   // cached routeDb
   DecisionRouteDb routeDb_;
 
@@ -358,6 +361,14 @@ class Decision : public OpenrEventBase {
    * OpenR initialization procedure. Set as true if such file does not exist.
    */
   bool initialRibPolicyRead_{false};
+
+  /* Whether to unblock the initial routes build. See
+   * unblockInitialRoutesBuild(). */
+  bool unblockInitialRoutes_{false};
+
+  /* Timeout to force initial routes build. */
+  const folly::not_null_unique_ptr<folly::AsyncTimeout>
+      unblockInitialRoutesTimeout_;
 
   /*
    * Set of prefix types whose static routes Decision awaits before initial RIB

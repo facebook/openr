@@ -124,7 +124,10 @@ Decision::Decision(
               *config->getConfig().decision_config()->save_rib_policy_min_ms()),
           std::chrono::milliseconds(
               *config->getConfig().decision_config()->save_rib_policy_max_ms()),
-          [this]() noexcept { saveRibPolicy(); }) {
+          [this]() noexcept { saveRibPolicy(); }),
+      unblockInitialRoutesTimeout_(folly::AsyncTimeout::make(
+          *getEvb(),
+          std::bind_front(&Decision::forceInitialRoutesBuild, this))) {
   // Create SpfSolver instance for best path calculation/selection
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),
@@ -213,6 +216,14 @@ Decision::Decision(
                               "received from KvStore.";
                 initialKvStoreSynced_ = true;
                 triggerInitialBuildRoutes();
+                auto timeout = *config_->getConfig()
+                                    .decision_config()
+                                    ->unblock_initial_routes_ms();
+                XLOG(DBG1) << fmt::format(
+                    "Initial kv store synced. Waiting {}ms for initial routes to be computed.",
+                    timeout);
+                unblockInitialRoutesTimeout_->scheduleTimeout(
+                    std::chrono::milliseconds(timeout));
               } else {
                 // Received all locally originated adjacency keys
                 XLOG(INFO)
@@ -918,6 +929,12 @@ Decision::rebuildRoutes(std::string const& event) {
 
 bool
 Decision::unblockInitialRoutesBuild() {
+  if (unblockInitialRoutes_) {
+    // Either all conditions have already been met, or the timeout expired and
+    // we can ignore them.
+    return true;
+  }
+
   constexpr auto blockedLogPrefix = "Blocking initial route computation: ";
   if (!unreceivedRouteTypes_.empty()) {
     XLOG(DBG1) << blockedLogPrefix
@@ -944,7 +961,19 @@ Decision::unblockInitialRoutesBuild() {
   }
   // All conditions have been fulfilled, initial route computation is
   // unblocked.
+  unblockInitialRoutes_ = true;
+  unblockInitialRoutesTimeout_->cancelTimeout();
   return true;
+}
+
+void
+Decision::forceInitialRoutesBuild() noexcept {
+  if (!unblockInitialRoutes_) {
+    XLOG(WARNING)
+        << "[Initialization] Timeout has expired. Unblocking initial route computation.";
+    unblockInitialRoutes_ = true;
+    triggerInitialBuildRoutes();
+  }
 }
 
 void

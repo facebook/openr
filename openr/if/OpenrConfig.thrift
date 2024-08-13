@@ -133,6 +133,8 @@ struct DecisionConfig {
   /** Decision time to save rib policy  in frequent setRibPolicy requests
   (in milliseconds). */
   4: i32 save_rib_policy_max_ms = 60000;
+  /** After initial KV store sync completes, wait for this timeout. If initial route computation is still blocked when the timeout expires, force initial route computation. */
+  5: i32 unblock_initial_routes_ms = 120000;
 }
 
 struct LinkMonitorConfig {
