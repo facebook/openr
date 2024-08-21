@@ -26,7 +26,6 @@
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/decision/RouteUpdate.h>
-#include <openr/if/gen-cpp2/BgpConfig_types.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>

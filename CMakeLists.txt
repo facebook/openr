@@ -97,14 +97,6 @@ include_directories(
 SET(OPENR_THRIFT_LIBS)
 
 add_fbthrift_cpp_library(
-  bgp_config_cpp2
-  openr/if/BgpConfig.thrift
-  OPTIONS
-    json
-)
-SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} bgp_config_cpp2)
-
-add_fbthrift_cpp_library(
   routing_policy_cpp2
   configerator/structs/neteng/config/routing_policy.thrift
   OPTIONS
@@ -126,7 +118,6 @@ add_fbthrift_cpp_library(
   OPTIONS
     json
   DEPENDS
-    bgp_config_cpp2
     routing_policy_cpp2
     vip_service_config_cpp2
 )
