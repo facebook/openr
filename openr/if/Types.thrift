@@ -20,6 +20,24 @@ include "openr/if/OpenrConfig.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/hack.thrift"
 
+/**
+ * [Drain state]
+ *
+ * Define struct from Open/R which includes
+ *  - Node drain state
+ *  - Interface drain state
+ */
+enum DrainState {
+  UNDRAINED = 0,
+  HARD_DRAINED = 1,
+  SOFT_DRAINED = 2,
+}
+
+struct OpenrDrainState {
+  1: optional DrainState drain_state;
+  2: optional list<string> drained_interfaces;
+}
+
 /*
  * [Spark Neighbor FSM]
  *
