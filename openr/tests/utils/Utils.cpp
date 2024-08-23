@@ -250,9 +250,11 @@ createAdjValue(
     int64_t version,
     const std::vector<thrift::Adjacency>& adjs,
     bool overloaded,
-    int32_t nodeId) {
+    int32_t nodeId,
+    int64_t nodeMetricIncrement) {
   auto adjDB = createAdjDb(node, adjs, nodeId);
   adjDB.isOverloaded() = overloaded;
+  adjDB.nodeMetricIncrementVal() = nodeMetricIncrement;
   return createThriftValue(
       version,
       "originator-1",

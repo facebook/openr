@@ -348,6 +348,171 @@ TEST_F(DecisionTestFixture, StopDecisionWithoutInitialPeers) {
   decision->stop();
 }
 
+TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {
+  auto publication = createThriftPublication(
+      {
+          {"adj:1",
+           createAdjValue(
+               serializer,
+               "1", /* node name */
+               1, /* version */
+               {adj12}, /* adjacencies */
+               false /* overloaded flag */,
+               1 /* nodeId*/)},
+          {"adj:2",
+           createAdjValue(
+               serializer,
+               "2", /* node name */
+               1, /* version */
+               {adj21}, /* adjacencies */
+               false /* overloaded flag */,
+               2 /* nodeId*/)},
+          createPrefixKeyValue("1", 1, addr1),
+          createPrefixKeyValue("2", 1, addr2),
+      },
+      {} /* expired keys */,
+      {} /* nodeIds*/,
+      {} /* keysToUpdate */);
+  sendKvPublication(publication);
+  // NOTE: this is just to make sure pulication is processed by decision
+  // before checking drain state inside LSDB
+  recvRouteUpdates();
+
+  /*
+   * Test 1: specify the node name. Expect API to return specified node's
+   *         drain state.
+   */
+  {
+    auto state = decision->getDecisionDrainState("1").get();
+    EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+  {
+    auto state = decision->getDecisionDrainState("2").get();
+    EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+
+  /*
+   * Test 2: do not specify the node name. Expect API to return local node's
+   *         drain state.
+   */
+  auto state = decision->getDecisionDrainState().get();
+  EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+  ASSERT_FALSE(state->drained_interfaces());
+}
+
+TEST_F(DecisionTestFixture, DecisionHardDrainStateTest) {
+  auto publication = createThriftPublication(
+      {
+          {"adj:1",
+           createAdjValue(
+               serializer,
+               "1", /* node name */
+               1, /* version */
+               {adj12}, /* adjacencies */
+               true /* overloaded flag */,
+               1 /* nodeId*/)},
+          {"adj:2",
+           createAdjValue(
+               serializer,
+               "2", /* node name */
+               1, /* version */
+               {adj21}, /* adjacencies */
+               false /* overloaded flag */,
+               2 /* nodeId*/)},
+          createPrefixKeyValue("1", 1, addr1),
+          createPrefixKeyValue("2", 1, addr2),
+      },
+      {} /* expired keys */,
+      {} /* nodeIds*/,
+      {} /* keysToUpdate */);
+  sendKvPublication(publication);
+  // NOTE: this is just to make sure pulication is processed by decision
+  // before checking drain state inside LSDB
+  recvRouteUpdates();
+
+  /*
+   * Test 1: specify the node name. Expect API to return specified node's
+   *         drain state.
+   */
+  {
+    auto state = decision->getDecisionDrainState("1").get();
+    EXPECT_EQ(thrift::DrainState::HARD_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+  {
+    auto state = decision->getDecisionDrainState("2").get();
+    EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+
+  /*
+   * Test 2: do not specify the node name. Expect API to return local node's
+   *         drain state.
+   */
+  auto state = decision->getDecisionDrainState().get();
+  EXPECT_EQ(thrift::DrainState::HARD_DRAINED, *state->drain_state());
+  ASSERT_FALSE(state->drained_interfaces());
+}
+
+TEST_F(DecisionTestFixture, DecisionSoftDrainStateTest) {
+  auto publication = createThriftPublication(
+      {
+          {"adj:1",
+           createAdjValue(
+               serializer,
+               "1", /* node name */
+               1, /* version */
+               {adj12}, /* adjacencies */
+               false, /* overloaded flag */
+               1, /* nodeId*/
+               100 /* nodeMetricIncrement */)},
+          {"adj:2",
+           createAdjValue(
+               serializer,
+               "2", /* node name */
+               1, /* version */
+               {adj21}, /* adjacencies */
+               false, /* overloaded flag */
+               2 /* nodeId*/)},
+          createPrefixKeyValue("1", 1, addr1),
+          createPrefixKeyValue("2", 1, addr2),
+      },
+      {} /* expired keys */,
+      {} /* nodeIds*/,
+      {} /* keysToUpdate */);
+  sendKvPublication(publication);
+  // NOTE: this is just to make sure pulication is processed by decision
+  // before checking drain state inside LSDB
+  recvRouteUpdates();
+
+  /*
+   * Test 1: specify the node name. Expect API to return specified node's
+   *         drain state.
+   */
+  {
+    auto state = decision->getDecisionDrainState("1").get();
+    EXPECT_EQ(thrift::DrainState::SOFT_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+  {
+    auto state = decision->getDecisionDrainState("2").get();
+    EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+
+  /*
+   * Test 2: do not specify the node name. Expect API to return local node's
+   *         drain state.
+   */
+  {
+    auto state = decision->getDecisionDrainState().get();
+    EXPECT_EQ(thrift::DrainState::SOFT_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+}
+
 // The following topology is used:
 //
 // 1---2---3

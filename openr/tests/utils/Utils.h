@@ -111,7 +111,8 @@ thrift::Value createAdjValue(
     int64_t version,
     const std::vector<thrift::Adjacency>& adjs,
     bool overloaded = false,
-    int32_t nodeId = 0);
+    int32_t nodeId = 0,
+    int64_t nodeMetricIncrement = 0);
 
 /*
  * Util function to generate Adjacency Value with LinkStatus record

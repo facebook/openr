@@ -148,11 +148,18 @@ class Decision : public OpenrEventBase {
   void stop() override;
 
   /*
+   * Retrieve device drain information for the input node name.
+   * If empty nodename specified, will return drained state of its own.
+   */
+  folly::SemiFuture<std::unique_ptr<thrift::OpenrDrainState>>
+  getDecisionDrainState(std::string nodeName = "");
+
+  /*
    * Retrieve routeDb from specified node.
    * If empty nodename specified, will return routeDb of its own
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
-      std::string nodeName);
+      std::string nodeName = "");
 
   /*
    * Retrieve AdjacencyDatabase for all nodes in all areas.

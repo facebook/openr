@@ -306,6 +306,38 @@ Decision::stop() {
   XLOG(DBG1) << "[Exit] Successfully stopped Decision eventbase.";
 }
 
+folly::SemiFuture<std::unique_ptr<thrift::OpenrDrainState>>
+Decision::getDecisionDrainState(std::string nodeName) {
+  folly::Promise<std::unique_ptr<thrift::OpenrDrainState>> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread(
+      [p = std::move(p), nodeName = std::move(nodeName), this]() mutable {
+        thrift::OpenrDrainState ret;
+        bool isNodeHardDrained = false;
+        bool isNodeSoftDrained = false;
+
+        // return the state of local node if not specified
+        if (nodeName.empty()) {
+          nodeName = myNodeName_;
+        }
+        for (auto const& [_, linkState] : areaLinkStates_) {
+          // hard-drained is considered as drained
+          isNodeHardDrained |= linkState.isNodeOverloaded(nodeName);
+          // soft-drained is considered as drained
+          isNodeSoftDrained |= (linkState.getNodeMetricIncrement(nodeName) > 0);
+        }
+        if (isNodeHardDrained) {
+          ret.drain_state() = thrift::DrainState::HARD_DRAINED;
+        } else if (isNodeSoftDrained) {
+          ret.drain_state() = thrift::DrainState::SOFT_DRAINED;
+        } else {
+          ret.drain_state() = thrift::DrainState::UNDRAINED;
+        }
+        p.setValue(std::make_unique<thrift::OpenrDrainState>(std::move(ret)));
+      });
+  return sf;
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 Decision::getDecisionRouteDb(std::string nodeName) {
   folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
