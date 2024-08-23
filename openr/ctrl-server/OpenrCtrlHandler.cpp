@@ -396,6 +396,16 @@ OpenrCtrlHandler::getRunningConfigThrift(thrift::OpenrConfig& _config) {
   _config = config_->getConfig();
 }
 
+// validate config
+folly::SemiFuture<std::unique_ptr<thrift::OpenrDrainState>>
+OpenrCtrlHandler::semifuture_getDrainState(
+    std::unique_ptr<std::string> nodeName) {
+  // Open/R does not have a dedicated config to differentiate undrain or drain
+  // config. It is the LSDB state to indicate if node is drained or not.
+  CHECK_NOTNULL(decision_);
+  return decision_->getDecisionDrainState(*nodeName);
+}
+
 void
 OpenrCtrlHandler::getInitializationEvents(
     std::map<thrift::InitializationEvent, int64_t>& _return) {

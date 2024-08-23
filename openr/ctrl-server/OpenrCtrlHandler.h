@@ -94,6 +94,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   void dryrunConfig(
       ::std::string& _return, std::unique_ptr<::std::string> file) override;
 
+  folly::SemiFuture<std::unique_ptr<thrift::OpenrDrainState>>
+  semifuture_getDrainState(std::unique_ptr<std::string> nodeName) override;
+
   //
   // OpenR initialization APIs
   //

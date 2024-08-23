@@ -273,6 +273,13 @@ service OpenrCtrl extends KvStore.KvStoreService {
    */
   string dryrunConfig(1: string file) throws (1: OpenrError error);
 
+  /**
+   * Retrieve drain state including:
+   *  1) node drain state
+   *  2) interface drain state
+   */
+  Types.OpenrDrainState getDrainState(1: string nodeName);
+
   //
   // OpenR initialization APIs
   //

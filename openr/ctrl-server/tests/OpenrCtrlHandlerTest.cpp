@@ -442,6 +442,16 @@ TEST_F(OpenrCtrlFixture, PerfApis) {
   EXPECT_EQ(nodeName_, *db->thisNodeName());
 }
 
+TEST_F(OpenrCtrlFixture, DrainStateApis) {
+  auto state =
+      handler_
+          ->semifuture_getDrainState(std::make_unique<std::string>(nodeName_))
+          .get();
+  ASSERT_TRUE(state->drain_state());
+  EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+  ASSERT_FALSE(state->drained_interfaces());
+}
+
 TEST_F(OpenrCtrlFixture, DecisionApis) {
   {
     auto dbs = handler_
