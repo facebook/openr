@@ -19,8 +19,6 @@
 
 using namespace std;
 using namespace openr;
-using FwdType = openr::thrift::PrefixForwardingType;
-using FwdAlgo = openr::thrift::PrefixForwardingAlgorithm;
 
 const auto node11Area1 =
     std::make_pair<std::string, std::string>("node11", "area1");

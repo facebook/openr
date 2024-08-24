@@ -83,19 +83,6 @@ TEST_F(ConfigTestFixture, ConstructFromFile) {
         invalidConfigFile.path().string(), folly::toJson(invalidConfig));
     EXPECT_ANY_THROW(Config(invalidConfigFile.path().string()));
   }
-
-  // out of range enum: prefix_forwarding_type
-  {
-    folly::dynamic invalidConfig;
-    invalidConfig = folly::parseJson(validConfigStr_);
-    invalidConfig["prefix_forwarding_type"] = 3;
-    LOG(INFO) << invalidConfig;
-
-    folly::test::TemporaryFile invalidConfigFile;
-    folly::writeFileAtomic(
-        invalidConfigFile.path().string(), folly::toJson(invalidConfig));
-    EXPECT_ANY_THROW(Config(invalidConfigFile.path().string()));
-  }
 }
 
 TEST(ConfigTest, PopulateAreaConfig) {
@@ -243,17 +230,6 @@ TEST(ConfigTest, EbbInterfaceConfiguration) {
 }
 
 TEST(ConfigTest, PopulateInternalDb) {
-  // features
-
-  // KSP2_ED_ECMP with IP
-  {
-    auto confInvalid = getBasicOpenrConfig();
-    confInvalid.prefix_forwarding_type() = thrift::PrefixForwardingType::IP;
-    confInvalid.prefix_forwarding_algorithm() =
-        thrift::PrefixForwardingAlgorithm::KSP2_ED_ECMP;
-    EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
-  }
-
   // RibPolicy
   {
     auto conf = getBasicOpenrConfig();

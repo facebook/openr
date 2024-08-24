@@ -19,8 +19,6 @@
 #include <re2/re2.h>
 
 using apache::thrift::util::enumName;
-using openr::thrift::PrefixForwardingAlgorithm;
-using openr::thrift::PrefixForwardingType;
 
 namespace openr {
 
@@ -334,21 +332,6 @@ Config::checkThriftServerConfig() const {
 void
 Config::populateInternalDb() {
   populateAreaConfig();
-
-  // validate prefix forwarding type and algorithm
-  const auto& pfxType = *config_.prefix_forwarding_type();
-  const auto& pfxAlgo = *config_.prefix_forwarding_algorithm();
-
-  if (not enumName(pfxType) or not enumName(pfxAlgo)) {
-    throw std::invalid_argument(
-        "invalid prefix_forwarding_type or prefix_forwarding_algorithm");
-  }
-
-  if (pfxAlgo == PrefixForwardingAlgorithm::KSP2_ED_ECMP and
-      pfxType != PrefixForwardingType::SR_MPLS) {
-    throw std::invalid_argument(
-        "prefix_forwarding_type must be set to SR_MPLS for KSP2_ED_ECMP");
-  }
 
   // validate IP-TOS
   if (const auto& ipTos = config_.ip_tos()) {
