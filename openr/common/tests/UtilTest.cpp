@@ -906,50 +906,6 @@ TEST(UtilTest, SelectRoutesShortestDistance) {
   }
 }
 
-TEST(UtilTest, SelectRoutesShortestDistance2) {
-  const auto kAlgorithm =
-      thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2;
-
-  // Single entry. Returns the entry itself
-  {
-    PrefixEntries prefixes = {{node11Area1, createPrefixEntryPtr(0, 0, 0)}};
-    const auto ret = selectRoutes(prefixes, kAlgorithm);
-    EXPECT_EQ(1, ret.size());
-    EXPECT_EQ(1, ret.count(node11Area1));
-  }
-
-  // Multiple entries. Single best and second best routes, tie on distance
-  // (select shortest-distance-2)
-  {
-    PrefixEntries prefixes = {
-        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
-        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
-        {node13Area1, createPrefixEntryPtr(100, 10, 2)},
-        {node21Area2, createPrefixEntryPtr(100, 10, 4)}};
-    const auto ret = selectRoutes(prefixes, kAlgorithm);
-    EXPECT_EQ(2, ret.size());
-    EXPECT_EQ(1, ret.count(node11Area1));
-    EXPECT_EQ(1, ret.count(node13Area1));
-  }
-
-  // Multiple entries. Multi best and second best routes, tie on distance
-  // (select shortest-distance-2)
-  {
-    PrefixEntries prefixes = {
-        {node11Area1, createPrefixEntryPtr(100, 10, 1)},
-        {node12Area1, createPrefixEntryPtr(100, 10, 3)},
-        {node13Area1, createPrefixEntryPtr(100, 10, 2)},
-        {node21Area2, createPrefixEntryPtr(100, 10, 1)},
-        {node22Area2, createPrefixEntryPtr(100, 10, 2)}};
-    const auto ret = selectRoutes(prefixes, kAlgorithm);
-    EXPECT_EQ(4, ret.size());
-    EXPECT_EQ(1, ret.count(node11Area1));
-    EXPECT_EQ(1, ret.count(node13Area1));
-    EXPECT_EQ(1, ret.count(node21Area2));
-    EXPECT_EQ(1, ret.count(node22Area2));
-  }
-}
-
 TEST(UtilTest, SelectRoutesPerAreaShortestDistance) {
   const auto kAlgorithm =
       thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE;

@@ -736,30 +736,6 @@ selectShortestDistance(
 }
 
 std::set<NodeAndArea>
-selectShortestDistance2(
-    const PrefixEntries& prefixEntries, std::set<NodeAndArea>& nodeAreaSet) {
-  // Get results with shortest distance.
-  std::set<NodeAndArea> shortestSet =
-      selectShortestDistance(prefixEntries, nodeAreaSet);
-  // Remove NodeAndArea with shortest distance.
-  for (const auto& nodeArea : shortestSet) {
-    nodeAreaSet.erase(nodeArea);
-  }
-  // Get results with second shortest distance.
-  std::set<NodeAndArea> secShortestSet =
-      selectShortestDistance(prefixEntries, nodeAreaSet);
-
-  std::set<NodeAndArea> ret;
-  std::merge(
-      shortestSet.begin(),
-      shortestSet.end(),
-      secShortestSet.begin(),
-      secShortestSet.end(),
-      std::inserter(ret, ret.begin()));
-  return ret;
-}
-
-std::set<NodeAndArea>
 selectShortestDistancePerArea(
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& nodeAreaSet) {
@@ -835,8 +811,6 @@ selectRoutes(
   switch (algorithm) {
   case thrift::RouteSelectionAlgorithm::SHORTEST_DISTANCE:
     return selectShortestDistance(prefixEntries, nodeAreaSet);
-  case thrift::RouteSelectionAlgorithm::K_SHORTEST_DISTANCE_2:
-    return selectShortestDistance2(prefixEntries, nodeAreaSet);
   case thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE:
     return selectShortestDistancePerArea(prefixEntries, nodeAreaSet);
   default:

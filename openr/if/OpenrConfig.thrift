@@ -87,10 +87,7 @@ struct KvstoreConfig {
 }
 
 /*
- * Enum to customize the best route selection algorithm amongst all areas. SHORTEST_DISTANCE
- * is the default algorithm. K_SHORTEST_DISTANCE_2 and PER_AREA_SHORTEST_DISTANCE
- * will select both shortest and non shortest distance routes to help form non shortest
- * path LSPs across areas
+ * Enum to customize the best route selection algorithm amongst all areas. SHORTEST_DISTANCE is the default algorithm. PER_AREA_SHORTEST_DISTANCE will select both shortest and non shortest distance routes to help form non shortest path LSPs across areas
  */
 enum RouteSelectionAlgorithm {
   /*
@@ -102,14 +99,6 @@ enum RouteSelectionAlgorithm {
    *  Default algorithm.
    */
   SHORTEST_DISTANCE = 0,
-
-  /*
-   * In order of priority, selects the best routes with the best:
-   *  1) Path preference
-   *  2) Source preference
-   *  3) Best and second best distance
-   */
-  K_SHORTEST_DISTANCE_2 = 1,
 
   /*
    * In order of priority, selects the best routes with the best:
