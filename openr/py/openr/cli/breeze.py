@@ -31,7 +31,7 @@ from thrift.transport.TTransport import TTransportException
 # Plugin module is optional
 plugin = None
 try:
-    from openr.py.openr.cli.clis import plugin
+    from openr.py.openr.cli.clis.facebook import plugin
 except ImportError:
     pass
 
