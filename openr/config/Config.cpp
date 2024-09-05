@@ -406,9 +406,6 @@ Config::toThriftKvStoreConfig() const {
 
     config.flood_rate() = std::move(rate);
   }
-  if (auto setLeafNode = oldConfig.set_leaf_node()) {
-    config.set_leaf_node() = *setLeafNode;
-  }
   if (auto keyPrefixFilters = oldConfig.key_prefix_filters()) {
     config.key_prefix_filters() = *keyPrefixFilters;
   }

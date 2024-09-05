@@ -442,18 +442,7 @@ struct KvStoreConfig {
   4: optional KvStoreFloodRate flood_rate;
 
   /**
-   * Sometimes a node maybe a leaf node and have only one path in to network.
-   * This node does not require to keep track of the entire topology. In this
-   * case, it may be useful to optimize memory by reducing the amount of
-   * key/vals tracked by the node. Setting this flag enables key prefix filters
-   * defined by key_prefix_filters. A node only tracks keys in kvstore that
-   * matches one of the prefixes in key_prefix_filters.
-   */
-  5: optional bool set_leaf_node;
-
-  /**
-   * This comma separated string is used to set the key prefixes when key prefix
-   * filter is enabled (See set_leaf_node). It is also set when requesting KEY_DUMP
+   * This comma separated string is set when requesting KEY_DUMP
    * from peer to request keys that match one of these prefixes.
    */
   6: optional list<string> key_prefix_filters;
