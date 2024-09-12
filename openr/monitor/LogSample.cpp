@@ -95,7 +95,7 @@ LogSample::addStringVector(
     json_.insert(STRINGVECTOR_KEY, folly::dynamic::object());
   }
 
-  json_[STRINGVECTOR_KEY][key] = folly::dynamic(values.begin(), values.end());
+  json_[STRINGVECTOR_KEY][key] = folly::dynamic::array_range(values);
 }
 
 void
@@ -105,7 +105,7 @@ LogSample::addStringTagset(
     json_.insert(STRINGTAGSET_KEY, folly::dynamic::object());
   }
 
-  json_[STRINGTAGSET_KEY][key] = folly::dynamic(tags.begin(), tags.end());
+  json_[STRINGTAGSET_KEY][key] = folly::dynamic::array_range(tags);
 }
 
 int64_t
