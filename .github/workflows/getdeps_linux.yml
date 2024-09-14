@@ -32,6 +32,8 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests zstd
     - name: Fetch double-conversion
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests double-conversion
+    - name: Fetch fast_float
+      run: python3 build/fbcode_builder/getdeps.py fetch --no-tests fast_float
     - name: Fetch libdwarf
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests libdwarf
     - name: Fetch libevent
@@ -48,6 +50,10 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests zlib
     - name: Fetch bz2
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests bz2
+    - name: Fetch openssl
+      run: python3 build/fbcode_builder/getdeps.py fetch --no-tests openssl
+    - name: Fetch liboqs
+      run: python3 build/fbcode_builder/getdeps.py fetch --no-tests liboqs
     - name: Fetch autoconf
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests autoconf
     - name: Fetch automake
@@ -100,6 +106,8 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py build --no-tests zstd
     - name: Build double-conversion
       run: python3 build/fbcode_builder/getdeps.py build --no-tests double-conversion
+    - name: Build fast_float
+      run: python3 build/fbcode_builder/getdeps.py build --no-tests fast_float
     - name: Build libdwarf
       run: python3 build/fbcode_builder/getdeps.py build --no-tests libdwarf
     - name: Build libevent
@@ -116,6 +124,10 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py build --no-tests zlib
     - name: Build bz2
       run: python3 build/fbcode_builder/getdeps.py build --no-tests bz2
+    - name: Build openssl
+      run: python3 build/fbcode_builder/getdeps.py build --no-tests openssl
+    - name: Build liboqs
+      run: python3 build/fbcode_builder/getdeps.py build --no-tests liboqs
     - name: Build autoconf
       run: python3 build/fbcode_builder/getdeps.py build --no-tests autoconf
     - name: Build automake
@@ -152,7 +164,7 @@ jobs:
       run: python3 build/fbcode_builder/getdeps.py build --src-dir=. openr  --project-install-prefix openr:/usr/local
     - name: Copy artifacts
       run: python3 build/fbcode_builder/getdeps.py fixup-dyn-deps --strip --src-dir=. openr _artifacts/linux  --project-install-prefix openr:/usr/local --final-install-prefix /usr/local
-    - uses: actions/upload-artifact@v2
+    - uses: actions/upload-artifact@v4
       with:
         name: openr
         path: _artifacts
