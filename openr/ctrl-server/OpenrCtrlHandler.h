@@ -625,7 +625,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // pending longPoll requests from clients, which consists of
   // 1). promise; 2). timestamp when req received on server
   std::atomic<int64_t> pendingRequestId_{0};
-  folly::Synchronized<std::unordered_map<
+  folly::ImplicitSynchronized<std::unordered_map<
       std::string /* area */,
       std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>>
       longPollReqs_;

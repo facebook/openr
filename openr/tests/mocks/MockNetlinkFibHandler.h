@@ -139,10 +139,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Synchronized<int64_t> startTime_{0};
 
   // Abstract route Db to hide kernel level routing details from Fib
-  folly::Synchronized<UnicastRoutes> unicastRouteDb_{};
+  folly::ImplicitSynchronized<UnicastRoutes> unicastRouteDb_{};
 
   // Mpls Route db
-  folly::Synchronized<
+  folly::ImplicitSynchronized<
       std::unordered_map<int32_t, std::vector<thrift::NextHopThrift>>>
       mplsRouteDb_;
 
