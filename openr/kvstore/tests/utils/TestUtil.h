@@ -7,10 +7,10 @@
 
 #pragma once
 
-#include <folly/experimental/coro/BlockingWait.h>
-#include <folly/experimental/coro/Collect.h>
-#include <folly/experimental/coro/Generator.h>
-#include <folly/experimental/coro/Task.h>
+#include <folly/coro/BlockingWait.h>
+#include <folly/coro/Collect.h>
+#include <folly/coro/Generator.h>
+#include <folly/coro/Task.h>
 
 #include <folly/Conv.h>
 

@@ -6,7 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
-#include <folly/experimental/coro/GtestHelpers.h>
+#include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>

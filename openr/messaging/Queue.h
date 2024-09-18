@@ -16,7 +16,7 @@
 #include <folly/Expected.h>
 #include <folly/fibers/Baton.h>
 #if FOLLY_HAS_COROUTINES
-#include <folly/experimental/coro/Task.h>
+#include <folly/coro/Task.h>
 #endif
 
 namespace openr::messaging {

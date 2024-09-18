@@ -14,10 +14,10 @@
 #include <folly/init/Init.h>
 
 #if FOLLY_HAS_COROUTINES
-#include <folly/experimental/coro/BlockingWait.h>
-#include <folly/experimental/coro/Collect.h>
-#include <folly/experimental/coro/Generator.h>
-#include <folly/experimental/coro/Task.h>
+#include <folly/coro/BlockingWait.h>
+#include <folly/coro/Collect.h>
+#include <folly/coro/Generator.h>
+#include <folly/coro/Task.h>
 #endif
 
 #include <openr/common/Constants.h>
