@@ -9,6 +9,8 @@
 
 import re
 
+from nettools.ebb.py.agents.constants import FIB_AGENT_PORT
+
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 
@@ -30,7 +32,7 @@ class Consts:
     STATIC_PREFIX_ALLOC_PARAM_KEY = "e2e-network-allocations"
 
     CTRL_PORT = 2018
-    FIB_AGENT_PORT = 60100
+    FIB_AGENT_PORT = FIB_AGENT_PORT
 
     TOPOLOGY_OUTPUT_FILE = "/tmp/openr-topology.png"
 
