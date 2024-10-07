@@ -66,6 +66,9 @@ class PrefixManagerTestFixture : public testing::Test {
  public:
   void
   SetUp() override {
+    // Reset all global counters
+    fb303::fbData->resetAllData();
+
     // create KvStore + PrefixManager instances for testing
     initKvStoreWithPrefixManager();
 

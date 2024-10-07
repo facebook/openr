@@ -103,6 +103,12 @@ void triggerInitializationEventForPrefixManager(
     messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQ);
 
 /*
+ * Util function to trigger initialization event KVSTORE_SYNCED
+ */
+void triggerInitializationEventKvStoreSynced(
+    messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQ);
+
+/*
  * Util function to generate Adjacency Value
  */
 thrift::Value createAdjValue(

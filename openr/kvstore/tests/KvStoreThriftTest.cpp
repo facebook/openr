@@ -446,7 +446,7 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
   // eventbase to schedule callbacks at certain time spot
   OpenrEventBase evb;
 
-  evb.scheduleTimeout(std::chrono::milliseconds(100), [&]() noexcept {
+  evb.scheduleTimeout(std::chrono::milliseconds(200), [&]() noexcept {
     auto allCounters = fb303::fbData->getCounters();
 
     // Get number of IDLE peers

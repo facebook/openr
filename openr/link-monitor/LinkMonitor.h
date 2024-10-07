@@ -77,6 +77,7 @@ class LinkMonitor final : public OpenrEventBase {
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
       // consumer queue
+      messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
       messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
       messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue);
 
@@ -338,6 +339,16 @@ class LinkMonitor final : public OpenrEventBase {
   std::chrono::milliseconds linkflapInitBackoff_;
   std::chrono::milliseconds linkflapMaxBackoff_;
 
+  /**
+   * Flag to indicate if KVSTORE_SYNCED signal should be used
+   * to advertise adjacency to kvstore.
+   * By default this flag is set to false and adjacecies will
+   * be advertised as soon KVSTORE_SYNCED signal received. If
+   * KVSTORE_SYNCED signal is not to be used (kept purley for
+   * backward compatibility), this flag can be set by tuning
+   * link monitor configuration.
+   */
+  bool enableInitOptimization_{false};
   std::unordered_map<std::string, AreaConfiguration> const areas_;
 
   //

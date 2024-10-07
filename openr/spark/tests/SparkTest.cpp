@@ -255,9 +255,9 @@ class InitializationTestFixture : public SimpleSparkFixture {
       auto neighbor = events.value().back();
       EXPECT_EQ(iface1, neighbor.localIfName);
       EXPECT_EQ(nodeName2_, neighbor.remoteNodeName);
-      EXPECT_EQ(true, neighbor.adjOnlyUsedByOtherNode);
+      EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
       LOG(INFO) << fmt::format(
-          "{} reported adjacency UP towards {} with adjacency hold",
+          "{} reported adjacency UP towards {} without adjacency hold",
           nodeName1_,
           nodeName2_);
       ASSERT_TRUE(node1_->waitForInitializationEvent() == true);
@@ -270,9 +270,9 @@ class InitializationTestFixture : public SimpleSparkFixture {
       auto neighbor = events.value().back();
       EXPECT_EQ(iface2, neighbor.localIfName);
       EXPECT_EQ(nodeName1_, neighbor.remoteNodeName);
-      EXPECT_EQ(true, neighbor.adjOnlyUsedByOtherNode);
+      EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
       LOG(INFO) << fmt::format(
-          "{} reported adjacency UP towards {} with adjacency hold",
+          "{} reported adjacency UP towards {} without adjacency hold",
           nodeName2_,
           nodeName1_);
       ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
@@ -371,38 +371,9 @@ TEST_F(SparkHandshakeConfigFixture, MinHoldTimerTest) {
   }
 }
 
-TEST_F(InitializationTestFixture, NeighborAdjDbHold) {
+TEST_F(InitializationTestFixture, NeighborAdjDbAtInit) {
   // create 2 Spark instances with proper config and connect them
   createAndConnect();
-
-  // mimick LM queue to send adjDbSync event
-  node1_->sendPrefixDbSyncedSignal();
-  node2_->sendPrefixDbSyncedSignal();
-
-  // Now wait for sparks to detect each other
-  {
-    auto events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
-    auto neighbor = events.value().back();
-    EXPECT_EQ(iface1, neighbor.localIfName);
-    EXPECT_EQ(nodeName2_, neighbor.remoteNodeName);
-    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
-    LOG(INFO) << fmt::format(
-        "{} reported adjacency UP towards {} without adjacency hold",
-        nodeName1_,
-        nodeName2_);
-  }
-
-  {
-    auto events = node2_->waitForEvents(NB_UP_ADJ_SYNCED);
-    auto neighbor = events.value().back();
-    EXPECT_EQ(iface2, neighbor.localIfName);
-    EXPECT_EQ(nodeName1_, neighbor.remoteNodeName);
-    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
-    LOG(INFO) << fmt::format(
-        "{} reported adjacency UP towards {} without adjacency hold",
-        nodeName2_,
-        nodeName1_);
-  }
 }
 
 //
@@ -594,6 +565,10 @@ TEST_F(SimpleSparkFixture, GRTest) {
   // create Spark instances and establish connections
   createAndConnect();
 
+  // mimick LM queue to send adjDbSync event
+  node1_->sendPrefixDbSyncedSignal();
+  node2_->sendPrefixDbSyncedSignal();
+
   // kill node2
   LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
 
@@ -601,7 +576,9 @@ TEST_F(SimpleSparkFixture, GRTest) {
 
   // node-1 should report node-2 as 'RESTARTING'
   {
-    EXPECT_TRUE(node1_->waitForEvents(NB_RESTARTING).has_value());
+    auto events = node1_->waitForEvents(NB_RESTARTING);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
     LOG(INFO)
         << fmt::format("{} reported {} as RESTARTING", nodeName1_, nodeName2_);
     ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
@@ -621,7 +598,9 @@ TEST_F(SimpleSparkFixture, GRTest) {
   // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
   // with wrapped seqNum
   {
-    EXPECT_TRUE(node1_->waitForEvents(NB_RESTARTED).has_value());
+    auto events = node1_->waitForEvents(NB_RESTARTED);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
     LOG(INFO)
         << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
     ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
@@ -632,10 +611,124 @@ TEST_F(SimpleSparkFixture, GRTest) {
 
   // node-2 should ultimately report node-1 as 'UP'
   {
-    EXPECT_TRUE(node2_->waitForEvents(NB_UP).has_value());
+    auto events = node2_->waitForEvents(NB_UP);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
     LOG(INFO) << fmt::format(
         "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
-    ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
+  }
+
+  ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+  node2_->sendPrefixDbSyncedSignal();
+
+  // should NOT receive any event( e.g.NEIGHBOR_DOWN)
+  {
+    const auto& graceful_restart_time_s1 = std::chrono::seconds(
+        folly::copy(*node1_->getSparkConfig().graceful_restart_time_s()));
+    const auto& graceful_restart_time_s2 = std::chrono::seconds(
+        folly::copy(*node2_->getSparkConfig().graceful_restart_time_s()));
+    EXPECT_FALSE(
+        node1_
+            ->waitForEvents(
+                NB_DOWN, graceful_restart_time_s1, graceful_restart_time_s1 * 2)
+            .has_value());
+    EXPECT_FALSE(
+        node2_
+            ->waitForEvents(
+                NB_DOWN, graceful_restart_time_s2, graceful_restart_time_s2 * 2)
+            .has_value());
+  }
+
+  checkCounters();
+}
+
+//
+// Start 2 Spark instances and wait them forming adj. Then
+// restart one of them outside of GR window, make sure we
+// sync adjacency again
+//
+TEST_F(SimpleSparkFixture, GRTimeoutTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  // mimick LM queue to send adjDbSync event
+  node1_->sendPrefixDbSyncedSignal();
+  node2_->sendPrefixDbSyncedSignal();
+
+  // kill node2
+  LOG(INFO) << fmt::format("Kill and restart {}", nodeName2_);
+
+  node2_.reset();
+
+  // node-1 should report node-2 as 'RESTARTING'
+  {
+    auto events = node1_->waitForEvents(NB_RESTARTING);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
+    LOG(INFO)
+        << fmt::format("{} reported {} as RESTARTING", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    // Restarting nodes are considered active neighbors.
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
+  }
+
+  // Wait until GR timeout and node-2 reported as down
+  {
+    auto events = node1_->waitForEvents(NB_DOWN);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
+    LOG(INFO)
+        << fmt::format("{} reported {} as 'DOWN'", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
+    // Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
+    // and then eventually back to ESTABLISHED.
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
+  }
+
+  // Recreate Spark instance
+  node2_ = createSpark(nodeName2_, config2_);
+
+  node2_->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip2V6} /* networks */)});
+
+  // node-1 should report node-2 as 'UP'
+  {
+    auto events = node1_->waitForEvents(NB_UP);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(true, neighbor.adjOnlyUsedByOtherNode);
+    LOG(INFO) << fmt::format("{} reported {} as 'UP'", nodeName1_, nodeName2_);
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    // Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
+    // and then eventually back to ESTABLISHED.
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
+  }
+
+  // node-2 should ultimately report node-1 as 'UP'
+  {
+    auto events = node2_->waitForEvents(NB_UP);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
+  }
+
+  ASSERT_TRUE(node2_->waitForInitializationEvent() == true);
+  node2_->sendPrefixDbSyncedSignal();
+
+  // node-1 should sync adjacency with node-2
+  {
+    auto events = node1_->waitForEvents(NB_UP_ADJ_SYNCED);
+    auto neighbor = events.value().back();
+    EXPECT_EQ(false, neighbor.adjOnlyUsedByOtherNode);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {}", nodeName1_, nodeName2_);
     ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
   }

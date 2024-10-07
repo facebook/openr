@@ -1205,18 +1205,6 @@ Spark::neighborUpWrapper(
   // add neighborName to collection
   addToActiveNeighbors(ifName, neighborName);
 
-  // The neighbor is coming up for the first time or cold booting. Mark the
-  // neighbor to reflect that the corresponding adjacency can't be used by the
-  // local node.
-  if (not neighbor.gracefulRestartHoldTimer) {
-    // ATTN: expect adjacency attribute to be removed later with heartbeatMsg
-    neighbor.adjOnlyUsedByOtherNode = true;
-
-    LOG(INFO) << fmt::format(
-        "[Initialization] Mark neighbor: {} only used by other node in adj population",
-        neighborName);
-  }
-
   // Notify LinkMonitor about neighbor UP event.
   // ATTN: both WARM_BOOT(GR) and COLD_BOOT shared the SAME:
   // negotiation -> established state transiion.
@@ -1227,6 +1215,26 @@ Spark::neighborUpWrapper(
 
     notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_RESTARTED, neighbor);
   } else {
+    /**
+     * adjOnlyUsedByOtherNode is used to indicate if neighbor node is coming
+     * up for the first time or cold booting and yet not complete with its
+     * own initialization. We want to avoid sending traffic to such a neighbor
+     * until neighbor has sent heartbeat message to reset this flag.
+     *
+     * NeighborUp event can also be seen first tiem for the neighbor when
+     * local node is restarting. It should not be mistaken to neighbor node
+     * coming up and so should not be manipulating adjOnlyUsedByOtherNode
+     * flag in such a case. During local node's restart, all adjacencies
+     * need to be learned and notified for decision module to build routes
+     */
+    if (initialized_) {
+      // ATTN: expect adjacency attribute to be removed later with heartbeatMsg
+      neighbor.adjOnlyUsedByOtherNode = true;
+
+      LOG(INFO) << fmt::format(
+          "[Initialization] Mark neighbor: {} only used by other node in adj population",
+          neighborName);
+    }
     notifySparkNeighborEvent(NeighborEventType::NEIGHBOR_UP, neighbor);
   }
   if (isInitialNeighborDiscoveryComplete()) {

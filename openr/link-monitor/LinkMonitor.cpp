@@ -107,6 +107,7 @@ LinkMonitor::LinkMonitor(
     messaging::ReplicateQueue<PeerEvent>& peerUpdatesQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue,
+    messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<NeighborInitEvent> neighborUpdatesQueue,
     messaging::RQueue<fbnl::NetlinkEvent> netlinkEventsQueue)
     : nodeId_(config->getNodeName()),
@@ -142,6 +143,20 @@ LinkMonitor::LinkMonitor(
   // TODO: remove this with strict Open/R initialization sequence
   const std::chrono::seconds initialAdjHoldTime{
       *config->getConfig().adj_hold_time_s()};
+
+  /**
+   * The flag that indicates if adjacencies are to be advertised only when
+   * adjacency hold timer is expired. Advertised only on hold timer expiry
+   * when init optimization flag is disabled, otherwise advertised as soon
+   * KvStoreSynced signal received from kvstore
+   */
+  if (auto enableInitOptimization =
+          config->getConfig().enable_init_optimization()) {
+    enableInitOptimization_ = *enableInitOptimization;
+  }
+  if (enableInitOptimization_) {
+    XLOG(INFO) << "[Initialization] Init Optimization enabled";
+  }
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
@@ -271,6 +286,43 @@ LinkMonitor::LinkMonitor(
   // start initial dump timer
   adjHoldTimer_->scheduleTimeout(initialAdjHoldTime);
 
+  /**
+   * It is guaranteed that KVSTORE_SYNCED signal is received only after LM has
+   * sent peer updates to kvstore (exception only when there are no peers to
+   * learn). Thus, it is okay to treat this signal as soon it is received.
+   */
+  addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
+    while (true) {
+      auto maybePub = q.get(); // perform read
+      if (maybePub.hasError()) {
+        break;
+      }
+
+      folly::variant_match(
+          std::move(maybePub).value(),
+          [this](thrift::Publication&& pub /* unused */) { return; },
+          [this](thrift::InitializationEvent&& event) {
+            if (event == thrift::InitializationEvent::KVSTORE_SYNCED) {
+              if (enableInitOptimization_) {
+                XLOG(INFO)
+                    << "Advertise adjacencies upon receiving KVSTORE_SYNCED";
+
+                /**
+                 * If KVSTORE_SYNCED was received after hold timer expired
+                 * then adjacencies are already advertised. No need to
+                 * advertise again in that case.
+                 */
+                if (adjHoldTimer_->isScheduled()) {
+                  adjHoldTimer_->cancelTimeout();
+                  advertiseAdjacencies();
+                  advertiseRedistAddrs();
+                }
+              }
+            }
+          });
+    }
+  });
+
   // Add fiber to process the neighbor events
   addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
     XLOG(DBG1) << "Starting neighbor-event processing task";
@@ -309,19 +361,6 @@ LinkMonitor::LinkMonitor(
             }
             // Send peers to add in all areas in a batch.
             peerUpdatesQueue_.push(std::move(peerEvent));
-
-            // TODO(agrewal) LM Must wait for bi-directional adjacency to be
-            // formed before advertising adjacencies, otherwise Decision will
-            // filtered out unsuable one-way adjacencies.
-            /*
-            XLOG(INFO) << "[Initialization] Initial
-            dump of neighbors "
-                       << "received. Advertising adjacencies and addresses.";
-
-            adjHoldTimer_->cancelTimeout();
-            advertiseAdjacencies();
-            advertiseRedistAddrs();
-            */
           });
     }
     XLOG(DBG1) << "[Exit] Neighbor-event processing task finished.";

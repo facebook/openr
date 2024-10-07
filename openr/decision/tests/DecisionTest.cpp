@@ -93,6 +93,7 @@ class DecisionTestFixture : public ::testing::Test {
 
     // Reset initial KvStore sync event as not sent.
     kvStoreSyncEventSent = false;
+    adjacencyDbSyncEventSent = false;
 
     // Override default rib policy file with file based on thread id.
     // This ensures stress run will use different file for each run.
@@ -218,18 +219,22 @@ class DecisionTestFixture : public ::testing::Test {
   sendKvPublication(
       const thrift::Publication& tPublication,
       bool prefixPubExists = true,
-      bool withSelfAdj = false) {
+      bool sendKvStoreSyncSignal = true,
+      bool sendAdjacencyDbSyncSignal = true) {
     kvStoreUpdatesQueue.push(tPublication);
-    if (prefixPubExists and (not kvStoreSyncEventSent)) {
-      // Send KvStore initial synced event.
-      kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
-      kvStoreSyncEventSent = true;
-    }
+    if (prefixPubExists) {
+      if (sendKvStoreSyncSignal && !kvStoreSyncEventSent) {
+        // Send KvStore initial synced event.
+        kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+        kvStoreSyncEventSent = true;
+      }
 
-    if (withSelfAdj) {
-      // Send Self Adjacencies synced event.
-      kvStoreUpdatesQueue.push(
-          thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+      if (sendAdjacencyDbSyncSignal && !adjacencyDbSyncEventSent) {
+        // Send Self Adjacencies synced event.
+        kvStoreUpdatesQueue.push(
+            thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+        adjacencyDbSyncEventSent = true;
+      }
     }
   }
 
@@ -334,6 +339,7 @@ class DecisionTestFixture : public ::testing::Test {
 
   // Initial KvStore synced signal is sent.
   bool kvStoreSyncEventSent{false};
+  bool adjacencyDbSyncEventSent{false};
 };
 
 TEST_F(DecisionTestFixture, StopDecisionWithoutInitialPeers) {
@@ -722,6 +728,165 @@ TEST_F(DecisionTestFixture, InitialRouteUpdate) {
       {},
       {},
       {}));
+
+  // Receive & verify all the expected updates
+  auto routeDbDelta = recvRouteUpdates();
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+}
+
+/**
+ * Publish all types of update to Decision with only ADJACENCY_DB_SYNCED
+ * Omit sending KVSTORE_SYNCED
+ * Verify that route database build is blocked
+ */
+TEST_F(DecisionTestFixture, InitialRouteBuildBlockedForKvStore) {
+  // Send adj publication
+  sendKvPublication(
+      createThriftPublication(
+          {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+           {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)}},
+          {},
+          {},
+          {}),
+      false /*prefixPubExists*/,
+      false /*sendKvStoreSyncSignla*/,
+      true /*sendAdjacencyDbSyncSignal*/);
+
+  // Send prefix publication
+  sendKvPublication(
+      createThriftPublication(
+          {createPrefixKeyValue("1", 1, addr1),
+           createPrefixKeyValue("2", 1, addr2)},
+          {},
+          {},
+          {}),
+      true /*prefixPubExists*/,
+      false /*sendKvStoreSyncSignal*/,
+      true /*sendAdjacencyDbSyncSignal*/);
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds{100}, [&]() {
+    // Route update is never queued because adjacency is missing.
+    EXPECT_EQ(0, routeUpdatesQueueReader.size());
+    evb.stop();
+  });
+  evb.run();
+
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+  kvStoreSyncEventSent = true;
+
+  // Receive & verify all the expected updates
+  auto routeDbDelta = recvRouteUpdates();
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+}
+
+/**
+ * Publish all types of update to Decision with only KVSTORE_SYNCED
+ * Omit sending ADJACENCY_DB_SYNCED
+ * Verify that route database build is blocked
+ */
+TEST_F(DecisionTestFixture, InitialRouteBuildBlockedForAdjacencyDb) {
+  // Send adj publication
+  sendKvPublication(
+      createThriftPublication(
+          {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+           {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)}},
+          {},
+          {},
+          {}),
+      false /*prefixPubExists*/,
+      true /*sendKvStoreSyncSignla*/,
+      false /*sendAdjacencyDbSyncSignal*/);
+
+  // Send prefix publication
+  sendKvPublication(
+      createThriftPublication(
+          {createPrefixKeyValue("1", 1, addr1),
+           createPrefixKeyValue("2", 1, addr2)},
+          {},
+          {},
+          {}),
+      true /*prefixPubExists*/,
+      true /*sendKvStoreSyncSignal*/,
+      false /*sendAdjacencyDbSyncSignal*/);
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds{100}, [&]() {
+    // Route update is never queued because adjacency is missing.
+    EXPECT_EQ(0, routeUpdatesQueueReader.size());
+    evb.stop();
+  });
+  evb.run();
+
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
+  adjacencyDbSyncEventSent = true;
+
+  // Receive & verify all the expected updates
+  auto routeDbDelta = recvRouteUpdates();
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
+  EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
+}
+
+/**
+ * Verify basic decision operation when flag enabled to not wait for
+ * adjacency DB sync signal
+ */
+class DecisionSkipSelfAdjSyncTestFixture : public DecisionTestFixture {
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = DecisionTestFixture::createConfig();
+    // Do not wait for adjacency DB sync signal to proceed for building routes
+    tConfig.enable_init_optimization() = false;
+
+    return tConfig;
+  }
+};
+
+/**
+ * Publish all types of update to Decision with only KVSTORE_SYNCED
+ * Omit sending ADJACENCY_DB_SYNCED
+ * Verify that route database build is not blocked when config is
+ * set to build routes on kvstore sync
+ */
+TEST_F(
+    DecisionSkipSelfAdjSyncTestFixture,
+    InitialRouteBuildNotBlockedForAdjacencyDb) {
+  // Send adj publication
+  sendKvPublication(
+      createThriftPublication(
+          {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+           {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)}},
+          {},
+          {},
+          {}),
+      false /*prefixPubExists*/,
+      true /*sendKvStoreSyncSignla*/,
+      false /*sendAdjacencyDbSyncSignal*/);
+
+  // Send prefix publication
+  sendKvPublication(
+      createThriftPublication(
+          {createPrefixKeyValue("1", 1, addr1),
+           createPrefixKeyValue("2", 1, addr2)},
+          {},
+          {},
+          {}),
+      true /*prefixPubExists*/,
+      true /*sendKvStoreSyncSignal*/,
+      false /*sendAdjacencyDbSyncSignal*/);
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds{100}, [&]() {
+    // Route update is never queued because adjacency is missing.
+    EXPECT_EQ(1, routeUpdatesQueueReader.size());
+    evb.stop();
+  });
+  evb.run();
 
   // Receive & verify all the expected updates
   auto routeDbDelta = recvRouteUpdates();
@@ -1210,7 +1375,7 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
 //
 // area A: adj12
 // area B: adj13
-TEST_F(DecisionTestFixture, SelfReditributePrefixPublication) {
+TEST_F(DecisionTestFixture, SelfRedistributePrefixPublication) {
   //
   // publish area A adj and prefix
   // "2" originate addr2 into A
@@ -1622,6 +1787,8 @@ TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
             kTestingAreaName);
         kvStoreUpdatesQueue.push(publication);
         kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+        kvStoreUpdatesQueue.push(
+            thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
 
         // Expect route update with live rib policy applied.
         auto maybeRouteDb = routeUpdatesQueueReader.get();
@@ -1735,6 +1902,8 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
             {});
         kvStoreUpdatesQueue.push(publication);
         kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+        kvStoreUpdatesQueue.push(
+            thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
 
         // Expect route update without rib policy applied.
         auto maybeRouteDb = routeUpdatesQueueReader.get();
@@ -3184,6 +3353,7 @@ TEST_F(DecisionTestFixture, TestLinkPropagationInitializationSignal) {
   EXPECT_EQ(counters["decision.linkstate.up.propagation_time_ms.avg.60"], 0);
 
   kvStoreUpdatesQueue.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+  kvStoreUpdatesQueue.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
 
   lsRec1.linkStatusMap()["1/2"].status() = thrift::LinkStatusEnum::UP;
   lsRec1.linkStatusMap()["1/2"].unixTs() = now - 4;

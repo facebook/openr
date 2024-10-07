@@ -107,6 +107,7 @@ getBasicOpenrConfig(
   config.enable_rib_policy() = true;
   config.assume_drained() = false;
   config.enable_neighbor_monitor() = true;
+  config.enable_init_optimization() = true;
 
   /*
    * [OVERRIDE] thrift::LinkMonitorConfig
@@ -237,6 +238,15 @@ triggerInitializationEventForPrefixManager(
   fibRouteUpdatesQ.push(std::move(fullSyncUpdates));
 
   // condition 2: publish KVSTORE_SYNCED signal
+  kvStoreUpdatesQ.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+}
+
+/*
+ * Util function to trigger initialization event for PrefixManager
+ */
+void
+triggerInitializationEventKvStoreSynced(
+    messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQ) {
   kvStoreUpdatesQ.push(thrift::InitializationEvent::KVSTORE_SYNCED);
 }
 

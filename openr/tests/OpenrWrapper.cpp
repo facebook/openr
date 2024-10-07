@@ -125,6 +125,7 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       peerUpdatesQueue_,
       logSampleQueue_,
       kvRequestQueue_,
+      kvStoreUpdatesQueue_.getReader(),
       neighborUpdatesQueue_.getReader(),
       nlSock_->getReader());
 

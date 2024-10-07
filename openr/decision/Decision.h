@@ -258,6 +258,11 @@ class Decision : public OpenrEventBase {
   void rebuildRoutes(std::string const& event);
 
   /*
+   * Return true if unblocked for self adjacency signal
+   */
+  bool unblockSelfAdjSync();
+
+  /*
    * Return true if all conditions of initial routes build are fulfilled.
    */
   bool unblockInitialRoutesBuild();
@@ -362,6 +367,7 @@ class Decision : public OpenrEventBase {
    * received in OpenR intialization procedure.
    */
   bool initialSelfAdjSynced_{false};
+  bool enableInitOptimization_{false};
 
   /**
    * Boolean flag indicating whether rib policy is read from persisted file in

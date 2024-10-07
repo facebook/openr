@@ -196,10 +196,6 @@ main(int argc, char** argv) {
 
   // KvStore -> Subscribers
   ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
-  auto decisionKvStoreUpdatesQueueReader =
-      kvStoreUpdatesQueue.getReader("decision");
-  auto prefixMgrKvStoreUpdatesReader =
-      kvStoreUpdatesQueue.getReader("prefixManager");
 
   // LinkMonitor -> KvStore/Decision
   ReplicateQueue<PeerEvent> peerUpdatesQueue;
@@ -319,12 +315,15 @@ main(int argc, char** argv) {
           *kvStorePublicationsDispatcherQueue));
 
   // make Decision/Prefix Manager subscribers of Dispatcher
-  decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
+  auto decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
       {Constants::kAdjDbMarker.toString(),
        Constants::kPrefixDbMarker.toString()});
 
-  prefixMgrKvStoreUpdatesReader =
+  auto prefixMgrKvStoreUpdatesReader =
       dispatcher->getReader({Constants::kPrefixDbMarker.toString()});
+
+  auto linkMonitorKvStoreUpdatesReader =
+      dispatcher->getReader({"link-monitor"});
 
   watchdog->addQueue(
       *kvStorePublicationsDispatcherQueue, "kvStorePublicationsQueue");
@@ -388,6 +387,7 @@ main(int argc, char** argv) {
           peerUpdatesQueue,
           logSampleQueue,
           kvRequestQueue,
+          std::move(linkMonitorKvStoreUpdatesReader),
           std::move(linkMonitorNeighborUpdatesQueueReader),
           std::move(linkMonitorNetlinkEventsQueueReader)));
   watchdog->addQueue(interfaceUpdatesQueue, "interfaceUpdatesQueue");

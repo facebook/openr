@@ -641,8 +641,22 @@ struct OpenrConfig {
    * routes previously programmed.
    */
   106: bool enable_clear_fib_state = false;
-/**
- * ATTN: All of the temp config knobs serving for gradual rollout purpose use
- * id range of 200 - 300
- */
+  /**
+   * ATTN: All of the temp config knobs serving for gradual rollout purpose use
+   * id range of 200 - 300
+   */
+
+  /**
+   * This flag indicates to enable OpenR initialization improvements
+   * Initialization improvements are disabled by default
+   * Initialization improvements influence following,
+   *
+   * - LinkMonitor to advertise adjacencies as soon KvStore peers are synced
+   *   instead of waiting till hold timer expired. When this flag is enabled
+   *   value of adj_hold_time_s is not relevant and will be ignored
+   *
+   * - Decision module to build routes only after both KvStore synced and
+   *   self Adjacencies synced signals are received from kvstore module
+   */
+  201: optional bool enable_init_optimization;
 }

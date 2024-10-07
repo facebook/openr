@@ -149,6 +149,14 @@ Decision::Decision(
     unreceivedRouteTypes_.emplace(thrift::PrefixType::CONFIG);
   }
 
+  if (auto enableInitOptimization =
+          config_->getConfig().enable_init_optimization()) {
+    enableInitOptimization_ = *enableInitOptimization;
+  }
+  if (enableInitOptimization_) {
+    XLOG(INFO) << "[Initialization] Init Optimization enabled";
+  }
+
   // Schedule periodic timer for counter submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     updateGlobalCounters();
@@ -212,23 +220,27 @@ Decision::Decision(
 
               if (event == thrift::InitializationEvent::KVSTORE_SYNCED) {
                 // Received all initial KvStore publications.
-                XLOG(INFO) << "[Initialization] All initial publications are "
-                              "received from KvStore.";
-                initialKvStoreSynced_ = true;
-                triggerInitialBuildRoutes();
                 auto timeout = *config_->getConfig()
                                     .decision_config()
                                     ->unblock_initial_routes_ms();
-                XLOG(DBG1) << fmt::format(
+                XLOG(INFO) << fmt::format(
                     "Initial kv store synced. Waiting {}ms for initial routes to be computed.",
                     timeout);
                 unblockInitialRoutesTimeout_->scheduleTimeout(
                     std::chrono::milliseconds(timeout));
+                initialKvStoreSynced_ = true;
               } else {
                 // Received all locally originated adjacency keys
                 XLOG(INFO)
                     << "[Initialization] Received all locally originated adjacency keys";
                 initialSelfAdjSynced_ = true;
+              }
+
+              if (initialKvStoreSynced_ && unblockSelfAdjSync()) {
+                if (!unblockInitialRoutes_) {
+                  XLOG(INFO) << "Trigger initial routes build";
+                  triggerInitialBuildRoutes();
+                }
               }
             });
       } catch (const std::exception& e) {
@@ -959,6 +971,24 @@ Decision::rebuildRoutes(std::string const& event) {
   routeUpdatesQueue_.push(std::move(update));
 }
 
+/**
+ * @brief  Tells if wait for adjacency-db sync is required and if required
+ *         if adjacency-db sync signal is received
+ *
+ * @params None
+ *
+ * @return Returns true when both conditions are met
+ *         returns false otherwise
+ */
+bool
+Decision::unblockSelfAdjSync() {
+  if (!enableInitOptimization_) {
+    return true;
+  }
+
+  return initialSelfAdjSynced_;
+}
+
 bool
 Decision::unblockInitialRoutesBuild() {
   if (unblockInitialRoutes_) {
@@ -976,6 +1006,11 @@ Decision::unblockInitialRoutesBuild() {
   if (!initialKvStoreSynced_) {
     XLOG(DBG1) << blockedLogPrefix
                << "Have not yet received initial KvStore publication.";
+    return false;
+  }
+  if (!unblockSelfAdjSync()) {
+    XLOG(DBG1) << blockedLogPrefix
+               << "Have not yet received initial self adjacency publication.";
     return false;
   }
   if (!initialRibPolicyRead_) {
