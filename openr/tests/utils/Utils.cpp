@@ -237,8 +237,9 @@ triggerInitializationEventForPrefixManager(
   fullSyncUpdates.type = DecisionRouteUpdate::FULL_SYNC;
   fibRouteUpdatesQ.push(std::move(fullSyncUpdates));
 
-  // condition 2: publish KVSTORE_SYNCED signal
+  // condition 2: publish KVSTORE_SYNCED and ADJACENCY_DB_SYNCED signal
   kvStoreUpdatesQ.push(thrift::InitializationEvent::KVSTORE_SYNCED);
+  kvStoreUpdatesQ.push(thrift::InitializationEvent::ADJACENCY_DB_SYNCED);
 }
 
 /*

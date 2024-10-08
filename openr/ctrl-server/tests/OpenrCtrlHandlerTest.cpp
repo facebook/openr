@@ -1329,7 +1329,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
   {
     const std::string key{"snoop-key"};
-    std::atomic<int> received{0};
+    std::atomic<int> received{0}, diff{0};
     auto responseAndSubscription =
         handler_
             ->semifuture_subscribeAndGetAreaKvStores(
@@ -1349,19 +1349,29 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     auto subscription =
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
-            .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              // Consider publication only if `key` is present
-              // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals()->count(key)) {
-                return;
-              }
-              auto& pub = *t;
-              EXPECT_EQ(1, (*pub.keyVals()).size());
-              ASSERT_EQ(1, (*pub.keyVals()).count(key));
-              EXPECT_EQ("value1", (*pub.keyVals()).at(key).value().value());
-              EXPECT_EQ(received + 4, *(*pub.keyVals()).at(key).version());
-              received++;
-            });
+            .subscribeExTry(
+                folly::getEventBase(), [&received, &diff, key](auto&& t) {
+                  // Consider publication only if `key` is present
+                  // NOTE: There can be updates to prefix or adj keys
+                  if (!t.hasValue() or !t->keyVals()->contains(key)) {
+                    return;
+                  }
+                  auto& pub = *t;
+                  EXPECT_EQ(1, (*pub.keyVals()).size());
+                  ASSERT_EQ(1, (*pub.keyVals()).count(key));
+                  EXPECT_EQ("value1", (*pub.keyVals()).at(key).value().value());
+
+                  /**
+                   * Expect incremental version for every received update
+                   * and hence diff between them should always be constant
+                   */
+                  if (!received) {
+                    diff = received - *(*pub.keyVals()).at(key).version();
+                  }
+                  EXPECT_EQ(
+                      diff, received - *(*pub.keyVals()).at(key).version());
+                  received++;
+                });
     EXPECT_EQ(1, handler_->getNumKvStorePublishers());
     kvStoreWrapper_->setKey(
         kSpineAreaId,
@@ -1451,7 +1461,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals()->count(key)) {
+              if (!t.hasValue() or !t->keyVals()->contains(key)) {
                 return;
               }
               auto& pub = *t;
@@ -1466,7 +1476,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, random_key](auto&& t) {
-                  if (!t.hasValue() or not t->keyVals()->count(random_key)) {
+                  if (!t.hasValue() or !t->keyVals()->contains(random_key)) {
                     return;
                   }
                   auto& pub = *t;
@@ -1543,7 +1553,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or not t->keyVals()->count(key)) {
+              if (!t.hasValue() or !t->keyVals()->contains(key)) {
                 return;
               }
               auto& pub = *t;
@@ -1866,7 +1876,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              if (!t.hasValue() or not t->keyVals()->count(key)) {
+              if (!t.hasValue() or !t->keyVals()->contains(key)) {
                 return;
               }
               auto& pub = *t;

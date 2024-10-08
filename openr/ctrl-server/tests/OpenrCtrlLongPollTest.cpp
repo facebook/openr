@@ -104,25 +104,14 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
   std::chrono::steady_clock::time_point startTime;
   std::chrono::steady_clock::time_point endTime;
 
-  // mimick there is a new publication from kvstore
-  testEvb_.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
-    // record the time
-    startTime = std::chrono::steady_clock::now();
-    kvStoreWrapper_->setKey(
-        kTestingAreaName,
-        adjKey_,
-        createThriftValue(1, nodeName_, std::string("value1")));
-
-    // stop the evb
-    testEvb_.stop();
-  });
-
-  // start eventloop
-  std::thread evbThread([&]() { testEvb_.run(); });
-  testEvb_.waitUntilRunning();
+  kvStoreWrapper_->setKey(
+      kTestingAreaName,
+      adjKey_,
+      createThriftValue(1, nodeName_, std::string("value1")));
 
   // start long-poll
   LOG(INFO) << "Start long poll...";
+  startTime = std::chrono::steady_clock::now();
   isAdjChanged = handler_
                      ->semifuture_longPollKvStoreAdjArea(
                          std::make_unique<std::string>(kTestingAreaName),
@@ -134,10 +123,6 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
   // make sure when there is publication, processing delay is less than 250ms
   ASSERT_LE(endTime - startTime, std::chrono::milliseconds(250));
   ASSERT_TRUE(isAdjChanged);
-
-  // wait for evl before cleanup
-  testEvb_.waitUntilStopped();
-  evbThread.join();
 }
 
 /*
@@ -147,7 +132,10 @@ TEST_F(LongPollFixture, LongPollAdjAdded) {
 TEST_F(LongPollFixture, LongPollTimeout) {
   bool isAdjChanged = false;
 
-  // mimick there is a new publication from kvstore
+  /**
+   * mimick there is a new publication from kvstore
+   * Publication from separate thread required for Longpoll to timeout
+   */
   testEvb_.scheduleTimeout(
       Constants::kLongPollReqHoldTime + std::chrono::milliseconds(1000),
       [&]() noexcept {
@@ -234,8 +222,11 @@ TEST_F(LongPollFixture, LongPollAdjUnchanged) {
       adjKey_,
       createThriftValue(1, nodeName_, std::string("value1")));
 
-  // mimick there is a new publication from kvstore.
-  // This publication should clean up pending req.
+  /**
+   * mimick there is a new publication from kvstore.
+   * This publication should clean up pending req.
+   * Publication from separate thread required for Longpoll to timeout
+   */
   testEvb_.scheduleTimeout(
       Constants::kLongPollReqHoldTime + std::chrono::milliseconds(1000),
       [&]() noexcept {
