@@ -325,7 +325,6 @@ class LinkMonitorTestFixture : public testing::Test {
     }
 
     std::vector<openr::thrift::AreaConfig> areaConfig;
-    int32_t nodeLabelBase = 101;
 
     // iterate and construct config
     for (auto areaId : areas) {
