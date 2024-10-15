@@ -544,14 +544,10 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   sendKvPublication(publication);
   auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  // self mpls route and node 2 mpls route label route
-  EXPECT_EQ(2, routeDbDelta.mplsRoutesToUpdate.size());
-  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
 
   auto routeDb = dumpRouteDb({"1"})["1"];
   std::sort(routeDb.unicastRoutes()->begin(), routeDb.unicastRoutes()->end());
-  std::sort(routeDb.mplsRoutes()->begin(), routeDb.mplsRoutes()->end());
 
   auto routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
@@ -583,8 +579,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   std::sort(
       routeDbBefore.unicastRoutes()->begin(),
       routeDbBefore.unicastRoutes()->end());
-  std::sort(
-      routeDbBefore.mplsRoutes()->begin(), routeDbBefore.mplsRoutes()->end());
   sendKvPublication(publication);
   // validate routers
 
@@ -595,13 +589,10 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(
       routeDbDelta.unicastRoutesToUpdate.begin()->second.prefix,
       toIPNetwork(addr3));
-  EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
-  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
 
   routeDb = dumpRouteDb({"1"})["1"];
   std::sort(routeDb.unicastRoutes()->begin(), routeDb.unicastRoutes()->end());
-  std::sort(routeDb.mplsRoutes()->begin(), routeDb.mplsRoutes()->end());
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
   fillRouteMap("1", routeMap, routeDb);
@@ -651,16 +642,12 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   std::sort(
       routeDbBefore.unicastRoutes()->begin(),
       routeDbBefore.unicastRoutes()->end());
-  std::sort(
-      routeDbBefore.mplsRoutes()->begin(), routeDbBefore.mplsRoutes()->end());
 
   sendKvPublication(publication);
   routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToDelete.size());
-  EXPECT_EQ(1, routeDbDelta.mplsRoutesToDelete.size());
   routeDb = dumpRouteDb({"1"})["1"];
   std::sort(routeDb.unicastRoutes()->begin(), routeDb.unicastRoutes()->end());
-  std::sort(routeDb.mplsRoutes()->begin(), routeDb.mplsRoutes()->end());
 
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
@@ -680,8 +667,6 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   std::sort(
       routeDbBefore.unicastRoutes()->begin(),
       routeDbBefore.unicastRoutes()->end());
-  std::sort(
-      routeDbBefore.mplsRoutes()->begin(), routeDbBefore.mplsRoutes()->end());
   sendKvPublication(publication);
   // validate routers
 
@@ -692,12 +677,9 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(
       routeDbDelta.unicastRoutesToUpdate.begin()->second.prefix,
       toIPNetwork(addr3));
-  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
-  EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
 
   routeDb = dumpRouteDb({"1"})["1"];
   std::sort(routeDb.unicastRoutes()->begin(), routeDb.unicastRoutes()->end());
-  std::sort(routeDb.mplsRoutes()->begin(), routeDb.mplsRoutes()->end());
   routeDelta = findDeltaRoutes(routeDb, routeDbBefore);
   EXPECT_TRUE(checkEqualRoutesDelta(routeDbDelta, routeDelta));
 }
@@ -828,7 +810,6 @@ TEST_F(DecisionTestFixture, InitialRouteBuildBlockedForAdjacencyDb) {
   // Receive & verify all the expected updates
   auto routeDbDelta = recvRouteUpdates();
   EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
-  EXPECT_EQ(0, routeDbDelta.mplsRoutesToDelete.size());
   EXPECT_EQ(0, routeDbDelta.unicastRoutesToDelete.size());
 }
 
@@ -2572,7 +2553,7 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
 //
 // This test aims to verify counter reporting from Decision module
 //
-TEST_F(DecisionTestFixture, Counters) {
+TEST_F(DecisionTestFixture, CountersTest) {
   // Verifiy some initial/default counters
   {
     decision->updateGlobalCounters();
@@ -2596,23 +2577,12 @@ TEST_F(DecisionTestFixture, Counters) {
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP,
       std::nullopt /* missing metric vector */);
-  auto bgpPrefixEntry3 = createPrefixEntry( // Conflicting forwarding type
-      toIpPrefix("10.3.0.0/16"),
-      thrift::PrefixType::BGP,
-      "data=10.3.0.0/16",
-      thrift::PrefixForwardingType::SR_MPLS,
-      thrift::PrefixForwardingAlgorithm::SP_ECMP);
   thrift::KeyVals pubKvs = {
       {"adj:1", createAdjValue(serializer, "1", 1, {adj12, adj13}, false, 1)},
       {"adj:2", createAdjValue(serializer, "2", 1, {adj21, adj23}, false, 2)},
-      {"adj:3",
-       createAdjValue(serializer, "3", 1, {adj31}, false, 3 << 20)}, // invalid
-                                                                     // mpls
-                                                                     // label
-      {"adj:4",
-       createAdjValue(serializer, "4", 1, {}, false, 4)} // Disconnected
-                                                         // node
-  };
+      {"adj:3", createAdjValue(serializer, "3", 1, {adj31}, false, 3)},
+      // Disconnected node
+      {"adj:4", createAdjValue(serializer, "4", 1, {}, false, 4)}};
   pubKvs.emplace(createPrefixKeyValue("1", 1, addr1));
   pubKvs.emplace(createPrefixKeyValue("1", 1, addr1V4));
 
@@ -2621,7 +2591,6 @@ TEST_F(DecisionTestFixture, Counters) {
 
   pubKvs.emplace(createPrefixKeyValue("3", 1, addr3));
   pubKvs.emplace(createPrefixKeyValue("3", 1, bgpPrefixEntry1));
-  pubKvs.emplace(createPrefixKeyValue("3", 1, bgpPrefixEntry3));
 
   pubKvs.emplace(createPrefixKeyValue("4", 1, addr4));
   pubKvs.emplace(createPrefixKeyValue("4", 1, bgpPrefixEntry2));
@@ -2643,9 +2612,7 @@ TEST_F(DecisionTestFixture, Counters) {
   EXPECT_EQ(counters.at("decision.num_complete_adjacencies"), 2);
   EXPECT_EQ(counters.at("decision.num_nodes"), 4);
   EXPECT_EQ(counters.at("decision.num_prefixes"), 8);
-  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 1);
-  EXPECT_EQ(counters.at("decision.skipped_mpls_route.count.60"), 1);
-  EXPECT_EQ(counters.at("decision.no_route_to_label.count.60"), 1);
+  EXPECT_EQ(counters.at("decision.no_route_to_prefix.count.60"), 2);
 
   // fully disconnect node 2
   auto publication1 = createThriftPublication(
@@ -2910,9 +2877,6 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
 
         // Static config originated route and static VIP route.
         EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
-        // Node label routes for the node itself (1).
-        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
-        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(1));
 
         // Send adj publication.
         // Updated adjacency for peer "2" is received,
@@ -2929,9 +2893,6 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
         EXPECT_EQ(
             routeDbDelta.unicastRoutesToUpdate.begin()->second.prefix,
             toIPNetwork(addr1));
-        // Node label route for node 2.
-        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.size());
-        EXPECT_EQ(1, routeDbDelta.mplsRoutesToUpdate.count(2));
 
         evb.stop();
       });

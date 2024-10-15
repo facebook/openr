@@ -132,7 +132,6 @@ Decision::Decision(
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),
       config->isV4Enabled(),
-      config->isSegmentRoutingEnabled(),
       config->isBestRouteSelectionEnabled(),
       config->isV4OverV6NexthopEnabled());
 

@@ -74,19 +74,14 @@ DecisionRouteDb::update(DecisionRouteUpdate const& update) {
 SpfSolver::SpfSolver(
     const std::string& myNodeName,
     bool enableV4,
-    bool enableNodeSegmentLabel,
     bool enableBestRouteSelection,
     bool v4OverV6Nexthop)
     : myNodeName_(myNodeName),
       enableV4_(enableV4),
-      enableNodeSegmentLabel_(enableNodeSegmentLabel),
       enableBestRouteSelection_(enableBestRouteSelection),
       v4OverV6Nexthop_(v4OverV6Nexthop) {
   // Initialize stat keys
   fb303::fbData->addStatExportType("decision.adj_db_update", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "decision.incompatible_forwarding_type", fb303::COUNT);
-  fb303::fbData->addStatExportType("decision.no_route_to_label", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.no_route_to_prefix", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.path_build_ms", fb303::AVG);
   fb303::fbData->addStatExportType("decision.prefix_db_update", fb303::COUNT);
@@ -94,14 +89,9 @@ SpfSolver::SpfSolver(
   fb303::fbData->addStatExportType("decision.route_build_runs", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "decision.get_route_for_prefix", fb303::COUNT);
-  fb303::fbData->addStatExportType("decision.skipped_mpls_route", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "decision.duplicate_node_label", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.spf_ms", fb303::AVG);
   fb303::fbData->addStatExportType("decision.spf_runs", fb303::COUNT);
   fb303::fbData->addStatExportType("decision.errors", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "decision.incorrect_redistribution_route", fb303::COUNT);
 }
 
 SpfSolver::~SpfSolver() = default;
@@ -346,102 +336,6 @@ SpfSolver::buildRouteDb(
       continue;
     }
     routeDb.addUnicastRoute(RibUnicastEntry(ribUnicastEntry));
-  }
-
-  //
-  // Create MPLS routes for all nodeLabel
-  //
-  if (enableNodeSegmentLabel_) {
-    std::unordered_map<int32_t, std::pair<std::string, RibMplsEntry>>
-        labelToNode;
-    for (const auto& [area, linkState] : areaLinkStates) {
-      for (const auto& [_, adjDb] : linkState.getAdjacencyDatabases()) {
-        const auto topLabel = *adjDb.nodeLabel();
-        const auto& nodeName = *adjDb.thisNodeName();
-        // Top label is not set => Non-SR mode
-        if (topLabel == 0) {
-          XLOG(INFO) << "Ignoring node label " << topLabel << " of node "
-                     << nodeName << " in area " << area;
-          fb303::fbData->addStatValue(
-              "decision.skipped_mpls_route", 1, fb303::COUNT);
-          continue;
-        }
-        // If mpls label is not valid then ignore it
-        if (not isMplsLabelValid(topLabel)) {
-          XLOG(ERR) << "Ignoring invalid node label " << topLabel << " of node "
-                    << nodeName << " in area " << area;
-          fb303::fbData->addStatValue(
-              "decision.skipped_mpls_route", 1, fb303::COUNT);
-          continue;
-        }
-
-        // There can be a temporary collision in node label allocation.
-        // Usually happens when two segmented networks allocating labels from
-        // the same range join together. In case of such conflict we respect
-        // the node label of bigger node-ID
-        auto iter = labelToNode.find(topLabel);
-        if (iter != labelToNode.end()) {
-          XLOG(INFO) << "Found duplicate label " << topLabel << "from "
-                     << iter->second.first << " " << nodeName << " in area "
-                     << area;
-          fb303::fbData->addStatValue(
-              "decision.duplicate_node_label", 1, fb303::COUNT);
-          if (iter->second.first < nodeName) {
-            continue;
-          }
-        }
-
-        // Install POP_AND_LOOKUP for next layer
-        if (*adjDb.thisNodeName() == myNodeName) {
-          thrift::NextHopThrift nh;
-          nh.address() = toBinaryAddress(folly::IPAddressV6("::"));
-          nh.area() = area;
-          nh.mplsAction() =
-              createMplsAction(thrift::MplsActionCode::POP_AND_LOOKUP);
-          labelToNode.erase(topLabel);
-          labelToNode.emplace(
-              topLabel,
-              std::make_pair(myNodeName, RibMplsEntry(topLabel, {nh})));
-          continue;
-        }
-
-        // Get best nexthop towards the node
-        auto metricNhs = getNextHopsWithMetric(
-            myNodeName, {{adjDb.thisNodeName().value(), area}}, linkState);
-        if (metricNhs.second.empty()) {
-          XLOG(WARNING) << "No route to nodeLabel " << std::to_string(topLabel)
-                        << " of node " << nodeName;
-          fb303::fbData->addStatValue(
-              "decision.no_route_to_label", 1, fb303::COUNT);
-          continue;
-        }
-
-        // Create nexthops with appropriate MplsAction (PHP and SWAP). Note
-        // that all nexthops are valid for routing without loops. Fib is
-        // responsible for installing these routes by making sure it programs
-        // least cost nexthops first and of same action type (based on HW
-        // limitations)
-        labelToNode.erase(topLabel);
-        labelToNode.emplace(
-            topLabel,
-            std::make_pair(
-                adjDb.thisNodeName().value(),
-                RibMplsEntry(
-                    topLabel,
-                    getNextHopsThrift(
-                        myNodeName,
-                        {{adjDb.thisNodeName().value(), area}},
-                        false /* isV4 */,
-                        metricNhs,
-                        topLabel,
-                        area,
-                        linkState))));
-      }
-    }
-
-    for (auto& [_, nodeToEntry] : labelToNode) {
-      routeDb.addMplsRoute(std::move(nodeToEntry.second));
-    }
   }
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(

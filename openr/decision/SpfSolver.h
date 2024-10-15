@@ -116,7 +116,6 @@ class SpfSolver {
   SpfSolver(
       const std::string& myNodeName,
       bool enableV4,
-      bool enableNodeSegmentLabel,
       bool enableBestRouteSelection = false,
       bool v4OverV6Nexthop = false);
   ~SpfSolver();
