@@ -116,7 +116,6 @@ LinkMonitor::LinkMonitor(
       enableLinkStatusMeasurement_(
           *config->getLinkMonitorConfig().enable_link_status_measurement()),
       enableV4_(config->isV4Enabled()),
-      enableSegmentRouting_(config->isSegmentRoutingEnabled()),
       prefixForwardingType_(*config->getConfig().prefix_forwarding_type()),
       prefixForwardingAlgorithm_(
           *config->getConfig().prefix_forwarding_algorithm()),
@@ -998,13 +997,6 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   adjDb.thisNodeName() = nodeId_;
   adjDb.area() = area;
   adjDb.nodeLabel() = 0;
-
-  if (enableSegmentRouting_) {
-    auto it = state_.nodeLabelMap()->find(area);
-    if (it != state_.nodeLabelMap()->end()) {
-      adjDb.nodeLabel() = it->second;
-    }
-  }
 
   // [Hard-Drain] set node overload bit
   adjDb.isOverloaded() = *state_.isOverloaded();

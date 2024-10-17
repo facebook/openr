@@ -461,8 +461,6 @@ TEST(ConfigTest, GeneralGetter) {
 
     // enable_v4
     EXPECT_TRUE(config.isV4Enabled());
-    // enable_segment_routing
-    EXPECT_FALSE(config.isSegmentRoutingEnabled());
     // enable_best_route_selection
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
     // enable_v4_over_v6_nexthop

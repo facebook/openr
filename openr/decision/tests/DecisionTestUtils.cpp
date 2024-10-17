@@ -88,14 +88,6 @@ fillRouteMap(
       routeMap[make_pair(node, prefix)].emplace(nextHop);
     }
   }
-  for (auto const& [_, entry] : routeDb.mplsRoutes) {
-    auto topLabelStr = std::to_string(entry.label);
-    for (const auto& nextHop : entry.nexthops) {
-      VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
-              << toString(nextHop);
-      routeMap[make_pair(node, topLabelStr)].emplace(nextHop);
-    }
-  }
 }
 
 void
@@ -110,14 +102,6 @@ fillRouteMap(
               << toString(nextHop);
 
       routeMap[make_pair(node, prefix)].emplace(nextHop);
-    }
-  }
-  for (auto const& route : *routeDb.mplsRoutes()) {
-    auto topLabelStr = std::to_string(*route.topLabel());
-    for (const auto& nextHop : *route.nextHops()) {
-      VLOG(4) << "node: " << node << " label: " << topLabelStr << " -> "
-              << toString(nextHop);
-      routeMap[make_pair(node, topLabelStr)].emplace(nextHop);
     }
   }
 }

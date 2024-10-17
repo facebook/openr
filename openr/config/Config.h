@@ -112,11 +112,6 @@ class Config {
   }
 
   bool
-  isSegmentRoutingEnabled() const {
-    return config_.enable_segment_routing().value_or(false);
-  }
-
-  bool
   isNetlinkFibHandlerEnabled() const {
     return config_.enable_netlink_fib_handler().value_or(false);
   }

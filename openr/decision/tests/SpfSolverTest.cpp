@@ -132,7 +132,6 @@ TEST(ShortestPathTest, UnreachableNodes) {
     auto routeDb = spfSolver.buildRouteDb(node, areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
     EXPECT_EQ(0, routeDb->unicastRoutes.size());
-    EXPECT_EQ(0, routeDb->mplsRoutes.size()); // No label routes
   }
 }
 
@@ -288,7 +287,6 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
-  EXPECT_EQ(0, routeDb->mplsRoutes.size());
 }
 
 //

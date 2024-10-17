@@ -37,21 +37,6 @@ DecisionRouteDb::calculateUpdate(DecisionRouteDb&& newDb) const {
       delta.unicastRoutesToDelete.emplace_back(prefix);
     }
   }
-
-  // mplsRoutesToUpdate
-  for (auto& [label, entry] : newDb.mplsRoutes) {
-    const auto& search = mplsRoutes.find(label);
-    if (search == mplsRoutes.end() || search->second != entry) {
-      delta.addMplsRouteToUpdate(std::move(entry));
-    }
-  }
-
-  // mplsRoutesToDelete
-  for (auto const& [label, _] : mplsRoutes) {
-    if (!newDb.mplsRoutes.count(label)) {
-      delta.mplsRoutesToDelete.emplace_back(label);
-    }
-  }
   return delta;
 }
 
@@ -62,12 +47,6 @@ DecisionRouteDb::update(DecisionRouteUpdate const& update) {
   }
   for (auto const& [_, entry] : update.unicastRoutesToUpdate) {
     unicastRoutes.insert_or_assign(entry.prefix, entry);
-  }
-  for (auto const& label : update.mplsRoutesToDelete) {
-    mplsRoutes.erase(label);
-  }
-  for (auto const& [_, entry] : update.mplsRoutesToUpdate) {
-    mplsRoutes.insert_or_assign(entry.label, entry);
   }
 }
 
@@ -479,7 +458,6 @@ SpfSolver::selectBestPathsSpf(
       routeSelectionResult.allNodeAreas,
       prefix.first.isV4(), /* isV4Prefix */
       nextHopsWithMetric,
-      std::nullopt /* swapLabel */,
       area,
       linkState);
 
@@ -587,7 +565,6 @@ SpfSolver::getNextHopsThrift(
     const std::set<NodeAndArea>& dstNodeAreas,
     bool isV4,
     const BestNextHopMetrics& bestNextHopMetrics,
-    std::optional<int32_t> swapLabel,
     const std::string& area,
     const LinkState& linkState) const {
   // Use reference to avoid copy
@@ -636,23 +613,12 @@ SpfSolver::getNextHopsThrift(
       continue;
     }
 
-    // Create associated mpls action if swapLabel is provided
-    std::optional<thrift::MplsAction> mplsAction;
-    if (swapLabel.has_value()) {
-      CHECK(not mplsAction.has_value());
-      bool isNextHopAlsoDst = dstNodeAreas.count({neighborNode, area});
-      mplsAction = createMplsAction(
-          isNextHopAlsoDst ? thrift::MplsActionCode::PHP
-                           : thrift::MplsActionCode::SWAP,
-          isNextHopAlsoDst ? std::nullopt : swapLabel);
-    }
-
     nextHops.emplace(createNextHop(
         isV4 and not v4OverV6Nexthop_ ? link->getNhV4FromNode(myNodeName)
                                       : link->getNhV6FromNode(myNodeName),
         link->getIfaceFromNode(myNodeName),
         distOverLink,
-        mplsAction,
+        std::nullopt, /* mplsAction */
         link->getArea(),
         link->getOtherNodeName(myNodeName),
         0 /* ucmp weight */));

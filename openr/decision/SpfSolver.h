@@ -19,7 +19,6 @@
 
 namespace openr {
 
-using StaticMplsRoutes = std::unordered_map<int32_t, RibMplsEntry>;
 using StaticUnicastRoutes =
     std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>;
 using Metric = openr::LinkStateMetric;
@@ -35,13 +34,20 @@ using BestNextHopMetrics = std::pair<
  * - All selected entries `list<pair<Node, Area>>`
  */
 struct RouteSelectionResult {
-  // Representing the selected set of `<Node, Area>`.
-  // NOTE: Using `std::set` helps ensuring uniqueness and ease code for electing
-  // unique `<Node, Area>` in some-cases.
+  /*
+   * Representing the selected set of `<Node, Area>`.
+   *
+   * NOTE:
+   * It is intentional to use `std::set` to preserve the order of node + area
+   * combination. This ensures the uniqueness and ease code for electing
+   * the unique `<Node, Area>` when tie-breaking is needed.
+   */
   std::set<NodeAndArea> allNodeAreas;
 
-  // The `pair<Node, Area>` with best metrics. This should be used for
-  // redistribution across areas.
+  /*
+   * The `pair<Node, Area>` with best metrics.
+   * This will be used for redistribution across areas.
+   */
   NodeAndArea bestNodeArea;
 
   /*
@@ -69,11 +75,13 @@ class DecisionRouteDb {
  public:
   std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutes;
-  std::unordered_map<int32_t /* label */, RibMplsEntry> mplsRoutes;
 
-  // calculate the delta between this and newDb. Note, this method is const;
-  // We are not actually updating here. We may mutate the DecisionRouteUpdate in
-  // some way before calling update with it
+  /*
+   * Function to calculate the delta between this and newDb.
+   *
+   * NOTE: this method is const. We are not actually updating here.
+   * We may mutate the `DecisionRouteUpdate` in some way before calling update.
+   */
   DecisionRouteUpdate calculateUpdate(DecisionRouteDb&& newDb) const;
 
   // update the state of this with the DecisionRouteUpdate passed
@@ -86,10 +94,6 @@ class DecisionRouteDb {
     for (const auto& [_, entry] : unicastRoutes) {
       tRouteDb.unicastRoutes()->emplace_back(entry.toThrift());
     }
-    // mpls routes
-    for (const auto& [_, entry] : mplsRoutes) {
-      tRouteDb.mplsRoutes()->emplace_back(entry.toThrift());
-    }
     return tRouteDb;
   }
 
@@ -98,13 +102,6 @@ class DecisionRouteDb {
   addUnicastRoute(RibUnicastEntry&& entry) {
     auto key = entry.prefix;
     CHECK(unicastRoutes.emplace(key, std::move(entry)).second);
-  }
-
-  // Assertion: no route for this label may already exist in the db
-  void
-  addMplsRoute(RibMplsEntry&& entry) {
-    auto key = entry.label;
-    CHECK(mplsRoutes.emplace(key, std::move(entry)).second);
   }
 };
 
@@ -123,7 +120,6 @@ class SpfSolver {
   //
   // util function to update IP static route
   //
-
   void updateStaticUnicastRoutes(
       const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutesToUpdate,
@@ -236,22 +232,19 @@ class SpfSolver {
       const std::set<NodeAndArea>& dstNodeAreas,
       const LinkState& linkState);
 
-  // This function converts best nexthop nodes to best nexthop adjacencies
-  // which can then be passed to FIB for programming. It considers and
-  // parallel link logic (tested by our UT)
-  // If swap label is provided then it will be used to associate SWAP or PHP
-  // mpls action
+  /*
+   * This function converts best nexthop nodes to best nexthop adjacencies
+   * which can then be passed to FIB for programming.
+   */
   std::unordered_set<thrift::NextHopThrift> getNextHopsThrift(
       const std::string& myNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,
       const BestNextHopMetrics& bestNextHopMetrics,
-      std::optional<int32_t> swapLabel,
       const std::string& area,
       const LinkState& linkState) const;
 
-  // Collection to store static IP/MPLS routes
-  StaticMplsRoutes staticMplsRoutes_;
+  // Collection to store static IP UNICAST routes
   StaticUnicastRoutes staticUnicastRoutes_;
 
   // Cache of best route selection.
@@ -264,8 +257,6 @@ class SpfSolver {
   // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
   // nexthops to Fib module for programming. Else it will just drop them.
   const bool enableV4_{false};
-
-  const bool enableNodeSegmentLabel_{true};
 
   const bool enableBestRouteSelection_{false};
 
