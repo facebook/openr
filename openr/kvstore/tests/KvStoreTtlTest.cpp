@@ -302,7 +302,7 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
 
   VLOG(1) << "Adjacency list: ";
   for (const auto&& [index, set] : adjacencyList | ranges::views::enumerate) {
-    VLOG(1) << index << ": " << fmt::format("{}", fmt::join(set, ", "));
+    VLOG(1) << index << ": " << fmt::format("{}", folly::join(", ", set));
   }
   performKvStoreSyncTest(
       adjacencyList, "kv_store_graph::store", kNumStores, kNumStores + 1);

@@ -53,6 +53,7 @@ find_package(Threads REQUIRED)
 find_library(ZSTD zstd)
 find_library(BENCHMARK follybenchmark PATHS)
 find_package(range-v3 REQUIRED)
+find_package(Xxhash REQUIRED)
 
 find_path(RE2_INCLUDE_DIR re2/re2.h)
 
@@ -70,9 +71,10 @@ if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
   if (COMPILER_HAS_F_COROUTINES)
     message(
       STATUS
-      "GCC has support for C++ coroutines, setting flag for Folly build."
+      "GCC has support for C++ coroutines, "
+      "disabling since fbthrift service is not ready"
     )
-    add_compile_options(-fcoroutines)
+    # add_compile_options(-fcoroutines)
   else()
     message(
       STATUS
@@ -88,6 +90,7 @@ include_directories(
   ${FBTHRIFT_INCLUDE_DIR}
   ${FOLLY_INCLUDE_DIR}
   ${RE2_INCLUDE_DIR}
+  ${Xxhash_INCLUDE_DIR}
 )
 
 #

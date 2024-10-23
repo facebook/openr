@@ -126,8 +126,7 @@ Decision::Decision(
               *config->getConfig().decision_config()->save_rib_policy_max_ms()),
           [this]() noexcept { saveRibPolicy(); }),
       unblockInitialRoutesTimeout_(folly::AsyncTimeout::make(
-          *getEvb(),
-          std::bind_front(&Decision::forceInitialRoutesBuild, this))) {
+          *getEvb(), [this]() noexcept { forceInitialRoutesBuild(); })) {
   // Create SpfSolver instance for best path calculation/selection
   spfSolver_ = std::make_unique<SpfSolver>(
       config->getNodeName(),

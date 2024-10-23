@@ -1353,7 +1353,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 folly::getEventBase(), [&received, &diff, key](auto&& t) {
                   // Consider publication only if `key` is present
                   // NOTE: There can be updates to prefix or adj keys
-                  if (!t.hasValue() or !t->keyVals()->contains(key)) {
+                  if (!t.hasValue() || !t->keyVals()->count(key)) {
                     return;
                   }
                   auto& pub = *t;
@@ -1461,7 +1461,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or !t->keyVals()->contains(key)) {
+              if (!t.hasValue() || !t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -1476,7 +1476,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, random_key](auto&& t) {
-                  if (!t.hasValue() or !t->keyVals()->contains(random_key)) {
+                  if (!t.hasValue() || !t->keyVals()->count(random_key)) {
                     return;
                   }
                   auto& pub = *t;
@@ -1553,7 +1553,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
               // Consider publication only if `key` is present
               // NOTE: There can be updates to prefix or adj keys
-              if (!t.hasValue() or !t->keyVals()->contains(key)) {
+              if (!t.hasValue() || !t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -1876,7 +1876,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              if (!t.hasValue() or !t->keyVals()->contains(key)) {
+              if (!t.hasValue() || !t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
@@ -2636,7 +2636,8 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
                 }
                 auto& pub = *t;
                 XLOG(INFO) << fmt::format(
-                    "Check publication for update: {}.", received);
+                    "Check publication for update: {}.",
+                    std::to_string(received));
                 checkPublications(expectedDeltas[received], pub);
                 received++;
               });
