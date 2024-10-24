@@ -40,10 +40,6 @@ const auto bestRoute1 = createPrefixEntry(prefix1);
 const auto bestRoute2 = createPrefixEntry(prefix2);
 const auto bestRoute3 = createPrefixEntry(prefix3);
 
-const auto label1{1};
-const auto label2{2};
-const auto label3{3};
-
 const auto path1_2_1 = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::2")),
     std::string("iface_1_2_1"),
@@ -80,17 +76,6 @@ const auto path3_4_2 = createNextHop(
     toBinaryAddress(folly::IPAddress("fe80::4")),
     std::string("iface_3_4_2"),
     2);
-
-const auto mpls_path1_2_1 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")),
-    std::string("iface_1_2_1"),
-    2,
-    createMplsAction(thrift::MplsActionCode::SWAP, 2));
-const auto mpls_path1_2_2 = createNextHop(
-    toBinaryAddress(folly::IPAddress("fe80::2")),
-    std::string("iface_1_2_2"),
-    2,
-    createMplsAction(thrift::MplsActionCode::SWAP, 2));
 
 // Check if two lists of unicastRoute's are equal.
 // Handles elements being in different order.
@@ -186,47 +171,6 @@ checkEqualRouteDatabaseUnicastDetail(
       *lhs.unicastRoutes(), *rhs.unicastRoutes());
 }
 
-bool
-checkEqualRouteDatabaseMpls(
-    const thrift::RouteDatabase& lhs, const thrift::RouteDatabase& rhs) {
-  if (lhs.mplsRoutes()->size() != rhs.mplsRoutes()->size()) {
-    return false;
-  }
-  std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> lhsRoutes;
-  std::unordered_map<int32_t, std::set<thrift::NextHopThrift>> rhsRoutes;
-  for (auto const& route : *lhs.mplsRoutes()) {
-    lhsRoutes.emplace(
-        *route.topLabel(),
-        std::set<thrift::NextHopThrift>(
-            route.nextHops()->begin(), route.nextHops()->end()));
-  }
-  for (auto const& route : *rhs.mplsRoutes()) {
-    rhsRoutes.emplace(
-        *route.topLabel(),
-        std::set<thrift::NextHopThrift>(
-            route.nextHops()->begin(), route.nextHops()->end()));
-  }
-
-  for (auto const& kv : lhsRoutes) {
-    if (rhsRoutes.count(kv.first) == 0) {
-      return false;
-    }
-    if (rhsRoutes.at(kv.first) != kv.second) {
-      return false;
-    }
-  }
-
-  for (auto const& kv : rhsRoutes) {
-    if (lhsRoutes.count(kv.first) == 0) {
-      return false;
-    }
-    if (lhsRoutes.at(kv.first) != kv.second) {
-      return false;
-    }
-  }
-  return true;
-}
-
 // Verify if RouteDatabaseDelta are same.
 // Handles values being arrange in different order.
 bool
@@ -288,23 +232,16 @@ checkEqualDecisionRouteUpdate(
   // vectors). perfEvents is not considered here.
 
   if (lhs.unicastRoutesToUpdate.size() != rhs.unicastRoutesToUpdate.size() or
-      lhs.unicastRoutesToDelete.size() != rhs.unicastRoutesToDelete.size() or
-      lhs.mplsRoutesToUpdate.size() != rhs.mplsRoutesToUpdate.size() or
-      lhs.mplsRoutesToDelete.size() != rhs.mplsRoutesToDelete.size()) {
+      lhs.unicastRoutesToDelete.size() != rhs.unicastRoutesToDelete.size()) {
     return false;
   }
 
   if (lhs.unicastRoutesToUpdate != rhs.unicastRoutesToUpdate or
-      lhs.mplsRoutesToUpdate != rhs.mplsRoutesToUpdate or
       std::unordered_set(
           lhs.unicastRoutesToDelete.begin(), lhs.unicastRoutesToDelete.end()) !=
           std::unordered_set(
               rhs.unicastRoutesToDelete.begin(),
-              rhs.unicastRoutesToDelete.end()) or
-      std::unordered_set(
-          lhs.mplsRoutesToDelete.begin(), lhs.mplsRoutesToDelete.end()) !=
-          std::unordered_set(
-              rhs.mplsRoutesToDelete.begin(), rhs.mplsRoutesToDelete.end())) {
+              rhs.unicastRoutesToDelete.end())) {
     LOG(INFO) << "unicast/mpls update/delete not the same.";
     return false;
   }
@@ -421,21 +358,6 @@ class FibTestFixture : public ::testing::Test {
   std::vector<thrift::UnicastRoute>
   getUnicastRoutes() {
     auto resp = handler_->semifuture_getUnicastRoutes().get();
-    EXPECT_TRUE(resp);
-    return *resp;
-  }
-
-  std::vector<thrift::MplsRoute>
-  getMplsRoutesFiltered(std::unique_ptr<std::vector<int32_t>> labels) {
-    auto resp =
-        handler_->semifuture_getMplsRoutesFiltered(std::move(labels)).get();
-    EXPECT_TRUE(resp);
-    return *resp;
-  }
-
-  std::vector<thrift::MplsRoute>
-  getMplsRoutes() {
-    auto resp = handler_->semifuture_getMplsRoutes().get();
     EXPECT_TRUE(resp);
     return *resp;
   }
@@ -952,16 +874,12 @@ TEST_F(FibTestFixture, fibDetailStreaming) {
 TEST_F(FibTestFixture, processRouteDb) {
   // Make sure fib starts with clean route database
   std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
 
   // initial syncFib debounce
   routeUpdatesQueue.push(DecisionRouteUpdate());
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   // Empty routes are sent fi tobRouteUpdatesQueue_.
   DecisionRouteUpdate emptyUpdate;
   emptyUpdate.type = DecisionRouteUpdate::FULL_SYNC;
@@ -971,11 +889,11 @@ TEST_F(FibTestFixture, processRouteDb) {
   // Mimic decision pub sock publishing RouteDatabaseDelta and
   // RouteDatabaseDeltaDetail
   thrift::RouteDatabase routeDb;
-  *routeDb.thisNodeName() = "node-1";
+  routeDb.thisNodeName() = "node-1";
   routeDb.unicastRoutes()->emplace_back(
       createUnicastRoute(prefix2, {path1_2_1, path1_2_2}));
   thrift::RouteDatabaseDetail routeDetailDb;
-  *routeDetailDb.thisNodeName() = "node-1";
+  routeDetailDb.thisNodeName() = "node-1";
   routeDetailDb.unicastRoutes()->emplace_back(
       createUnicastRouteDetail(prefix2, {path1_2_1, path1_2_2}, bestRoute2));
 
@@ -1069,25 +987,18 @@ TEST_F(FibTestFixture, processRouteDb) {
 TEST_F(FibTestFixture, WaitOnDecision) {
   // Make sure fib starts with clean route database
   std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
 
   // Mimic decision pub sock publishing RouteDatabaseDelta
   DecisionRouteUpdate routeUpdate;
   routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1, path1_2_2}));
-  routeUpdate.addMplsRouteToUpdate(
-      RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2}));
-  routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_2}));
 
   routeUpdatesQueue.push(routeUpdate);
 
   // initial syncFib debounce
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   // Synced routes are sent to fibRouteUpdatesQueue_.
   routeUpdate.type = DecisionRouteUpdate::FULL_SYNC;
   EXPECT_TRUE(checkEqualDecisionRouteUpdate(
@@ -1097,92 +1008,6 @@ TEST_F(FibTestFixture, WaitOnDecision) {
   EXPECT_EQ(mockFibHandler_->getFibSyncCount(), 1);
   EXPECT_EQ(mockFibHandler_->getAddRoutesCount(), 0);
   EXPECT_EQ(mockFibHandler_->getDelRoutesCount(), 0);
-
-  EXPECT_EQ(mockFibHandler_->getFibMplsSyncCount(), 1);
-  EXPECT_EQ(mockFibHandler_->getAddMplsRoutesCount(), 0);
-  EXPECT_EQ(mockFibHandler_->getDelMplsRoutesCount(), 0);
-}
-
-TEST_F(FibTestFixture, getMslpRoutesFilteredTest) {
-  // Make sure fib starts with clean route database
-  std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
-  mockFibHandler_->getRouteTableByClient(routes, kFibId);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(routes.size(), 0);
-  EXPECT_EQ(mplsRoutes.size(), 0);
-
-  // initial syncFib debounce
-  routeUpdatesQueue.push(DecisionRouteUpdate());
-  mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
-  // Empty routes are sent fi tobRouteUpdatesQueue_.
-  DecisionRouteUpdate emptyUpdate;
-  emptyUpdate.type = DecisionRouteUpdate::FULL_SYNC;
-  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
-      emptyUpdate, fibRouteUpdatesQueueReader.get().value()));
-
-  // Mimic decision pub sock publishing RouteDatabaseDelta
-  auto route1 = RibMplsEntry(label1, {mpls_path1_2_1, mpls_path1_2_2});
-  auto route2 = RibMplsEntry(label2, {mpls_path1_2_2});
-  auto route3 = RibMplsEntry(label3, {mpls_path1_2_1});
-  const auto& tRoute1 = route1.toThrift();
-  const auto& tRoute2 = route2.toThrift();
-  const auto& tRoute3 = route3.toThrift();
-
-  DecisionRouteUpdate routeUpdate;
-  routeUpdate.addMplsRouteToUpdate(std::move(route1));
-  routeUpdate.addMplsRouteToUpdate(std::move(route2));
-  routeUpdate.addMplsRouteToUpdate(std::move(route3));
-  routeUpdatesQueue.push(routeUpdate);
-
-  // wait for mpls
-  mockFibHandler_->waitForUpdateMplsRoutes();
-  // Synced routes are sent to fibRouteUpdatesQueue_.
-  routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
-  EXPECT_TRUE(checkEqualDecisionRouteUpdate(
-      routeUpdate, fibRouteUpdatesQueueReader.get().value()));
-
-  // verify mpls routes in DB
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 3);
-  EXPECT_EQ(mockFibHandler_->getAddMplsRoutesCount(), 3);
-  EXPECT_EQ(mockFibHandler_->getDelMplsRoutesCount(), 0);
-
-  // 1. check the MPLS filtering API
-  auto labels = std::unique_ptr<std::vector<int32_t>>(
-      new std::vector<int32_t>({1, 1, 3})); // matching route1 and route3
-  thrift::RouteDatabase responseDb;
-  const auto& filteredRoutes = getMplsRoutesFiltered(std::move(labels));
-  *responseDb.mplsRoutes() = filteredRoutes;
-  // expected routesDB after filtering - delete duplicate entries
-  thrift::RouteDatabase expectedDb;
-  *expectedDb.thisNodeName() = "node-1";
-  *expectedDb.mplsRoutes() = {tRoute1, tRoute3};
-  EXPECT_TRUE(checkEqualRouteDatabaseMpls(responseDb, expectedDb));
-
-  // 2. check getting all MPLS routes API
-  thrift::RouteDatabase allRoutesDb;
-  *allRoutesDb.mplsRoutes() = getMplsRoutes();
-  // expected routesDB for all MPLS Routes
-  thrift::RouteDatabase allRoutesExpectedDb;
-  *allRoutesExpectedDb.thisNodeName() = "node-1";
-  *allRoutesExpectedDb.mplsRoutes() = {tRoute1, tRoute2, tRoute3};
-  *expectedDb.mplsRoutes() = {tRoute1, tRoute2, tRoute3};
-  EXPECT_TRUE(checkEqualRouteDatabaseMpls(allRoutesDb, allRoutesExpectedDb));
-
-  // 3. check filtering API with empty input list - return all MPLS routes
-  auto emptyLabels =
-      std::unique_ptr<std::vector<int32_t>>(new std::vector<int32_t>({}));
-  thrift::RouteDatabase responseAllDb;
-  *responseAllDb.mplsRoutes() = getMplsRoutesFiltered(std::move(emptyLabels));
-  EXPECT_TRUE(checkEqualRouteDatabaseMpls(responseAllDb, allRoutesExpectedDb));
-
-  // 4. check if no result found
-  auto notFoundFilter = std::unique_ptr<std::vector<std::int32_t>>(
-      new std::vector<std::int32_t>({4, 5}));
-  const auto& notFoundResp = getMplsRoutesFiltered(std::move(notFoundFilter));
-  EXPECT_EQ(notFoundResp.size(), 0);
 }
 
 TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
@@ -1428,7 +1253,6 @@ TEST_F(FibTestFixture, doNotInstall) {
  */
 TEST_F(FibTestFixture, SyncFibProgramming) {
   std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
 
   //
   // Send first RIB update
@@ -1438,8 +1262,6 @@ TEST_F(FibTestFixture, SyncFibProgramming) {
       RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
   routeUpdate.addRouteToUpdate(
       RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1}));
-  routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
-  routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_1}));
   routeUpdatesQueue.push(routeUpdate);
 
   //
@@ -1448,11 +1270,8 @@ TEST_F(FibTestFixture, SyncFibProgramming) {
 
   // Wait for sync to happen & verify routes
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(2, routes.size());
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(2, mplsRoutes.size());
 
   // Fib should also produce a publication
   routeUpdate.type = DecisionRouteUpdate::FULL_SYNC;
@@ -1473,18 +1292,13 @@ TEST_F(FibTestFixture, SyncFibProgramming) {
   // Make sure routes are not yet programmed or published
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
   EXPECT_EQ(0, fibRouteUpdatesQueueReader.size());
 
   // Mark fib as healthy & wait for sync signals
   mockFibHandler_->setHandlerHealthyState(true);
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 2);
 
   // Make sure FIB publication is empty
   {
@@ -1497,80 +1311,62 @@ TEST_F(FibTestFixture, SyncFibProgramming) {
   // 3) Restart FIB to trigger Fib Sync - with PlatformFibUpdateError exception
   //
 
-  // Mark prefix2/prefix3, and label2/label3 as dirty in Fib
+  // Mark prefix2/prefix3 as dirty in Fib
   mockFibHandler_->setDirtyState(
-      {toIPNetwork(prefix2), toIPNetwork(prefix3)}, {label2, label3});
+      {toIPNetwork(prefix2), toIPNetwork(prefix3)}, {});
   mockFibHandler_->restart();
 
   // Make sure routes are not yet programmed or published
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 0);
   EXPECT_EQ(0, fibRouteUpdatesQueueReader.size());
 
-  // Wait for fib sync event & verify that 1 prefix & 1 label route gets
-  // programmed
+  // Wait for fib sync event & verify that 1 unicast route gets programmed
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 1);
 
-  // Make sure FIB publication withdraws prefix2, and label2
+  // Make sure FIB publication withdraws prefix2
   {
     auto publication = fibRouteUpdatesQueueReader.get().value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-    EXPECT_EQ(2, publication.size()); // modifications
+    EXPECT_EQ(1, publication.size()); // modifications
     ASSERT_EQ(1, publication.unicastRoutesToDelete.size());
-    ASSERT_EQ(1, publication.mplsRoutesToDelete.size());
     EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
-    EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
   }
 
   // Wait for deletion of prefix3, label3 go through
   mockFibHandler_->waitForUpdateUnicastRoutes(); // prefix2 (will fail)
-  mockFibHandler_->waitForUpdateMplsRoutes(); // label2 (will fail)
   mockFibHandler_->waitForDeleteUnicastRoutes(); // prefix3
-  mockFibHandler_->waitForDeleteMplsRoutes(); // label3
 
   // Number of routes in MockFibHandler doesn't change
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 1);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 1);
 
-  // Make sure FIB publication withdraws prefix3, and label3. `prefix2` and
+  // Make sure FIB publication withdraws prefix3. `prefix2` and
   // `label2` will also be retried and fails, so they'll be reported as failed
   {
     auto publication = fibRouteUpdatesQueueReader.get().value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-    EXPECT_EQ(4, publication.size()); // modifications
+    EXPECT_EQ(2, publication.size()); // modifications
     ASSERT_EQ(2, publication.unicastRoutesToDelete.size());
-    ASSERT_EQ(2, publication.mplsRoutesToDelete.size());
   }
 
   // Clear dirty state
   mockFibHandler_->setDirtyState({}, {});
 
-  // Wait for incremental programming of unicast & mpls routes
+  // Wait for incremental programming of unicast routes
   mockFibHandler_->waitForUpdateUnicastRoutes(); // prefix2 (will succeed)
-  mockFibHandler_->waitForUpdateMplsRoutes(); // label2 (will succeed)
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 2);
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(mplsRoutes.size(), 2);
 
-  // Make sure FIB publication programs prefix2, and label2
+  // Make sure FIB publication programs prefix2
   {
     auto publication = fibRouteUpdatesQueueReader.get().value();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-    EXPECT_EQ(2, publication.size()); // modifications
+    EXPECT_EQ(1, publication.size()); // modifications
     ASSERT_EQ(1, publication.unicastRoutesToUpdate.size());
-    ASSERT_EQ(1, publication.mplsRoutesToUpdate.size());
     EXPECT_TRUE(publication.unicastRoutesToUpdate.count(toIPNetwork(prefix2)));
-    EXPECT_EQ(1, publication.mplsRoutesToUpdate.count(label2));
   }
 
   // Make sure there are no pending FIB publications (just for fun)
@@ -1579,87 +1375,73 @@ TEST_F(FibTestFixture, SyncFibProgramming) {
 
 /**
  * Validates incremental route programming and its error handling.
- * - Add P1/L1
- * - Add P2/L2 - with std::exception failure injection
- * - Update P1/L1 - with FibUpdateError failure injection
- * - Delete P2/L2 - with std::exception failure injection
- * - Delete P1/P1
+ * - Add P1
+ * - Add P2 - with std::exception failure injection
+ * - Update P1 - with FibUpdateError failure injection
+ * - Delete P2 - with std::exception failure injection
+ * - Delete P1
  */
 TEST_F(FibTestFixture, IncrementalRouteProgramming) {
   std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
 
   //
   // Initialize FIB to SYNCED state with empty route db
   //
   routeUpdatesQueue.push(DecisionRouteUpdate());
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(0, routes.size());
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(0, mplsRoutes.size());
   EXPECT_TRUE(fibRouteUpdatesQueueReader.get()->empty());
 
   //
-  // 1) Add Routes - Prefix1/Label1
+  // 1) Add Routes - Prefix1
   //
   {
-    // Advertise Prefix1/Label1 update
+    // Advertise Prefix1 update
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get added successfully
     mockFibHandler_->waitForUpdateUnicastRoutes();
-    mockFibHandler_->waitForUpdateMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(1, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(1, mplsRoutes.size());
 
     // Verify that update is reflected in fib route updates
     auto publication = fibRouteUpdatesQueueReader.get().value();
     routeUpdate.type = DecisionRouteUpdate::INCREMENTAL;
     EXPECT_TRUE(checkEqualDecisionRouteUpdate(routeUpdate, publication));
-    EXPECT_EQ(2, publication.size());
+    EXPECT_EQ(1, publication.size());
     EXPECT_TRUE(publication.unicastRoutesToUpdate.count(toIPNetwork(prefix1)));
-    EXPECT_EQ(1, publication.mplsRoutesToUpdate.count(label1));
   }
 
   //
-  // 2) Add some more routes - Prefix2/Label2 & introduce std::exception
+  // 2) Add some more routes - Prefix2 & introduce std::exception
   //
   {
     // Set handler unhealthy
     mockFibHandler_->setHandlerHealthyState(false);
 
-    // Advertise Prefix2/Label2 update
+    // Advertise Prefix2 update
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1}));
-    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
-    // Verify that they don't get programmed. Wait for exception for each type
-    // and that too twice, to make sure it retries. And also for backoff to
-    // increase
-    mockFibHandler_->waitForUnhealthyException(6 * 2);
+    // Verify that they don't get programmed. Wait for exception and make sure
+    // it retries. And also for backoff to increase.
+    mockFibHandler_->waitForUnhealthyException(6);
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(1, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(1, mplsRoutes.size());
 
     // Verify that update is reflected as route withdraws in fib publication
     // NOTE: We'll receive update twice
     for (auto i = 0; i < 6; ++i) {
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-      EXPECT_EQ(2, publication.size());
+      EXPECT_EQ(1, publication.size());
       EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
-      EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
     }
 
     // Set handler healthy
@@ -1667,11 +1449,8 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
 
     // Wait for route sync updates
     mockFibHandler_->waitForUpdateUnicastRoutes();
-    mockFibHandler_->waitForUpdateMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(2, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(2, mplsRoutes.size());
 
     // Verify that update is reflected as is in fib publication
     auto publication = fibRouteUpdatesQueueReader.get().value();
@@ -1680,17 +1459,16 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
   }
 
   //
-  // 3) Update routes - Prefix1/Label1 & introduce FibUpdateError
+  // 3) Update routes - Prefix1 & introduce FibUpdateError
   //
   {
     // Set dirty state to introduce FibUpdateError
-    mockFibHandler_->setDirtyState({toIPNetwork(prefix1)}, {label1});
+    mockFibHandler_->setDirtyState({toIPNetwork(prefix1)}, {});
 
-    // Advertise Prefix1/Label1 update
+    // Advertise Prefix1 update
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_2}));
-    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_2}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Wait for route programming to proceed. Let it repeat a few times.
@@ -1699,14 +1477,12 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     // retries). Read publications later on
     for (int i = 0; i < 6; i++) {
       mockFibHandler_->waitForUpdateUnicastRoutes();
-      mockFibHandler_->waitForUpdateMplsRoutes();
     }
     for (int i = 0; i < 6; i++) {
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-      EXPECT_EQ(2, publication.size());
+      EXPECT_EQ(1, publication.size());
       EXPECT_EQ(toIPNetwork(prefix1), publication.unicastRoutesToDelete.at(0));
-      EXPECT_EQ(label1, publication.mplsRoutesToDelete.at(0));
     }
 
     // Unset dirty state
@@ -1714,7 +1490,6 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
 
     // Wait for route programming to proceed
     mockFibHandler_->waitForUpdateUnicastRoutes();
-    mockFibHandler_->waitForUpdateMplsRoutes();
 
     // Verify that update is reflected as is in fib publication
     const auto publication = fibRouteUpdatesQueueReader.get().value();
@@ -1724,12 +1499,10 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     // Verify the number of unicast and mpls routes
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(2, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(2, mplsRoutes.size());
   }
 
   //
-  // 4) Delete routes - Prefix2/Label2 with std::exception
+  // 4) Delete routes - Prefix2 with std::exception
   //
   {
     // Set handler unhealthy
@@ -1738,7 +1511,6 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     // Withdraw routes
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix2));
-    routeUpdate.mplsRoutesToDelete.emplace_back(label2);
     routeUpdatesQueue.push(routeUpdate);
 
     // There will be immediate notification about route withdrawl
@@ -1750,7 +1522,6 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     // type for multiple times, to make sure it retries.
     for (int i = 0; i < 6; i++) {
       mockFibHandler_->waitForUnhealthyException(); // Unicast route
-      mockFibHandler_->waitForUnhealthyException(); // Mpls route
     }
     for (int i = 0; i < 6; i++) {
       publication = fibRouteUpdatesQueueReader.get().value();
@@ -1761,19 +1532,14 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
     // Verify that route doesn't gets programmed
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(2, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(2, mplsRoutes.size());
 
     // Set handler healthy
     mockFibHandler_->setHandlerHealthyState(true);
 
     // Verify that they get removed
     mockFibHandler_->waitForDeleteUnicastRoutes();
-    mockFibHandler_->waitForDeleteMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(1, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(1, mplsRoutes.size());
 
     // Verify that they're reported as withdrawn again (We can do optimize here
     // in code, but it is not going to affect correctness).
@@ -1783,22 +1549,18 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
   }
 
   //
-  // 5. Delete routes - Prefix1/Label1 (without any exception)
+  // 5. Delete routes - Prefix1 (without any exception)
   //
   {
     // Withdraw routes
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix1));
-    routeUpdate.mplsRoutesToDelete.emplace_back(label1);
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get removed
     mockFibHandler_->waitForDeleteUnicastRoutes();
-    mockFibHandler_->waitForDeleteMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(0, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(0, mplsRoutes.size());
 
     // Verify that they're reported as withdrawn
     auto publication = fibRouteUpdatesQueueReader.get().value();
@@ -1811,82 +1573,69 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
 /**
  * Validates incremental route programming when certain set of routes keep
  * failing.
- * - Mark P2/L2 as bad to introduce FibUpdateError
- * - Add P2/L2 and see they won't get added
- * - Add P1/L1 and see they'll get added
- * - Delete P1/L1 and see they get removed
- * - Mark P2/L2 as good
+ * - Mark P2 as bad to introduce FibUpdateError
+ * - Add P2 and see they won't get added
+ * - Add P1 and see they'll get added
+ * - Delete P1 and see they get removed
+ * - Mark P2 as good
  * - See that they gets programmed
  */
 TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
   std::vector<thrift::UnicastRoute> routes;
-  std::vector<thrift::MplsRoute> mplsRoutes;
 
   //
   // Initialize FIB to SYNCED state with empty route db
   //
   routeUpdatesQueue.push(DecisionRouteUpdate());
   mockFibHandler_->waitForSyncFib();
-  mockFibHandler_->waitForSyncMplsFib();
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(0, routes.size());
-  mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-  EXPECT_EQ(0, mplsRoutes.size());
   EXPECT_TRUE(fibRouteUpdatesQueueReader.get()->empty());
 
   //
-  // 1) Mark P2/L2 as bad to introduce FibUpdateError
+  // 1) Mark P2 as bad to introduce FibUpdateError
   //
-  mockFibHandler_->setDirtyState({toIPNetwork(prefix2)}, {label2});
+  mockFibHandler_->setDirtyState({toIPNetwork(prefix2)}, {});
 
   //
-  // 2) Add P2/L2 and see they won't get added
+  // 2) Add P2 and see they won't get added
   //
   {
     // Advertise Prefix2/Label2 update
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix2), {path1_2_1}));
-    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label2, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they don't get programmed. Wait for exception for each type
     // and multiple times. We wait for multiple times for backoff to increase
     for (int i = 0; i < 10; ++i) {
       mockFibHandler_->waitForUpdateUnicastRoutes();
-      mockFibHandler_->waitForUpdateMplsRoutes();
       mockFibHandler_->getRouteTableByClient(routes, kFibId);
       EXPECT_EQ(0, routes.size());
-      mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-      EXPECT_EQ(0, mplsRoutes.size());
 
       // Verify that update is reflected as route withdraws in fib publication
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-      EXPECT_EQ(2, publication.size());
+      EXPECT_EQ(1, publication.size());
       EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
-      EXPECT_EQ(label2, publication.mplsRoutesToDelete.at(0));
     }
   }
 
   //
-  // 3) Add P1/L1 and see they'll get added
+  // 3) Add P1 and see they'll get added
   //
   {
-    // Advertise Prefix1/Label1 update
+    // Advertise Prefix1 update
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(
         RibUnicastEntry(toIPNetwork(prefix1), {path1_2_1}));
-    routeUpdate.addMplsRouteToUpdate(RibMplsEntry(label1, {mpls_path1_2_1}));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get added successfully
     mockFibHandler_->waitForUpdateUnicastRoutes();
-    mockFibHandler_->waitForUpdateMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(1, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(1, mplsRoutes.size());
 
     // Verify that update is reflected in fib route updates
     auto publication = fibRouteUpdatesQueueReader.get().value();
@@ -1895,22 +1644,18 @@ TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
   }
 
   //
-  // 4) Delete P1/L1 and see they'll get deleted
+  // 4) Delete P1 and see they'll get deleted
   //
   {
     // Withdraw routes
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix1));
-    routeUpdate.mplsRoutesToDelete.emplace_back(label1);
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get removed
     mockFibHandler_->waitForDeleteUnicastRoutes();
-    mockFibHandler_->waitForDeleteMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(0, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(0, mplsRoutes.size());
 
     // Verify that they're reported as withdrawn twice - Once immediately &
     // second time delayed
@@ -1922,7 +1667,7 @@ TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
   }
 
   //
-  // 5) Mark P2/L2 as good and see it gets programmed
+  // 5) Mark P2 as good and see it gets programmed
   //
   {
     // Reset dirty state
@@ -1930,19 +1675,15 @@ TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
 
     // Verify that they get added successfully
     mockFibHandler_->waitForUpdateUnicastRoutes();
-    mockFibHandler_->waitForUpdateMplsRoutes();
     mockFibHandler_->getRouteTableByClient(routes, kFibId);
     EXPECT_EQ(1, routes.size());
-    mockFibHandler_->getMplsRouteTableByClient(mplsRoutes, kFibId);
-    EXPECT_EQ(1, mplsRoutes.size());
 
     // Verify that they're published as part of fib update
     auto publication = fibRouteUpdatesQueueReader.get().value();
     LOG(INFO) << publication.str();
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
-    EXPECT_EQ(2, publication.size());
+    EXPECT_EQ(1, publication.size());
     EXPECT_TRUE(publication.unicastRoutesToUpdate.count(toIPNetwork(prefix2)));
-    EXPECT_EQ(1, publication.mplsRoutesToUpdate.count(label2));
   }
 }
 

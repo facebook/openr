@@ -116,9 +116,6 @@ LinkMonitor::LinkMonitor(
       enableLinkStatusMeasurement_(
           *config->getLinkMonitorConfig().enable_link_status_measurement()),
       enableV4_(config->isV4Enabled()),
-      prefixForwardingType_(*config->getConfig().prefix_forwarding_type()),
-      prefixForwardingAlgorithm_(
-          *config->getConfig().prefix_forwarding_algorithm()),
       useRttMetric_(*config->getLinkMonitorConfig().use_rtt_metric()),
       linkflapInitBackoff_(std::chrono::milliseconds(
           *config->getLinkMonitorConfig().linkflap_initial_backoff_ms())),
@@ -896,10 +893,6 @@ LinkMonitor::advertiseRedistAddrs() {
       thrift::PrefixEntry prefixEntry;
       prefixEntry.prefix() = toIpPrefix(prefix);
       prefixEntry.type() = thrift::PrefixType::LOOPBACK;
-
-      // Forwarding information
-      prefixEntry.forwardingType() = prefixForwardingType_;
-      prefixEntry.forwardingAlgorithm() = prefixForwardingAlgorithm_;
 
       // Tags
       {

@@ -328,9 +328,6 @@ class LinkMonitor final : public OpenrEventBase {
   const bool enableLinkStatusMeasurement_{false};
   // enable v4
   bool enableV4_{false};
-  // [TO_BE_DEPRECATED] prefix forwarding type and algorithm
-  thrift::PrefixForwardingType prefixForwardingType_;
-  thrift::PrefixForwardingAlgorithm prefixForwardingAlgorithm_;
   // Use spark measured RTT to neighbor as link metric
   bool useRttMetric_{false};
   // link flap back offs

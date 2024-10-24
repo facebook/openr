@@ -76,12 +76,6 @@ class Fib final : public OpenrEventBase {
       const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate);
 
   /**
-  Show MPLS routes which are to be added or updated
-  */
-  static void printMplsRoutesAddUpdate(
-      const std::vector<thrift::MplsRoute>& mplsRoutesToUpdate);
-
-  /**
    * NOTE: DEPRECATED! Use getUnicastRoutes or getMplsRoutes.
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getRouteDb();
@@ -168,21 +162,6 @@ class Fib final : public OpenrEventBase {
    * @return true if all routes are successfully programmed
    */
   bool updateUnicastRoutes(
-      const bool useDeleteDelay,
-      const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
-      const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
-      DecisionRouteUpdate& routeUpdate,
-      thrift::RouteDatabaseDelta& routeDbDelta);
-
-  /**
-   * The helper function of updateRoutes that programs MPLS routes. On route
-   * programming failure, labels are marked dirty and retryRoutesSignal is
-   * invoked. If useDeleteDelay is false, delete routes without putting them in
-   * dirtyLabels (i.e., don't delay programming). Otherwise, delay deletion
-   * based on configured duration.
-   * @return true if all routes are successfully programmed
-   */
-  bool updateMplsRoutes(
       const bool useDeleteDelay,
       const std::chrono::time_point<std::chrono::steady_clock>& currentTime,
       const std::chrono::time_point<std::chrono::steady_clock>& retryAt,
@@ -350,10 +329,6 @@ class Fib final : public OpenrEventBase {
   // Config Knob - In dry run FIB will not invoke route programming
   // APIs, and mimick the whole logic as programming is successful.
   const bool dryrun_{true};
-
-  // Config Knob - Indicates if Segment Routing feature is enabled or not. MPLS
-  // routes will be programmed only if segment routing is enabled.
-  const bool enableSegmentRouting_{false};
 
   /*
    * Special flag handling dryrun_ case to clean up routes programmed
