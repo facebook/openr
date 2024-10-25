@@ -126,33 +126,11 @@ SpfSolver::createRouteForPrefixOrGetStaticRoute(
   return std::nullopt;
 }
 
-std::optional<RibUnicastEntry>
-SpfSolver::createRouteForPrefix(
+std::pair<PrefixEntries, bool>
+SpfSolver::getReachablePrefixEntries(
     const std::string& myNodeName,
     std::unordered_map<std::string, LinkState> const& areaLinkStates,
-    PrefixState const& prefixState,
-    folly::CIDRNetwork const& prefix) {
-  fb303::fbData->addStatValue("decision.get_route_for_prefix", 1, fb303::COUNT);
-
-  // Sanity check for V4 prefixes
-  const bool isV4Prefix = prefix.first.isV4();
-  if (isV4Prefix and (not enableV4_) and (not v4OverV6Nexthop_)) {
-    XLOG(WARNING) << "Received v4 prefix "
-                  << folly::IPAddress::networkToString(prefix)
-                  << " while v4 is not enabled, and "
-                  << "we are not allowing v4 prefix over v6 nexthop.";
-    return std::nullopt;
-  }
-
-  auto search = prefixState.prefixes().find(prefix);
-  if (search == prefixState.prefixes().end()) {
-    return std::nullopt;
-  }
-  auto const& allPrefixEntries = search->second;
-
-  // Clear best route selection in prefix state
-  bestRoutesCache_.erase(prefix);
-
+    const PrefixEntries& allPrefixEntries) {
   //
   // Create list of prefix-entries from reachable nodes only
   // NOTE: We're copying prefix-entries and it can be expensive. Using
@@ -170,7 +148,10 @@ SpfSolver::createRouteForPrefix(
       // instead of PrefixManager
       // This indicates that when we calculated the
       // best path, we have considered locally originated prefix as well
-      if (myNodeName == prefixNode) {
+      if ((myNodeName == prefixNode) && (it->second->area_stack()->empty())) {
+        // Notice that a prefix is local if
+        // - the prefixNode == myNodeName
+        // - the area_stack is empty (not received from other area)
         localPrefixConsidered = true;
       }
       // Only check reachability within the area that prefixNode belongs to.
@@ -181,6 +162,39 @@ SpfSolver::createRouteForPrefix(
       }
     }
   }
+
+  return std::make_pair(prefixEntries, localPrefixConsidered);
+}
+
+std::optional<RibUnicastEntry>
+SpfSolver::createRouteForPrefix(
+    const std::string& myNodeName,
+    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    PrefixState const& prefixState,
+    folly::CIDRNetwork const& prefix) {
+  fb303::fbData->addStatValue("decision.get_route_for_prefix", 1, fb303::COUNT);
+
+  // Sanity check for V4 prefixes
+  const bool isV4Prefix = prefix.first.isV4();
+  if (isV4Prefix && (!enableV4_) && (!v4OverV6Nexthop_)) {
+    XLOG(WARNING) << "Received v4 prefix "
+                  << folly::IPAddress::networkToString(prefix)
+                  << " while v4 is not enabled, and "
+                  << "we are not allowing v4 prefix over v6 nexthop.";
+    return std::nullopt;
+  }
+
+  auto search = prefixState.prefixes().find(prefix);
+  if (search == prefixState.prefixes().end()) {
+    return std::nullopt;
+  }
+  auto const& allPrefixEntries = search->second;
+
+  // Clear best route selection in prefix state
+  bestRoutesCache_.erase(prefix);
+
+  auto [prefixEntries, localPrefixConsidered] =
+      getReachablePrefixEntries(myNodeName, areaLinkStates, allPrefixEntries);
 
   // Skip if no valid prefixes
   if (prefixEntries.empty()) {

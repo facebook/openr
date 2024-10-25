@@ -7,7 +7,6 @@
 
 #pragma once
 
-#include <chrono>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -201,6 +200,11 @@ class SpfSolver {
       const openr::LinkStateMetric shortestMetric,
       const bool localPrefixConsidered);
 
+  std::pair<PrefixEntries, bool> getReachablePrefixEntries(
+      const std::string& myNodeName,
+      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      const PrefixEntries& allPrefixEntries);
+
   std::optional<RibUnicastEntry> createRouteForPrefix(
       const std::string& myNodeName,
       std::unordered_map<std::string, LinkState> const& areaLinkStates,
@@ -264,5 +268,11 @@ class SpfSolver {
   // prefixes with v6 nexthops to Fib module for programming. Else it will just
   // use v4 over v4 nexthop.
   const bool v4OverV6Nexthop_{false};
+
+  // per class placeholder for test code injection
+  // only need to be setup once here
+#ifdef SpfSolver_TEST_FRIENDS
+  SpfSolver_TEST_FRIENDS
+#endif
 };
 } // namespace openr

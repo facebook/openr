@@ -7,6 +7,10 @@
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#define SpfSolver_TEST_FRIENDS \
+  FRIEND_TEST(SpfSolverUnitTest, GetReachablePrefixEntriesTest);
+
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/SpfSolver.h>
@@ -2209,3 +2213,59 @@ TEST(GridTopology, StressTest) {
   createGrid(linkState, prefixState, 99);
   spfSolver.buildRouteDb("523", areaLinkStates, prefixState);
 }
+
+namespace openr {
+// FRIEND_TESTs must be in the same namespace as the class being accessed
+
+TEST(SpfSolverUnitTest, GetReachablePrefixEntriesTest) {
+  std::string nodeName("local");
+  SpfSolver spfSolver(
+      nodeName,
+      false /* disable v4 */,
+      true /* enable best route selection */,
+      false /* disable v4_over_v6 */);
+
+  std::unordered_map<std::string, LinkState> areaLinkStates;
+  areaLinkStates.emplace(
+      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
+
+  PrefixEntries allPrefixEntries;
+
+  auto ribPrefix1 = createPrefixEntry(addr1, thrift::PrefixType::RIB);
+  ribPrefix1.area_stack() = {"Area1", "Area2"};
+
+  auto ribPrefix2 = createPrefixEntry(addr1, thrift::PrefixType::RIB);
+  ribPrefix2.area_stack() = {"Area3"};
+
+  allPrefixEntries.emplace(
+      std::make_pair(nodeName, "other-area"),
+      std::make_shared<thrift::PrefixEntry>(ribPrefix1));
+
+  allPrefixEntries.emplace(
+      std::make_pair("other-node", kTestingAreaName),
+      std::make_shared<thrift::PrefixEntry>(ribPrefix2));
+
+  auto [prefixEntries, localPrefixConsidered] =
+      spfSolver.getReachablePrefixEntries(
+          nodeName, areaLinkStates, allPrefixEntries);
+
+  // no locally originated prefix is found
+  EXPECT_FALSE(localPrefixConsidered);
+  // ribPrefix1 is kept: It is in a different area "other-area"
+  // ribPrefix2 is removed: It is in the same area (kTestingAreaName) while
+  // SPF result cannot find the node (other-node)
+  EXPECT_EQ(1, prefixEntries.size());
+
+  auto configPrefix = createPrefixEntry(addr1, thrift::PrefixType::CONFIG);
+  allPrefixEntries.emplace(
+      std::make_pair(nodeName, kTestingAreaName),
+      std::make_shared<thrift::PrefixEntry>(configPrefix));
+
+  // One locally generated route is considered
+  std::tie(prefixEntries, localPrefixConsidered) =
+      spfSolver.getReachablePrefixEntries(
+          nodeName, areaLinkStates, allPrefixEntries);
+  EXPECT_TRUE(localPrefixConsidered);
+}
+
+} // namespace openr
