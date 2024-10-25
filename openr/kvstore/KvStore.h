@@ -614,6 +614,18 @@ class KvStore final : public OpenrEventBase {
   }
 
   /*
+   * Check if kvStoreSync timer currently scheduled on or off
+   */
+  inline bool
+  isKvStoreSyncTimerScheduled() {
+    if (kvStoreSyncTimer_ && kvStoreSyncTimer_->isScheduled()) {
+      return true;
+    }
+
+    return false;
+  }
+
+  /*
    * [Open/R Initialization]
    *
    * This is the callback function used by KvStoreDb to mark initial
@@ -786,6 +798,11 @@ class KvStore final : public OpenrEventBase {
   void initGlobalCounters();
 
   /*
+   * Initialize all kvstore instances with zero peers
+   */
+  void initZeroPeersKvStores();
+
+  /*
    * This is a helper function which returns a reference to the relevant
    * KvStoreDb or throws an instance of KvStoreError for backward compaytibilty.
    *
@@ -813,6 +830,9 @@ class KvStore final : public OpenrEventBase {
   std::unique_ptr<folly::AsyncTimeout> counterUpdateTimer_{nullptr};
 
   std::unique_ptr<folly::AsyncTimeout> initialSelfOriginatedKeysTimer_{nullptr};
+
+  // Timer to await for learning at least one peer
+  std::unique_ptr<folly::AsyncTimeout> kvStoreSyncTimer_{nullptr};
 
   // kvstore parameters common to all kvstoreDB
   KvStoreParams kvParams_;

@@ -76,6 +76,19 @@ KvStore<ClientType>::KvStore(
         std::chrono::milliseconds(*kvStoreConfig.sync_max_backoff_ms());
   }
 
+  if (kvStoreConfig.kvstore_sync_timeout_ms().has_value()) {
+    XLOG(INFO) << "Set kvStoreSyncTimer_ with timeout "
+               << *kvStoreConfig.kvstore_sync_timeout_ms();
+    kvParams_.kvStoreSyncTimeout =
+        std::chrono::milliseconds(*kvStoreConfig.kvstore_sync_timeout_ms());
+
+    kvStoreSyncTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
+      XLOG(INFO) << "kvStoreSync Timer expired";
+      initZeroPeersKvStores();
+    });
+    kvStoreSyncTimer_->scheduleTimeout(kvParams_.kvStoreSyncTimeout.count());
+  }
+
   if (kvStoreConfig.self_adjacency_timeout_ms().has_value()) {
     kvParams_.selfAdjSyncTimeout =
         std::chrono::milliseconds(*kvStoreConfig.self_adjacency_timeout_ms());
@@ -276,6 +289,31 @@ KvStore<ClientType>::getKvStoreUpdatesReader() {
   return kvParams_.kvStoreUpdatesQueue.getReader();
 }
 
+/*
+ * In OpenR initialization process, first PeerEvent publishment from
+ * LinkMonitor includes peers in all areas. However, KvStore could receive
+ * empty peers in one configured area in following scenarios,
+ * - The device is running in standalone mode,
+ * - The configured area just spawns without any peer yet.
+ * In order to make KvStore converge in initialization process, KvStoreDb
+ * with no peers in the area is treated as syncing completed. Otherwise,
+ * 'initialKvStoreDbSynced()' will not publish kvStoreSynced signal, and
+ * downstream modules cannot proceed to complete initialization.
+ */
+template <class ClientType>
+void
+KvStore<ClientType>::initZeroPeersKvStores() {
+  for (auto& [area, kvStoreDb] : kvStoreDb_) {
+    if (kvStoreDb.getPeerCnt() != 0) {
+      continue;
+    }
+
+    XLOG(INFO)
+        << fmt::format("[Initialization] Received 0 peers in area {}.", area);
+    kvStoreDb.processInitializationEvent();
+  }
+}
+
 template <class ClientType>
 void
 KvStore<ClientType>::processPeerUpdates(PeerEvent&& event) {
@@ -283,30 +321,33 @@ KvStore<ClientType>::processPeerUpdates(PeerEvent&& event) {
     // Event can contain peerAdd/peerDel simultaneously
     if (not areaPeerEvent.peersToAdd.empty()) {
       semifuture_addUpdateKvStorePeers(area, areaPeerEvent.peersToAdd).get();
+      if (isKvStoreSyncTimerScheduled()) {
+        kvStoreSyncTimer_->cancelTimeout();
+      }
     }
     if (not areaPeerEvent.peersToDel.empty()) {
       semifuture_deleteKvStorePeers(area, areaPeerEvent.peersToDel).get();
+      if (isKvStoreSyncTimerScheduled()) {
+        kvStoreSyncTimer_->cancelTimeout();
+      }
     }
   }
 
   if ((not initialSyncSignalSent_)) {
-    // In OpenR initialization process, first PeerEvent publishment from
-    // LinkMonitor includes peers in all areas. However, KvStore could receive
-    // empty peers in one configured area in following scenarios,
-    // - The device is running in standalone mode,
-    // - The configured area just spawns without any peer yet.
-    // In order to make KvStore converge in initialization process, KvStoreDb
-    // with no peers in the area is treated as syncing completed. Otherwise,
-    // 'initialKvStoreDbSynced()' will not publish kvStoreSynced signal, and
-    // downstream modules cannot proceed to complete initialization.
-    for (auto& [area, kvStoreDb] : kvStoreDb_) {
-      if (kvStoreDb.getPeerCnt() != 0) {
-        continue;
-      }
-      XLOG(INFO)
-          << fmt::format("[Initialization] Received 0 peers in area {}.", area);
-      kvStoreDb.processInitializationEvent();
+    /**
+     * This whole block is applicable to only case when node has not
+     * learned any peers yet
+     *
+     * Do not declare KVSTORE_SYNCED pre-maturely. In use-cases, it may
+     * take longer to learn peers during initialization. Allow them to
+     * not declare KVSTORE_SYNCED at-least until configurable timeout
+     * if no peers learned.
+     */
+    if (isKvStoreSyncTimerScheduled()) {
+      return;
     }
+
+    initZeroPeersKvStores();
   }
 }
 

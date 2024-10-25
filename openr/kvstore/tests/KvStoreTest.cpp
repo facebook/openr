@@ -881,6 +881,110 @@ TEST_F(KvStoreTestFixture, PeerResyncWithDefaultBackoff) {
   EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
 }
 
+/**
+ * Let KVSTORE_SYNCED signal learned as soon when there are no peers
+ *
+ * Create KvStore just for one node without any peers
+ *
+ * Then wait for KVSTORE_SYNCED signal and verify that sync signal was
+ * immediately
+ */
+TEST_F(KvStoreTestFixture, KvStoreSyncWithoutTimeout) {
+  messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
+
+  auto config = getTestKvConf("storeA");
+
+  auto const start = std::chrono::steady_clock::now();
+  auto* storeA =
+      createKvStore(config, {kTestingAreaName}, myPeerUpdatesQueue.getReader());
+  storeA->run();
+
+  // Publish empty peers.
+  myPeerUpdatesQueue.push(PeerEvent());
+
+  // Wait for KVSTORE_SYNCED signal
+  storeA->recvKvStoreSyncedSignal();
+
+  auto cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(0, cmpPeers.size());
+  auto elapsedTime =
+      duration_cast<milliseconds>(steady_clock::now() - start).count();
+
+  // Should receive KVSTORE_SYNCED much before 1000 ms
+  EXPECT_LT(elapsedTime, 1000);
+}
+
+/**
+ * Explicitly set kvstoreConfig for timeout to declare KVSTORE_SYNCED
+ * when there are no peers that can be learned (with empty PeerEvent)
+ *
+ * Create KvStore just for one node without any peers
+ *
+ * Then wait for KVSTORE_SYNCED signal and verify that sync signal was
+ * received only after the timeout value
+ */
+TEST_F(KvStoreTestFixture, KvStoreSyncTimeoutWithEmptyPeerUpdate) {
+  messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
+  const std::chrono::milliseconds kKvStoreSyncTimeout(2000);
+  const std::chrono::milliseconds kKvStoreSyncTimeoutUpperCheck(2200);
+
+  auto config = getTestKvConf("storeA");
+  config.kvstore_sync_timeout_ms() = kKvStoreSyncTimeout.count();
+
+  auto const start = std::chrono::steady_clock::now();
+  auto* storeA =
+      createKvStore(config, {kTestingAreaName}, myPeerUpdatesQueue.getReader());
+  storeA->run();
+
+  // Publish empty peers.
+  myPeerUpdatesQueue.push(PeerEvent());
+
+  // Wait for KVSTORE_SYNCED signal
+  storeA->recvKvStoreSyncedSignal();
+
+  auto cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(0, cmpPeers.size());
+
+  auto elapsedTime =
+      duration_cast<milliseconds>(steady_clock::now() - start).count();
+  EXPECT_GT(elapsedTime, kKvStoreSyncTimeout.count());
+  EXPECT_LT(elapsedTime, kKvStoreSyncTimeoutUpperCheck.count());
+}
+
+/**
+ * Explicitly set kvstoreConfig for timeout to declare KVSTORE_SYNCED
+ * when there are no peers that can be learned
+ *
+ * Create KvStore just for one node without any peers
+ *
+ * Then wait for KVSTORE_SYNCED signal and verify that sync signal was
+ * received only after the timeout value
+ */
+TEST_F(KvStoreTestFixture, KvStoreSyncTimeoutWithoutPeerUpdate) {
+  messaging::ReplicateQueue<PeerEvent> myPeerUpdatesQueue;
+  const std::chrono::milliseconds kKvStoreSyncTimeout(2000);
+  const std::chrono::milliseconds kKvStoreSyncTimeoutUpperCheck(2200);
+
+  auto config = getTestKvConf("storeA");
+  config.kvstore_sync_timeout_ms() = kKvStoreSyncTimeout.count();
+
+  auto const start = std::chrono::steady_clock::now();
+  auto* storeA =
+      createKvStore(config, {kTestingAreaName}, myPeerUpdatesQueue.getReader());
+  storeA->run();
+
+  // Wait for KVSTORE_SYNCED signal
+  storeA->recvKvStoreSyncedSignal();
+
+  auto cmpPeers = storeA->getPeers(kTestingAreaName);
+  EXPECT_EQ(0, cmpPeers.size());
+
+  auto elapsedTime =
+      duration_cast<milliseconds>(steady_clock::now() - start).count();
+  EXPECT_GT(elapsedTime, kKvStoreSyncTimeout.count());
+  EXPECT_LT(elapsedTime, kKvStoreSyncTimeoutUpperCheck.count());
+}
+
 // When you receive a update from 'other' about a key you originates,
 //  with some inconsistency (higher ttl_version)
 // 1. you should never delete it

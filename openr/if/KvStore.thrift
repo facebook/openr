@@ -464,6 +464,8 @@ struct KvStoreConfig {
   15: i32 sync_initial_backoff_ms = 4000;
   16: i32 sync_max_backoff_ms = 256000;
   17: optional i32 self_adjacency_timeout_ms;
+  /* configuration of timeout before kvstore considered sync even when no peers learned */
+  18: optional i32 kvstore_sync_timeout_ms;
 }
 
 /**

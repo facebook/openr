@@ -44,6 +44,8 @@ struct KvStoreParams {
   // Locally adjacency learning timeout
   std::chrono::milliseconds selfAdjSyncTimeout;
 
+  std::chrono::milliseconds kvStoreSyncTimeout;
+
   // TLS knob
   bool enable_secure_thrift_client{false};
   // TLS paths
