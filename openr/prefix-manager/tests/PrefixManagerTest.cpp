@@ -436,7 +436,6 @@ TEST_F(PrefixManagerTestFixture, CounterInitialization) {
  * 3. Withdraw prefix1 with client-default - Verify KvStore
  */
 TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
-  int scheduleAt{0};
   // Order of prefix-entries -> loopback > default
   const auto loopback_prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::LOOPBACK, createMetrics(200, 0, 0));
