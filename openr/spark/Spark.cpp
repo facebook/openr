@@ -2022,7 +2022,6 @@ Spark::sendHelloMsg(
   // down event has not arrived yet
   const auto& interfaceEntry = interfaceDb_.at(ifName);
   const auto ifIndex = interfaceEntry.ifIndex;
-  const auto v4Addr = interfaceEntry.v4Network.first;
   const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
   thrift::OpenrVersion openrVer(*kVersion_.version());
 
