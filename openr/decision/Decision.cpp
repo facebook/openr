@@ -325,17 +325,48 @@ Decision::getDecisionDrainState(std::string nodeName) {
         thrift::OpenrDrainState ret;
         bool isNodeHardDrained = false;
         bool isNodeSoftDrained = false;
+        std::vector<std::string> soft_drained_interfaces{};
+        std::vector<std::string> hard_drained_interfaces{};
 
         // return the state of local node if not specified
         if (nodeName.empty()) {
           nodeName = myNodeName_;
         }
         for (auto const& [_, linkState] : areaLinkStates_) {
-          // hard-drained is considered as drained
+          if (!linkState.hasNode(nodeName)) {
+            // skip node since it is not a valid one
+            continue;
+          }
+          /*
+           * [Node Drain]
+           *
+           * hard-drained is considered as drained
+           * soft-drained is considered as drained
+           */
           isNodeHardDrained |= linkState.isNodeOverloaded(nodeName);
-          // soft-drained is considered as drained
           isNodeSoftDrained |= (linkState.getNodeMetricIncrement(nodeName) > 0);
+
+          /*
+           * [Interface Drain]
+           *
+           * interface overload is considered as hard-drained
+           * interface metric increment is considered as soft-drained
+           */
+          const auto& adjDb = linkState.getAdjacencyDatabases().at(nodeName);
+          for (const auto& adj : *adjDb.adjacencies()) {
+            if (*adj.isOverloaded()) {
+              hard_drained_interfaces.emplace_back(*adj.ifName());
+            }
+            // TODO: implement the soft-drain information inside Adjacency
+          }
         }
+        if (!soft_drained_interfaces.empty()) {
+          ret.soft_drained_interfaces() = std::move(soft_drained_interfaces);
+        }
+        if (!hard_drained_interfaces.empty()) {
+          ret.drained_interfaces() = std::move(hard_drained_interfaces);
+        }
+
         if (isNodeHardDrained) {
           ret.drain_state() = thrift::DrainState::HARD_DRAINED;
         } else if (isNodeSoftDrained) {

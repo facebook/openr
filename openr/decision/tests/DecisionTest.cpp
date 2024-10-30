@@ -363,7 +363,7 @@ TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {
                "1", /* node name */
                1, /* version */
                {adj12}, /* adjacencies */
-               false /* overloaded flag */,
+               false /* node overloaded flag */,
                1 /* nodeId*/)},
           {"adj:2",
            createAdjValue(
@@ -371,7 +371,7 @@ TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {
                "2", /* node name */
                1, /* version */
                {adj21}, /* adjacencies */
-               false /* overloaded flag */,
+               false /* node overloaded flag */,
                2 /* nodeId*/)},
           createPrefixKeyValue("1", 1, addr1),
           createPrefixKeyValue("2", 1, addr2),
@@ -391,11 +391,13 @@ TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {
   {
     auto state = decision->getDecisionDrainState("1").get();
     EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
     ASSERT_FALSE(state->drained_interfaces());
   }
   {
     auto state = decision->getDecisionDrainState("2").get();
     EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
     ASSERT_FALSE(state->drained_interfaces());
   }
 
@@ -405,10 +407,15 @@ TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {
    */
   auto state = decision->getDecisionDrainState().get();
   EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+  ASSERT_FALSE(state->soft_drained_interfaces());
   ASSERT_FALSE(state->drained_interfaces());
 }
 
 TEST_F(DecisionTestFixture, DecisionHardDrainStateTest) {
+  // deliberately copy and set the link hard-drained
+  auto adj21_1 = adj21;
+  adj21_1.isOverloaded() = true;
+
   auto publication = createThriftPublication(
       {
           {"adj:1",
@@ -417,15 +424,15 @@ TEST_F(DecisionTestFixture, DecisionHardDrainStateTest) {
                "1", /* node name */
                1, /* version */
                {adj12}, /* adjacencies */
-               true /* overloaded flag */,
+               true /* node overloaded flag */,
                1 /* nodeId*/)},
           {"adj:2",
            createAdjValue(
                serializer,
                "2", /* node name */
                1, /* version */
-               {adj21}, /* adjacencies */
-               false /* overloaded flag */,
+               {adj21_1}, /* adjacencies */
+               false /* node overloaded flag */,
                2 /* nodeId*/)},
           createPrefixKeyValue("1", 1, addr1),
           createPrefixKeyValue("2", 1, addr2),
@@ -445,21 +452,39 @@ TEST_F(DecisionTestFixture, DecisionHardDrainStateTest) {
   {
     auto state = decision->getDecisionDrainState("1").get();
     EXPECT_EQ(thrift::DrainState::HARD_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
     ASSERT_FALSE(state->drained_interfaces());
   }
   {
     auto state = decision->getDecisionDrainState("2").get();
     EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
-    ASSERT_FALSE(state->drained_interfaces());
+    ASSERT_FALSE(state->soft_drained_interfaces());
+    ASSERT_TRUE(state->drained_interfaces());
+    EXPECT_THAT(*state->drained_interfaces(), testing::SizeIs(1));
+    EXPECT_EQ(state->drained_interfaces()->back(), *adj21_1.ifName());
   }
 
   /*
    * Test 2: do not specify the node name. Expect API to return local node's
    *         drain state.
    */
-  auto state = decision->getDecisionDrainState().get();
-  EXPECT_EQ(thrift::DrainState::HARD_DRAINED, *state->drain_state());
-  ASSERT_FALSE(state->drained_interfaces());
+  {
+    auto state = decision->getDecisionDrainState().get();
+    EXPECT_EQ(thrift::DrainState::HARD_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
+
+  /*
+   * Test 3: specify an unknown node name. Expect API to return the default
+   * value.
+   */
+  {
+    auto state = decision->getDecisionDrainState("unknown").get();
+    EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
+    ASSERT_FALSE(state->drained_interfaces());
+  }
 }
 
 TEST_F(DecisionTestFixture, DecisionSoftDrainStateTest) {
@@ -500,11 +525,13 @@ TEST_F(DecisionTestFixture, DecisionSoftDrainStateTest) {
   {
     auto state = decision->getDecisionDrainState("1").get();
     EXPECT_EQ(thrift::DrainState::SOFT_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
     ASSERT_FALSE(state->drained_interfaces());
   }
   {
     auto state = decision->getDecisionDrainState("2").get();
     EXPECT_EQ(thrift::DrainState::UNDRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
     ASSERT_FALSE(state->drained_interfaces());
   }
 
@@ -515,6 +542,7 @@ TEST_F(DecisionTestFixture, DecisionSoftDrainStateTest) {
   {
     auto state = decision->getDecisionDrainState().get();
     EXPECT_EQ(thrift::DrainState::SOFT_DRAINED, *state->drain_state());
+    ASSERT_FALSE(state->soft_drained_interfaces());
     ASSERT_FALSE(state->drained_interfaces());
   }
 }

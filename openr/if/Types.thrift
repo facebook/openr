@@ -35,7 +35,16 @@ enum DrainState {
 
 struct OpenrDrainState {
   1: optional DrainState drain_state;
+
+  /*
+   * Hard-drained, aka, overloaded interfaces
+   */
   2: optional list<string> drained_interfaces;
+
+  /*
+   * Soft-drained, aka, metric incremented interfaces
+   */
+  3: optional list<string> soft_drained_interfaces;
 }
 
 /*
