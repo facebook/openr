@@ -9,7 +9,8 @@
 import copy
 import re
 import ssl
-from typing import Any, Callable, Tuple
+from collections.abc import Callable
+from typing import Any, Tuple
 
 import bunch
 import click
@@ -67,7 +68,7 @@ def str2cert(ctx, param, value) -> None:
     )
 
 
-def getNameFromOpts(opts: Tuple[Any, ...]) -> str:
+def getNameFromOpts(opts: tuple[Any, ...]) -> str:
     names = [nameFromOpt(n) for n in opts if nameFromOpt(n) in OPTIONS]
     assert len(names) == 1, "Exaclty one parameter must correspond to an option"
     return names[0]

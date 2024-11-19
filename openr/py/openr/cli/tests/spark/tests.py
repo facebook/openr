@@ -40,7 +40,7 @@ BASE_CMD_MODULE = "openr.py.openr.cli.commands.spark"
 
 
 class CliSparkTests(TestCase):
-    maxDiff: Optional[int] = None
+    maxDiff: int | None = None
 
     def setUp(self) -> None:
         self.runner = CliRunner()
@@ -79,7 +79,7 @@ class CliSparkTests(TestCase):
         self.assertEqual(0, invoked_return.exit_code)
         self.assertEqual(SPARK_NEIGHBORS_OUTPUT_JSON, invoked_return.stdout)
 
-    def _parse_validate_stdout(self, validate_stdout: str) -> List[str]:
+    def _parse_validate_stdout(self, validate_stdout: str) -> list[str]:
         """
         Checks if stdout is missing information, returns stdout as a list of strings
         """

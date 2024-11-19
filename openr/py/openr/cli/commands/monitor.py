@@ -9,7 +9,8 @@
 
 import json
 import time
-from typing import Dict, List, Mapping
+from collections.abc import Mapping
+from typing import Dict, List
 
 import tabulate
 from openr.py.openr.cli.utils import utils
@@ -19,7 +20,7 @@ from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCp
 
 
 class MonitorCmd(OpenrCtrlCmd):
-    def print_log_list_type(self, llist: List) -> str:
+    def print_log_list_type(self, llist: list) -> str:
         idx = 1
         str_txt = "{}".format("".join(llist[0]) + "\n")
         while idx < len(llist):
@@ -28,7 +29,7 @@ class MonitorCmd(OpenrCtrlCmd):
 
         return str_txt
 
-    def print_log_sample(self, log_sample: Dict) -> None:
+    def print_log_sample(self, log_sample: dict) -> None:
         columns = ["", ""]
         rows = []
         for _, value0 in log_sample.items():
@@ -38,7 +39,7 @@ class MonitorCmd(OpenrCtrlCmd):
                 if type(value) is list:
                     value = self.print_log_list_type(value)
 
-                rows.append(["{:<17}  {}".format(key, value)])
+                rows.append([f"{key:<17}  {value}"])
 
         print(tabulate.tabulate(rows, headers=columns, tablefmt="plain"))
 
@@ -65,7 +66,7 @@ class CountersCmd(MonitorCmd):
         """print the Kv Store counters"""
 
         host_id = await client.getMyNodeName()
-        caption = "{}'s counters".format(host_id)
+        caption = f"{host_id}'s counters"
 
         rows = []
         for key, counter in sorted(resp.items()):

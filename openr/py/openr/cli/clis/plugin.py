@@ -11,7 +11,7 @@ def plugin_start(cli):
     pass
 
 
-class PluginCli(object):
+class PluginCli:
     def __init__(self):
         # Place holder for future commands
         pass

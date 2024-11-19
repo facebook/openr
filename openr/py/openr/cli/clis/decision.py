@@ -7,7 +7,8 @@
 # pyre-unsafe
 
 
-from typing import Any, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Any, List, Optional
 
 import bunch
 import click
@@ -208,9 +209,9 @@ class ReceivedRoutesCli:
     @click.pass_obj
     def show(
         cli_opts: bunch.Bunch,  # noqa: B902
-        prefix: List[str],
-        node: Optional[str],
-        area: Optional[str],
+        prefix: list[str],
+        node: str | None,
+        area: str | None,
         detail: bool,
         tag2name: bool,
         json: bool,

@@ -109,11 +109,11 @@ def main() -> None:
     try:
         main_cli()
     except TApplicationException as e:
-        raise SystemExit("Thrift Application Exception: {}".format(str(e)))
+        raise SystemExit(f"Thrift Application Exception: {str(e)}")
     except TTransportException as e:
-        raise SystemExit("Failed connecting to host: {}".format(str(e)))
+        raise SystemExit(f"Failed connecting to host: {str(e)}")
     except Exception as e:
-        raise SystemExit("Failed with exception: {}".format(str(e)))
+        raise SystemExit(f"Failed with exception: {str(e)}")
 
 
 if __name__ == "__main__":

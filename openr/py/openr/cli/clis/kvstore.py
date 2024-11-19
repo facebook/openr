@@ -242,11 +242,11 @@ class SnoopCli:
         cli_opts: Bunch,  # noqa: B902
         delta: bool,
         ttl: bool,
-        regexes: Optional[List[str]],
+        regexes: list[str] | None,
         duration: int,
-        originator_ids: Optional[AbstractSet[str]],
+        originator_ids: AbstractSet[str] | None,
         match_all: bool,
-        area: Set[str],
+        area: set[str],
         print_initial: bool,
     ) -> None:
         """Snoop on KV-store updates in the network. We are primarily
@@ -266,7 +266,7 @@ class SnoopCli:
 
 
 class SummaryCli:
-    default_area_list: List[str] = []
+    default_area_list: list[str] = []
 
     @click.command()
     @click.option(
@@ -279,7 +279,7 @@ class SummaryCli:
         "either of the two valid flags: -a or --areas",
     )
     @click.pass_obj
-    def summary(cli_opts: Bunch, area: List[str]) -> None:  # noqa: B902
+    def summary(cli_opts: Bunch, area: list[str]) -> None:  # noqa: B902
         """show the KV store summary for each area"""
 
         kvstore.SummaryCmd(cli_opts).run(set(area))

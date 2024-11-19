@@ -16,23 +16,10 @@ import re
 import string
 import sys
 import time
-from builtins import str
 from collections import defaultdict
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from itertools import combinations
-from typing import (
-    AbstractSet,
-    Any,
-    Callable,
-    Dict,
-    List,
-    Mapping,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    Union,
-)
+from typing import AbstractSet, Any, Dict, List, Optional, Set, Tuple, Union
 
 import bunch
 import click
@@ -66,12 +53,12 @@ from thrift.python.serializer import deserialize
 class KvStoreCmdBase(OpenrCtrlCmd):
     def __init__(self, cli_opts: bunch.Bunch):
         super().__init__(cli_opts)
-        self.areas: Set = set()
+        self.areas: set = set()
 
     def print_publication_delta(
         self,
         title: str,
-        pub_update: List[str],
+        pub_update: list[str],
         sprint_db: str = "",
         timestamp=False,
     ) -> None:
@@ -82,7 +69,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
                         "{}\n{}{}".format(
                             title,
                             pub_update,
-                            "\n\n{}".format(sprint_db) if sprint_db else "",
+                            f"\n\n{sprint_db}" if sprint_db else "",
                         )
                     ]
                 ],
@@ -114,8 +101,8 @@ class KvStoreCmdBase(OpenrCtrlCmd):
             parse_func(container, value)
 
     async def get_node_to_ips(
-        self, client: OpenrCtrlCppClient.Async, area: Optional[str] = None
-    ) -> Dict:
+        self, client: OpenrCtrlCppClient.Async, area: str | None = None
+    ) -> dict:
         """get the dict of all nodes to their IP in the network"""
 
         node_dict = {}
@@ -150,10 +137,10 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         (area,) = self.areas
         return area
 
-    def print_peers(self, host_id: str, peers_list: Dict[str, Any]) -> None:
+    def print_peers(self, host_id: str, peers_list: dict[str, Any]) -> None:
         """print the Kv Store peers"""
 
-        caption = "{}'s peers".format(host_id)
+        caption = f"{host_id}'s peers"
 
         rows = []
         column_labels = [
@@ -191,7 +178,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
         print(printing.render_horizontal_table(rows, column_labels, caption=caption))
 
     def print_kvstore_keys(
-        self, resp: Dict[str, Publication], ttl: bool, json: bool
+        self, resp: dict[str, Publication], ttl: bool, json: bool
     ) -> None:
         """print keys from raw publication from KvStore"""
 
@@ -268,9 +255,9 @@ class KvStoreCmdBase(OpenrCtrlCmd):
     async def fetch_keyvals(
         self,
         client: OpenrCtrlCppClient.Async,
-        areas: Set[Any],
+        areas: set[Any],
         keyDumpParams: KeyDumpParams,
-    ) -> Dict[str, Publication]:
+    ) -> dict[str, Publication]:
         """
         Fetch the keyval publication for each area specified in areas via thrift call
         Returned as a dict {area : publication}
@@ -302,7 +289,7 @@ class KvStoreWithInitAreaCmdBase(KvStoreCmdBase):
         """
 
         async def _wrapper() -> int:
-            ret_val: Optional[int] = 0
+            ret_val: int | None = 0
             async with get_openr_ctrl_cpp_client(
                 self.host,
                 self.cli_opts,
@@ -338,7 +325,7 @@ class PrefixesCmd(KvStoreWithInitAreaCmdBase):
 
     def print_prefix(
         self,
-        resp: Dict[str, Publication],
+        resp: dict[str, Publication],
         nodes: set,
         json: bool,
         prefix: str,
@@ -387,7 +374,7 @@ class KeyValsCmd(KvStoreWithInitAreaCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        keys: List[str],
+        keys: list[str],
         *args,
         **kwargs,
     ) -> None:
@@ -413,7 +400,7 @@ class KeyValsCmd(KvStoreWithInitAreaCmdBase):
     def print_kvstore_values(
         self,
         resp: Publication,
-        area: Optional[str] = None,
+        area: str | None = None,
     ) -> None:
         """print values from raw publication from KvStore"""
 
@@ -478,7 +465,7 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
         # pyre-fixme[61]: `host_id` may not be initialized here.
         self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
 
-    def get_connected_nodes(self, adj_keys: Publication, node_id: str) -> Set[str]:
+    def get_connected_nodes(self, adj_keys: Publication, node_id: str) -> set[str]:
         """
         Build graph of adjacencies and return list of connected node from
         current node-id
@@ -503,10 +490,10 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
 
     def print_kvstore_nodes(
         self,
-        connected_nodes: Set[str],
+        connected_nodes: set[str],
         prefix_keys: Publication,
         host_id: str,
-        node_area: Optional[Dict[str, str]] = None,
+        node_area: dict[str, str] | None = None,
     ) -> None:
         """
         Print kvstore nodes information. Their loopback and reachability
@@ -637,11 +624,7 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
     def compare(self, our_kvs, other_kvs, our_node, other_node):
         """print kv delta"""
 
-        print(
-            printing.caption_fmt(
-                "kv-compare between {} and {}".format(our_node, other_node)
-            )
-        )
+        print(printing.caption_fmt(f"kv-compare between {our_node} and {other_node}"))
 
         # for comparing version and id info
         our_kv_pub_db = {}
@@ -685,7 +668,7 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
 
         if lines != []:
             self.print_publication_delta(
-                "Key: {} difference".format(key),
+                f"Key: {key} difference",
                 utils.sprint_pub_update(our_kv_pub_db, key, other_val),
                 "\n".join(lines) if lines else "",
             )
@@ -693,14 +676,10 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
     def print_key_delta(self, key, node):
         """print key delta"""
 
-        print(
-            printing.render_vertical_table(
-                [["key: {} only in {} kv store".format(key, node)]]
-            )
-        )
+        print(printing.render_vertical_table([[f"key: {key} only in {node} kv store"]]))
 
     def dump_nodes_kvs(
-        self, nodes: set, all_nodes_to_ips: Dict, area: Optional[str] = None
+        self, nodes: set, all_nodes_to_ips: dict, area: str | None = None
     ):
         """get the kvs of a set of nodes"""
 
@@ -710,7 +689,7 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
             kv = utils.dump_node_kvs(self.cli_opts, node_ip, area)
             if kv is not None:
                 kv_dict[node] = kv.keyVals
-                print("dumped kv from {}".format(node))
+                print(f"dumped kv from {node}")
         return kv_dict
 
 
@@ -745,7 +724,7 @@ class EraseKeyCmd(KvStoreWithInitAreaCmdBase):
         keyVals = dict(publication.keyVals)
 
         if key not in keyVals:
-            print("Error: Key {} not found in KvStore.".format(key))
+            print(f"Error: Key {key} not found in KvStore.")
             sys.exit(1)
 
         # Get and modify the key
@@ -765,7 +744,7 @@ class EraseKeyCmd(KvStoreWithInitAreaCmdBase):
 
         await client.setKvStoreKeyVals(KeySetParams(keyVals=keyVals), area)
 
-        print("Success: key {} will be erased soon from all KvStores.".format(key))
+        print(f"Success: key {key} will be erased soon from all KvStores.")
 
 
 class SetKeyCmd(KvStoreWithInitAreaCmdBase):
@@ -774,7 +753,7 @@ class SetKeyCmd(KvStoreWithInitAreaCmdBase):
         self,
         client: OpenrCtrlCppClient.Async,
         key: str,
-        value: Union[bytes, str],
+        value: bytes | str,
         originator: str,
         version: Any,
         ttl: int,
@@ -847,7 +826,7 @@ class KvSignatureCmd(KvStoreWithInitAreaCmdBase):
         for _, value in sorted(resp.keyVals.items(), key=lambda x: x[0]):
             signature.update(str(value.hash).encode("utf-8"))
 
-        print("sha256: {}".format(signature.hexdigest()))
+        print(f"sha256: {signature.hexdigest()}")
 
 
 class SnoopCmd(KvStoreCmdBase):
@@ -857,11 +836,11 @@ class SnoopCmd(KvStoreCmdBase):
         client: OpenrCtrlCppClient.Async,
         delta: bool,
         ttl: bool,
-        regexes: Optional[List[str]],
+        regexes: list[str] | None,
         duration: int,
-        originator_ids: Optional[AbstractSet[str]],
+        originator_ids: AbstractSet[str] | None,
         match_all: bool,
-        select_areas: Set[str],
+        select_areas: set[str],
         print_initial: bool,
         *args,
         **kwargs,
@@ -908,13 +887,13 @@ class SnoopCmd(KvStoreCmdBase):
             else:
                 print(f"ERROR: got publication for unexpected area: {msg.area}")
 
-    def print_expired_keys(self, msg: Publication, global_dbs: Dict):
+    def print_expired_keys(self, msg: Publication, global_dbs: dict):
         rows = []
         if len(msg.expiredKeys):
-            print("Traversal List: {}".format(msg.nodeIds))
+            print(f"Traversal List: {msg.nodeIds}")
 
         for key in msg.expiredKeys:
-            rows.append(["Key: {} got expired".format(key)])
+            rows.append([f"Key: {key} got expired"])
 
             # Delete key from global DBs
             global_dbs["publications"].pop(key, None)
@@ -930,7 +909,7 @@ class SnoopCmd(KvStoreCmdBase):
                     prefix_set = set()
                     addr_str = prefix_match.group("ipaddr")
                     prefix_len = prefix_match.group("plen")
-                    prefix_set.add("{}/{}".format(addr_str, prefix_len))
+                    prefix_set.add(f"{addr_str}/{prefix_len}")
                     node_prefix_set = global_dbs["prefixes"][prefix_match.group("node")]
                     node_prefix_set = node_prefix_set - prefix_set
                 else:
@@ -943,12 +922,12 @@ class SnoopCmd(KvStoreCmdBase):
         msg: Publication,
         ttl: bool,
         delta: bool,
-        global_dbs: Dict,
+        global_dbs: dict,
     ):
 
         for key, value in msg.keyVals.items():
             if value.value is None:
-                print("Traversal List: {}".format(msg.nodeIds))
+                print(f"Traversal List: {msg.nodeIds}")
                 self.print_publication_delta(
                     f"Key: {key}, ttl update",
                     [f"ttl: {value.ttl}, ttlVersion: {value.ttlVersion}"],
@@ -976,9 +955,9 @@ class SnoopCmd(KvStoreCmdBase):
                 )
                 continue
 
-            print("Traversal List: {}".format(msg.nodeIds))
+            print(f"Traversal List: {msg.nodeIds}")
             self.print_publication_delta(
-                "Key: {} update".format(key),
+                f"Key: {key} update",
                 # pyre-fixme[6]: For 2nd param expected `List[str]` but got `str`.
                 utils.sprint_pub_update(global_dbs["publications"], key, value),
                 timestamp=True,
@@ -989,8 +968,8 @@ class SnoopCmd(KvStoreCmdBase):
         key: str,
         value: Value,
         delta: bool,
-        global_prefix_db: Dict,
-        global_publication_db: Dict,
+        global_prefix_db: dict,
+        global_publication_db: dict,
     ):
         if value.value:
             prefix_db = deserialize(
@@ -1009,7 +988,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         if lines:
             self.print_publication_delta(
-                "{}'s prefixes".format(prefix_db.thisNodeName),
+                f"{prefix_db.thisNodeName}'s prefixes",
                 # pyre-fixme[6]: For 2nd param expected `List[str]` but got `str`.
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
@@ -1023,8 +1002,8 @@ class SnoopCmd(KvStoreCmdBase):
         key: str,
         value: Value,
         delta: bool,
-        global_adj_db: Dict,
-        global_publication_db: Dict,
+        global_adj_db: dict,
+        global_publication_db: dict,
     ):
         if value.value:
             new_adj_db = deserialize(openr_types.AdjacencyDatabase, value.value)
@@ -1044,7 +1023,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         if lines:
             self.print_publication_delta(
-                "{}'s adjacencies".format(new_adj_db.thisNodeName),
+                f"{new_adj_db.thisNodeName}'s adjacencies",
                 # pyre-fixme[6]: For 2nd param expected `List[str]` but got `str`.
                 utils.sprint_pub_update(global_publication_db, key, value),
                 lines,
@@ -1053,7 +1032,7 @@ class SnoopCmd(KvStoreCmdBase):
 
         utils.update_global_adj_db(global_adj_db, new_adj_db)
 
-    def process_snapshot(self, resp: Sequence[Publication]) -> Dict:
+    def process_snapshot(self, resp: Sequence[Publication]) -> dict:
         snapshots = {}
         print("Processing initial snapshots...")
         for pub in resp:
@@ -1077,7 +1056,7 @@ class SnoopCmd(KvStoreCmdBase):
 
 
 class SummaryCmd(KvStoreWithInitAreaCmdBase):
-    def _get_summary_stats_template(self, area: str = "") -> List[Dict[str, Any]]:
+    def _get_summary_stats_template(self, area: str = "") -> list[dict[str, Any]]:
         if area != "":
             title = " Stats for Area " + area
             area = "." + area
@@ -1106,11 +1085,11 @@ class SummaryCmd(KvStoreWithInitAreaCmdBase):
 
     def _get_bytes_str(self, bytes_count: int) -> str:
         if bytes_count < 1024:
-            return "{} Bytes".format(bytes_count)
+            return f"{bytes_count} Bytes"
         elif bytes_count < 1024 * 1024:
-            return "{:.2f}KB".format(bytes_count / 1024)
+            return f"{bytes_count / 1024:.2f}KB"
         else:
-            return "{:.2f}MB".format(bytes_count / 1024 / 1024)
+            return f"{bytes_count / 1024 / 1024:.2f}MB"
 
     def _get_peer_state_output(self, peersMap: Mapping[str, PeerSpec]) -> str:
         # form a list of peer state value for easy counting, for display
@@ -1154,7 +1133,7 @@ class SummaryCmd(KvStoreWithInitAreaCmdBase):
         self,
         client: OpenrCtrlCppClient.Async,
         summaries: Sequence[KvStoreAreaSummary],
-        input_areas: Set[str],
+        input_areas: set[str],
     ) -> None:
         allFlag: bool = False
         # if no area(s) filter specified in CLI, then get all configured areas
@@ -1180,7 +1159,7 @@ class SummaryCmd(KvStoreWithInitAreaCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        input_areas: Set[str],
+        input_areas: set[str],
         *args,
         **kwargs,
     ) -> None:
@@ -1344,8 +1323,8 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         return is_pass
 
     def _validate_local_key_advertisement(
-        self, area_to_publication_dict: Dict[str, Publication]
-    ) -> Tuple[bool, bool]:
+        self, area_to_publication_dict: dict[str, Publication]
+    ) -> tuple[bool, bool]:
         """
         Checks if the local node is advertising atleast one adjacency key and
         one prefix key to the kvstore. Returns a boolean for each key type.
@@ -1368,8 +1347,8 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         return is_adj_advertised, is_prefix_advertised
 
     def _validate_peer_state(
-        self, area_to_peers: Dict[str, Dict[str, PeerSpec]]
-    ) -> Dict[str, Dict[str, PeerSpec]]:
+        self, area_to_peers: dict[str, dict[str, PeerSpec]]
+    ) -> dict[str, dict[str, PeerSpec]]:
         """
         Checks if all peers are in INITIALIZED state,
         returns a dictionary of {area : peersmap of peers} which are not in
@@ -1386,10 +1365,10 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
 
     def _validate_key_ttl(
         self,
-        publications: Dict[str, Publication],
+        publications: dict[str, Publication],
         ttl: int,
         threshold: float = 0.5,
-    ) -> Dict[str, Publication]:
+    ) -> dict[str, Publication]:
         """
         Checks if the ttl of each key is above 1/2 of the max ttl,
         We allow one miss since drain could delay the refresh
@@ -1412,7 +1391,7 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
 
     def _print_key_ttl_check(
         self,
-        area_to_invalid_keys: Dict[str, Publication],
+        area_to_invalid_keys: dict[str, Publication],
         ttl: int,
         threshold: float = 0.5,
     ) -> None:
@@ -1440,7 +1419,7 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
 
     def _print_peer_state_check(
         self,
-        invalid_peers: Dict[str, Dict[str, PeerSpec]],
+        invalid_peers: dict[str, dict[str, PeerSpec]],
         host_id: str,
     ) -> None:
         """

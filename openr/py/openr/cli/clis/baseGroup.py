@@ -20,7 +20,7 @@ class deduceCommandGroup(click.Group):
         if not matches:
             return None
         elif len(matches) == 1:
-            print("Running command: {}".format(matches[0]))
+            print(f"Running command: {matches[0]}")
             return click.Group.get_command(self, ctx, matches[0])
         ctx.fail(
             f"Ambiguous command: {cmd_name} matches with: {', '.join(sorted(matches))}"

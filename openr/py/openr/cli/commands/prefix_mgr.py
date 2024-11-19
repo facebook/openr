@@ -6,7 +6,8 @@
 
 # pyre-unsafe
 
-from typing import Dict, List, Optional, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Dict, List, Optional, Tuple
 
 from openr.py.openr.cli.utils import utils
 
@@ -26,7 +27,7 @@ from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCp
 from openr.thrift.Types.thrift_types import OriginatedPrefixEntry, PrefixEntry
 
 
-def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
+def prefix_type_key_fn(key: PrintAdvertisedTypes) -> tuple[str]:
     try:
         return (key.name if key in PrefixType else "N/A - Not in PrefixType enum",)
     except ValueError:
@@ -35,7 +36,7 @@ def prefix_type_key_fn(key: PrintAdvertisedTypes) -> Tuple[str]:
 
 
 def get_advertised_route_filter(
-    prefixes: List[str], prefix_type: Optional[str]
+    prefixes: list[str], prefix_type: str | None
 ) -> ctrl_types.AdvertisedRouteFilter:
     return ctrl_types.AdvertisedRouteFilter(
         prefixes=(
@@ -66,8 +67,8 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        prefix_type: Optional[str],
+        prefixes: list[str],
+        prefix_type: str | None,
         json: bool,
         detailed: bool,
         *args,
@@ -86,8 +87,8 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
     async def fetch(
         self,
         client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        prefix_type: Optional[str],
+        prefixes: list[str],
+        prefix_type: str | None,
     ) -> Sequence[ctrl_types.AdvertisedRouteDetail]:
         """
         Fetch the requested data
@@ -148,9 +149,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 
     def _print_orig_routes(
         self,
-        rows: List[str],
+        rows: list[str],
         originated_prefixes: Sequence[OriginatedPrefixEntry],
-        tag_to_name: Optional[Dict[str, str]] = None,
+        tag_to_name: dict[str, str] | None = None,
     ):
         """
         Construct print lines of originated route in tabular fashion
@@ -178,7 +179,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         rows.append("")
         tag_to_name = tag_to_name if tag_to_name is not None else {}
         for prefix_entry in originated_prefixes:
-            tag: List[str] = [""]
+            tag: list[str] = [""]
             prefix_tags = prefix_entry.prefix.tags
             if prefix_tags:
                 tag = [tag_to_name.get(t, t) for t in prefix_tags]
@@ -199,9 +200,9 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
 
     def _print_orig_routes_detailed(
         self,
-        rows: List[str],
+        rows: list[str],
         originated_prefixes: Sequence[OriginatedPrefixEntry],
-        tag_to_name: Optional[Dict[str, str]] = None,
+        tag_to_name: dict[str, str] | None = None,
     ) -> None:
         """
         Construct print lines of originated route, append to rows
@@ -258,8 +259,8 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
         self,
         client: OpenrCtrlCppClient.Async,
         route_filter_type: ctrl_types.RouteFilterType,
-        prefixes: List[str],
-        prefix_type: Optional[str],
+        prefixes: list[str],
+        prefix_type: str | None,
         json: bool,
         detailed: bool,
         *args,
@@ -279,8 +280,8 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
         self,
         client: OpenrCtrlCppClient.Async,
         route_filter_type: ctrl_types.RouteFilterType,
-        prefixes: List[str],
-        prefix_type: Optional[str],
+        prefixes: list[str],
+        prefix_type: str | None,
     ) -> Sequence[ctrl_types.AdvertisedRoute]:
         """
         Fetch the requested data
@@ -313,8 +314,8 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         client: OpenrCtrlCppClient.Async,
         area: str,
         route_filter_type: ctrl_types.RouteFilterType,
-        prefixes: List[str],
-        prefix_type: Optional[str],
+        prefixes: list[str],
+        prefix_type: str | None,
         json: bool,
         detailed: bool,
         *args,
@@ -340,8 +341,8 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         client: OpenrCtrlCppClient.Async,
         area: str,
         route_filter_type: ctrl_types.RouteFilterType,
-        prefixes: List[str],
-        prefix_type: Optional[str],
+        prefixes: list[str],
+        prefix_type: str | None,
     ) -> Sequence[ctrl_types.AdvertisedRoute]:
         """
         Fetch the requested data

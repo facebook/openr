@@ -10,7 +10,6 @@
 import random
 import string
 import unittest
-from builtins import range
 
 from openr.thrift.Types import thrift_types as openr_types
 from thrift.python.serializer import deserialize, serialize

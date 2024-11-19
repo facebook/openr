@@ -34,20 +34,20 @@ class VersionCmd(OpenrCtrlCmd):
         else:
             if build_info.buildPackageName:
                 print("Build Information")
-                print("  Built by: {}".format(build_info.buildUser))
-                print("  Built on: {}".format(build_info.buildTime))
-                print("  Built at: {}".format(build_info.buildHost))
-                print("  Build path: {}".format(build_info.buildPath))
-                print("  Package Name: {}".format(build_info.buildPackageName))
-                print("  Package Version: {}".format(build_info.buildPackageVersion))
-                print("  Package Release: {}".format(build_info.buildPackageRelease))
-                print("  Build Revision: {}".format(build_info.buildRevision))
+                print(f"  Built by: {build_info.buildUser}")
+                print(f"  Built on: {build_info.buildTime}")
+                print(f"  Built at: {build_info.buildHost}")
+                print(f"  Build path: {build_info.buildPath}")
+                print(f"  Package Name: {build_info.buildPackageName}")
+                print(f"  Package Version: {build_info.buildPackageVersion}")
+                print(f"  Package Release: {build_info.buildPackageRelease}")
+                print(f"  Build Revision: {build_info.buildRevision}")
                 print(
                     "  Build Upstream Revision: {}".format(
                         build_info.buildUpstreamRevision
                     )
                 )
-                print("  Build Platform: {}".format(build_info.buildPlatform))
+                print(f"  Build Platform: {build_info.buildPlatform}")
                 print(
                     "  Build Rule: {} ({}, {}, {})".format(
                         build_info.buildRule,

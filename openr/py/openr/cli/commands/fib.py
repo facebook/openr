@@ -11,8 +11,8 @@ import asyncio
 import datetime
 import ipaddress
 import time
-from builtins import object
-from typing import List, Optional, Sequence
+from collections.abc import Sequence
+from typing import List, Optional
 
 import prettytable
 import pytz
@@ -60,7 +60,7 @@ class FibAgentCmd(FibCmdBase):
                 client_id=cli_opts.client_id,
             )
         except Exception as e:
-            print("Failed to get communicate to Fib. {}".format(e))
+            print(f"Failed to get communicate to Fib. {e}")
             print(
                 "Note: Specify correct host with -H/--host option and "
                 + "make sure that Fib is running on the host or ports "
@@ -74,7 +74,7 @@ class FibUnicastRoutesCmd(FibCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        prefix_or_ip: List[str],
+        prefix_or_ip: list[str],
         json: bool,
         hostnames: bool,
         *args,
@@ -109,7 +109,7 @@ class FibMplsRoutesCmd(FibCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        labels: List[int],
+        labels: list[int],
         json: bool,
         *args,
         **kwargs,
@@ -125,9 +125,7 @@ class FibMplsRoutesCmd(FibCmdBase):
             route_dict = {host_name: routes}
             utils.print_routes_json(route_dict)
         else:
-            utils.print_mpls_routes(
-                "MPLS Routes for {}".format(host_name), mpls_route_list
-            )
+            utils.print_mpls_routes(f"MPLS Routes for {host_name}", mpls_route_list)
 
 
 class FibCountersCmd(FibAgentCmd):
@@ -144,7 +142,7 @@ class FibCountersCmd(FibAgentCmd):
             return 0
         except Exception as e:
             print("Failed to get counter from Fib")
-            print("Exception: {}".format(e))
+            print(f"Exception: {e}")
             return 1
 
     def print_counters(self, counters, host_id, json_opt) -> None:
@@ -157,7 +155,7 @@ class FibCountersCmd(FibAgentCmd):
         else:
             rows = []
             for key in counters:
-                rows.append(["{} : {}".format(key, counters[key])])
+                rows.append([f"{key} : {counters[key]}"])
             print(
                 printing.render_horizontal_table(
                     rows, caption=caption, tablefmt="plain"
@@ -171,10 +169,10 @@ class FibRoutesInstalledCmd(FibAgentCmd):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        labels: Optional[List[int]] = None,
+        prefixes: list[str],
+        labels: list[int] | None = None,
         json_opt: bool = False,
-        client_id: Optional[int] = None,
+        client_id: int | None = None,
         *args,
         **kwargs,
     ):
@@ -188,7 +186,7 @@ class FibRoutesInstalledCmd(FibAgentCmd):
             routes = self.fib_agent_client.getRouteTableByClient(clientId=client_id)
         except Exception as e:
             print("Failed to get routes from Fib.")
-            print("Exception: {}".format(e))
+            print(f"Exception: {e}")
             return 1
 
         try:
@@ -226,10 +224,10 @@ class FibAddRoutesCmd(FibAgentCmd):
             )
         except Exception as e:
             print("Failed to add routes.")
-            print("Exception: {}".format(e))
+            print(f"Exception: {e}")
             return 1
 
-        print("Added {} routes.".format(len(routes)))
+        print(f"Added {len(routes)} routes.")
         return 0
 
 
@@ -243,10 +241,10 @@ class FibDelRoutesCmd(FibAgentCmd):
             )
         except Exception as e:
             print("Failed to delete routes.")
-            print("Exception: {}".format(e))
+            print(f"Exception: {e}")
             return 1
 
-        print("Deleted {} routes.".format(len(prefixes)))
+        print(f"Deleted {len(prefixes)} routes.")
         return 0
 
 
@@ -261,10 +259,10 @@ class FibSyncRoutesCmd(FibAgentCmd):
             self.fib_agent_client.syncFib(self.fib_agent_client.client_id, routes)
         except Exception as e:
             print("Failed to sync routes.")
-            print("Exception: {}".format(e))
+            print(f"Exception: {e}")
             return 1
 
-        print("Reprogrammed FIB with {} routes.".format(len(routes)))
+        print(f"Reprogrammed FIB with {len(routes)} routes.")
         return 0
 
 
@@ -301,7 +299,7 @@ class FibValidateRoutesCmd(FibAgentCmd):
 
         except Exception as e:
             print("Failed to validate Fib routes.")
-            print("Exception: {}".format(e))
+            print(f"Exception: {e}")
             raise e
 
         # compare UNICAST route database between Decision and Fib module
@@ -371,7 +369,7 @@ class FibSnoopCmd(FibCmdBase):
     def print_ip_prefixes_filtered(
         self,
         ip_prefixes: Sequence[IpPrefix],
-        prefixes_filter: Optional[List[str]] = None,
+        prefixes_filter: list[str] | None = None,
         element_prefix: str = ">",
         element_suffix: str = "",
     ) -> None:
@@ -435,7 +433,7 @@ class FibSnoopCmd(FibCmdBase):
     def print_route_db_delta(
         self,
         delta_db: RouteDatabaseDelta,
-        prefixes: Optional[List[str]] = None,
+        prefixes: list[str] | None = None,
     ) -> None:
         """print the RouteDatabaseDelta from Fib module"""
 
@@ -476,8 +474,8 @@ class FibSnoopCmd(FibCmdBase):
     def print_route_db(
         self,
         route_db: RouteDatabase,
-        prefixes: Optional[List[str]] = None,
-        labels: Optional[List[int]] = None,
+        prefixes: list[str] | None = None,
+        labels: list[int] | None = None,
     ) -> None:
         """print the routes from Fib module"""
 
@@ -506,7 +504,7 @@ class FibSnoopCmd(FibCmdBase):
         client: OpenrCtrlCppClient.Async,
         duration: int,
         initial_dump: bool,
-        prefixes: List[str],
+        prefixes: list[str],
         *args,
         **kwargs,
     ) -> None:

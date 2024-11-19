@@ -52,8 +52,8 @@ class CliKvStoreTests(TestCase):
 
     def _test_kvstore_peers_helper(
         self,
-        peer_lines: List[str],
-        expected_peers: Dict[str, Dict[str, kvstore_types.PeerSpec]],
+        peer_lines: list[str],
+        expected_peers: dict[str, dict[str, kvstore_types.PeerSpec]],
     ) -> None:
         """
         Parses stdout to check if the information outputed and number of peers
@@ -109,8 +109,8 @@ class CliKvStoreTests(TestCase):
 
     def _test_keys_helper(
         self,
-        keyvals: List[str],
-        expected_keys: Dict[str, Dict[str, kvstore_types.Value]],
+        keyvals: list[str],
+        expected_keys: dict[str, dict[str, kvstore_types.Value]],
     ) -> None:
         """
         Checks if the information for each key in string form matches the expected values
@@ -200,8 +200,8 @@ class CliKvStoreTests(TestCase):
             )
 
     def _find_validation_string(
-        self, stdout_lines: List[str], start_idx: int
-    ) -> Optional[int]:
+        self, stdout_lines: list[str], start_idx: int
+    ) -> int | None:
         """
         A validation string is the title of each check in the format:
         [Module Name] Name of Check: Pass state
@@ -218,8 +218,8 @@ class CliKvStoreTests(TestCase):
                 return idx
 
     def _get_keyval_lines(
-        self, stdout_lines: List[str], validation_str_idx: int
-    ) -> List[str]:
+        self, stdout_lines: list[str], validation_str_idx: int
+    ) -> list[str]:
         """
         Returns the list of lines with keyval info given the index of the
         validation string of the current check
@@ -482,7 +482,7 @@ class CliKvStoreTests(TestCase):
         self._check_validation_state(True, pass_line)
 
     def _test_kvstore_validate_peer_state_helper(
-        self, stdout: str, invalid_peers: Dict[str, Dict[str, kvstore_types.PeerSpec]]
+        self, stdout: str, invalid_peers: dict[str, dict[str, kvstore_types.PeerSpec]]
     ) -> None:
         """
         Helper to check for the failure case of validate peers

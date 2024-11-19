@@ -7,7 +7,8 @@
 # pyre-strict
 
 import asyncio
-from typing import Dict, List, Optional, Sequence
+from collections.abc import Sequence
+from typing import Dict, List, Optional
 from unittest.mock import AsyncMock, patch
 
 from click.testing import CliRunner
@@ -54,7 +55,7 @@ class CliFibTests(TestCase):
         self,
         nexthop_line: str,
         expected_nexthop: NextHopThrift,
-        addr_to_name: Optional[Dict[bytes, str]] = None,
+        addr_to_name: dict[bytes, str] | None = None,
     ) -> None:
         """
         Checks  if the next hop information outputted is correct
@@ -76,21 +77,21 @@ class CliFibTests(TestCase):
 
     def check_printed_routes(
         self,
-        stdout_lines: List[str],
-        expected_routes: List[UnicastRoute],
-        addr_to_name: Optional[Dict[bytes, str]] = None,
+        stdout_lines: list[str],
+        expected_routes: list[UnicastRoute],
+        addr_to_name: dict[bytes, str] | None = None,
     ) -> None:
         """
         Checks if each address in the output is correct
         """
-        unicast_route_dict: Dict[str, Sequence[NextHopThrift]] = {
+        unicast_route_dict: dict[str, Sequence[NextHopThrift]] = {
             ipnetwork.sprint_prefix(route.dest): route.nextHops
             for route in expected_routes
         }
 
         def check_dest_line(
             dest_line: str,
-        ) -> Optional[Sequence[NextHopThrift]]:
+        ) -> Sequence[NextHopThrift] | None:
 
             is_valid_route = False
             next_hops = None

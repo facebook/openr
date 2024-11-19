@@ -7,7 +7,8 @@
 # pyre-unsafe
 
 import datetime
-from typing import Any, Dict, List, Sequence, Tuple
+from collections.abc import Sequence
+from typing import Any, Dict, List, Tuple
 
 import click
 
@@ -193,7 +194,7 @@ class ValidateCmd(SparkBaseCmd):
 
     def _validate_neigbor_regex(
         self, neighbors: Sequence[SparkNeighbor], areas: Sequence[Any]
-    ) -> Tuple[Sequence[SparkNeighbor], Dict[str, List[str]]]:
+    ) -> tuple[Sequence[SparkNeighbor], dict[str, list[str]]]:
         """
         Returns a list of all neighbors which don't pass the check
         and a dictionary of area_id : neighbor_regexes
@@ -258,7 +259,7 @@ class ValidateCmd(SparkBaseCmd):
     def _print_neighbor_regex_info(
         self,
         invalid_neighbors: Sequence[SparkNeighbor],
-        regexes: Dict[str, List[str]],
+        regexes: dict[str, list[str]],
         detail: bool,
     ) -> None:
 

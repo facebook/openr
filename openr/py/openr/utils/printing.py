@@ -8,8 +8,8 @@
 
 
 import datetime
-from builtins import range
-from typing import Iterable, List, Optional, Sequence, Union
+from collections.abc import Iterable, Sequence
+from typing import List, Optional, Union
 
 import tabulate
 
@@ -18,7 +18,7 @@ def caption_fmt(caption) -> str:
     """Format a caption"""
 
     if caption:
-        return "\n== {}  ==\n".format(caption)
+        return f"\n== {caption}  ==\n"
     return ""
 
 
@@ -28,7 +28,7 @@ def get_timestamp() -> str:
     )
 
 
-def sprint_bytes(bytes: Union[int, float]) -> str:
+def sprint_bytes(bytes: int | float) -> str:
     """Return formatted bytes. e.g. 12KB, 15.1MB"""
 
     if bytes < 1024:
@@ -70,8 +70,8 @@ def render_horizontal_table(
 
 
 def render_vertical_table(
-    data: Iterable[List[str]],
-    column_labels: Optional[Sequence[str]] = None,
+    data: Iterable[list[str]],
+    column_labels: Sequence[str] | None = None,
     caption: str = "",
     element_prefix: str = ">",
     element_suffix: str = "",

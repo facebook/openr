@@ -100,7 +100,7 @@ class OpenrCtrlSecureClient(OpenrCtrlClient):
 
 # to be deprecated
 def get_openr_ctrl_client_py(
-    host: str, options: Optional[bunch.Bunch] = None
+    host: str, options: bunch.Bunch | None = None
 ) -> OpenrCtrl.Client:
     """
     Utility function to get openr clients with default smart options. For
@@ -127,10 +127,10 @@ def get_openr_ctrl_client_py(
 
 def get_ssl_context(
     options: bunch.Bunch,
-) -> Optional[SSLContext]:
+) -> SSLContext | None:
     # The options are the local settings to connect to the host
 
-    ssl_context: Optional[SSLContext] = None
+    ssl_context: SSLContext | None = None
     # Create ssl context if specified
     if options.ssl:
         # Translate ssl verification option
@@ -155,7 +155,7 @@ def get_fib_agent_client(
     port: int,
     timeout_ms: int,
     client_id: int = FibClient.OPENR,
-    client_class: Type[
+    client_class: type[
         Client[TAsyncClient, TSyncClient]
     ] = FibServiceClient,  # Allow service client overwrite
 ) -> TSyncClient:  # return client_class.Sync
@@ -172,7 +172,7 @@ def get_fib_agent_client(
     `get_sync_client` below to `get_client`, which provides the async client.
     """
 
-    ssl_context: Optional[SSLContext] = get_ssl_context(getDefaultOptions(host))
+    ssl_context: SSLContext | None = get_ssl_context(getDefaultOptions(host))
     try:
         client = get_sync_client(
             client_class,
@@ -212,7 +212,7 @@ def get_fib_agent_client(
 
 def get_openr_ctrl_cpp_sync_client(
     host: str,
-    options: Optional[bunch.Bunch] = None,
+    options: bunch.Bunch | None = None,
     client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient.Sync:
     """
@@ -224,7 +224,7 @@ def get_openr_ctrl_cpp_sync_client(
     options = options if options else getDefaultOptions(host)
 
     # Create and return client
-    ssl_context: Optional[SSLContext] = get_ssl_context(options)
+    ssl_context: SSLContext | None = get_ssl_context(options)
     try:
         client = get_sync_client(
             OpenrCtrlCppClient,
@@ -261,7 +261,7 @@ def get_openr_ctrl_cpp_sync_client(
 
 def get_openr_ctrl_cpp_client(
     host: str,
-    options: Optional[bunch.Bunch] = None,
+    options: bunch.Bunch | None = None,
     client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient.Async:
     """
@@ -275,7 +275,7 @@ def get_openr_ctrl_cpp_client(
     options = options if options else getDefaultOptions(host)
 
     # Create and return client
-    ssl_context: Optional[SSLContext] = get_ssl_context(options)
+    ssl_context: SSLContext | None = get_ssl_context(options)
     try:
         client = get_client(
             OpenrCtrlCppClient,

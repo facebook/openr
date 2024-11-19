@@ -12,7 +12,7 @@ from openr.py.openr.cli.commands import perf
 from openr.py.openr.cli.utils.options import breeze_option
 
 
-class PerfCli(object):
+class PerfCli:
     def __init__(self):
         self.perf.add_command(ViewFibCli().fib)
 
@@ -23,7 +23,7 @@ class PerfCli(object):
         pass
 
 
-class ViewFibCli(object):
+class ViewFibCli:
     @click.command()
     @click.pass_obj
     def fib(cli_opts):  # noqa: B902

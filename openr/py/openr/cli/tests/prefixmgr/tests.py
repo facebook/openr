@@ -31,7 +31,7 @@ BASE_CMD_MODULE = "openr.py.openr.cli.commands.prefix_mgr"
 
 
 class CliPrefixManagerTests(TestCase):
-    maxDiff: Optional[int] = None
+    maxDiff: int | None = None
 
     def setUp(self) -> None:
         self.runner = CliRunner()

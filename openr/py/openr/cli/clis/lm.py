@@ -100,7 +100,7 @@ class LMAdjCli:
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.argument("areas", nargs=-1)
     @click.pass_obj
-    def adj(cli_opts: bunch.Bunch, json: bool, areas: List[str]):  # noqa: B902
+    def adj(cli_opts: bunch.Bunch, json: bool, areas: list[str]):  # noqa: B902
         """Dump all formed adjacencies of the current host"""
 
         nodes = parse_nodes(cli_opts, "")

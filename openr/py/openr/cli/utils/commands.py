@@ -10,7 +10,8 @@
 import asyncio
 import json
 import re
-from typing import Any, Callable, Dict, List, Mapping, Optional, Set, Tuple
+from collections.abc import Callable, Mapping
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import bunch
 import click
@@ -26,7 +27,7 @@ class OpenrCtrlCmd:
     Command wrapping OpenrCtrl.Client
     """
 
-    def __init__(self, cli_opts: Optional[bunch.Bunch] = None) -> None:
+    def __init__(self, cli_opts: bunch.Bunch | None = None) -> None:
         """initialize the Config Store client"""
         if not cli_opts:
             cli_opts = bunch.Bunch()
@@ -45,7 +46,7 @@ class OpenrCtrlCmd:
         """
 
         async def _wrapper() -> int:
-            ret_val: Optional[int] = 0
+            ret_val: int | None = 0
             async with get_openr_ctrl_cpp_client(
                 self.host,
                 self.cli_opts,
@@ -70,7 +71,7 @@ class OpenrCtrlCmd:
 
         raise NotImplementedError
 
-    async def _get_config(self) -> Dict[str, Any]:
+    async def _get_config(self) -> dict[str, Any]:
         if self._config is None:
             async with get_openr_ctrl_cpp_client(self.host, self.cli_opts) as client:
                 resp = await client.getRunningConfig()
@@ -80,9 +81,9 @@ class OpenrCtrlCmd:
     def iter_dbs(
         self,
         container: Any,
-        dbs: Dict,
+        dbs: dict,
         nodes: set,
-        parse_func: Callable[[Any, Dict], None],
+        parse_func: Callable[[Any, dict], None],
     ):
         """
         parse prefix/adj databases
@@ -114,7 +115,7 @@ class OpenrCtrlCmd:
             stats_rows = []
             for title, key_prefix in template["stats"]:
                 row = [title]
-                for key in ["{}{}".format(key_prefix, s) for s in suffixes]:
+                for key in [f"{key_prefix}{s}" for s in suffixes]:
                     val = counters.get(key, None)
                     row.append("N/A" if not val and val != 0 else val)
                 stats_rows.append(row)
@@ -140,8 +141,8 @@ class OpenrCtrlCmd:
     def buildKvStoreKeyDumpParams(
         self,
         prefix: str = Consts.ALL_DB_MARKER,
-        originator_ids: Optional[Set[str]] = None,
-        keyval_hash: Optional[Dict[str, Value]] = None,
+        originator_ids: set[str] | None = None,
+        keyval_hash: dict[str, Value] | None = None,
     ) -> KeyDumpParams:
         """
         Build KeyDumpParams based on input parameter list
@@ -160,7 +161,7 @@ class OpenrCtrlCmd:
         self,
         init_event_dict: Mapping[InitializationEvent, int],
         init_event: InitializationEvent,
-    ) -> Tuple[bool, Optional[str]]:
+    ) -> tuple[bool, str | None]:
         """
         Returns True if the init_event specified is published within it's defined time limit
         If init_event is published, returns the duration as a stylized string. If the checks fail,
@@ -206,7 +207,7 @@ class OpenrCtrlCmd:
     def print_initialization_event_check(
         self,
         is_pass: bool,
-        err_msg_str: Optional[str],
+        err_msg_str: str | None,
         init_event: InitializationEvent,
         module: str,
     ) -> None:
@@ -224,7 +225,7 @@ class OpenrCtrlCmd:
             click.echo(err_msg_str)
 
     def validate_regexes(
-        self, regexes: List[str], strings_to_check: List[str], expect_match: bool
+        self, regexes: list[str], strings_to_check: list[str], expect_match: bool
     ) -> bool:
         """
         If expect_match is true, checks if all the strings in strings_to_check match atleast one of the regexes.

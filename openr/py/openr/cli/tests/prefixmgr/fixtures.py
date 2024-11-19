@@ -210,14 +210,14 @@ ADVERTISED_ROUTES_OUTPUT_JSON = """\
 ]
 """
 
-MOCKED_INIT_EVENT_GOOD: Dict[openr_kvstore_types.InitializationEvent, int] = {
+MOCKED_INIT_EVENT_GOOD: dict[openr_kvstore_types.InitializationEvent, int] = {
     openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED: 9206,
 }
 
-MOCKED_INIT_EVENT_WARNING: Dict[openr_kvstore_types.InitializationEvent, int] = {
+MOCKED_INIT_EVENT_WARNING: dict[openr_kvstore_types.InitializationEvent, int] = {
     openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED: 170000,
 }
 
-MOCKED_INIT_EVENT_TIMEOUT: Dict[openr_kvstore_types.InitializationEvent, int] = {
+MOCKED_INIT_EVENT_TIMEOUT: dict[openr_kvstore_types.InitializationEvent, int] = {
     openr_kvstore_types.InitializationEvent.PREFIX_DB_SYNCED: 300000,
 }

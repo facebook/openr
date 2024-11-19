@@ -8,8 +8,9 @@
 
 
 import sys
+from collections.abc import Sequence
 from string import ascii_letters
-from typing import Any, Dict, List, Optional, Sequence
+from typing import Any, Dict, List, Optional
 
 import click
 from openr.py.openr.cli.utils import utils
@@ -62,17 +63,15 @@ class LMCmdBase(OpenrCtrlCmd):
         print()
 
         if overload and links.isOverloaded:
-            print("Node {} is already overloaded.\n".format(host))
+            print(f"Node {host} is already overloaded.\n")
             sys.exit(0)
 
         if not overload and not links.isOverloaded:
-            print("Node {} is not overloaded.\n".format(host))
+            print(f"Node {host} is not overloaded.\n")
             sys.exit(0)
 
         action = "set overload bit" if overload else "unset overload bit"
-        if not utils.yesno(
-            "Are you sure to {} for node {} ?".format(action, host), yes
-        ):
+        if not utils.yesno(f"Are you sure to {action} for node {host} ?", yes):
             print()
             return
 
@@ -81,7 +80,7 @@ class LMCmdBase(OpenrCtrlCmd):
         else:
             await client.unsetNodeOverload()
 
-        print("Successfully {}..\n".format(action))
+        print(f"Successfully {action}..\n")
 
     async def toggle_link_overload_bit(
         self,
@@ -96,7 +95,7 @@ class LMCmdBase(OpenrCtrlCmd):
         print()
 
         if interface not in links.interfaceDetails:
-            print("No such interface: {}".format(interface))
+            print(f"No such interface: {interface}")
             return
 
         if overload and links.interfaceDetails[interface].isOverloaded:
@@ -118,7 +117,7 @@ class LMCmdBase(OpenrCtrlCmd):
         else:
             await client.unsetInterfaceOverload(interface)
 
-        print("Successfully {} for the interface.\n".format(action))
+        print(f"Successfully {action} for the interface.\n")
 
     async def toggle_node_metric_inc(
         self, client: OpenrCtrlCppClient.Async, metric_inc: int, yes: bool = False
@@ -158,7 +157,7 @@ class LMCmdBase(OpenrCtrlCmd):
     async def toggle_link_metric_inc(
         self,
         client: OpenrCtrlCppClient.Async,
-        interfaces: List[str],
+        interfaces: list[str],
         metric_inc: int,
         yes: bool,
     ) -> None:
@@ -225,7 +224,7 @@ class LMCmdBase(OpenrCtrlCmd):
 
     def check_link_overriden(
         self, links: DumpLinksReply, interface: str, metric: int
-    ) -> Optional[bool]:
+    ) -> bool | None:
         """
         This function call will comapre the metricOverride in the following way:
         1) metricOverride NOT set -> return None;
@@ -277,8 +276,8 @@ class LMCmdBase(OpenrCtrlCmd):
 
     @classmethod
     def build_table_rows(
-        cls, interfaces: Dict[str, InterfaceDetails]
-    ) -> List[List[str]]:
+        cls, interfaces: dict[str, InterfaceDetails]
+    ) -> list[list[str]]:
         rows = []
         for interface in sorted(interfaces, key=interface_key):
             details = interfaces[interface]
@@ -287,7 +286,7 @@ class LMCmdBase(OpenrCtrlCmd):
         return rows
 
     @staticmethod
-    def build_table_row(k: str, v: InterfaceDetails) -> List[Any]:
+    def build_table_row(k: str, v: InterfaceDetails) -> list[Any]:
         metric_override = ""
         if v.metricOverride:
             # [TO BE DEPRECATED]
@@ -309,7 +308,7 @@ class LMCmdBase(OpenrCtrlCmd):
             elif not utils.is_color_output_supported():
                 state = backoff_sec
             else:
-                state = click.style("Hold ({} s)".format(backoff_sec), fg="yellow")
+                state = click.style(f"Hold ({backoff_sec} s)", fg="yellow")
         else:
             state = (
                 click.style("Down", fg="red")
@@ -415,7 +414,7 @@ class IncreaseLinkMetricCmd(LMCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        interfaces: List[str],
+        interfaces: list[str],
         metric: str,
         yes: bool,
         *args,
@@ -429,7 +428,7 @@ class ClearLinkMetricCmd(LMCmdBase):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        interfaces: List[str],
+        interfaces: list[str],
         yes: bool,
         *args,
         **kwargs,
@@ -529,12 +528,12 @@ class LMLinksCmd(LMCmdBase):
                     "red" if links.nodeMetricIncrementVal > 0 else "green"
                 )
                 node_metric_inc_status = click.style(
-                    "{}".format(links.nodeMetricIncrementVal),
+                    f"{links.nodeMetricIncrementVal}",
                     fg=node_metric_inc_color,
                 )
             else:
                 overload_status = "YES" if links.isOverloaded else "NO"
-                node_metric_inc_status = "{}".format(links.nodeMetricIncrementVal)
+                node_metric_inc_status = f"{links.nodeMetricIncrementVal}"
 
             caption = "Node Overload: {}, Node Metric Increment: {}".format(
                 overload_status, node_metric_inc_status
@@ -584,7 +583,7 @@ class LMValidateCmd(LMCmdBase):
 
     def _validate_interface_regex(
         self, links: DumpLinksReply, areas: Sequence[Any]
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Checks if each interface passes the regexes of atleast one area
         Returns a dictionary interface : interfaceDetails of the invalid interfaces
@@ -630,7 +629,7 @@ class LMValidateCmd(LMCmdBase):
 
     def _print_interface_validation_info(
         self,
-        invalid_interfaces: Dict[str, Any],
+        invalid_interfaces: dict[str, Any],
     ) -> None:
 
         click.echo(

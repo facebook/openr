@@ -36,7 +36,7 @@ def sprint_addr(addr: bytes) -> str:
 
 
 def sprint_prefix(
-    prefix: Union[IpPrefix, network_types_py3.IpPrefix, network_types.IpPrefix]
+    prefix: IpPrefix | network_types_py3.IpPrefix | network_types.IpPrefix,
 ) -> str:
     """
     :param prefix: network_types.IpPrefix representing an CIDR network
@@ -48,7 +48,7 @@ def sprint_prefix(
     return f"{sprint_addr(prefix.prefixAddress.addr)}/{prefix.prefixLength}"
 
 
-def ip_str_to_addr(addr_str: str, if_index: Optional[str] = None) -> BinaryAddress:
+def ip_str_to_addr(addr_str: str, if_index: str | None = None) -> BinaryAddress:
     """
     :param addr_str: ip address in string representation
 
@@ -60,7 +60,7 @@ def ip_str_to_addr(addr_str: str, if_index: Optional[str] = None) -> BinaryAddre
     try:
         addr = socket.inet_pton(socket.AF_INET, addr_str)
         return BinaryAddress(addr=addr, ifName=if_index)
-    except socket.error:
+    except OSError:
         pass
 
     # Try v6
@@ -70,7 +70,7 @@ def ip_str_to_addr(addr_str: str, if_index: Optional[str] = None) -> BinaryAddre
 
 # to be deprecated
 def ip_str_to_addr_py(
-    addr_str: str, if_index: Optional[str] = None
+    addr_str: str, if_index: str | None = None
 ) -> network_types.BinaryAddress:
     """
     :param addr_str: ip address in string representation
@@ -86,7 +86,7 @@ def ip_str_to_addr_py(
         if if_index:
             binary_address.ifName = if_index
         return binary_address
-    except socket.error:
+    except OSError:
         pass
 
     # Try v6
@@ -140,7 +140,7 @@ def ip_nexthop_to_nexthop_thrift(
     return NextHopThrift(address=binary_address, weight=weight, metric=metric)
 
 
-def ip_to_unicast_route(ip_prefix: str, nexthops: List[NextHopThrift]) -> UnicastRoute:
+def ip_to_unicast_route(ip_prefix: str, nexthops: list[NextHopThrift]) -> UnicastRoute:
     """
     :param ip_prefix: IP prefix
     :param nexthops: List of next hops
@@ -151,7 +151,7 @@ def ip_to_unicast_route(ip_prefix: str, nexthops: List[NextHopThrift]) -> Unicas
     return UnicastRoute(dest=ip_str_to_prefix(ip_prefix), nextHops=nexthops)
 
 
-def mpls_to_mpls_route(label: int, nexthops: List[NextHopThrift]) -> MplsRoute:
+def mpls_to_mpls_route(label: int, nexthops: list[NextHopThrift]) -> MplsRoute:
     """
     :param label: MPLS label
     :param nexthops: List of nexthops
@@ -166,7 +166,7 @@ def mpls_nexthop_to_nexthop_thrift(
     if_index: str,
     weight: int = 0,
     metric: int = 0,
-    label: Optional[List[int]] = None,
+    label: list[int] | None = None,
     action: MplsActionCode = MplsActionCode.PHP,
 ) -> NextHopThrift:
     """
@@ -195,8 +195,8 @@ def mpls_nexthop_to_nexthop_thrift(
 
 def routes_to_route_db(
     node: str,
-    unicast_routes: Optional[List[network_types.UnicastRoute]] = None,
-    mpls_routes: Optional[List[network_types.MplsRoute]] = None,
+    unicast_routes: list[network_types.UnicastRoute] | None = None,
+    mpls_routes: list[network_types.MplsRoute] | None = None,
 ) -> openr_types.RouteDatabase:
     """
     :param node: node name
@@ -229,7 +229,7 @@ def sprint_prefix_forwarding_type(forwarding_type):
 
 def sprint_prefix_forwarding_algorithm(
     forwarding_algo: openr_config_types.PrefixForwardingAlgorithm,
-) -> Optional[str]:
+) -> str | None:
     """
     :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
     """

@@ -12,7 +12,7 @@ from openr.py.openr.cli.commands.tech_support import TechSupportCmd
 from openr.py.openr.cli.utils.options import breeze_option
 
 
-class TechSupportCli(object):
+class TechSupportCli:
     @click.command(name="tech-support")
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
     @click.option(

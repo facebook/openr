@@ -28,7 +28,7 @@ def create_package_list(base):
     Get all packages under the base directory
     """
 
-    return [base] + ["{}.{}".format(base, pkg) for pkg in find_packages(base)]
+    return [base] + [f"{base}.{pkg}" for pkg in find_packages(base)]
 
 
 extension_include_dirs = [

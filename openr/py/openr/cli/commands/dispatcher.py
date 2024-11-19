@@ -6,7 +6,7 @@
 # pyre-unsafe
 
 
-from typing import Mapping, Sequence
+from collections.abc import Mapping, Sequence
 
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
@@ -40,7 +40,7 @@ class FiltersCmd(OpenrCtrlCmd):
 
         output = []
         for i, prefix_filters in enumerate(filters):
-            reader = "#{}".format(i)
+            reader = f"#{i}"
 
             # replace the empty filter by a tag "(empty prefix: match all)"
             prefix_filters = [
@@ -74,7 +74,7 @@ class QueuesCmd(OpenrCtrlCmd):
         """print the queue counters for Dispatcher"""
 
         host_id = await client.getMyNodeName()
-        caption = "{}'s Dispatcher counters".format(host_id)
+        caption = f"{host_id}'s Dispatcher counters"
 
         output = []
 

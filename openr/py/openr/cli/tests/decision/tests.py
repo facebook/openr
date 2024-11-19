@@ -33,7 +33,7 @@ BASE_CMD_MODULE = "openr.py.openr.cli.commands.decision"
 
 
 class CliDecisionTests(TestCase):
-    maxDiff: Optional[int] = None
+    maxDiff: int | None = None
 
     def setUp(self) -> None:
         self.runner = CliRunner()

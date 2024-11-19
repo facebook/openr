@@ -143,6 +143,6 @@ MOCKED_KVSTORE_PEERS_ONE_FAIL = {
     ),
 }
 
-MOCKED_INIT_EVENTS_PASS: Dict[InitializationEvent, int] = {
+MOCKED_INIT_EVENTS_PASS: dict[InitializationEvent, int] = {
     InitializationEvent.KVSTORE_SYNCED: 9204,
 }

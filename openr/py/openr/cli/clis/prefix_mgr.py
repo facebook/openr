@@ -29,7 +29,7 @@ class PrefixMgrCli:
         pass
 
 
-class AdvertisedRoutesCli(object):
+class AdvertisedRoutesCli:
     @click.group("advertised-routes", cls=deduceCommandGroup)
     @click.option(
         "--prefix-type",
@@ -52,7 +52,7 @@ class AdvertisedRoutesCli(object):
     @click.pass_context
     def show(
         ctx: bunch.Bunch,  # noqa: B902
-        prefix_type: Optional[str],
+        prefix_type: str | None,
         detail: bool,
         tag2name: bool,
         json: bool,
@@ -74,7 +74,7 @@ class AdvertisedRoutesCli(object):
     @show.command("all")
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
-    def all(cli_opts: bunch.Bunch, prefix: List[str]) -> None:  # noqa: B902
+    def all(cli_opts: bunch.Bunch, prefix: list[str]) -> None:  # noqa: B902
         """
         Show routes that this node should be advertising across all areas. This
         is pre-area-policy routes. Note this does not show routes denied by origination policy
@@ -90,7 +90,7 @@ class AdvertisedRoutesCli(object):
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
     def pre_area_policy(
-        cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
+        cli_opts: bunch.Bunch, area: str, prefix: list[str]  # noqa: B902
     ) -> None:
         """
         Show pre-policy routes for advertisment of specified area
@@ -112,7 +112,7 @@ class AdvertisedRoutesCli(object):
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
     def post_area_policy(
-        cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
+        cli_opts: bunch.Bunch, area: str, prefix: list[str]  # noqa: B902
     ) -> None:
         """
         Show post-policy routes that are advertisment to specified area
@@ -133,7 +133,7 @@ class AdvertisedRoutesCli(object):
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
     def rejected_on_area(
-        cli_opts: bunch.Bunch, area: str, prefix: List[str]  # noqa: B902
+        cli_opts: bunch.Bunch, area: str, prefix: list[str]  # noqa: B902
     ) -> None:
         """
         Show routes rejected by area policy on advertisement
@@ -150,7 +150,7 @@ class AdvertisedRoutesCli(object):
         )
 
 
-class OriginatedRoutesCli(object):
+class OriginatedRoutesCli:
     @click.command("originated-routes")
     @click.option(
         "--detail/--no-detail",
@@ -177,7 +177,7 @@ class OriginatedRoutesCli(object):
         prefix_mgr.OriginatedRoutesCmd(cli_opts).run(detail, tag2name)
 
 
-class PrefixMgrValidateCli(object):
+class PrefixMgrValidateCli:
     @click.command()
     @click.pass_obj
     def validate(cli_opts):

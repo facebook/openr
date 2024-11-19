@@ -10,7 +10,6 @@
 import os
 import subprocess
 import sys
-from builtins import object
 
 from openr.py.openr.cli.commands import (
     config,
@@ -26,7 +25,7 @@ from openr.py.openr.cli.utils.utils import parse_nodes
 from openr.py.openr.utils.consts import Consts
 
 
-class TechSupportCmd(object):
+class TechSupportCmd:
     def __init__(self, cli_opts):
         """initialize the tech support command"""
         self.cli_opts = cli_opts
@@ -74,7 +73,7 @@ class TechSupportCmd(object):
         sys.exit(ret)
 
     def print_title(self, title):
-        print("\n--------  {}  --------\n".format(title))
+        print(f"\n--------  {title}  --------\n")
 
     def print_config_file(self):
         if not os.path.isfile(Consts.OPENR_CONFIG_FILE):

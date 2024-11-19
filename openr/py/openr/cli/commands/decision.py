@@ -9,7 +9,8 @@
 import ipaddress
 import sys
 from collections import defaultdict
-from typing import Any, Dict, List, Mapping, Optional, Sequence, Set, Tuple
+from collections.abc import Mapping, Sequence
+from typing import Any, Dict, List, Optional, Set, Tuple
 
 import click
 from openr.py.openr.cli.utils import utils
@@ -140,7 +141,7 @@ class PathCmd(OpenrCtrlCmd):
             dst = dst or host_id
 
         # pyre-fixme[16]: `PathCmd` has no attribute `prefix_dbs`.
-        self.prefix_dbs: Dict[str, openr_types.PrefixDatabase] = {}
+        self.prefix_dbs: dict[str, openr_types.PrefixDatabase] = {}
         area = await utils.get_area_id(client, area)
         # Get prefix_dbs from KvStore
 
@@ -562,7 +563,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         return errors
 
-    async def get_dbs(self, client: OpenrCtrlCppClient.Async, area: str) -> Tuple[
+    async def get_dbs(self, client: OpenrCtrlCppClient.Async, area: str) -> tuple[
         Sequence[openr_types.AdjacencyDatabase],
         Sequence[ctrl_types.ReceivedRouteDetail],
         Mapping[str, kv_store_types.Value],
@@ -589,7 +590,7 @@ class DecisionValidateCmd(OpenrCtrlCmd):
         self,
         key: str,
         value: Any,
-        kvstore_adj_node_names: Set,
+        kvstore_adj_node_names: set,
         decision_adj_dbs: Sequence[openr_types.AdjacencyDatabase],
         json_opt: bool,
     ) -> int:
@@ -651,10 +652,10 @@ class DecisionValidateCmd(OpenrCtrlCmd):
     def print_db_delta_prefix(
         self,
         kvstore_keyvals: Mapping[str, kv_store_types.Value],
-        kvstore_prefix_node_names: Set,
+        kvstore_prefix_node_names: set,
         decision_prefix_dbs: Sequence[ctrl_types.ReceivedRouteDetail],
         json_opt: bool,
-    ) -> Tuple[int, Set[str]]:
+    ) -> tuple[int, set[str]]:
         """Returns status code. 0 = success, 1 = failure"""
 
         prefix_maps = utils.collate_prefix_keys(kvstore_keyvals)
@@ -692,9 +693,9 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
     def print_db_diff(
         self,
-        nodes_set_a: Set,
-        nodes_set_b: Set,
-        db_sources: List[str],
+        nodes_set_a: set,
+        nodes_set_b: set,
+        db_sources: list[str],
         db_type: str,
         json_opt: bool,
         suppress: bool,
@@ -774,7 +775,7 @@ class DecisionRibPolicyCmd(OpenrCtrlCmd):
         print("> RibPolicy")
         print(f"  Validity: {policy.ttl_secs}s")
         for stmt in policy.statements:
-            prefixes: List[str] = []
+            prefixes: list[str] = []
             if stmt.matcher.prefixes:
                 prefixes = [ipnetwork.sprint_prefix(p) for p in stmt.matcher.prefixes]
             tags = stmt.matcher.tags or []
@@ -800,9 +801,9 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        node: Optional[str],
-        area: Optional[str],
+        prefixes: list[str],
+        node: str | None,
+        area: str | None,
         json_opt: bool,
         detailed: bool,
         tag2name: bool,
@@ -819,9 +820,9 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
     async def fetch(
         self,
         client: OpenrCtrlCppClient.Async,
-        prefixes: List[str],
-        node: Optional[str],
-        area: Optional[str],
+        prefixes: list[str],
+        node: str | None,
+        area: str | None,
     ) -> Sequence[ctrl_types.ReceivedRouteDetail]:
         """
         Fetch the requested data
@@ -849,7 +850,7 @@ class ReceivedRoutesCmd(OpenrCtrlCmd):
         Render received routes
         """
 
-        def key_fn(key: utils.PrintAdvertisedTypes) -> Tuple[str, str]:
+        def key_fn(key: utils.PrintAdvertisedTypes) -> tuple[str, str]:
             if not isinstance(key, ctrl_types.NodeAndArea):
                 return ("", "")
             return (key.node, key.area)

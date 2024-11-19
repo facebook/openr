@@ -36,7 +36,7 @@ class ConfigDryRunCmd(OpenrCtrlCmd):
         try:
             file_conf = await client.dryrunConfig(file)
         except OpenrError as ex:
-            click.echo(click.style("FAILED: {}".format(ex), fg="red"))
+            click.echo(click.style(f"FAILED: {ex}", fg="red"))
             return 1
 
         config = json.loads(file_conf)
@@ -52,13 +52,13 @@ class ConfigCompareCmd(OpenrCtrlCmd):
         try:
             file_conf = await client.dryrunConfig(file)
         except OpenrError as ex:
-            click.echo(click.style("FAILED: {}".format(ex), fg="red"))
+            click.echo(click.style(f"FAILED: {ex}", fg="red"))
             return
 
         res = jsondiff.diff(running_conf, file_conf, load=True, syntax="explicit")
         if res:
             click.echo(click.style("DIFF FOUND!", fg="red"))
-            print("== diff(running_conf, {}) ==".format(file))
+            print(f"== diff(running_conf, {file}) ==")
             print(res)
         else:
             click.echo(click.style("SAME", fg="green"))
@@ -67,13 +67,13 @@ class ConfigCompareCmd(OpenrCtrlCmd):
 class ConfigStoreCmdBase(OpenrCtrlCmd):
     async def getConfigWrapper(
         self, client: OpenrCtrlCppClient.Async, config_key: str
-    ) -> Tuple[Optional[bytes], Optional[str]]:
+    ) -> tuple[bytes | None, str | None]:
         blob = None
         exception_str = None
         try:
             blob = await client.getConfigKey(config_key)
         except OpenrError as ex:
-            exception_str = "Exception getting key for {}: {}".format(config_key, ex)
+            exception_str = f"Exception getting key for {config_key}: {ex}"
 
         return (blob, exception_str)
 
@@ -149,7 +149,7 @@ class ConfigEraseCmd(ConfigStoreCmdBase):
         self, client: OpenrCtrlCppClient.Async, key: str, *args, **kwargs
     ) -> None:
         await client.eraseConfigKey(key)
-        print("Key:{} erased".format(key))
+        print(f"Key:{key} erased")
 
 
 class ConfigStoreCmd(ConfigStoreCmdBase):
@@ -158,11 +158,11 @@ class ConfigStoreCmd(ConfigStoreCmdBase):
         self,
         client: OpenrCtrlCppClient.Async,
         key: str,
-        value: Union[bytes, str],
+        value: bytes | str,
         *args,
         **kwargs,
     ) -> None:
         if isinstance(value, str):
             value = value.encode()
         await client.setConfigKey(key, value)
-        print("Key:{}, value:{} stored".format(key, value))
+        print(f"Key:{key}, value:{value} stored")

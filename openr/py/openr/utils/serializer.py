@@ -33,7 +33,7 @@ TO_DICT_OVERRIDES = {
 }
 
 
-def object_to_dict(data: Any, overrides: Optional[Dict] = TO_DICT_OVERRIDES) -> Any:
+def object_to_dict(data: Any, overrides: dict | None = TO_DICT_OVERRIDES) -> Any:
     """
     Recursively convert any python object to dict such that it is json
     serializable. Provides to_dict overrides for any specific class type

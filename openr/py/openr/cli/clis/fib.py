@@ -81,8 +81,8 @@ class FibRoutesInstalledCli:
     @click.pass_obj
     def routes(
         cli_opts: Bunch,  # noqa: B902
-        prefixes: List[str],
-        labels: List[int],
+        prefixes: list[str],
+        labels: list[int],
         client_id: int,
         json: bool,
     ):
@@ -109,7 +109,7 @@ class FibUnicastRoutesCli:
     @click.pass_obj
     def routes(
         cli_opts: Bunch,  # noqa: B902
-        prefix_or_ip: List[str],
+        prefix_or_ip: list[str],
         json: bool,
         hostnames: bool,
     ) -> None:
@@ -198,7 +198,7 @@ class FibSnoopCli:
         cli_opts: Bunch,  # noqa: B902
         duration: int,
         initial_dump: bool,
-        prefixes: List[str],
+        prefixes: list[str],
     ):
         """Snoop on fib streaming updates."""
 
