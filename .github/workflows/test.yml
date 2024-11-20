@@ -1,0 +1,21 @@
+name: Echo Hi
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  say-hi:
+    runs-on: self-hosted
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Display .git/config
+        run: |
+          pwd
+          ls -la ./
+      - name: Echo Hi
+        run: echo "hi"
