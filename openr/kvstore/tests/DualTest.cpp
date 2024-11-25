@@ -1020,7 +1020,7 @@ int
 main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  gflags::ParseCommandLineFlags(&argc, &argv, true);
+  folly::gflags::ParseCommandLineFlags(&argc, &argv, true);
   google::InitGoogleLogging(argv[0]);
   google::InstallFailureSignalHandler();
   FLAGS_logtostderr = true;
