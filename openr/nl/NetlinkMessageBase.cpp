@@ -46,7 +46,7 @@ NetlinkMessageBase::addSubAttributes(
   struct rtattr* subrta{nullptr};
   uint32_t subRtaLen = RTA_LENGTH(len);
 
-  if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlPayloadSize) {
+  if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlSendPayloadSize) {
     XLOG(ERR) << "No buffer for adding attr: " << type << " length: " << len;
     return subrta;
   }
@@ -72,7 +72,7 @@ NetlinkMessageBase::addAttributes(
   uint32_t rtaLen = (RTA_LENGTH(len));
   uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr_)->nlmsg_len);
 
-  if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlPayloadSize) {
+  if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlSendPayloadSize) {
     XLOG(ERR) << "Space not available to add attribute type " << type;
     return ENOBUFS;
   }

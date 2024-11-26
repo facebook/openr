@@ -123,7 +123,7 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
 
   // Add ECMP paths
   int addMultiPathNexthop(
-      std::array<char, kMaxNlPayloadSize>& nhop, const Route& route) const;
+      std::array<char, kMaxNlSendPayloadSize>& nhop, const Route& route) const;
 
   // Add single mpls encap nexthop
   int addSingleMplsNexthop(const Route& route);

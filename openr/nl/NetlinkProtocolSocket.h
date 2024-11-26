@@ -261,7 +261,7 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Process received netlink message. Set return values for pending requests
   // or send notifications.
   void processMessage(
-      const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead);
+      const std::array<char, kNetlinkSockRecvBuf>& rxMsg, uint32_t bytesRead);
 
   // Process ack message. Set return status on pending requests in nlSeqNumMap_
   // Resume sending messages from queue_ if any pending

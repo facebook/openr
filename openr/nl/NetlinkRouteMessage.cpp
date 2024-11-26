@@ -388,7 +388,7 @@ NetlinkRouteMessage::addPushNexthop(
 
 int
 NetlinkRouteMessage::addNextHops(const Route& route) {
-  std::array<char, kMaxNlPayloadSize> nhop = {};
+  std::array<char, kMaxNlSendPayloadSize> nhop = {};
   int status{0};
   if (route.getNextHops().size() && route.isMultiPath()) {
     if ((status = addMultiPathNexthop(nhop, route))) {
@@ -416,7 +416,7 @@ NetlinkRouteMessage::addNextHops(const Route& route) {
 
 int
 NetlinkRouteMessage::addMultiPathNexthop(
-    std::array<char, kMaxNlPayloadSize>& nhop, const Route& route) const {
+    std::array<char, kMaxNlSendPayloadSize>& nhop, const Route& route) const {
   // Add [RTA_MULTIPATH - label, via, dev][RTA_ENCAP][RTA_ENCAP_TYPE]
   struct rtattr* rta = reinterpret_cast<struct rtattr*>(nhop.data());
 
@@ -482,7 +482,7 @@ NetlinkRouteMessage::addSingleMplsNexthop(const Route& route) {
   }
   size_t totalSize = labels.value().size() * sizeof(struct mpls_label);
   // nested attr RTA_ENCAP + MPLS_IPTUNNEL_DST
-  std::array<char, kMaxNlPayloadSize> encapInfo = {};
+  std::array<char, kMaxNlSendPayloadSize> encapInfo = {};
   struct rtattr* rta = reinterpret_cast<struct rtattr*>(encapInfo.data());
   rta->rta_type = NLA_F_NESTED | RTA_ENCAP;
   rta->rta_len = RTA_LENGTH(0);

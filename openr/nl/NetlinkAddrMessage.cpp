@@ -110,7 +110,7 @@ NetlinkAddrMessage::addCacheInfo(const IfAddress& ifAddr) {
   if (!ifAddr.getPreferredLft().has_value()) {
     return 0;
   }
-  std::array<char, kMaxNlPayloadSize> cacheInfo = {};
+  std::array<char, kMaxNlSendPayloadSize> cacheInfo = {};
   struct ifa_cacheinfo* rta =
       reinterpret_cast<struct ifa_cacheinfo*>(cacheInfo.data());
   rta->ifa_prefered = ifAddr.getPreferredLft().value();

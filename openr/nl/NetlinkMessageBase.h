@@ -23,7 +23,7 @@
 
 namespace openr::fbnl {
 
-constexpr uint16_t kMaxNlPayloadSize{4096};
+constexpr uint16_t kMaxNlSendPayloadSize{4096};
 
 /*
  * Data structure representing a netlink message, either to be sent or received.
@@ -34,7 +34,7 @@ constexpr uint16_t kMaxNlPayloadSize{4096};
  * Aim of the message is to faciliate serialization and deserialization of
  * C++ object (application) to/from bytes (kernel).
  *
- * Maximum size of message is limited by `kMaxNlPayloadSize` parameter.
+ * Maximum size of message is limited by `kMaxNlSendPayloadSize` parameter.
  */
 /*
  * For netlink reference:
@@ -101,7 +101,7 @@ class NetlinkMessageBase {
   uint32_t getDataLength() const;
 
   // Buffer to create message
-  std::array<char, kMaxNlPayloadSize> msg = {};
+  std::array<char, kMaxNlSendPayloadSize> msg = {};
 
   /**
    * APIs for accumulating objects of `GET_<>` request. These APIs are invoked

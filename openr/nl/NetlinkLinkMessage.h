@@ -82,7 +82,8 @@ class NetlinkLinkMessage final : public NetlinkMessageBase {
 
   // add sub-attributes to IFLA_LINKINFO
   int addLinkInfoSubAttrs(
-      std::array<char, kMaxNlPayloadSize>& linkInfo, const Link& link) const;
+      std::array<char, kMaxNlSendPayloadSize>& linkInfo,
+      const Link& link) const;
 
   //
   // Private variables for rtnetlink msg exchange

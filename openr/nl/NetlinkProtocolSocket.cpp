@@ -284,7 +284,7 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
 
 void
 NetlinkProtocolSocket::processMessage(
-    const std::array<char, kMaxNlPayloadSize>& rxMsg, uint32_t bytesRead) {
+    const std::array<char, kNetlinkSockRecvBuf>& rxMsg, uint32_t bytesRead) {
   // first netlink message header
   struct nlmsghdr* nlh = (struct nlmsghdr*)rxMsg.data();
   do {
@@ -433,10 +433,11 @@ NetlinkProtocolSocket::processMessage(
 
 void
 NetlinkProtocolSocket::recvNetlinkMessage() {
-  // messages buffer
-  std::array<char, kMaxNlPayloadSize> recvMsg = {};
+  // messages buffer, set the size same as what is set as receive
+  // buffer size for nlSock_
+  std::array<char, kNetlinkSockRecvBuf> recvMsg = {};
 
-  int32_t bytesRead = ::recv(nlSock_, recvMsg.data(), kMaxNlPayloadSize, 0);
+  int32_t bytesRead = ::recv(nlSock_, recvMsg.data(), kNetlinkSockRecvBuf, 0);
   XLOG(DBG4) << "Message received with size: " << bytesRead;
 
   if (bytesRead < 0) {

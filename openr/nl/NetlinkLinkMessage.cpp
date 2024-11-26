@@ -199,7 +199,7 @@ NetlinkLinkMessage::addLink(const Link& link) {
 
 int
 NetlinkLinkMessage::addLinkInfo(const Link& link) {
-  std::array<char, kMaxNlPayloadSize> linkInfo = {};
+  std::array<char, kMaxNlSendPayloadSize> linkInfo = {};
   int status{0};
   if (!link.getLinkKind().has_value()) {
     return 0;
@@ -225,7 +225,7 @@ NetlinkLinkMessage::addLinkInfo(const Link& link) {
 
 int
 NetlinkLinkMessage::addLinkInfoSubAttrs(
-    std::array<char, kMaxNlPayloadSize>& linkInfo, const Link& link) const {
+    std::array<char, kMaxNlSendPayloadSize>& linkInfo, const Link& link) const {
   struct rtattr* rta = reinterpret_cast<struct rtattr*>(linkInfo.data());
 
   if (addSubAttributes(
@@ -239,7 +239,7 @@ NetlinkLinkMessage::addLinkInfoSubAttrs(
   const auto greInfo = link.getGreInfo();
   if (greInfo.has_value()) {
     // init sub attribute
-    std::array<char, kMaxNlPayloadSize> linkInfoData = {};
+    std::array<char, kMaxNlSendPayloadSize> linkInfoData = {};
     struct rtattr* subRta =
         reinterpret_cast<struct rtattr*>(linkInfoData.data());
     subRta->rta_type = IFLA_INFO_DATA;
