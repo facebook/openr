@@ -9,7 +9,7 @@ permissions:
 
 jobs:
   build:
-    runs-on: 4-core-ubuntu-22.04
+    runs-on: 8-core-ubuntu-22.04
     steps:
     - uses: actions/checkout@v4
     - name: Fetch boost
