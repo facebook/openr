@@ -448,8 +448,8 @@ TEST(ConfigTest, GeneralGetter) {
         "node-1",
         {}, /* area config */
         true /* enableV4 */,
-        false /* enableSegmentRouting */,
-        true /*dryrun*/);
+        false /* dryrun */,
+        true /* enableV4OverV6Nexthop */);
     auto config = Config(tConfig);
 
     // getNodeName
@@ -464,7 +464,7 @@ TEST(ConfigTest, GeneralGetter) {
     // enable_best_route_selection
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
     // enable_v4_over_v6_nexthop
-    EXPECT_FALSE(config.isV4OverV6NexthopEnabled());
+    EXPECT_TRUE(config.isV4OverV6NexthopEnabled());
     // enable_vip_service
     EXPECT_FALSE(config.isVipServiceEnabled());
     // enable_soft_drain
@@ -480,7 +480,6 @@ TEST(ConfigTest, GeneralGetter) {
         "node-1",
         {} /* area config */,
         true /* enable v4 */,
-        false /* enableSegmentRouting */,
         true /* dryrun */,
         true /* enableV4OverV6Nexthop */);
     auto config = Config(tConfig);

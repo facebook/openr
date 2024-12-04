@@ -51,11 +51,8 @@ class OpenrCtrlFixture : public ::testing::Test {
       area.neighbor_regexes() = {".*"};
       areaConfig.emplace_back(std::move(area));
     }
-    auto tConfig = getBasicOpenrConfig(
-        nodeName_,
-        areaConfig,
-        true /* enableV4 */,
-        true /* enableSegmentRouting */);
+    auto tConfig =
+        getBasicOpenrConfig(nodeName_, areaConfig, true /* enableV4 */);
 
     config = std::make_shared<Config>(tConfig);
 

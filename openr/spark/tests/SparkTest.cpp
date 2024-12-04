@@ -1664,7 +1664,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       nodeName1,
       {},
       true /* enable v4 */,
-      true /* enable segment routing */,
       true /* dryrun */,
       false /* enable v4 over v6 nh */);
   auto config1 = std::make_shared<Config>(tConfig1);
@@ -1673,7 +1672,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       nodeName2,
       {},
       true /* enable v4 */,
-      true /* enable segment routing */,
       true /* dryrun */,
       false /* enable v4 over v6 nh */);
   auto config2 = std::make_shared<Config>(tConfig2);
@@ -1712,7 +1710,6 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
       nodeName3,
       {},
       true /* enable v4 */,
-      true /* enable segment routing */,
       true /* dryrun */,
       false /* enable v4 over v6 nh */);
 

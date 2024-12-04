@@ -268,7 +268,6 @@ class FibTestFixture : public ::testing::Test {
         "node-1",
         {}, /* area config */
         true, /* enableV4 */
-        true, /* enableSegmentRouting */
         false /* dryrun */);
     tConfig.route_delete_delay_ms() = routeDeleteDelay_;
     tConfig.fib_port() = fibThriftThread.getAddress()->getPort();
@@ -478,7 +477,6 @@ class FibDryRunTestFixture : public ::testing::Test {
         "node-1",
         {}, /* area config */
         true, /* enableV4 */
-        false, /* enableSegmentRouting */
         true /* dryrun */);
     tConfig.fib_port() = fibThriftThread_.getAddress()->getPort();
     tConfig.enable_clear_fib_state() = true;

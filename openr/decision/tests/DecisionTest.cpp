@@ -127,7 +127,6 @@ class DecisionTestFixture : public ::testing::Test {
         "1",
         {},
         true /* enable v4 */,
-        true /* enableSegmentRouting */,
         true /* dryrun */,
         false /* enableV4OverV6Nexthop */);
 
@@ -2943,7 +2942,6 @@ class DecisionV4OverV6NexthopTestFixture : public DecisionTestFixture {
         "1", /* nodeName */
         {}, /* areaCfg */
         true, /* enable v4 */
-        true, /* enableSegmentRouting */
         false, /* dryrun */
         true /* enableV4OverV6Nexthop */);
     return tConfig_;
@@ -3058,7 +3056,6 @@ class DecisionV4OverV6NexthopWithNoV4TestFixture : public DecisionTestFixture {
         "1", /* nodeName */
         {}, /* areaCfg */
         false, /* enable v4 */
-        true, /* enableSegmentRouting */
         false, /* dryrun */
         true /* enableV4OverV6Nexthop */);
     return tConfig_;

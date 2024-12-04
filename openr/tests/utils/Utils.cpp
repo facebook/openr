@@ -86,7 +86,6 @@ getBasicOpenrConfig(
     const std::string& nodeName,
     const std::vector<openr::thrift::AreaConfig>& areaCfg,
     bool enableV4,
-    bool enableSegmentRouting,
     bool dryrun,
     bool enableV4OverV6Nexthop) {
   /*
@@ -100,7 +99,6 @@ getBasicOpenrConfig(
   config.node_name() = nodeName;
   config.enable_v4() = enableV4;
   config.v4_over_v6_nexthop() = enableV4OverV6Nexthop;
-  config.enable_segment_routing() = enableSegmentRouting;
   config.dryrun() = dryrun;
   config.ip_tos() = 192;
 

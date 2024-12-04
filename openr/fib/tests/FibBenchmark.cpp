@@ -68,7 +68,7 @@ using apache::thrift::util::ScopedServerThread;
 
 class FibWrapper {
  public:
-  explicit FibWrapper(bool enableSegmentRouting = false) {
+  explicit FibWrapper() {
     // Register Singleton
     folly::SingletonVault::singleton()->registrationComplete();
     // Create MockNetlinkFibHandler
@@ -86,9 +86,8 @@ class FibWrapper {
         "node-1",
         {}, /* area config */
         true, /* enableV4 */
-        enableSegmentRouting /*enableSegmentRouting*/,
-        false /*orderedFibProgramming*/,
-        false /*dryrun*/);
+        false /* dryrun */,
+        false /* v4OverV6 */);
     tConfig.fib_port() = fibThriftThread.getAddress()->getPort();
     config = std::make_shared<Config>(tConfig);
 
@@ -116,29 +115,6 @@ class FibWrapper {
     // Stop mocked nl platform
     mockFibHandler->stop();
     fibThriftThread.stop();
-  }
-
-  std::vector<thrift::NextHopThrift>
-  getRandomNextHopsMpls() {
-    /* Generate random nextHops. */
-    uint8_t numOfNextHops = folly::Random::rand32() % kNumOfNexthops + 1;
-    std::vector<thrift::NextHopThrift> nextHops;
-    nextHops.reserve(numOfNextHops);
-
-    for (uint32_t index = 0; index < numOfNextHops; index++) {
-      // Random local IPV6
-      auto ipv6Addr = folly::IPAddress(fmt::format(
-          "fe80::{}", fmt::format("{:02x}", folly::Random::rand32() >> 16)));
-
-      // Create nexthop
-      const auto path = createNextHop(
-          toBinaryAddress(ipv6Addr),
-          kVethNameY,
-          2,
-          createMplsAction(thrift::MplsActionCode::SWAP, 2));
-      nextHops.emplace_back(path);
-    }
-    return nextHops;
   }
 
   std::shared_ptr<ThriftServer> server;
@@ -318,164 +294,6 @@ BM_FibDeleteUnicastRoute(
 }
 
 /*
- * Benchmark for fib add mpls route
- * 1. Create a fib
- * 2. Generate random labels and routes
- * 3. Send routes to fib
- * 4. Wait until the completion of routes update
- * 5. Create a DecisionRouteUpdate for routes-to-delete
- * 6. Wait until the completion of routes update
- */
-static void
-BM_FibAddMplsRoute(
-    folly::UserCounters& counters,
-    uint32_t iters,
-    unsigned numOfRoutes,
-    unsigned numOfUpdateRoutes) {
-  auto suspender = folly::BenchmarkSuspender();
-  // Add boolean to control profiling memory for the 1st iteration
-  SystemMetrics sysMetrics;
-  bool record = true;
-  for (uint32_t i = 0; i < iters; i++) {
-    // Fib starts with clean route database
-    auto fibWrapper = std::make_unique<FibWrapper>(true);
-
-    // Initial syncFib debounce
-    fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-    fibWrapper->fibRouteUpdatesQueueReader.get().value();
-
-    if (record) {
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
-      }
-    }
-
-    std::vector<int32_t> labels;
-    {
-      DecisionRouteUpdate routeUpdate;
-      for (int j = 0; j < numOfRoutes; ++j) {
-        auto label = folly::Random::rand32();
-        labels.push_back(label);
-        auto nhs = fibWrapper->getRandomNextHopsMpls();
-        auto nhsSet =
-            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-        routeUpdate.mplsRoutesToUpdate.emplace(
-            label, RibMplsEntry(label, std::move(nhsSet)));
-      }
-      // Send routeDB to Fib and wait for updating completing
-      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->fibRouteUpdatesQueueReader.get().value();
-    }
-    if (record) {
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
-      }
-      record = false;
-    }
-
-    {
-      // Update routes by randomly regenerating nextHops for numOfUpdatePrefixes
-      // prefixes.
-      DecisionRouteUpdate routeUpdate;
-      for (uint32_t index = 0; index < numOfUpdateRoutes; ++index) {
-        auto nhs = fibWrapper->getRandomNextHopsMpls();
-        auto nhsSet =
-            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-        routeUpdate.mplsRoutesToUpdate.emplace(
-            labels[index], RibMplsEntry(labels[index], std::move(nhsSet)));
-      }
-
-      suspender.dismiss(); // Start measuring benchmark time
-      // Send routeDB to Fib for updates
-      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->fibRouteUpdatesQueueReader.get().value();
-      suspender.rehire(); // Stop measuring time again
-    }
-  }
-}
-
-/**
- * Benchmark for fib delete mpls route
- * 1. Create a fib
- * 2. Generate random IpV6s and routes
- * 3. Send routes to fib
- * 4. Wait until the completion of routes update
- * 5. Create a DecisionRouteUpdate for routes-to-delete
- * 6. Wait until the completion of routes update
- */
-static void
-BM_FibDeleteMplsRoute(
-    folly::UserCounters& counters,
-    uint32_t iters,
-    unsigned numOfRoutes,
-    unsigned numOfDeleteRoutes) {
-  auto suspender = folly::BenchmarkSuspender();
-  SystemMetrics sysMetrics;
-  // Add boolean to control profiling memory for the 1st iteration
-  bool record = true;
-  for (uint32_t i = 0; i < iters; i++) {
-    // Fib starts with clean route database
-    auto fibWrapper = std::make_unique<FibWrapper>(true);
-
-    // Initial syncFib debounce
-    fibWrapper->routeUpdatesQueue.push(DecisionRouteUpdate());
-    fibWrapper->fibRouteUpdatesQueueReader.get().value();
-
-    std::vector<int32_t> labels;
-    {
-      DecisionRouteUpdate routeUpdate;
-      for (int j = 0; j < numOfRoutes; ++j) {
-        auto label = folly::Random::rand32();
-        labels.push_back(label);
-        auto nhs = fibWrapper->getRandomNextHopsMpls();
-        auto nhsSet =
-            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
-        routeUpdate.mplsRoutesToUpdate.emplace(
-            label, RibMplsEntry(label, std::move(nhsSet)));
-      }
-      // Send routeDB to Fib and wait for updating completing
-      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->fibRouteUpdatesQueueReader.get().value();
-    }
-
-    // Profile memory before the routeUpdate is generated
-    if (record) {
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_before_operation(MB)"] = mem.value() / 1024 / 1024;
-      }
-    }
-
-    labels.resize(numOfDeleteRoutes);
-    auto labelsSet = std::unordered_set<int32_t>(labels.begin(), labels.end());
-    {
-      // Delete routes
-      DecisionRouteUpdate routeUpdate;
-      for (auto& removeLabel : labelsSet) {
-        routeUpdate.mplsRoutesToDelete.emplace_back(removeLabel);
-      }
-
-      suspender.dismiss(); // Start measuring benchmark time
-      // Send routeDB to Fib for updates
-      fibWrapper->routeUpdatesQueue.push(std::move(routeUpdate));
-      fibWrapper->fibRouteUpdatesQueueReader.get().value();
-      suspender.rehire(); // Stop measuring time again
-    }
-
-    // Profile memory after the routeUpdate is handled by Fib
-    if (record) {
-      auto mem = sysMetrics.getVirtualMemBytes();
-      if (mem.has_value()) {
-        counters["memory_after_operation(MB)"] = mem.value() / 1024 / 1024;
-      }
-      record = false;
-    }
-  }
-}
-
-/*
  * @params counters: reserved counter for customized profile
  * @params first integer: num of existing routes
  * @params second integer: num of updating routes
@@ -504,36 +322,6 @@ BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100);
 BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 1000);
 BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 10000);
 BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100000);
-
-/*
- * @params counters: reserved counter for customized profile
- * @params first integer: num of existing routes
- * @params second integer: num of updating routes
- */
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 1000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddMplsRoute, counters, 100000, 100000);
-
-/*
- * @params counters: reserved counter for customized profile
- * @params first integer: num of existing routes
- * @params second integer: num of deleting routes
- */
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 1000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteMplsRoute, counters, 100000, 100000);
 
 } // namespace openr
 

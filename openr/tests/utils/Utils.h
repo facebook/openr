@@ -73,7 +73,6 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
     const std::string& nodeName = "",
     const std::vector<openr::thrift::AreaConfig>& areaCfg = {},
     bool enableV4 = true,
-    bool enableSegmentRouting = false,
     bool dryrun = true,
     bool enableV4OverV6Nexthop = false);
 
