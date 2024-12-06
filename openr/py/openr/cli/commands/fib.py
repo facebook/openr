@@ -274,7 +274,6 @@ class FibValidateRoutesCmd(FibAgentCmd):
         *args,
         **kwargs,
     ) -> int:
-
         all_success = True
 
         # fetch openr config for comparison
@@ -508,7 +507,6 @@ class FibSnoopCmd(FibCmdBase):
         *args,
         **kwargs,
     ) -> None:
-
         initialDb, updates = await client.subscribeAndGetFib()
         # Print summary
         print(f" Routes for {initialDb.thisNodeName}.")
@@ -575,7 +573,6 @@ class StreamSummaryCmd(FibCmdBase):
         *args,
         **kwargs,
     ) -> None:
-
         subscribers = await client.getSubscriberInfo(StreamSubscriberType.FIB)
 
         # Prepare the table

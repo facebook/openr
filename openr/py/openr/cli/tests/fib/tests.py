@@ -92,7 +92,6 @@ class CliFibTests(TestCase):
         def check_dest_line(
             dest_line: str,
         ) -> Sequence[NextHopThrift] | None:
-
             is_valid_route = False
             next_hops = None
 

@@ -548,7 +548,6 @@ class LMValidateCmd(LMCmdBase):
         *args,
         **kwargs,
     ) -> bool:
-
         is_pass = True
 
         # Get Data
@@ -602,10 +601,14 @@ class LMValidateCmd(LMCmdBase):
                 redistr_regexes = area.redistribute_interface_regexes
 
                 passes_incl_regexes = self.validate_regexes(
-                    incl_regexes, [interface], True  # expect at least one regex match
+                    incl_regexes,
+                    [interface],
+                    True,  # expect at least one regex match
                 )
                 passes_excl_regexes = self.validate_regexes(
-                    excl_regexes, [interface], False  # expect no regex match
+                    excl_regexes,
+                    [interface],
+                    False,  # expect no regex match
                 )
                 passes_redistr_regexes = self.validate_regexes(
                     redistr_regexes, [interface], True
@@ -631,7 +634,6 @@ class LMValidateCmd(LMCmdBase):
         self,
         invalid_interfaces: dict[str, Any],
     ) -> None:
-
         click.echo(
             self.validation_result_str(
                 "link monitor", "Interface Regex Check", (len(invalid_interfaces) == 0)

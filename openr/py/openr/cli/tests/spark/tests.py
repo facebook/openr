@@ -327,7 +327,6 @@ class CliSparkTests(TestCase):
     def test_spark_validate_regex_diff_ids(
         self, mocked_openr_client: AsyncMock
     ) -> None:
-
         # Checking if it passes with different ids and correct areas
         mocked_returned_connection = helpers.get_enter_thrift_asyncmock(
             mocked_openr_client
@@ -385,7 +384,6 @@ class CliSparkTests(TestCase):
     def test_spark_validate_regex_accept_none(
         self, mocked_openr_client: AsyncMock
     ) -> None:
-
         # Checking if it fails when no node is accepted
         # Also checks if it correclty prints out more than 1 failed neighbor
         mocked_returned_connection = helpers.get_enter_thrift_asyncmock(

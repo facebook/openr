@@ -18,7 +18,6 @@ from openr.py.openr.cli.utils.utils import parse_nodes
 
 class LMCli:
     def __init__(self):
-
         # [Show Cmd]
         self.lm.add_command(LMLinksCli().links, name="links")
         self.lm.add_command(LMAdjCli().adj, name="adj")
@@ -252,7 +251,12 @@ class OverrideAdjMetricCli:
     @click.option("--quiet", is_flag=True, help="Do not print out the links table")
     @click.pass_obj
     def override_adj_metric(
-        cli_opts, node, interface, metric, yes, quiet  # noqa: B902
+        cli_opts,
+        node,
+        interface,
+        metric,
+        yes,
+        quiet,  # noqa: B902
     ):
         """
         Override the adjacency metric value.

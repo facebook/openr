@@ -90,7 +90,9 @@ class AdvertisedRoutesCli:
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
     def pre_area_policy(
-        cli_opts: bunch.Bunch, area: str, prefix: list[str]  # noqa: B902
+        cli_opts: bunch.Bunch,
+        area: str,
+        prefix: list[str],  # noqa: B902
     ) -> None:
         """
         Show pre-policy routes for advertisment of specified area
@@ -112,7 +114,9 @@ class AdvertisedRoutesCli:
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
     def post_area_policy(
-        cli_opts: bunch.Bunch, area: str, prefix: list[str]  # noqa: B902
+        cli_opts: bunch.Bunch,
+        area: str,
+        prefix: list[str],  # noqa: B902
     ) -> None:
         """
         Show post-policy routes that are advertisment to specified area
@@ -133,7 +137,9 @@ class AdvertisedRoutesCli:
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
     def rejected_on_area(
-        cli_opts: bunch.Bunch, area: str, prefix: list[str]  # noqa: B902
+        cli_opts: bunch.Bunch,
+        area: str,
+        prefix: list[str],  # noqa: B902
     ) -> None:
         """
         Show routes rejected by area policy on advertisement

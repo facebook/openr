@@ -112,7 +112,6 @@ class NeighborCmd(SparkBaseCmd):
         *args,
         **kwargs,
     ) -> None:
-
         # Get data
         neighbors = await client.getNeighbors()
 
@@ -138,7 +137,6 @@ class ValidateCmd(SparkBaseCmd):
     async def _run(
         self, client: OpenrCtrlCppClient.Async, detail: bool, *args, **kwards
     ) -> bool:
-
         is_pass = True
 
         # Get data
@@ -262,7 +260,6 @@ class ValidateCmd(SparkBaseCmd):
         regexes: dict[str, list[str]],
         detail: bool,
     ) -> None:
-
         click.echo(
             self.validation_result_str(
                 "spark", "neighbor regex matching check", (len(invalid_neighbors) == 0)

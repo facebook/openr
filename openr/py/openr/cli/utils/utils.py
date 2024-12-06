@@ -306,7 +306,6 @@ def collate_prefix_keys(
     prefix_maps = {}
     for key, value in sorted(kvstore_keyvals.items()):
         if key.startswith(Consts.PREFIX_DB_MARKER):
-
             node_name = key.split(":")[1]
             if value.value:
                 prefix_db = deserialize(openr_types.PrefixDatabase, value.value)
@@ -442,7 +441,9 @@ def build_global_prefix_db(resp):
     return global_prefix_db
 
 
-def dump_adj_db_full(global_adj_db, adj_db, bidir) -> tuple[
+def dump_adj_db_full(
+    global_adj_db, adj_db, bidir
+) -> tuple[
     int,
     bool,
     list[openr_types_py.Adjacency] | Sequence[openr_types.Adjacency],
@@ -1466,7 +1467,6 @@ def compare_route_db(
     sources: list[str],
     quiet: bool = False,
 ) -> tuple[bool, list[str]]:
-
     extra_routes_in_a = routes_difference(routes_a, routes_b, route_type)
     extra_routes_in_b = routes_difference(routes_b, routes_a, route_type)
     diff_prefixes = prefixes_with_different_nexthops(routes_a, routes_b, route_type)
@@ -1722,9 +1722,8 @@ def print_unicast_routes(
 
 def build_unicast_route(
     route: network_types.UnicastRoute | network_types_py.UnicastRoute,
-    filter_for_networks: None | (
-        list[ipaddress.IPv4Network | ipaddress.IPv6Network]
-    ) = None,
+    filter_for_networks: None
+    | (list[ipaddress.IPv4Network | ipaddress.IPv6Network]) = None,
     filter_exact_match: bool = False,
     nexthops_to_neighbor_names: dict[bytes, str] | None = None,
 ) -> tuple[str, list[str]] | None:

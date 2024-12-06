@@ -81,7 +81,6 @@ class OpenrValidateCmd(OpenrCtrlCmd):
         *args,
         **kwargs,
     ) -> int:
-
         spark_pass = spark.ValidateCmd(self.cli_opts).run(detail=False)
         lm_pass = lm.LMValidateCmd(self.cli_opts).run()
         kvstore_pass = kvstore.ValidateCmd(self.cli_opts).run()

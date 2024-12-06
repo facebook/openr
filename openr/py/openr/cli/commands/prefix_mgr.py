@@ -74,7 +74,6 @@ class AdvertisedRoutesCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-
         # Get data
         routes = await self.fetch(client, prefixes, prefix_type)
 
@@ -122,7 +121,6 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-
         # Get data
         await self._render(await client.getOriginatedPrefixes(), detailed, tag2name)
 
@@ -266,7 +264,6 @@ class AdvertisedRoutesWithOriginationPolicyCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-
         # Get data
         routes = await self.fetch(client, route_filter_type, prefixes, prefix_type)
 
@@ -321,7 +318,6 @@ class AreaAdvertisedRoutesCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> None:
-
         # Deduce / Validate area
         area = await utils.deduce_area(client, area)
 
@@ -375,7 +371,6 @@ class ValidateCmd(PrefixMgrCmd):
         *args,
         **kwargs,
     ) -> bool:
-
         is_pass = True
 
         # Get Data

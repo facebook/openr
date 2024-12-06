@@ -106,7 +106,6 @@ class DecisionAdjCmd(OpenrCtrlCmd):
         *args,
         **kwargs,
     ) -> None:
-
         adj_dbs = await client.getDecisionAdjacenciesFiltered(
             ctrl_types.AdjacenciesFilter(selectAreas=areas)
         )
@@ -563,7 +562,9 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         return errors
 
-    async def get_dbs(self, client: OpenrCtrlCppClient.Async, area: str) -> tuple[
+    async def get_dbs(
+        self, client: OpenrCtrlCppClient.Async, area: str
+    ) -> tuple[
         Sequence[openr_types.AdjacencyDatabase],
         Sequence[ctrl_types.ReceivedRouteDetail],
         Mapping[str, kv_store_types.Value],

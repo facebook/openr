@@ -924,7 +924,6 @@ class SnoopCmd(KvStoreCmdBase):
         delta: bool,
         global_dbs: dict,
     ):
-
         for key, value in msg.keyVals.items():
             if value.value is None:
                 print(f"Traversal List: {msg.nodeIds}")
@@ -1221,7 +1220,6 @@ class StreamSummaryCmd(KvStoreCmdBase):
         *args,
         **kwargs,
     ) -> None:
-
         subscribers = await client.getSubscriberInfo(StreamSubscriberType.KVSTORE)
 
         # Prepare the table
@@ -1258,7 +1256,6 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
         *args,
         **kwargs,
     ) -> bool:
-
         is_pass = True
 
         # Get data
