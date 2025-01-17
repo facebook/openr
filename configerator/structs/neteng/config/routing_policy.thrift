@@ -10,6 +10,8 @@ namespace py neteng.config.routing_policy
 namespace go neteng.config.routing_policy
 namespace py3 neteng.config
 
+include "thrift/annotation/thrift.thrift"
+
 enum Operator {
   add = 1,
   rewrite = 2,
@@ -274,7 +276,8 @@ struct FilterCriteria {
   23: optional string bgpOrigin;
   24: optional list<string> bgpPathFilters;
   25: optional string bgpPath;
-  26: optional list<string> bgpPrefixFilters (deprecated);
+  @thrift.DeprecatedUnvalidatedAnnotations{items = {"deprecated": "1"}}
+  26: optional list<string> bgpPrefixFilters;
 
   // openr (index range 40:)
   40: optional list<string> openrTags;

@@ -19,6 +19,7 @@ include "openr/if/Network.thrift"
 include "openr/if/OpenrConfig.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/hack.thrift"
+include "thrift/annotation/thrift.thrift"
 
 /**
  * [Drain state]
@@ -365,7 +366,8 @@ struct PrefixEntry {
    * Indicates the type of prefix. This have no use except to indicate the
    * source of origination. e.g. Interface route, BGP route etc.
    */
-  2: Network.PrefixType type (deprecated);
+  @thrift.DeprecatedUnvalidatedAnnotations{items = {"deprecated": "1"}}
+  2: Network.PrefixType type;
 
   /**
    * Default mode of forwarding for prefix is IP. If `forwardingType` is
