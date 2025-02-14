@@ -10,7 +10,6 @@
 #include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
 #include <gflags/gflags.h>
-#include <glog/logging.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/common/OpenrEventBase.h>

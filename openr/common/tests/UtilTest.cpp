@@ -12,7 +12,6 @@
 
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/MplsUtil.h>
-#include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>

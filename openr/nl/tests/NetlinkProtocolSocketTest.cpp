@@ -9,7 +9,6 @@
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Subprocess.h>
-#include <folly/gen/Base.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>

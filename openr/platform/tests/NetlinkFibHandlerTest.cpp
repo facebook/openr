@@ -11,7 +11,6 @@
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/ThreadName.h>
-#include <gflags/gflags.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 

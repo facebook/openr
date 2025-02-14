@@ -8,7 +8,6 @@
 #include <openr/tests/utils/Utils.h>
 
 #include <folly/Benchmark.h>
-#include <folly/gen/Base.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 #include <openr/monitor/SystemMetrics.h>

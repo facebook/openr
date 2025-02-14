@@ -3,7 +3,6 @@
 #include <string>
 #include <vector>
 
-#include <gflags/gflags.h>
 #include <glog/logging.h>
 
 #include <openr/config/Config.h>

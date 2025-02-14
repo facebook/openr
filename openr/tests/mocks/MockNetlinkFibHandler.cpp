@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <unistd.h>
-
 #include <folly/futures/Promise.h>
 #include <folly/gen/Base.h>
 #include <glog/logging.h>

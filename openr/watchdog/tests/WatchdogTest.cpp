@@ -10,7 +10,6 @@
 #include <openr/common/OpenrEventBase.h>
 #include <openr/messaging/ReplicateQueue.h>
 
-#include <fb303/ServiceData.h>
 #include <folly/init/Init.h>
 #include <openr/tests/utils/Utils.h>
 #include <openr/watchdog/Watchdog.h>

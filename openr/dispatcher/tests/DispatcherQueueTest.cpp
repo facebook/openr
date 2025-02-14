@@ -14,7 +14,6 @@
 
 #include <folly/Overload.h>
 #include <folly/fibers/EventBaseLoopController.h>
-#include <folly/fibers/FiberManager.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/io/async/EventBase.h>
 

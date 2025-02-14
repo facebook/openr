@@ -14,7 +14,6 @@
 #include <string>
 #include <utility>
 
-#include <folly/Overload.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
 

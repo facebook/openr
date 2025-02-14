@@ -7,13 +7,11 @@
 
 #include <openr/dispatcher/Dispatcher.h>
 
-#include <folly/fibers/FiberManager.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
 #include <gflags/gflags.h>
 #include <gtest/gtest.h>
-#include <thrift/lib/cpp2/Thrift.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/LsdbUtil.h>

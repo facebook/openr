@@ -12,7 +12,6 @@
 #include <gtest/gtest.h>
 #include <openr/common/Constants.h>
 #include <openr/config/Config.h>
-#include <openr/monitor/SystemMetrics.h>
 
 using namespace std;
 using namespace openr;

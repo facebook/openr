@@ -9,7 +9,6 @@
 #include <folly/logging/xlog.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/decision/LinkState.h>
-#include <thrift/lib/cpp/util/EnumUtils.h>
 
 namespace fb303 = facebook::fb303;
 
