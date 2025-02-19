@@ -340,7 +340,7 @@ struct PrefixMetrics {
    * policy can change the behavior.
    */
   4: i32 distance = 0;
-/**
+  /**
    * NOTE: Forwarding Algorithm set with `PrefixEntry` will be the subsequent
    * tie-breaker among the nodes advertising PrefixEntry with best metrics.
    * e.g. SP_ECMP (Shortest Path ECMP) - Will further tie-break nodes as per the
