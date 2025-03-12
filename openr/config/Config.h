@@ -265,11 +265,17 @@ class Config {
   const std::string
   getSSLCertPath() const {
     auto certPath = getThriftServerConfig().x509_cert_path();
-    if ((not certPath) && isSecureThriftServerEnabled()) {
+    const char* certPathEnv = getenv("THRIFT_TLS_SRV_CERT");
+    if ((!certPath && certPathEnv == nullptr) &&
+        isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_cert_path is empty");
+          "enable_secure_thrift_server = true, but x509_cert_path or THRIFT_TLS_SRV_CERT environment variable is empty");
     }
-    return certPath.value();
+    if (fs::exists(certPath.value())) {
+      return certPath.value();
+    } else {
+      return std::string(certPathEnv);
+    }
   }
 
   const std::string
@@ -285,21 +291,28 @@ class Config {
   const std::string
   getSSLCaPath() const {
     auto caPath = getThriftServerConfig().x509_ca_path();
-    if ((not caPath) && isSecureThriftServerEnabled()) {
+    const char* caPathEnv = getenv("THRIFT_TLS_CL_CERT_PATH");
+    if ((!caPath && caPathEnv == nullptr) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_ca_path is empty");
+          "enable_secure_thrift_server = true, but x509_ca_path or THRIFT_TLS_CL_CERT_PATH environment variable is empty");
     }
-    return caPath.value();
+    if (fs::exists(caPath.value())) {
+      return caPath.value();
+    } else {
+      return std::string(caPathEnv);
+    }
   }
 
   const std::string
   getSSLKeyPath() const {
     std::string keyPath;
     const auto& keyPathConfig = getThriftServerConfig().x509_key_path();
-
+    const char* keyPathEnv = getenv("THRIFT_TLS_SRV_KEY");
     // If unspecified x509_key_path, will use x509_cert_path
-    if (keyPathConfig) {
+    if (keyPathConfig && fs::exists(keyPathConfig.value())) {
       keyPath = keyPathConfig.value();
+    } else if (keyPathEnv != nullptr) {
+      keyPath = std::string(keyPathEnv);
     } else {
       keyPath = getSSLCertPath();
     }
