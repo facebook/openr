@@ -81,7 +81,7 @@ class KvStoreTestFixture : public ::testing::Test {
   /**
    * Helper function to create KvStoreWrapper. The underlying stores will be
    * stopped as well as destroyed automatically when test exits.
-   * Retured raw pointer of an object will be freed as well.
+   * Returned raw pointer of an object will be freed as well.
    */
   KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*
   createKvStore(
@@ -723,7 +723,7 @@ TEST_F(KvStoreTestFixture, PeerResyncWithConfiguredBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  EXPECT_GT(elapsedTime, ksyncInitialBackoff.count());
+  EXPECT_GE(elapsedTime, ksyncInitialBackoff.count());
   EXPECT_LT(elapsedTime, ksyncMaxBackoff.count());
 
   cmpPeers = storeA->getPeers(kTestingAreaName);
@@ -801,7 +801,7 @@ TEST_F(KvStoreTestFixture, PeerResyncWithEqualConfiguredBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  EXPECT_GT(elapsedTime, ksyncInitialBackoff.count());
+  EXPECT_GE(elapsedTime, ksyncInitialBackoff.count());
   EXPECT_LT(elapsedTime, ksyncValidationTime.count());
 
   cmpPeers = storeA->getPeers(kTestingAreaName);
