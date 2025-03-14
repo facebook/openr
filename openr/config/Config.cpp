@@ -314,24 +314,17 @@ Config::checkThriftServerConfig() const {
     throw std::invalid_argument(
         "enable_secure_thrift_server = true, but x509_ca_path, x509_cert_path or ecc_curve_name is empty.");
   }
-  const char* certPathEnv = getenv("THRIFT_TLS_SRV_CERT");
-  const char* caPathEnv = getenv("THRIFT_TLS_CL_CERT_PATH");
-  if (!(fs::exists(caPath.value()) && fs::exists(certPath.value())) &&
-      !(caPathEnv != nullptr && certPathEnv != nullptr &&
-        fs::exists(std::string(caPathEnv)) &&
-        fs::exists(std::string(certPathEnv)))) {
+  if ((not fs::exists(caPath.value())) or (not fs::exists(certPath.value()))) {
     throw std::invalid_argument(
-        "x509_ca_path or x509_cert_path is specified in the config or THRIFT_TLS_SRV_CERT/THRIFT_TLS_CL_CERT_PATH environment variables not found in the disk.");
+        "x509_ca_path or x509_cert_path is specified in the config but not found in the disk.");
   }
 
   // x509_key_path could be empty. If specified, need to be present in the
   // file system.
-  const char* keyPathEnv = getenv("THRIFT_TLS_SRV_KEY");
   const auto& keyPath = getThriftServerConfig().x509_key_path();
-  if ((keyPath && (!fs::exists(keyPath.value()))) &&
-      (keyPathEnv != nullptr && (!fs::exists(std::string(keyPathEnv))))) {
+  if (keyPath and (not fs::exists(keyPath.value()))) {
     throw std::invalid_argument(
-        "x509_key_path is specified in the config or THRIFT_TLS_SRV_KEY environment variable not found in the disk.");
+        "x509_key_path is specified in the config but not found in the disk.");
   }
 }
 
