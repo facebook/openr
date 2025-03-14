@@ -723,7 +723,9 @@ TEST_F(KvStoreTestFixture, PeerResyncWithConfiguredBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  EXPECT_GE(elapsedTime, ksyncInitialBackoff.count());
+  // discount 1ms. We have seen some-times elapsed time is
+  //     999 ms instead of 1000 ms of Initial Backoff
+  EXPECT_GE(elapsedTime, ksyncInitialBackoff.count() - 1);
   EXPECT_LT(elapsedTime, ksyncMaxBackoff.count());
 
   cmpPeers = storeA->getPeers(kTestingAreaName);
@@ -801,7 +803,9 @@ TEST_F(KvStoreTestFixture, PeerResyncWithEqualConfiguredBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  EXPECT_GE(elapsedTime, ksyncInitialBackoff.count());
+  // discount 1ms. We have seen some-times elapsed time is
+  //     999 ms instead of 1000 ms of Initial Backoff
+  EXPECT_GE(elapsedTime, ksyncInitialBackoff.count() - 1);
   EXPECT_LT(elapsedTime, ksyncValidationTime.count());
 
   cmpPeers = storeA->getPeers(kTestingAreaName);
