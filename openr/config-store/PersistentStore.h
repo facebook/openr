@@ -158,9 +158,6 @@ class PersistentStore : public OpenrEventBase {
   // layer (disk) in a file.
   std::unordered_map<std::string, std::string> database_;
 
-  // Serializer for encoding/decoding of thrift objects
-  apache::thrift::CompactSerializer serializer_;
-
   // Define a persistent object
   std::vector<PersistentObject> pObjects_;
 };
