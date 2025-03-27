@@ -170,6 +170,7 @@ class SetKeyCli:
     @click.option(
         "--version",
         default=None,
+        type=int,
         help="Version. If not set, override existing key if any",
     )
     @click.option(
