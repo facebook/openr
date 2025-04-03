@@ -346,7 +346,7 @@ struct InterfaceInfo {
   /**
    * Interface name
    */
-  std::string ifName{""};
+  std::string ifName;
 
   /**
    * Link status
