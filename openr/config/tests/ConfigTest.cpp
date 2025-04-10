@@ -521,8 +521,8 @@ TEST(ConfigTest, LinkMonitorGetter) {
   tConfig.areas().emplace();
   auto config = Config(tConfig);
 
-  // check to see the link monitor options got converted to an area config with
-  // domainName
+  // check to see the link monitor options got converted to an area config
+  // with domainName
   auto const& domainNameArea =
       config.getAreas().at(Constants::kDefaultArea.toString());
   EXPECT_FALSE(domainNameArea.shouldDiscoverOnIface("eth0"));
@@ -577,4 +577,120 @@ TEST(ConfigTest, DefaultVrfConfigGetterUnsetValue) {
   const auto vrf = config.getDefaultVrfName();
   EXPECT_EQ("", vrf);
 }
+
+TEST(ConfigTest, CheckThriftServerConfig) {
+  folly::test::TemporaryFile tempFile;
+  auto existing_file = tempFile.path().string();
+  auto non_existent_file = "/etc/x509_non_existent_file.pem";
+
+  // Test with populated environment variables and invalid file in thrift
+  {
+    auto validConfig = getSecureOpenrConfig(existing_file, non_existent_file);
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    EXPECT_EQ(config.getSSLCaPath(), existing_file);
+    EXPECT_EQ(config.getSSLCertPath(), existing_file);
+    EXPECT_EQ(config.getSSLKeyPath(), existing_file);
+  }
+
+  // Test with invalid environment variables and  populated file in thrift
+  {
+    auto validConfig = getSecureOpenrConfig(non_existent_file, existing_file);
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    EXPECT_EQ(config.getSSLCaPath(), existing_file);
+    EXPECT_EQ(config.getSSLCertPath(), existing_file);
+    EXPECT_EQ(config.getSSLKeyPath(), existing_file);
+  }
+
+  // Test with empty environment variables and  populated file in thrift
+  {
+    auto validConfig = getSecureOpenrConfig(non_existent_file, existing_file);
+    unsetenv("THRIFT_TLS_SRV_KEY");
+    unsetenv("THRIFT_TLS_CL_CERT_PATH");
+    unsetenv("THRIFT_TLS_SRV_CERT");
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    EXPECT_EQ(config.getSSLCaPath(), existing_file);
+    EXPECT_EQ(config.getSSLCertPath(), existing_file);
+    EXPECT_EQ(config.getSSLKeyPath(), existing_file);
+  }
+
+  // Test with populated environment variables and  populated file in thrift
+  {
+    folly::test::TemporaryFile tempFileThrift;
+    auto tempFileThriftPath = tempFileThrift.path().string();
+    auto validConfig = getSecureOpenrConfig(existing_file, tempFileThriftPath);
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    EXPECT_EQ(config.getSSLCaPath(), tempFileThriftPath);
+    EXPECT_EQ(config.getSSLCertPath(), tempFileThriftPath);
+    EXPECT_EQ(config.getSSLKeyPath(), tempFileThriftPath);
+  }
+
+  // Test with invalid environment variables and invalid file in thrift
+  {
+    auto validConfig =
+        getSecureOpenrConfig(non_existent_file, non_existent_file);
+    EXPECT_THROW((Config(validConfig)), std::invalid_argument);
+  }
+
+  // Test with empty environment variables and invalid file in thrift
+  {
+    auto validConfig =
+        getSecureOpenrConfig(non_existent_file, non_existent_file);
+    unsetenv("THRIFT_TLS_SRV_KEY");
+    unsetenv("THRIFT_TLS_CL_CERT_PATH");
+    unsetenv("THRIFT_TLS_SRV_CERT");
+    EXPECT_THROW((Config(validConfig)), std::invalid_argument);
+  }
+
+  // Test with disabled thrift server
+  {
+    auto validConfig = getSecureOpenrConfig(non_existent_file, existing_file);
+    validConfig.thrift_server()->enable_secure_thrift_server() = false;
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    EXPECT_EQ(config.getSSLCaPath(), "");
+    EXPECT_EQ(config.getSSLCertPath(), "");
+    EXPECT_EQ(config.getSSLKeyPath(), "");
+  }
+
+  // Test with  disabled environment variable fallback
+  {
+    folly::test::TemporaryFile tempFileThrift;
+    auto tempFileThriftPath = tempFileThrift.path().string();
+    auto validConfig =
+        getSecureOpenrConfig(tempFileThriftPath, existing_file, false);
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    EXPECT_EQ(config.getSSLCaPath(), existing_file);
+    EXPECT_EQ(config.getSSLCertPath(), existing_file);
+    EXPECT_EQ(config.getSSLKeyPath(), existing_file);
+  }
+
+  // Test with  disabled environment variable fallback and unset env variables
+  {
+    folly::test::TemporaryFile tempFileThrift;
+    auto tempFileThriftPath = tempFileThrift.path().string();
+    auto validConfig =
+        getSecureOpenrConfig(tempFileThriftPath, existing_file, false);
+    EXPECT_NO_THROW((Config(validConfig)));
+
+    auto config = Config(validConfig);
+    unsetenv("THRIFT_TLS_SRV_KEY");
+    unsetenv("THRIFT_TLS_CL_CERT_PATH");
+    unsetenv("THRIFT_TLS_SRV_CERT");
+    EXPECT_EQ(config.getSSLCaPath(), existing_file);
+    EXPECT_EQ(config.getSSLCertPath(), existing_file);
+    EXPECT_EQ(config.getSSLKeyPath(), existing_file);
+  }
+}
+
 } // namespace openr

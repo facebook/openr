@@ -246,6 +246,12 @@ class Config {
   }
 
   bool
+  isSubstituteX509PathsFromEnvEnabled() const {
+    return getThriftServerConfig().substitute_x509_paths_from_env().value_or(
+        false);
+  }
+
+  bool
   isNonDefaultVrfThriftServerEnabled() const {
     return getThriftServerConfig()
         .enable_non_default_vrf_thrift_server()
@@ -264,12 +270,26 @@ class Config {
 
   const std::string
   getSSLCertPath() const {
-    auto certPath = getThriftServerConfig().x509_cert_path();
-    if ((not certPath) && isSecureThriftServerEnabled()) {
-      throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_cert_path is empty");
+    if (!isSecureThriftServerEnabled()) {
+      return "";
     }
-    return certPath.value();
+    auto certPath = getThriftServerConfig().x509_cert_path().to_optional();
+    const char* certPathEnv = getenv("THRIFT_TLS_SRV_CERT");
+    if (!isSubstituteX509PathsFromEnvEnabled() && certPath) {
+      return certPath.value();
+    } else if (
+        isSubstituteX509PathsFromEnvEnabled() && certPath &&
+        fs::exists(certPath.value())) {
+      return certPath.value();
+    } else if (
+        isSubstituteX509PathsFromEnvEnabled() && certPathEnv != nullptr &&
+        fs::exists(std::string(certPathEnv))) {
+      return std::string(certPathEnv);
+    } else {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but x509_cert_path can be empty, x509_cert_path doesn't exist, or THRIFT_TLS_SRV_CERT environment variable path doesn't exist");
+    }
+    return "";
   }
 
   const std::string
@@ -284,22 +304,45 @@ class Config {
 
   const std::string
   getSSLCaPath() const {
-    auto caPath = getThriftServerConfig().x509_ca_path();
-    if ((not caPath) && isSecureThriftServerEnabled()) {
-      throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_ca_path is empty");
+    if (!isSecureThriftServerEnabled()) {
+      return "";
     }
-    return caPath.value();
+    auto caPath = getThriftServerConfig().x509_ca_path().to_optional();
+    const char* caPathEnv = getenv("THRIFT_TLS_CL_CERT_PATH");
+    if (!isSubstituteX509PathsFromEnvEnabled() && caPath) {
+      return caPath.value();
+    } else if (
+        isSubstituteX509PathsFromEnvEnabled() && caPath &&
+        fs::exists(caPath.value())) {
+      return caPath.value();
+    } else if (
+        isSubstituteX509PathsFromEnvEnabled() && caPathEnv != nullptr &&
+        fs::exists(std::string(caPathEnv))) {
+      return std::string(caPathEnv);
+    } else {
+      throw std::invalid_argument(
+          "enable_secure_thrift_server = true, but x509_ca_path can be empty, x509_ca_path doesn't exist, or THRIFT_TLS_CL_CERT_PATH environment variable path doesn't exist");
+    }
+    return "";
   }
 
   const std::string
   getSSLKeyPath() const {
     std::string keyPath;
-    const auto& keyPathConfig = getThriftServerConfig().x509_key_path();
-
+    if (!isSecureThriftServerEnabled()) {
+      return "";
+    }
+    auto keyPathConfig = getThriftServerConfig().x509_key_path().to_optional();
+    const char* keyPathEnv = getenv("THRIFT_TLS_SRV_KEY");
     // If unspecified x509_key_path, will use x509_cert_path
-    if (keyPathConfig) {
+    if (!isSubstituteX509PathsFromEnvEnabled() && keyPathConfig) {
       keyPath = keyPathConfig.value();
+    } else if (
+        isSubstituteX509PathsFromEnvEnabled() && keyPathConfig &&
+        fs::exists(keyPathConfig.value())) {
+      keyPath = keyPathConfig.value();
+    } else if (isSubstituteX509PathsFromEnvEnabled() && keyPathEnv != nullptr) {
+      keyPath = std::string(keyPathEnv);
     } else {
       keyPath = getSSLCertPath();
     }
@@ -391,7 +434,8 @@ class Config {
    * Based on configured file flag path, Open/R will determine the node
    * is in either:
    *  - UNDRAINED;
-   *  - DRAINED with either SOFTDRAINED(metric bump) or HARDDRAINED(overloaded);
+   *  - DRAINED with either SOFTDRAINED(metric bump) or
+   * HARDDRAINED(overloaded);
    */
   bool
   isDrainerFlagInUse() const {

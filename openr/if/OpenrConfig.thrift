@@ -336,6 +336,13 @@ struct ThriftServerConfig {
    * This VRF is only used when pivoting back from a non-default VRF
    */
   14: optional string default_vrf_name;
+
+  /**
+  * If true, explicitly look for x509_* paths provided in the config first, only when not found
+  * fall back to the respective environment variables. If false, only consume x509_* paths provided
+  **/
+
+  15: optional bool substitute_x509_paths_from_env;
 }
 
 struct ThriftClientConfig {

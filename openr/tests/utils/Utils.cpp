@@ -147,6 +147,28 @@ getBasicOpenrConfig(
   return config;
 }
 
+openr::thrift::OpenrConfig
+getSecureOpenrConfig(
+    const std::string& env_file,
+    const std::string& thrift_file,
+    bool environment_variable_fallback) {
+  auto config = getBasicOpenrConfig();
+  openr::thrift::ThriftServerConfig thrift_server;
+  setenv("THRIFT_TLS_SRV_KEY", env_file.c_str(), 1);
+  setenv("THRIFT_TLS_CL_CERT_PATH", env_file.c_str(), 1);
+  setenv("THRIFT_TLS_SRV_CERT", env_file.c_str(), 1);
+
+  thrift_server.enable_secure_thrift_server() = true;
+  thrift_server.x509_ca_path() = thrift_file;
+  thrift_server.x509_cert_path() = thrift_file;
+  thrift_server.ecc_curve_name() = "prime256v1";
+  thrift_server.x509_key_path() = thrift_file;
+  thrift_server.substitute_x509_paths_from_env() =
+      environment_variable_fallback;
+  config.thrift_server() = thrift_server;
+  return config;
+}
+
 std::vector<thrift::PrefixEntry>
 generatePrefixEntries(const PrefixGenerator& prefixGenerator, uint32_t num) {
   // generate `num` of random prefixes

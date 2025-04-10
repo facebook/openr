@@ -76,6 +76,11 @@ openr::thrift::OpenrConfig getBasicOpenrConfig(
     bool dryrun = true,
     bool enableV4OverV6Nexthop = false);
 
+openr::thrift::OpenrConfig getSecureOpenrConfig(
+    const std::string& env_file,
+    const std::string& thrift_file,
+    bool environment_variable_fallback = true);
+
 std::vector<thrift::PrefixEntry> generatePrefixEntries(
     const PrefixGenerator& prefixGenerator, uint32_t num);
 
