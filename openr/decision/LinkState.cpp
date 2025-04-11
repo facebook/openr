@@ -354,7 +354,7 @@ LinkState::mayHaveLinkEventPropagationTime(
     bool isUp,
     bool firstPub,
     bool inInitialization) {
-  std::string propagationTimeLogStr = "";
+  std::string propagationTimeLogStr;
 
   // Skip propagation reporting during initialization or for first publication
   if (inInitialization || firstPub) {
