@@ -826,6 +826,11 @@ struct SparkHelloMsg {
    * Timestamp to indicate when this helloMsg is sent for RTT calculation
    */
   9: i64 sentTsInUs;
+
+  /**
+   * Flag to indicate that the interface has an address change
+   */
+  10: optional bool addressChange;
 }
 
 /**

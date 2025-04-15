@@ -150,7 +150,8 @@ class Spark final : public OpenrEventBase {
   void sendHelloMsg(
       std::string const& ifName,
       bool inFastInitState = false,
-      bool restarting = false);
+      bool restarting = false,
+      bool addressChange = false);
 
   // util call to send handshake msg
   void sendHandshakeMsg(

@@ -1089,7 +1089,7 @@ Spark::getSparkNeighState(
           auto neighborIt = ifNeighbors.find(neighborName);
           if (neighborIt == ifNeighbors.end()) {
             XLOG(ERR) << "No neighborName: " << neighborName
-                      << " in sparkNeighbor colelction";
+                      << " in sparkNeighbor collection";
             promise.setValue(std::nullopt);
           } else {
             auto& neighbor = neighborIt->second;
@@ -1519,6 +1519,7 @@ Spark::processHelloMsg(
       std::chrono::microseconds(*helloMsg.sentTsInUs());
   auto const& solicitResponse = *helloMsg.solicitResponse();
   auto const& restarting = *helloMsg.restarting();
+  auto const& addressChange = helloMsg.addressChange().value_or(false);
 
   XLOG(DBG2) << "[SparkHelloMsg] Received pkt over intf: " << ifName
              << ", solicitResponse: " << std::boolalpha << solicitResponse
@@ -1672,7 +1673,7 @@ Spark::processHelloMsg(
     neighbor.seqNum = remoteSeqNum;
 
     // Check if neighbor is undergoing 'Graceful-Restart'
-    if (*helloMsg.restarting()) {
+    if (restarting) {
       XLOG(INFO) << "[SparkHelloMsg] Adjacent neighbor: " << neighborName
                  << ", from remote interface: " << remoteIfName
                  << ", on interface: " << ifName << " is restarting.";
@@ -1709,7 +1710,8 @@ Spark::processHelloMsg(
      *       [Result]   Keep peer in ESTABLISHED state and let hold timer
      *                  takes care of neighbor state.
      */
-    if (curSeqNum < remoteSeqNum and tsIt == neighborInfos.end()) {
+    if ((curSeqNum < remoteSeqNum) &&
+        (tsIt == neighborInfos.end() || addressChange)) {
       thrift::SparkNeighState oldState = neighbor.state;
       neighbor.state =
           getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_NO_INFO);
@@ -1721,6 +1723,11 @@ Spark::processHelloMsg(
 
       // remove from tracked neighbor at the end
       eraseSparkNeighbor(ifNeighbors, neighborName);
+
+      if (addressChange) {
+        // create hello timer over this interface with fast neighbor discovery
+        setupFastDiscoveryHelloTimer(ifName);
+      }
     }
   } else if (neighbor.state == thrift::SparkNeighState::RESTART) {
     // Neighbor is undergoing restart. Will reply immediately for hello msg for
@@ -1999,7 +2006,10 @@ Spark::processPacket() {
 
 void
 Spark::sendHelloMsg(
-    std::string const& ifName, bool inFastInitState, bool restarting) {
+    std::string const& ifName,
+    bool inFastInitState,
+    bool restarting,
+    bool addressChange) {
   if (interfaceDb_.count(ifName) == 0) {
     XLOG(ERR) << fmt::format(
         "[SparkHelloMsg] Interface: {} is no longer being tracked.", ifName);
@@ -2034,6 +2044,7 @@ Spark::sendHelloMsg(
   helloMsg.version() = openrVer;
   helloMsg.solicitResponse() = inFastInitState;
   helloMsg.restarting() = restarting;
+  helloMsg.addressChange() = addressChange;
   helloMsg.sentTsInUs() = getCurrentTime<std::chrono::microseconds>().count();
 
   // bake neighborInfo into helloMsg
@@ -2394,7 +2405,13 @@ Spark::updateInterface(
                << newInterface.v6LinkLocalNetwork.first << " , "
                << newInterface.v4Network.first << ")";
 
+    bool v4Changed = interface.v4Network != newInterface.v4Network;
+    bool v6Changed =
+        interface.v6LinkLocalNetwork != newInterface.v6LinkLocalNetwork;
     interface = std::move(newInterface);
+    if (v4Changed || v6Changed) {
+      sendHelloMsg(ifName, false, false, true);
+    }
   }
 }
 

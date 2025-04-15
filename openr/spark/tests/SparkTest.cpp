@@ -906,6 +906,8 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
 // Start 2 Spark instances and wait them forming adj. Then
 // update interface from one instance's perspective. Due to same
 // interface, there should be no interface removal/adding.
+// Then update the network address from one instance's perspective.
+// This will trigger interface removal/adding.
 //
 TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   // create Spark instances and establish connections
@@ -926,6 +928,48 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
       node1_->waitForEvents(NB_DOWN, waitTime, waitTime * 2).has_value());
   EXPECT_FALSE(
       node1_->waitForEvents(NB_UP, waitTime, waitTime * 2).has_value());
+
+  // adding an ip in higher sorted order should not trigger any event
+  node1_->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6, ip3V4} /* networks */)});
+
+  EXPECT_FALSE(
+      node1_->waitForEvents(NB_DOWN, waitTime, waitTime * 2).has_value());
+  EXPECT_FALSE(
+      node1_->waitForEvents(NB_UP, waitTime, waitTime * 2).has_value());
+
+  // changing the v6 address should trigger interface removal/adding
+  node2_->updateInterfaceDb({InterfaceInfo(
+      iface2 /* ifName */,
+      true /* isUp */,
+      ifIndex2 /* ifIndex */,
+      {ip2V4, ip3V6} /* networks */)});
+
+  // check to see if node1 detects node2 address change
+  {
+    auto eventsDown1 = node1_->waitForEvents(NB_DOWN, waitTime, waitTime * 2);
+    auto eventsDown2 = node2_->waitForEvents(NB_DOWN, waitTime, waitTime * 2);
+
+    auto eventsUp1 = node1_->waitForEvents(NB_UP, waitTime, waitTime * 2);
+    auto eventsUp2 = node2_->waitForEvents(NB_UP, waitTime, waitTime * 2);
+
+    auto& eventDown1 = eventsDown1.value().back();
+    EXPECT_EQ(iface1, eventDown1.localIfName);
+    EXPECT_EQ(nodeName2_, eventDown1.remoteNodeName);
+    auto& eventDown2 = eventsDown2.value().back();
+    EXPECT_EQ(iface2, eventDown2.localIfName);
+    EXPECT_EQ(nodeName1_, eventDown2.remoteNodeName);
+
+    auto& eventUp1 = eventsUp1.value().back();
+    EXPECT_EQ(iface1, eventUp1.localIfName);
+    EXPECT_EQ(nodeName2_, eventUp1.remoteNodeName);
+    auto& eventUp2 = eventsUp2.value().back();
+    EXPECT_EQ(iface2, eventUp2.localIfName);
+    EXPECT_EQ(nodeName1_, eventUp2.remoteNodeName);
+  }
 }
 
 //
