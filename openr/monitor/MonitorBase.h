@@ -76,6 +76,9 @@ class MonitorBase : public OpenrEventBase {
 
   // Get the system metrics for resource usage counters
   SystemMetrics systemMetrics_{};
+
+  // Keep track of peak CPU usage
+  double cpuPeakPct_{0.0};
 };
 
 } // namespace openr

@@ -271,6 +271,7 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
 
   std::string memKey{"process.memory.rss"};
   std::string cpuKey{"process.cpu.pct"};
+  std::string cpuPeakKey{"process.cpu.peak_pct"};
   std::string upTimeKey{"process.uptime.seconds"};
   uint32_t rssMemInUse{0};
 
@@ -302,7 +303,9 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   while (true) {
     if (counters1.find(cpuKey) != counters1.end()) {
       EXPECT_EQ(counters1.count(cpuKey), 1);
+      EXPECT_EQ(counters1.count(cpuPeakKey), 1);
       EXPECT_EQ(counters1.count(memKey), 1);
+      EXPECT_EQ(counters1.count(upTimeKey), 1);
       break;
     }
     counters1 = openr1->getCounters();
