@@ -208,6 +208,8 @@ macro(thrift_generate
     ${output_path}/gen-${language}/${file_name}_constants.cpp
     ${output_path}/gen-${language}/${file_name}_data.cpp
     ${output_path}/gen-${language}/${file_name}_types.cpp
+    ${output_path}/gen-${language}/${file_name}_types_compact.cpp
+    ${output_path}/gen-${language}/${file_name}_types_binary.cpp
   )
   foreach(service ${services})
     set("${file_name}-${language}-HEADERS"
