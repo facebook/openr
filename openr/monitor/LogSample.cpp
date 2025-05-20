@@ -10,6 +10,8 @@
 #include <folly/json/DynamicConverter.h>
 #include <folly/json/json.h>
 
+#include <utility>
+
 namespace {
 
 /**
@@ -43,7 +45,7 @@ LogSample::LogSample(std::chrono::system_clock::time_point timestamp)
 
 LogSample::LogSample(
     folly::dynamic json, std::chrono::system_clock::time_point timestamp)
-    : json_(json), timestamp_(timestamp) {}
+    : json_(std::move(json)), timestamp_(timestamp) {}
 
 LogSample
 LogSample::fromJson(const std::string& json) {

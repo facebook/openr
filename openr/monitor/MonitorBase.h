@@ -34,7 +34,7 @@ class MonitorBase : public OpenrEventBase {
   MonitorBase(
       std::shared_ptr<const Config> config,
       const std::string& category,
-      messaging::RQueue<LogSample> logSampleQueue);
+      const messaging::RQueue<LogSample>& logSampleQueue);
 
   // Get recent event logs
   std::list<std::string> getRecentEventLogs();

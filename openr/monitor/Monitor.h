@@ -19,7 +19,7 @@ class Monitor : public MonitorBase {
   Monitor(
       std::shared_ptr<const Config> config,
       const std::string& category,
-      messaging::RQueue<LogSample> logSampleQueue)
+      const messaging::RQueue<LogSample>& logSampleQueue)
       : MonitorBase(config, category, logSampleQueue) {}
 
  private:

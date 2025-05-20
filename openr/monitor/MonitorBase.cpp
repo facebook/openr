@@ -14,7 +14,7 @@ namespace openr {
 MonitorBase::MonitorBase(
     std::shared_ptr<const Config> config,
     const std::string& category,
-    messaging::RQueue<LogSample> logSampleQueue)
+    const messaging::RQueue<LogSample>& logSampleQueue)
     : category_{category},
       maxLogEvents_{
           folly::to<uint32_t>(*config->getMonitorConfig().max_event_log())},
