@@ -18,8 +18,6 @@
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/tests/utils/Utils.h>
 
-#include <stdexcept>
-
 using namespace openr;
 
 FOLLY_INIT_LOGGING_CONFIG(
