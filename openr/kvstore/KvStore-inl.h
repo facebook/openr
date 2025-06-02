@@ -976,8 +976,6 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       "kvstore.thrift.secure_client", fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.plaintext_client.fallback", fb303::COUNT);
-  fb303::fbData->addStatExportType(
       "kvstore.thrift.plaintext_client", fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_client_connection_failure", fb303::COUNT);
@@ -986,9 +984,6 @@ KvStore<ClientType>::initGlobalCounters() {
       fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
-      fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.thrift.co_getKvStoreKeyValsFilteredArea.secure_client.failure",
       fb303::COUNT);
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_full_sync", fb303::COUNT);
@@ -1584,6 +1579,8 @@ KvStoreDb<ClientType>::KvStoreDb(
       "kvstore.num_expiring_keys." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
       "kvstore.num_flood_peers." + area, fb303::SUM);
+  fb303::fbData->addStatExportType(
+      "kvstore.ttl_countdown_queue_size." + area, fb303::SUM);
 }
 
 template <class ClientType>
@@ -2144,6 +2141,12 @@ KvStoreDb<ClientType>::updateTtlCountdownQueue(
       ttlCountdownQueue_.push(std::move(queueEntry));
     }
   }
+
+  // record telemetry of the queue size
+  fb303::fbData->addStatValue(
+      "kvstore.ttl_countdown_queue_size." + area_,
+      ttlCountdownQueue_.size(),
+      fb303::SUM);
 }
 
 // loop through all key/vals and count the size of KvStoreDB (per area)
@@ -2738,6 +2741,10 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
 
   fb303::fbData->addStatValue(
       "kvstore.expired_key_vals", expiredKeys.size(), fb303::SUM);
+  fb303::fbData->addStatValue(
+      "kvstore.ttl_countdown_queue_size." + area_,
+      ttlCountdownQueue_.size(),
+      fb303::SUM);
 
   // ATTN: expired key will be ONLY notified to local subscribers
   //       via replicate-queue. KvStore will NOT flood publication

@@ -1270,7 +1270,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
       1 /* version */,
       "node1" /* originatorId */,
       std::string("value1") /* value */,
-      Constants::kTtlInfinity /* ttl */,
+      counterUpdateWaitTime.count() * 2 /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
   kvStore->setKey(kTestingAreaName, "test-key2", thriftVal1);
@@ -1280,7 +1280,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
       1 /* version */,
       "node1" /* originatorId */,
       std::string("value2") /* value */,
-      Constants::kTtlInfinity /* ttl */,
+      counterUpdateWaitTime.count() * 2 /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
   kvStore->setKey(kTestingAreaName, "test-key2", thriftVal2);
@@ -1290,28 +1290,29 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   auto counters = fb303::fbData->getCounters();
 
   // Verify the counter keys exist
-  ASSERT_TRUE(counters.count("kvstore.num_peers"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_peer_dump.count"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_peer_add.count"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_per_del.count"));
-  ASSERT_TRUE(counters.count("kvstore.expired_key_vals.sum"));
-  ASSERT_TRUE(counters.count("kvstore.thrift.flood_pub_duration_ms.avg"));
-  ASSERT_TRUE(counters.count("kvstore.thrift.full_sync_duration_ms.avg"));
-  ASSERT_TRUE(counters.count("kvstore.thrift.finalized_sync_duration_ms.avg"));
-  ASSERT_TRUE(counters.count("kvstore.rate_limit_keys.avg"));
-  ASSERT_TRUE(counters.count("kvstore.rate_limit_suppress.count"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_hash_dump.count"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_self_originated_key_dump.count"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_key_dump.count"));
-  ASSERT_TRUE(counters.count("kvstore.cmd_key_get.count"));
-  ASSERT_TRUE(counters.count("kvstore.updated_key_vals." + area + ".sum"));
-  ASSERT_TRUE(counters.count("kvstore.received_key_vals." + area + ".sum"));
+  ASSERT_TRUE(counters.contains("kvstore.num_peers"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_peer_dump.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_peer_add.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_per_del.count"));
+  ASSERT_TRUE(counters.contains("kvstore.expired_key_vals.sum"));
+  ASSERT_TRUE(counters.contains("kvstore.thrift.flood_pub_duration_ms.avg"));
+  ASSERT_TRUE(counters.contains("kvstore.thrift.full_sync_duration_ms.avg"));
   ASSERT_TRUE(
-      counters.count("kvstore.received_publications." + area + ".count"));
-  ASSERT_TRUE(counters.count("kvstore.num_flood_peers"));
-  ASSERT_TRUE(counters.count("kvstore.num_flood_peers." + area + ".sum"));
-  ASSERT_TRUE(counters.count("kvstore.num_expiring_keys"));
-  ASSERT_TRUE(counters.count("kvstore.num_expiring_keys." + area + ".sum"));
+      counters.contains("kvstore.thrift.finalized_sync_duration_ms.avg"));
+  ASSERT_TRUE(counters.contains("kvstore.rate_limit_keys.avg"));
+  ASSERT_TRUE(counters.contains("kvstore.rate_limit_suppress.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_hash_dump.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_self_originated_key_dump.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_key_dump.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_key_get.count"));
+  ASSERT_TRUE(counters.contains("kvstore.updated_key_vals." + area + ".sum"));
+  ASSERT_TRUE(counters.contains("kvstore.received_key_vals." + area + ".sum"));
+  ASSERT_TRUE(
+      counters.contains("kvstore.received_publications." + area + ".count"));
+  ASSERT_TRUE(counters.contains("kvstore.num_flood_peers"));
+  ASSERT_TRUE(counters.contains("kvstore.num_flood_peers." + area + ".sum"));
+  ASSERT_TRUE(counters.contains("kvstore.num_expiring_keys"));
+  ASSERT_TRUE(counters.contains("kvstore.num_expiring_keys." + area + ".sum"));
 
   // Verify the value of counter keys
   EXPECT_EQ(0, counters.at("kvstore.num_peers"));
@@ -1334,18 +1335,25 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(0, counters.at("kvstore.num_expiring_keys." + area + ".sum"));
 
   // Verify four keys were set
-  ASSERT_EQ(1, counters.count("kvstore.cmd_key_set.count"));
+  ASSERT_TRUE(counters.contains("kvstore.cmd_key_set.count"));
   EXPECT_EQ(4, counters.at("kvstore.cmd_key_set.count"));
-  ASSERT_EQ(1, counters.count("kvstore.received_key_vals.sum"));
+  ASSERT_TRUE(counters.contains("kvstore.received_key_vals.sum"));
   EXPECT_EQ(3, counters.at("kvstore.received_key_vals.sum"));
-  ASSERT_EQ(1, counters.count("kvstore.received_key_vals." + area + ".sum"));
+  ASSERT_TRUE(counters.contains("kvstore.received_key_vals." + area + ".sum"));
   EXPECT_EQ(3, counters.at("kvstore.received_key_vals." + area + ".sum"));
+
+  // Verify the ttl countdown queue size counter is populated
+  // NOTE: counter is 3 since we have setKey() called for 3 different
+  // (key, originator) combinations.
+  ASSERT_TRUE(
+      counters.contains("kvstore.ttl_countdown_queue_size." + area + ".sum"));
+  EXPECT_EQ(
+      3, counters.at("kvstore.ttl_countdown_queue_size." + area + ".sum"));
 
   // Verify the key and the number of key
   ASSERT_TRUE(kvStore->getKey(kTestingAreaName, "test-key2").has_value());
   ASSERT_EQ(1, counters.count("kvstore.num_keys"));
-  int expect_num_key = 1;
-  EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
+  EXPECT_EQ(1, counters.at("kvstore.num_keys"));
 
   // Verify the number key update
   ASSERT_EQ(1, counters.count("kvstore.updated_key_vals.sum"));
@@ -1370,7 +1378,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   std::this_thread::sleep_for(std::chrono::milliseconds(counterUpdateWaitTime));
   // Verify the num_keys counter is the same
   counters = fb303::fbData->getCounters();
-  EXPECT_EQ(expect_num_key, counters.at("kvstore.num_keys"));
+  EXPECT_EQ(1, counters.at("kvstore.num_keys"));
 
   LOG(INFO) << "Counters received, yo";
 }
