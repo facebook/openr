@@ -185,8 +185,6 @@ class KvStoreWrapper {
       AreaId const& area, std::string const& peerName);
   int64_t getPeerStateEpochTimeMs(
       AreaId const& area, std::string const& peerName);
-  int64_t getPeerStateElapsedTimeMs(
-      AreaId const& area, std::string const& peerName);
   int32_t getPeerFlaps(AreaId const& area, std::string const& peerName);
 
   /**

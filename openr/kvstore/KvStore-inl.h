@@ -718,34 +718,6 @@ KvStore<ClientType>::semifuture_getKvStorePeerStateEpochTimeMs(
 }
 
 /**
- * @brief utility function to get elapsed time of a given peer, from a given
- * area, since last state peer has been in
- *
- * @param area      name of area kvstore peer belongs
- * @param peerName  name of the kvstore peer
- *
- * @return folly::SemiFuture<int64_t> elapsed time in ms
- */
-template <class ClientType>
-folly::SemiFuture<int64_t>
-KvStore<ClientType>::semifuture_getKvStorePeerStateElapsedTimeMs(
-    std::string const& area, std::string const& peerName) {
-  folly::Promise<int64_t> promise;
-  auto sf = promise.getSemiFuture();
-  runInEventBaseThread(
-      [this, p = std::move(promise), peerName, area]() mutable {
-        try {
-          p.setValue(getAreaDbOrThrow(
-                         area, "semifuture_getKvStorePeerStateElapsedTimeMs")
-                         .getCurrentStateElapsedTimeMs(peerName));
-        } catch (thrift::KvStoreError const& e) {
-          p.setException(e);
-        }
-      });
-  return sf;
-}
-
-/**
  * @brief utility function to get number of flaps to a specific peer (either
  * from INITIALIZED state or to INITIALIZED state)
  *
@@ -1173,26 +1145,6 @@ KvStoreDb<ClientType>::getCurrentStateEpochTimeMs(std::string const& peerName) {
   auto thriftPeerIt = thriftPeers_.find(peerName);
   if (thriftPeerIt != thriftPeers_.end()) {
     return *thriftPeerIt->second.peerSpec.stateEpochTimeMs();
-  }
-  return 0;
-}
-
-/**
- * @brief static util function to fetch current peer state elapsed time
- *
- * @param peerName  name of the kvstore peer
- *
- * @return int64_t  elapsed time in ms
- */
-template <class ClientType>
-int64_t
-KvStoreDb<ClientType>::getCurrentStateElapsedTimeMs(
-    std::string const& peerName) {
-  auto thriftPeerIt = thriftPeers_.find(peerName);
-  if (thriftPeerIt != thriftPeers_.end()) {
-    return (
-        getTimeSinceEpochMs() -
-        *thriftPeerIt->second.peerSpec.stateElapsedTimeMs());
   }
   return 0;
 }

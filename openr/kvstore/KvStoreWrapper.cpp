@@ -385,22 +385,6 @@ KvStoreWrapper<ClientType>::getPeerStateEpochTimeMs(
 }
 
 /**
- * @brief util function to fetch peer state elapsed time
- *
- * @param area      name of area kvstore peer belongs
- * @param peerName  name of the kvstore peer
- *
- * @return int64_t  elapsed time in ms
- */
-template <class ClientType>
-int64_t
-KvStoreWrapper<ClientType>::getPeerStateElapsedTimeMs(
-    AreaId const& area, std::string const& peerName) {
-  return kvStore_->semifuture_getKvStorePeerStateElapsedTimeMs(area, peerName)
-      .get();
-}
-
-/**
  * @brief util function to fetch peer state flaps
  *
  * @param area      name of area kvstore peer belongs
