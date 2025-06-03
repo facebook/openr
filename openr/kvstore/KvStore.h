@@ -434,12 +434,6 @@ class KvStoreDb {
 
     folly::SemiFuture<thrift::Publication> getKvStoreKeyValsFilteredAreaWrapper(
         const thrift::KeyDumpParams& filter, const std::string& area);
-
-#if FOLLY_HAS_COROUTINES
-    folly::coro::Task<thrift::Publication>
-    getKvStoreKeyValsFilteredAreaCoroWrapper(
-        const thrift::KeyDumpParams& filter, const std::string& area);
-#endif
 #pragma endregion ApiWrapper
 
     // node name

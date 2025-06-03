@@ -3455,29 +3455,6 @@ KvStore<ClientType>::co_dumpKvStoreHashes(
   co_return std::make_unique<thrift::Publication>(result);
 }
 
-// TODO: remove stale function
-template <class ClientType>
-folly::coro::Task<thrift::Publication>
-KvStoreDb<ClientType>::KvStorePeer::getKvStoreKeyValsFilteredAreaCoroWrapper(
-    const thrift::KeyDumpParams& filter, const std::string& area) {
-  if (not kvParams_.enable_secure_thrift_client) {
-    co_return co_await plainTextClient->co_getKvStoreKeyValsFilteredArea(
-        filter, area);
-  }
-  // TLS fallback
-  try {
-    co_return co_await secureClient->co_getKvStoreKeyValsFilteredArea(
-        filter, area);
-  } catch (const folly::AsyncSocketException& ex) {
-    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.co_getKvStoreKeyValsFilteredArea.secure_client.failure",
-        1,
-        fb303::COUNT);
-    co_return plainTextClient->co_getKvStoreKeyValsFilteredArea(filter, area);
-  }
-}
-
 template <class ClientType>
 folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
 KvStore<ClientType>::co_getKvStoreAreaSummaryInternal(
