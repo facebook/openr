@@ -631,20 +631,25 @@ KvStore<ClientType>::semifuture_injectThriftFailure(
     std::string area, std::string peerName) {
   folly::Promise<std::unique_ptr<bool>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread(
-      [this, p = std::move(p), peerName = std::move(peerName), area]() mutable {
-        try {
-          bool r = true;
-          auto& kvStoreDb = getAreaDbOrThrow(area, "disconnectPeer");
-          kvStoreDb.processThriftFailure(
-              peerName,
-              "injected thrift failure",
-              std::chrono::milliseconds(500)); // arbitrary timeout
-          p.setValue(std::make_unique<bool>(std::move(r)));
-        } catch (thrift::KvStoreError const& e) {
-          p.setException(e);
-        }
-      });
+  const auto startTime = std::chrono::steady_clock::now();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        peerName = std::move(peerName),
+                        area = std::move(area),
+                        startTime = startTime]() mutable {
+    try {
+      bool r = true;
+      auto& kvStoreDb = getAreaDbOrThrow(area, "disconnectPeer");
+      kvStoreDb.processThriftFailure(
+          peerName,
+          Constants::kTypeFullSync.toString(), /* type */
+          "injected thrift failure", /* exception string */
+          startTime);
+      p.setValue(std::make_unique<bool>(std::move(r)));
+    } catch (thrift::KvStoreError const& e) {
+      p.setException(e);
+    }
+  });
   return sf;
 }
 
@@ -958,30 +963,56 @@ KvStore<ClientType>::initGlobalCounters() {
       "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
       fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_full_sync", fb303::COUNT);
+      fmt::format("kvstore.thrift.num_{}", Constants::kTypeFullSync.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_full_sync_success", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}_success", Constants::kTypeFullSync.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_full_sync_failure", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}_failure", Constants::kTypeFullSync.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_pub", fb303::COUNT);
+      fmt::format("kvstore.thrift.num_{}", Constants::kTypeFloodPub.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_pub_success", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}_success", Constants::kTypeFloodPub.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_flood_pub_failure", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}_failure", Constants::kTypeFloodPub.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_finalized_sync", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}",
+          Constants::kTypeFinalizedFullSync.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_finalized_sync_success", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}_success",
+          Constants::kTypeFinalizedFullSync.toString()),
+      fb303::COUNT);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.num_finalized_sync_failure", fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}_failure",
+          Constants::kTypeFinalizedFullSync.toString()),
+      fb303::COUNT);
 
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.full_sync_duration_ms", fb303::AVG);
+      fmt::format(
+          "kvstore.thrift.{}_duration_ms", Constants::kTypeFullSync.toString()),
+      fb303::AVG);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.flood_pub_duration_ms", fb303::AVG);
+      fmt::format(
+          "kvstore.thrift.{}_duration_ms", Constants::kTypeFloodPub.toString()),
+      fb303::AVG);
   fb303::fbData->addStatExportType(
-      "kvstore.thrift.finalized_sync_duration_ms", fb303::AVG);
+      fmt::format(
+          "kvstore.thrift.{}_duration_ms",
+          Constants::kTypeFinalizedFullSync.toString()),
+      fb303::AVG);
 
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_missing_keys", fb303::SUM);
@@ -2222,18 +2253,11 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
         .thenError([this, peer = peerName, startTime](
                        const folly::exception_wrapper& ew) {
           // state transition to IDLE
-          auto endTime = std::chrono::steady_clock::now();
-          auto timeDelta =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  endTime - startTime);
           processThriftFailure(
               peer,
+              Constants::kTypeFullSync.toString(),
               fmt::format("FULL_SYNC failure with {}, {}", peer, ew.what()),
-              timeDelta);
-
-          // record telemetry for thrift calls
-          fb303::fbData->addStatValue(
-              "kvstore.thrift.num_full_sync_failure", 1, fb303::COUNT);
+              startTime);
         });
 
     // in case pending peer size is over parallelSyncLimit,
@@ -2421,8 +2445,21 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::processThriftFailure(
     std::string const& peerName,
+    std::string const& type,
     folly::fbstring const& exceptionStr,
-    std::chrono::milliseconds timeDelta) {
+    std::chrono::steady_clock::time_point startTime) {
+  auto endTime = std::chrono::steady_clock::now();
+  auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
+      endTime - startTime);
+
+  // record telemetry for thrift calls
+  fb303::fbData->addStatValue(
+      fmt::format("kvstore.thrift.num_{}_failure", type), 1, fb303::COUNT);
+  fb303::fbData->addStatValue(
+      fmt::format("kvstore.thrift.{}_duration_ms", type),
+      timeDelta.count(),
+      fb303::AVG);
+
   // check if this kvStore is destructed and stop processing callbacks
   if (isStopped_) {
     return;
@@ -2810,7 +2847,11 @@ KvStoreDb<ClientType>::finalizeFullSync(
 
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
-      "kvstore.thrift.num_finalized_sync", 1, fb303::COUNT);
+      fmt::format(
+          "kvstore.thrift.num_{}",
+          Constants::kTypeFinalizedFullSync.toString()),
+      1,
+      fb303::COUNT);
 
   auto startTime = std::chrono::steady_clock::now();
 
@@ -2834,28 +2875,28 @@ KvStoreDb<ClientType>::finalizeFullSync(
 
         // record telemetry for thrift calls
         fb303::fbData->addStatValue(
-            "kvstore.thrift.num_finalized_sync_success", 1, fb303::COUNT);
+            fmt::format(
+                "kvstore.thrift.num_{}_success",
+                Constants::kTypeFinalizedFullSync.toString()),
+            1,
+            fb303::COUNT);
         fb303::fbData->addStatValue(
-            "kvstore.thrift.finalized_sync_duration_ms",
+            fmt::format(
+                "kvstore.thrift.{}_duration_ms",
+                Constants::kTypeFinalizedFullSync.toString()),
             timeDelta.count(),
             fb303::AVG);
       })
-      .thenError([this, senderId, startTime](
-                     const folly::exception_wrapper& ew) {
-        // state transition to IDLE
-        auto endTime = std::chrono::steady_clock::now();
-        auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
-            endTime - startTime);
-        processThriftFailure(
-            senderId,
-            fmt::format(
-                "Finalized FULL_SYNC failure with {}, {}", senderId, ew.what()),
-            timeDelta);
-
-        // record telemetry for thrift calls
-        fb303::fbData->addStatValue(
-            "kvstore.thrift.num_finalized_sync_failure", 1, fb303::COUNT);
-      });
+      .thenError(
+          [this, senderId, startTime](const folly::exception_wrapper& ew) {
+            // state transition to IDLE
+            processThriftFailure(
+                senderId,
+                Constants::kTypeFinalizedFullSync.toString(),
+                fmt::format(
+                    "FINALIZED_SYNC failure with {}, {}", senderId, ew.what()),
+                startTime);
+          });
 }
 
 template <class ClientType>
@@ -2975,28 +3016,27 @@ KvStoreDb<ClientType>::floodPublication(
 
           // record telemetry for thrift calls
           fb303::fbData->addStatValue(
-              "kvstore.thrift.num_flood_pub_success", 1, fb303::COUNT);
+              fmt::format(
+                  "kvstore.thrift.num_{}_success",
+                  Constants::kTypeFloodPub.toString()),
+              1,
+              fb303::COUNT);
           fb303::fbData->addStatValue(
-              "kvstore.thrift.flood_pub_duration_ms",
+              fmt::format(
+                  "kvstore.thrift.{}_duration_ms",
+                  Constants::kTypeFloodPub.toString()),
               timeDelta.count(),
               fb303::AVG);
         })
         .thenError([this, peerNameStr = peerName, startTime](
                        const folly::exception_wrapper& ew) {
           // state transition to IDLE
-          auto endTime = std::chrono::steady_clock::now();
-          auto timeDelta =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  endTime - startTime);
           processThriftFailure(
               peerNameStr,
+              Constants::kTypeFloodPub.toString(),
               fmt::format(
                   "FLOOD_PUB failure with {}, {}", peerNameStr, ew.what()),
-              timeDelta);
-
-          // record telemetry for thrift calls
-          fb303::fbData->addStatValue(
-              "kvstore.thrift.num_flood_pub_failure", 1, fb303::COUNT);
+              startTime);
         });
   }
 }
@@ -3415,6 +3455,7 @@ KvStore<ClientType>::co_dumpKvStoreHashes(
   co_return std::make_unique<thrift::Publication>(result);
 }
 
+// TODO: remove stale function
 template <class ClientType>
 folly::coro::Task<thrift::Publication>
 KvStoreDb<ClientType>::KvStorePeer::getKvStoreKeyValsFilteredAreaCoroWrapper(

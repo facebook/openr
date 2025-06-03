@@ -183,6 +183,11 @@ class Constants {
   static constexpr folly::StringPiece kAdjDbMarker{"adj:"};
   static constexpr folly::StringPiece kPrefixDbMarker{"prefix:"};
 
+  // KvStore thrift request types
+  static constexpr folly::StringPiece kTypeFullSync{"full_sync"};
+  static constexpr folly::StringPiece kTypeFloodPub{"flood_pub"};
+  static constexpr folly::StringPiece kTypeFinalizedFullSync{"finalized_sync"};
+
   static constexpr folly::StringPiece kOpenrCtrlSessionContext{"OpenrCtrl"};
 
   // max interval to update TTL for each key in kvstore w/ finite TTL

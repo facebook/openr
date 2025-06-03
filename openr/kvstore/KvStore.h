@@ -224,8 +224,9 @@ class KvStoreDb {
 
   void processThriftFailure(
       std::string const& peerName,
+      std::string const& type,
       folly::fbstring const& exceptionStr,
-      std::chrono::milliseconds timeDelta);
+      std::chrono::steady_clock::time_point startTime);
 
  private:
   // disable copying

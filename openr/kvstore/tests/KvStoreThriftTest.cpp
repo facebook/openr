@@ -445,6 +445,7 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
 
   // eventbase to schedule callbacks at certain time spot
   OpenrEventBase evb;
+  int64_t fullSyncDurationBefore{0}, fullSyncDurationAfter{0};
 
   evb.scheduleTimeout(std::chrono::milliseconds(200), [&]() noexcept {
     auto allCounters = fb303::fbData->getCounters();
@@ -456,12 +457,18 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     // Get boolean counter whether no peer is initialized
     auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
 
+    // Collect "full_sync" duration
+    fullSyncDurationBefore = allCounters.at(fmt::format(
+        "kvstore.thrift.{}_duration_ms.avg",
+        Constants::kTypeFullSync.toString()));
+
     EXPECT_EQ(0, numIdlePeer);
     EXPECT_EQ(2, numInitializedPeer);
     // If there is at least 1 peer is initialized state, this
     // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
     // 0
     EXPECT_EQ(0, allPeerNotInitialized);
+    EXPECT_LE(0, fullSyncDurationBefore);
 
     // inject thrift failure for this peer `node-2`, processing time is 500ms
     // the peer from INITIALIZED state will be changed to IDLE state
@@ -479,6 +486,10 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     auto numInitializedPeer = allCounters[initializedKeyStr];
     // Verify if no peers is in INITIALIZED state
     auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
+    // Collect "full_sync" duration
+    fullSyncDurationAfter = allCounters.at(fmt::format(
+        "kvstore.thrift.{}_duration_ms.avg",
+        Constants::kTypeFullSync.toString()));
 
     // verify the number of IDLE and INITIALIZED peers
     //
@@ -491,6 +502,8 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
     // 0
     EXPECT_EQ(0, allPeerNotInitialized);
+    EXPECT_LE(0, fullSyncDurationAfter);
+    EXPECT_NE(fullSyncDurationAfter, fullSyncDurationBefore);
 
     // inject thrift failure for this peer `node-3`, processing time is 500ms
     // the peer from INITIALIZED state will be changed to IDLE state
