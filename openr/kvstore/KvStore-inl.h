@@ -1051,6 +1051,7 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType("kvstore.updated_key_vals", fb303::SUM);
   fb303::fbData->addStatExportType(
       "kvstore.num_conflict_version_key", fb303::SUM);
+  fb303::fbData->addStatExportType("kvstore.last_update", fb303::AVG);
 }
 
 // static util function to fetch peers by state
@@ -3261,6 +3262,10 @@ KvStoreDb<ClientType>::mergePublication(
       "kvstore.updated_key_vals", kvUpdateCnt, fb303::SUM);
   fb303::fbData->addStatValue(
       "kvstore.updated_key_vals." + area_, kvUpdateCnt, fb303::SUM);
+  if (kvUpdateCnt) {
+    fb303::fbData->addStatValue(
+        "kvstore.last_update", getUnixTimeStampMs(), fb303::AVG);
+  }
 
   // Populate nodeIds. ATTN: nodeId of itself will be appended later
   // inside `floodPublication`

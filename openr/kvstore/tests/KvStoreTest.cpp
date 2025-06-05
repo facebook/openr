@@ -1287,6 +1287,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
 
   // Wait till counters updated
   std::this_thread::sleep_for(std::chrono::milliseconds(counterUpdateWaitTime));
+  auto timeAfterCounterUpdate = getUnixTimeStampMs();
   auto counters = fb303::fbData->getCounters();
 
   // Verify the counter keys exist
@@ -1307,6 +1308,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.contains("kvstore.cmd_key_get.count"));
   ASSERT_TRUE(counters.contains("kvstore.updated_key_vals." + area + ".sum"));
   ASSERT_TRUE(counters.contains("kvstore.received_key_vals." + area + ".sum"));
+  ASSERT_TRUE(counters.contains("kvstore.last_update.avg"));
   ASSERT_TRUE(
       counters.contains("kvstore.received_publications." + area + ".count"));
   ASSERT_TRUE(counters.contains("kvstore.num_flood_peers"));
@@ -1360,6 +1362,8 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(2, counters.at("kvstore.updated_key_vals.sum"));
   ASSERT_EQ(1, counters.count("kvstore.updated_key_vals." + area + ".sum"));
   EXPECT_EQ(2, counters.at("kvstore.updated_key_vals." + area + ".sum"));
+  ASSERT_EQ(1, counters.count("kvstore.last_update.avg"));
+  EXPECT_GT(timeAfterCounterUpdate, counters.at("kvstore.last_update.avg"));
 
   // Verify publication counter
   ASSERT_EQ(1, counters.count("kvstore.looped_publications.count"));
