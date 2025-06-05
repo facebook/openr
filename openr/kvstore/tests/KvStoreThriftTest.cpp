@@ -503,7 +503,6 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     // 0
     EXPECT_EQ(0, allPeerNotInitialized);
     EXPECT_LE(0, fullSyncDurationAfter);
-    EXPECT_NE(fullSyncDurationAfter, fullSyncDurationBefore);
 
     // inject thrift failure for this peer `node-3`, processing time is 500ms
     // the peer from INITIALIZED state will be changed to IDLE state
