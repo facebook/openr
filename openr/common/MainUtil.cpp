@@ -77,6 +77,12 @@ setUpThriftServer(
   // (if not set explicitly, the default value is 100ms)
   server->setQueueTimeout(Constants::kThriftServerQueueTimeout);
 
+  /* Adding a monitor handler for OpenR thrift service
+   * to get information about counters, process id, uptime, etc */
+  std::shared_ptr<fb303::DefaultMonitor> monitor =
+      std::make_shared<fb303::DefaultMonitor>();
+  server->setMonitoringInterface(std::move(monitor));
+
   // Setup TLS
   if (config->isSecureThriftServerEnabled()) {
     setupThriftServerTls(

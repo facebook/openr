@@ -15,6 +15,7 @@
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
 #include <openr/watchdog/Watchdog.h>
+#include "common/fb303/cpp/DefaultMonitor.h"
 
 namespace openr {
 
