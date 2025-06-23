@@ -1904,13 +1904,13 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
 
       auto update = waitForRouteUpdate(staticRoutesReader);
       EXPECT_TRUE(update.has_value());
-      auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-      auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+      auto updatedRoutes = *update.value().unicastRoutesToUpdate();
+      auto deletedRoutes = *update.value().unicastRoutesToDelete();
       EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
       EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
       const auto& route = updatedRoutes.back();
-      EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
-      const auto& nhs = *route.nextHops_ref();
+      EXPECT_EQ(*route.dest(), toIpPrefix(v4Prefix_));
+      const auto& nhs = *route.nextHops();
       EXPECT_THAT(nhs, testing::SizeIs(0));
     }
 
@@ -2557,13 +2557,13 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     // 1c. v4 route update received
     auto update = waitForRouteUpdate(staticRoutesReader);
     EXPECT_TRUE(update.has_value());
-    auto updatedRoutes = *update.value().unicastRoutesToUpdate_ref();
-    auto deletedRoutes = *update.value().unicastRoutesToDelete_ref();
+    auto updatedRoutes = *update.value().unicastRoutesToUpdate();
+    auto deletedRoutes = *update.value().unicastRoutesToDelete();
     EXPECT_THAT(updatedRoutes, testing::SizeIs(1));
     EXPECT_THAT(deletedRoutes, testing::SizeIs(0));
     const auto& route = updatedRoutes.back();
-    EXPECT_EQ(*route.dest_ref(), toIpPrefix(v4Prefix_));
-    const auto& nhs = *route.nextHops_ref();
+    EXPECT_EQ(*route.dest(), toIpPrefix(v4Prefix_));
+    const auto& nhs = *route.nextHops();
     EXPECT_THAT(nhs, testing::SizeIs(0));
 
     // 1d. no v6 route update received
