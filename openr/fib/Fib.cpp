@@ -26,12 +26,12 @@ logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
   fb303::fbData->addStatValue(
       "fib.thrift.failure.fib_update_error", 1, fb303::COUNT);
   XLOG(ERR) << "Partially failed to update/delete following in FIB.";
-  for (auto& [_, prefixes] : *error.vrf2failedAddUpdatePrefixes_ref()) {
+  for (auto& [_, prefixes] : *error.vrf2failedAddUpdatePrefixes()) {
     for (auto& prefix : prefixes) {
       XLOG(ERR) << "  > " << toString(prefix) << " add/update";
     }
   }
-  for (auto& [_, prefixes] : *error.vrf2failedDeletePrefixes_ref()) {
+  for (auto& [_, prefixes] : *error.vrf2failedDeletePrefixes()) {
     for (auto& prefix : prefixes) {
       XLOG(ERR) << "  > " << toString(prefix) << " delete";
     }
@@ -420,12 +420,12 @@ Fib::RouteState::processFibUpdateError(
   // Mark prefixes as dirty. All newly failed unicast routes are added into
   // dirtyPrefixes map. We can distinguish between add/update and delete updates
   // in createUpdate().
-  for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes_ref()) {
+  for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes()) {
     for (auto& prefix : prefixes) {
       dirtyPrefixes.insert_or_assign(toIPNetwork(prefix), retryAt);
     }
   }
-  for (auto& [_, prefixes] : *fibError.vrf2failedDeletePrefixes_ref()) {
+  for (auto& [_, prefixes] : *fibError.vrf2failedDeletePrefixes()) {
     for (auto& prefix : prefixes) {
       dirtyPrefixes.insert_or_assign(toIPNetwork(prefix), retryAt);
     }
