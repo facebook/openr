@@ -509,7 +509,7 @@ NetlinkFibHandler::buildInterfaceRoute(const thrift::UnicastRoute& route) {
   // Create interface prefix route object, use RTPROT_KERNEL to avoid being
   // messed up by routing protocol.
   fbnl::RouteBuilder rtBuilder;
-  rtBuilder.setDestination(toIPNetwork(*route.dest_ref()))
+  rtBuilder.setDestination(toIPNetwork(*route.dest()))
       .setRouteTable(routeTable_)
       .setProtocolId(RTPROT_KERNEL)
       .setFlags(0)
