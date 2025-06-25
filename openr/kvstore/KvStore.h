@@ -483,6 +483,17 @@ class KvStoreDb {
   // TTL count down queue
   TtlCountdownQueue ttlCountdownQueue_;
 
+  // Map holding the handles to the elements in ttlCountdownQueue_
+  // Key is struct TtlCountdownHandleKey(key, originatorId) and value is the
+  // handle to the element.
+  // Note: F14FastMap is used here instead of F14NodeMap
+  // because of the automatic sizing when we call erase(). This should not cause
+  // referance stability with current code as there are no long standing
+  // references. Current UTs do resize the map multiple times and are able to
+  // pass.
+  folly::F14FastMap<TtlCountdownHandleKey, TtlCountdownQueue::handle_type>
+      ttlCountdownHandleMap_;
+
   // TTL count down timer
   std::unique_ptr<folly::AsyncTimeout> ttlCountdownTimer_{nullptr};
 

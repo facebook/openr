@@ -1563,8 +1563,6 @@ KvStoreDb<ClientType>::KvStoreDb(
       "kvstore.num_expiring_keys." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
       "kvstore.num_flood_peers." + area, fb303::SUM);
-  fb303::fbData->addStatExportType(
-      "kvstore.ttl_countdown_queue_size." + area, fb303::SUM);
 }
 
 template <class ClientType>
@@ -2122,15 +2120,26 @@ KvStoreDb<ClientType>::updateTtlCountdownQueue(
             std::chrono::milliseconds(*value.ttl()));
       }
 
-      ttlCountdownQueue_.push(std::move(queueEntry));
+      // ATTN: ttlCountdownHandleMap_ uses a tuple of key and originatorId as
+      // its key. We want to replace the existing entry in ttlCountdownQueue_
+      // with the latest version and ttlVersion. So we skip the equality check
+      // for version and ttlVersion.
+      TtlCountdownHandleKey handleKey{key, *value.originatorId()};
+      auto it = ttlCountdownHandleMap_.find(handleKey);
+      if (it != ttlCountdownHandleMap_.end()) {
+        ttlCountdownQueue_.update(it->second, queueEntry);
+      } else {
+        ttlCountdownHandleMap_[std::move(handleKey)] =
+            ttlCountdownQueue_.push(queueEntry);
+      }
     }
   }
-
-  // record telemetry of the queue size
-  fb303::fbData->addStatValue(
-      "kvstore.ttl_countdown_queue_size." + area_,
-      ttlCountdownQueue_.size(),
-      fb303::SUM);
+  // record telemetry of the queue size and handle map
+  fb303::fbData->setCounter(
+      "kvstore.ttl_countdown_queue_size." + area_, ttlCountdownQueue_.size());
+  fb303::fbData->setCounter(
+      "kvstore.ttl_countdown_handle_map_size." + area_,
+      ttlCountdownHandleMap_.size());
 }
 
 // loop through all key/vals and count the size of KvStoreDB (per area)
@@ -2714,6 +2723,8 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
       logKvEvent("KEY_EXPIRE", top.key);
       kvStore_.erase(it);
     }
+    ttlCountdownHandleMap_.erase(
+        TtlCountdownHandleKey{top.key, top.originatorId});
     ttlCountdownQueue_.pop();
   }
 
@@ -2723,7 +2734,11 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
         std::chrono::duration_cast<std::chrono::milliseconds>(
             ttlCountdownQueue_.top().expiryTime - now));
   }
-
+  fb303::fbData->setCounter(
+      "kvstore.ttl_countdown_queue_size." + area_, ttlCountdownQueue_.size());
+  fb303::fbData->setCounter(
+      "kvstore.ttl_countdown_handle_map_size." + area_,
+      ttlCountdownHandleMap_.size());
   if (expiredKeys.empty()) {
     // no key expires
     return;
@@ -2731,10 +2746,6 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
 
   fb303::fbData->addStatValue(
       "kvstore.expired_key_vals", expiredKeys.size(), fb303::SUM);
-  fb303::fbData->addStatValue(
-      "kvstore.ttl_countdown_queue_size." + area_,
-      ttlCountdownQueue_.size(),
-      fb303::SUM);
 
   // ATTN: expired key will be ONLY notified to local subscribers
   //       via replicate-queue. KvStore will NOT flood publication

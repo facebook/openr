@@ -1345,12 +1345,14 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   EXPECT_EQ(3, counters.at("kvstore.received_key_vals." + area + ".sum"));
 
   // Verify the ttl countdown queue size counter is populated
-  // NOTE: counter is 3 since we have setKey() called for 3 different
-  // (key, originator) combinations.
+  // NOTE: counter is 1. We call setKey() 4 times, but the first 2 don't have a
+  // ttl and the last 2 have the same (key, originator) combination.
+  ASSERT_TRUE(counters.contains("kvstore.ttl_countdown_queue_size." + area));
+  EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
+
   ASSERT_TRUE(
-      counters.contains("kvstore.ttl_countdown_queue_size." + area + ".sum"));
-  EXPECT_EQ(
-      3, counters.at("kvstore.ttl_countdown_queue_size." + area + ".sum"));
+      counters.contains("kvstore.ttl_countdown_handle_map_size." + area));
+  EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
 
   // Verify the key and the number of key
   ASSERT_TRUE(kvStore->getKey(kTestingAreaName, "test-key2").has_value());
@@ -1392,6 +1394,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
  * - TTL propagation is carried out correctly
  * - Correct TTL reflects back in GET/KEY_DUMP/KEY_HASH
  * - Applying ttl updates reflects properly
+ * - Size of TTL queue and TTL handle map is as expected
  */
 TEST_F(KvStoreTestFixture, TtlVerification) {
   const std::string key{"dummyKey"};
@@ -1405,6 +1408,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
 
   auto kvStore = createKvStore(getTestKvConf("test"));
   kvStore->run();
+  const std::string& area = kTestingAreaName;
 
   //
   // 1. Advertise key-value with 1ms rtt
@@ -1423,6 +1427,10 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(0, publication.keyVals()->size());
     ASSERT_EQ(1, publication.expiredKeys()->size());
     EXPECT_EQ(key, publication.expiredKeys()->at(0));
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(0, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(0, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
   //
@@ -1474,6 +1482,10 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     pubValue.ttl() = *thriftValue.ttl();
     pubValue.hash() = 0;
     EXPECT_EQ(thriftValue, pubValue);
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
   //
@@ -1506,6 +1518,10 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(*thriftValue.version(), *pubValue.version());
     EXPECT_EQ(*thriftValue.originatorId(), *pubValue.originatorId());
     EXPECT_EQ(*thriftValue.ttlVersion(), *pubValue.ttlVersion());
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
   //
@@ -1539,6 +1555,10 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(*thriftValue.version(), *pubValue.version());
     EXPECT_EQ(*thriftValue.originatorId(), *pubValue.originatorId());
     EXPECT_EQ(*thriftValue.ttlVersion(), *pubValue.ttlVersion());
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
   //
@@ -1571,6 +1591,10 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(*thriftValue.version(), *pubValue.version());
     EXPECT_EQ(*thriftValue.originatorId(), *pubValue.originatorId());
     EXPECT_EQ(*thriftValue.ttlVersion(), *pubValue.ttlVersion());
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
   //
@@ -1590,7 +1614,123 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(*value.originatorId(), *getRes->originatorId());
     EXPECT_EQ(*value.ttlVersion() + 3, *getRes->ttlVersion());
     EXPECT_EQ(value.value(), getRes->value());
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
+
+  //
+  // 7. Add new (key, originatorId) combinations and verify queue size
+  //  - ensure that when we re-set a (key, originatorId) combination with a new
+  //  ttlVersion, size of queue does not increase
+  //
+  {
+    // Set new key test-key2
+    thrift::Value thriftVal2 = createThriftValue(
+        1 /* version */,
+        "node1" /* originatorId */,
+        std::string("value2") /* value */,
+        100000 /* ttl */,
+        1 /* ttl version */,
+        0 /* hash */);
+    kvStore->setKey(kTestingAreaName, "test-key2", thriftVal2);
+
+    // Set same key test-key2 with a different originatorId
+    thrift::Value thriftVal3 = createThriftValue(
+        1 /* version */,
+        "node2" /* originatorId */,
+        std::string("value2") /* value */,
+        100000 /* ttl */,
+        1 /* ttl version */,
+        0 /* hash */);
+    kvStore->setKey(kTestingAreaName, "test-key2", thriftVal3);
+
+    // Set same key test-key2 with same originatorId but different ttl version
+    thrift::Value thriftVal4 = createThriftValue(
+        1 /* version */,
+        "node2" /* originatorId */,
+        std::string("value2") /* value */,
+        10000 /* ttl */,
+        2 /* ttl version */,
+        0 /* hash */);
+    kvStore->setKey(kTestingAreaName, "test-key2", thriftVal4);
+    auto getRes = kvStore->getKey(kTestingAreaName, "test-key2");
+    ASSERT_TRUE(getRes.has_value());
+    EXPECT_GE(10000, *getRes->ttl()); // Previous ttl was set to 10s
+    EXPECT_LE(5000, *getRes->ttl());
+    EXPECT_EQ(*thriftVal4.version(), *getRes->version());
+    EXPECT_EQ(*thriftVal4.originatorId(), *getRes->originatorId());
+    EXPECT_EQ(*thriftVal4.ttlVersion(), *getRes->ttlVersion());
+
+    auto counters = fb303::fbData->getCounters();
+    EXPECT_EQ(3, counters.at("kvstore.ttl_countdown_queue_size." + area));
+    EXPECT_EQ(3, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
+  }
+}
+
+/**
+ * When we first set a key with a finite TTL, then set the same key with a
+ * infinite TTL. ttlCountdownQueue_ will only store an entry for finite TTLs. We
+ * want to verify that once the finite TTL gets erased, this does not affect
+ * kvStore_
+ * Test Scenario:
+ * 1. Create a key with a short finite TTL
+ * 2. Set the same key to be infinite TTL
+ * 3. Wait until finite TTL key should have expired
+ * 4. Verify key has not been improperly removed
+ * 4.5. Verify ttlCountdownQueue_ is empty
+ */
+TEST_F(KvStoreTestFixture, TtlInfiniteExpiry) {
+  const std::string key{"dummyKey"};
+  const auto value = createThriftValue(
+      1, /* version */
+      "node1", /* node id */
+      "dummyValue",
+      2000, /* ttl */
+      1 /* ttl version */,
+      0 /* hash */);
+
+  auto kvStore = createKvStore(getTestKvConf("test"));
+  kvStore->run();
+
+  // Step 1: Create key with short finite TTL
+  {
+    EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, value));
+    auto getRes = kvStore->getKey(kTestingAreaName, key);
+    ASSERT_TRUE(getRes.has_value());
+    EXPECT_GE(2000, *getRes->ttl());
+  }
+  // Step 2: Set same key with infinite TTL
+  {
+    auto thriftValue = value;
+    thriftValue.ttl() = Constants::kTtlInfinity;
+    thriftValue.ttlVersion() = *thriftValue.ttlVersion() + 1;
+    EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
+    auto getRes = kvStore->getKey(kTestingAreaName, key);
+    ASSERT_TRUE(getRes.has_value());
+    EXPECT_EQ(Constants::kTtlInfinity, *getRes->ttl());
+    EXPECT_EQ(*thriftValue.ttlVersion(), *getRes->ttlVersion());
+  }
+  folly::EventBase testEvb;
+  // Step 3: Wait until finite TTL key should have expired
+  testEvb.scheduleAt(
+      [&]() noexcept {
+        // Step 4: Verify key has not been improperly removed
+        auto getRes = kvStore->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(getRes.has_value());
+        EXPECT_EQ(Constants::kTtlInfinity, *getRes->ttl());
+        EXPECT_EQ(*value.ttlVersion() + 1, *getRes->ttlVersion());
+
+        // Step 4.5: Verify ttlCountdownQueue_ is empty
+        auto counters = fb303::fbData->getCounters();
+        const std::string& area = kTestingAreaName;
+        EXPECT_EQ(0, counters.at("kvstore.ttl_countdown_queue_size." + area));
+        EXPECT_EQ(
+            0, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
+      },
+      std::chrono::steady_clock::now() + std::chrono::seconds(3));
+  testEvb.loop();
 }
 
 /**

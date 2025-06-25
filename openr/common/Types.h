@@ -11,7 +11,7 @@
 #include <re2/set.h>
 #include <variant>
 
-#include <boost/heap/priority_queue.hpp>
+#include <boost/heap/d_ary_heap.hpp>
 #include <boost/serialization/strong_typedef.hpp>
 
 #include <openr/common/Constants.h>
@@ -47,8 +47,24 @@ struct TtlCountdownQueueEntry {
   }
 };
 
-using TtlCountdownQueue = boost::heap::priority_queue<
+/**
+ * Struct defining the key to ttlCountdownHandleMap_.
+ */
+struct TtlCountdownHandleKey {
+  std::string key;
+  std::string originatorId;
+
+  bool
+  operator==(TtlCountdownHandleKey const& other) const {
+    return (key == other.key) && (originatorId == other.originatorId);
+  }
+};
+
+using TtlCountdownQueue = boost::heap::d_ary_heap<
     TtlCountdownQueueEntry,
+    boost::heap::arity<2>, /* each node will have 2 children */
+    boost::heap::mutable_<true>, /* allows us to update entries already existing
+                                    in the heap */
     // Always returns smallest first
     boost::heap::compare<std::greater<TtlCountdownQueueEntry>>,
     boost::heap::stable<true>>;
@@ -287,6 +303,14 @@ class RegexSet {
 };
 
 } // namespace openr
+
+template <>
+struct std::hash<openr::TtlCountdownHandleKey> {
+  size_t
+  operator()(const openr::TtlCountdownHandleKey& handleKey) const {
+    return folly::hash::hash_combine(handleKey.key, handleKey.originatorId);
+  }
+};
 
 template <>
 struct std::hash<openr::AreaId> {
