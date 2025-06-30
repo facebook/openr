@@ -3380,9 +3380,8 @@ KvStore<ClientType>::co_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
   XLOG(DBG3) << "Get key requested for AREA: " << area;
   try {
-    auto result =
-        co_await co_getKvStoreKeyValsInternal(area, std::move(keyGetParams))
-            .scheduleOn(getEvb());
+    auto result = co_await co_withExecutor(
+        getEvb(), co_getKvStoreKeyValsInternal(area, std::move(keyGetParams)));
     co_return std::make_unique<thrift::Publication>(std::move(result));
   } catch (thrift::KvStoreError const& e) {
     XLOG(ERR) << fmt::format(
@@ -3415,9 +3414,8 @@ KvStore<ClientType>::co_setKvStoreKeyVals(
            ? folly::to<std::string>(keySetParams.timestamp_ms().value())
            : ""));
   try {
-    auto result =
-        co_await co_setKvStoreKeyValsInternal(area, std::move(keySetParams))
-            .scheduleOn(getEvb());
+    auto result = co_await co_withExecutor(
+        getEvb(), co_setKvStoreKeyValsInternal(area, std::move(keySetParams)));
   } catch (thrift::KvStoreError const& e) {
     XLOG(ERR) << fmt::format(
         "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
@@ -3439,9 +3437,8 @@ KvStore<ClientType>::co_setKvStoreKeyValues(
            ? folly::to<std::string>(keySetParams.timestamp_ms().value())
            : ""));
   try {
-    auto result =
-        co_await co_setKvStoreKeyValsInternal(area, std::move(keySetParams))
-            .scheduleOn(getEvb());
+    auto result = co_await co_withExecutor(
+        getEvb(), co_setKvStoreKeyValsInternal(area, std::move(keySetParams)));
     co_return std::make_unique<thrift::SetKeyValsResult>(result);
   } catch (thrift::KvStoreError const& e) {
     XLOG(ERR) << fmt::format(
@@ -3455,9 +3452,9 @@ template <class ClientType>
 folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
 KvStore<ClientType>::co_dumpKvStoreKeys(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
-  auto result = co_await co_dumpKvStoreKeysImpl(
-                    std::move(keyDumpParams), std::move(selectAreas))
-                    .scheduleOn(getEvb());
+  auto result = co_await co_withExecutor(
+      getEvb(),
+      co_dumpKvStoreKeysImpl(std::move(keyDumpParams), std::move(selectAreas)));
   co_return result;
 }
 
@@ -3465,9 +3462,9 @@ template <class ClientType>
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 KvStore<ClientType>::co_dumpKvStoreHashes(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
-  auto result = co_await co_dumpKvStoreHashesImpl(
-                    std::move(area), std::move(keyDumpParams))
-                    .scheduleOn(getEvb());
+  auto result = co_await co_withExecutor(
+      getEvb(),
+      co_dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams)));
   co_return std::make_unique<thrift::Publication>(result);
 }
 
@@ -3475,8 +3472,8 @@ template <class ClientType>
 folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
 KvStore<ClientType>::co_getKvStoreAreaSummaryInternal(
     std::set<std::string> selectAreas) {
-  auto result = co_await co_getKvStoreAreaSummaryImpl(std::move(selectAreas))
-                    .scheduleOn(getEvb());
+  auto result = co_await co_withExecutor(
+      getEvb(), co_getKvStoreAreaSummaryImpl(std::move(selectAreas)));
   co_return std::make_unique<std::vector<thrift::KvStoreAreaSummary>>(result);
 }
 
