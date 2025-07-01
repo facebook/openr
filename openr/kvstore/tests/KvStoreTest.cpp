@@ -1734,6 +1734,80 @@ TEST_F(KvStoreTestFixture, TtlInfiniteExpiry) {
 }
 
 /**
+ * T226400553: Set a key with a long finite TTL, then set the same key with a
+ * small finite TTL. We want to verify that once the update key with the small
+ * ttl expires, the key is erased rather than replaced with the old long finite
+ * ttl.
+ * Test Scenario:
+ * 1. Create a key with a long finite TTL
+ * 2. Set the same key to be short finite TTL
+ * 3. Wait until the updated finite TTL key expires
+ * 4. Verify key has been deleted and not updated to the stale key
+ * 5. Add the same key with a TTL and verify contents
+ */
+TEST_F(KvStoreTestFixture, TtlEraseExpiry) {
+  const std::string key{"staleKey"};
+  const auto value = createThriftValue(
+      1, /* version */
+      "node1", /* node id */
+      "dummyValue",
+      2592000000, /* ttl of 30 days */
+      1 /* ttl version */,
+      0 /* hash */);
+
+  auto kvStore = createKvStore(getTestKvConf("test"));
+  kvStore->run();
+
+  // Step 1: Create key with long finite TTL
+  {
+    EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, value));
+    auto getRes = kvStore->getKey(kTestingAreaName, key);
+    ASSERT_TRUE(getRes.has_value());
+    EXPECT_GE(2592000000, *getRes->ttl());
+  }
+  // Step 2: Set same key with short finite TTL
+  {
+    auto thriftValue = value;
+    thriftValue.ttl() = 1000;
+    thriftValue.ttlVersion() = *thriftValue.ttlVersion() + 1;
+    EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
+    auto getRes = kvStore->getKey(kTestingAreaName, key);
+    ASSERT_TRUE(getRes.has_value());
+    EXPECT_GE(1000, *getRes->ttl());
+    EXPECT_EQ(*thriftValue.ttlVersion(), *getRes->ttlVersion());
+  }
+  folly::EventBase testEvb;
+  // Step 3: Wait until short finite TTL key should have expired
+  testEvb.scheduleAt(
+      [&]() noexcept {
+        // Step 4: Verify key has been removed
+        auto getRes = kvStore->getKey(kTestingAreaName, key);
+        ASSERT_FALSE(getRes.has_value());
+        auto counters = fb303::fbData->getCounters();
+        const std::string& area = kTestingAreaName;
+        EXPECT_EQ(0, counters.at("kvstore.ttl_countdown_queue_size." + area));
+        EXPECT_EQ(
+            0, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
+      },
+      std::chrono::steady_clock::now() + std::chrono::seconds(2));
+
+  // Step 5: Readd key with ttl and verify contents
+  testEvb.scheduleAt(
+      [&]() noexcept {
+        auto thriftValue = value;
+        thriftValue.ttl() = 100000;
+        thriftValue.ttlVersion() = *thriftValue.ttlVersion() + 2;
+        EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
+        auto getRes = kvStore->getKey(kTestingAreaName, key);
+        ASSERT_TRUE(getRes.has_value());
+        EXPECT_GE(100000, *getRes->ttl());
+        EXPECT_EQ(*thriftValue.ttlVersion(), *getRes->ttlVersion());
+      },
+      std::chrono::steady_clock::now() + std::chrono::seconds(4));
+  testEvb.loop();
+}
+
+/**
  * Test
  * -  when KvStore peers are synced, TTL of keys are sent with remaining
  * time to expire,
