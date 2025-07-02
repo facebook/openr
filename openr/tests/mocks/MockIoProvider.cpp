@@ -52,7 +52,7 @@ MockIoProvider::fcntl(int sockFd, int /* cmd */, int /* arg */) {
   VLOG(4) << "MockIoProvider::fcntl called";
 
   std::lock_guard<std::mutex> lock(mutex_);
-  CHECK(pipeFds_.count(sockFd));
+  CHECK(pipeFds_.contains(sockFd));
   return 0;
 }
 
@@ -62,7 +62,7 @@ MockIoProvider::bind(
   VLOG(4) << "MockIoProvider::bind called";
 
   std::lock_guard<std::mutex> lock(mutex_);
-  CHECK(pipeFds_.count(sockFd));
+  CHECK(pipeFds_.contains(sockFd));
   return 0;
 }
 
@@ -76,7 +76,7 @@ MockIoProvider::recvmsg(int sockFd, struct msghdr* msg, int /* flags */) {
 
   VLOG(4) << "MockIoProvider::recvmsg called ";
 
-  CHECK(pipeFds_.count(sockFd));
+  CHECK(pipeFds_.contains(sockFd));
 
   auto it = mailboxes_.find(sockFd);
   CHECK_THROW(it != mailboxes_.end(), std::invalid_argument);
@@ -183,7 +183,7 @@ MockIoProvider::sendmsg(int sockFd, const struct msghdr* msg, int /* flags */) {
 
   std::lock_guard<std::mutex> lock(mutex_);
 
-  CHECK(pipeFds_.count(sockFd));
+  CHECK(pipeFds_.contains(sockFd));
 
   struct cmsghdr* cmsg{nullptr};
   int srcIfIndex{-1};
