@@ -324,7 +324,7 @@ operator==(const Route& lhs, const Route& rhs) {
 
   // Verify all nexthops are in each other (NOTE: size of nexthops are same)
   for (const NextHop& nh : lhs.getNextHops()) {
-    if (!rhs.getNextHops().count(nh)) {
+    if (!rhs.getNextHops().contains(nh)) {
       return false;
     }
   }
