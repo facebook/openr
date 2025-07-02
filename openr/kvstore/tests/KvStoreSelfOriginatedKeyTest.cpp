@@ -193,7 +193,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, SetKeyVersion) {
 
   // Make sure self-originated keys will NOT increase counter
   auto counters = fb303::fbData->getCounters();
-  ASSERT_TRUE(counters.count("kvstore.received_publications.count"));
+  ASSERT_TRUE(counters.contains("kvstore.received_publications.count"));
   EXPECT_EQ(0, counters.at("kvstore.received_publications.count"));
 }
 
@@ -604,7 +604,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
     // Make sure "erase-key" key is in self-originated cache.
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(2, kvStoreCache.size());
-    EXPECT_EQ(1, kvStoreCache.count(eraseKey));
+    EXPECT_EQ(1, kvStoreCache.contains(eraseKey));
     EXPECT_EQ(eraseValue, *kvStoreCache.at(eraseKey).value.value());
 
     /** Erase one key. Check that erased key does NOT emit ttl updates. **/
@@ -625,7 +625,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 
     auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(1, updatedCache.size());
-    EXPECT_EQ(0, updatedCache.count(eraseKey));
+    EXPECT_EQ(0, updatedCache.contains(eraseKey));
 
     // Receive ttl refresh publication for "set-key" (ttl version 2).
     auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
@@ -672,18 +672,18 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
         SetKeyValueRequest(kTestingAreaName, unsetKey, valueBeforeUnset);
     kvRequestQueue_.push(std::move(setKvRequestToUnset));
     auto pubSetKey = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKey.keyVals()->count(unsetKey));
+    EXPECT_EQ(1, pubSetKey.keyVals()->contains(unsetKey));
 
     // Push SetKeyValue request for "set-key" key to queue. Check key was set
     // correctly.
     auto setKvRequest = SetKeyValueRequest(kTestingAreaName, setKey, setValue);
     kvRequestQueue_.push(std::move(setKvRequest));
     auto pubSetKey2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKey2.keyVals()->count(setKey));
+    EXPECT_EQ(1, pubSetKey2.keyVals()->contains(setKey));
 
     // Make sure "unset-key" key is in self-originated cache.
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
-    EXPECT_EQ(1, kvStoreCache.count(unsetKey));
+    EXPECT_EQ(1, kvStoreCache.contains(unsetKey));
     EXPECT_EQ(valueBeforeUnset, *kvStoreCache.at(unsetKey).value.value());
 
     /** Unset one key. Check that unset key does NOT emit ttl updates. **/
@@ -696,7 +696,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
     // Receive publication for new value set to "unset-key". Version should be
     // bumped up and ttl version should be reset.
     auto pubUnsetKey = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubUnsetKey.keyVals()->count(unsetKey));
+    EXPECT_EQ(1, pubUnsetKey.keyVals()->contains(unsetKey));
     EXPECT_EQ(2, *pubUnsetKey.keyVals()->at(unsetKey).version());
     EXPECT_EQ(0, *pubUnsetKey.keyVals()->at(unsetKey).ttlVersion());
     EXPECT_EQ(valueAfterUnset, *pubUnsetKey.keyVals()->at(unsetKey).value());
@@ -708,16 +708,16 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
     EXPECT_TRUE(recVal.has_value());
     EXPECT_EQ(valueAfterUnset, *recVal.value().value());
     EXPECT_EQ(1, updatedCache.size());
-    EXPECT_EQ(0, updatedCache.count(unsetKey));
+    EXPECT_EQ(0, updatedCache.contains(unsetKey));
 
     // Receive ttl refresh publication for "set-key" (version 1).
     auto pubSetKeyTtlUpdate = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals()->count(setKey));
+    EXPECT_EQ(1, pubSetKeyTtlUpdate.keyVals()->contains(setKey));
     EXPECT_EQ(1, *(pubSetKeyTtlUpdate.keyVals()->at(setKey).ttlVersion()));
 
     // Receive ttl refresh publication for "set-key" (version 2).
     auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
-    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals()->count(setKey));
+    EXPECT_EQ(1, pubSetKeyTtlUpdate2.keyVals()->contains(setKey));
     EXPECT_EQ(2, *(pubSetKeyTtlUpdate2.keyVals()->at(setKey).ttlVersion()));
   });
 
