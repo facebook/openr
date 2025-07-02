@@ -325,8 +325,8 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     ASSERT_TRUE(db.has_value());
     auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
-    EXPECT_TRUE(pub.count(key1));
-    EXPECT_TRUE(pub.count(key2));
+    EXPECT_TRUE(pub.contains(key1));
+    EXPECT_TRUE(pub.contains(key2));
   }
 
   // Step3: shutdown thriftSevers and verify
