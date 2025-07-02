@@ -146,7 +146,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         const auto hashDump = store->dumpHashes(kTestingAreaName);
         for (const auto& [key, value] : dump) {
           EXPECT_TRUE(value.hash().value() != 0);
-          if (!hashDump.count(key)) {
+          if (!hashDump.contains(key)) {
             continue;
           }
           EXPECT_EQ(value.hash().value(), hashDump.at(key).hash().value());
@@ -203,7 +203,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
           EXPECT_EQ(expectedGlobalKeyVals, dump);
           for (const auto& [key, value] : dump) {
             EXPECT_TRUE(value.hash().value() != 0);
-            EXPECT_TRUE(hashDump.count(key) != 0);
+            EXPECT_TRUE(hashDump.contains(key));
             EXPECT_EQ(value.hash().value(), hashDump.at(key).hash().value());
           }
         }
