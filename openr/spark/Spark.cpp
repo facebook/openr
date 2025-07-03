@@ -2440,8 +2440,6 @@ Spark::updateGlobalCounters() {
       fb303::fbData->setCounter(
           "spark.rtt_latest_us." + neighbor.nodeName,
           neighbor.rttLatest.count());
-      fb303::fbData->setCounter(
-          "spark.seq_num." + neighbor.nodeName, neighbor.seqNum);
     }
   }
   fb303::fbData->setCounter(
