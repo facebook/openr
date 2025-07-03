@@ -604,7 +604,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
     // Make sure "erase-key" key is in self-originated cache.
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(2, kvStoreCache.size());
-    EXPECT_EQ(1, kvStoreCache.contains(eraseKey));
+    EXPECT_TRUE(kvStoreCache.contains(eraseKey));
     EXPECT_EQ(eraseValue, *kvStoreCache.at(eraseKey).value.value());
 
     /** Erase one key. Check that erased key does NOT emit ttl updates. **/
@@ -625,7 +625,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, EraseKeyValue) {
 
     auto updatedCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
     EXPECT_EQ(1, updatedCache.size());
-    EXPECT_EQ(0, updatedCache.contains(eraseKey));
+    EXPECT_FALSE(updatedCache.contains(eraseKey));
 
     // Receive ttl refresh publication for "set-key" (ttl version 2).
     auto pubSetKeyTtlUpdate2 = kvStore_->recvPublication();
@@ -683,7 +683,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
 
     // Make sure "unset-key" key is in self-originated cache.
     auto kvStoreCache = kvStore_->dumpAllSelfOriginated(kTestingAreaName);
-    EXPECT_EQ(1, kvStoreCache.contains(unsetKey));
+    EXPECT_TRUE(kvStoreCache.contains(unsetKey));
     EXPECT_EQ(valueBeforeUnset, *kvStoreCache.at(unsetKey).value.value());
 
     /** Unset one key. Check that unset key does NOT emit ttl updates. **/
@@ -708,7 +708,7 @@ TEST_F(KvStoreSelfOriginatedKeyValueRequestFixture, UnsetKeyValue) {
     EXPECT_TRUE(recVal.has_value());
     EXPECT_EQ(valueAfterUnset, *recVal.value().value());
     EXPECT_EQ(1, updatedCache.size());
-    EXPECT_EQ(0, updatedCache.contains(unsetKey));
+    EXPECT_FALSE(updatedCache.contains(unsetKey));
 
     // Receive ttl refresh publication for "set-key" (version 1).
     auto pubSetKeyTtlUpdate = kvStore_->recvPublication();
