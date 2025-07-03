@@ -211,14 +211,14 @@ class SimpleSparkFixture : public SparkFixture {
   checkCounters() {
     auto counters = fb303::fbData->getCounters();
     // Verify the counter keys exist
-    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg"));
-    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg.3600"));
-    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg.60"));
-    ASSERT_TRUE(counters.count("slo.neighbor_discovery.time_ms.avg.600"));
-    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg"));
-    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg.3600"));
-    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg.60"));
-    ASSERT_TRUE(counters.count("slo.neighbor_restart.time_ms.avg.600"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_discovery.time_ms.avg"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_discovery.time_ms.avg.3600"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_discovery.time_ms.avg.60"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_discovery.time_ms.avg.600"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_restart.time_ms.avg"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_restart.time_ms.avg.3600"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_restart.time_ms.avg.60"));
+    ASSERT_TRUE(counters.contains("slo.neighbor_restart.time_ms.avg.600"));
 
     // Neighbor discovery should be less than 3 secs
     ASSERT_GE(3000, counters["slo.neighbor_discovery.time_ms.avg"]);
@@ -1478,8 +1478,8 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     auto& maybeEvent2 = maybeEvents.value().back();
     events.emplace(maybeEvent2.remoteNodeName, maybeEvent2);
 
-    ASSERT_EQ(1, events.count(nodeName2));
-    ASSERT_EQ(1, events.count(nodeName3));
+    ASSERT_EQ(1, events.contains(nodeName2));
+    ASSERT_EQ(1, events.contains(nodeName3));
 
     auto event1 = events.at(nodeName2);
     EXPECT_EQ(iface1_2, event1.localIfName);
@@ -1801,8 +1801,8 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     auto& event2 = maybeEvents.value().back();
     events.emplace(event2.remoteNodeName, event2);
 
-    ASSERT_EQ(1, events.count(nodeName1));
-    ASSERT_EQ(1, events.count(nodeName2));
+    ASSERT_EQ(1, events.contains(nodeName1));
+    ASSERT_EQ(1, events.contains(nodeName2));
 
     auto event = events.at(nodeName1);
     EXPECT_EQ(iface3, event.localIfName);
