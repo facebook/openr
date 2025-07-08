@@ -302,10 +302,10 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   auto counters1 = openr1->getCounters();
   while (true) {
     if (counters1.find(cpuKey) != counters1.end()) {
-      EXPECT_EQ(counters1.contains(cpuKey), 1);
-      EXPECT_EQ(counters1.contains(cpuPeakKey), 1);
-      EXPECT_EQ(counters1.contains(memKey), 1);
-      EXPECT_EQ(counters1.contains(upTimeKey), 1);
+      EXPECT_TRUE(counters1.contains(cpuKey));
+      EXPECT_TRUE(counters1.contains(cpuPeakKey));
+      EXPECT_TRUE(counters1.contains(memKey));
+      EXPECT_TRUE(counters1.contains(upTimeKey));
       break;
     }
     counters1 = openr1->getCounters();
