@@ -46,6 +46,46 @@ enum SwitchRunState {
   EXITING = 4,
 }
 
+struct NextHopStatus {
+  // True if there is an open/r route that resolves the nexthop.
+  // False otherwise.
+  1: bool isReachable;
+  // If isReachable is true, this is the resolving route's distance.
+  2: optional i32 igpCost;
+}
+
+struct NextHopRegistrationRequest {
+  // List of nexthop IP addresseses to register.
+  // Each binary string contains the nexthop IP address bytes in network byte order.
+  // 4 bytes for IPv4, and 16 bytes for IPv6.
+  1: list<binary> nexthops;
+}
+
+struct NextHopRegistrationResponse {
+  // nexthop->status
+  // Each binary string contains the nexthop IP address bytes in network byte order.
+  // 4 bytes for IPv4, and 16 bytes for IPv6.
+  1: map<binary, NextHopStatus> nexthopStatuses;
+}
+
+struct NextHopDeregistrationRequest {
+  // List of nexthop IP addresseses to deregister.
+  // Each binary string contains the nexthop IP address bytes in network byte order.
+  // 4 bytes for IPv4, and 16 bytes for IPv6.
+  1: list<binary> nexthops;
+}
+
+struct NextHopDeregistrationResponse {}
+
+struct StreamNextHopStatusRequest {}
+
+struct StreamNextHopStatusResponse {
+  // nexthop->status
+  // Each binary string contains the nexthop IP address bytes in network byte order.
+  // 4 bytes for IPv4, and 16 bytes for IPv6.
+  1: map<binary, NextHopStatus> nexthopStatuses;
+}
+
 exception PlatformError {
   @thrift.ExceptionMessage
   1: string message;
@@ -146,6 +186,18 @@ service FibService extends fb303_core.BaseService {
   void sendNeighborDownInfo(1: list<string> neighborIp) throws (
     1: PlatformError error,
   );
+
+  NextHopRegistrationResponse registerNextHops(
+    NextHopRegistrationRequest req,
+  ) throws (1: PlatformError error);
+
+  NextHopDeregistrationResponse deregisterNextHops(
+    NextHopDeregistrationRequest req,
+  ) throws (1: PlatformError error);
+
+  stream<StreamNextHopStatusResponse> streamNextHopStatus(
+    StreamNextHopStatusRequest req,
+  ) throws (1: PlatformError error);
 }
 
 service NeighborListenerClientForFibagent {
