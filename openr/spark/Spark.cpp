@@ -2435,9 +2435,6 @@ Spark::updateGlobalCounters() {
       adjacentNeighborCount +=
           neighbor.state == thrift::SparkNeighState::ESTABLISHED;
       fb303::fbData->setCounter(
-          "spark.rtt_us." + neighbor.nodeName + "." + ifaceNeighbors.first,
-          neighbor.rtt.count());
-      fb303::fbData->setCounter(
           "spark.rtt_latest_us." + neighbor.nodeName,
           neighbor.rttLatest.count());
     }
