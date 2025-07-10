@@ -440,13 +440,13 @@ Config::toThriftKvStoreConfig() const {
   }
   auto thriftServer = getThriftServerConfig();
   if (auto x509_cert_path = thriftServer.x509_cert_path()) {
-    config.x509_cert_path() = *x509_cert_path;
+    config.x509_cert_path() = this->getSSLCertPath();
   }
   if (auto x509_key_path = thriftServer.x509_key_path()) {
-    config.x509_key_path() = *x509_key_path;
+    config.x509_key_path() = this->getSSLKeyPath();
   }
   if (auto x509_ca_path = thriftServer.x509_ca_path()) {
-    config.x509_ca_path() = *x509_ca_path;
+    config.x509_ca_path() = this->getSSLCaPath();
   }
   if (auto selfAdjTimeoutMs = oldConfig.self_adjacency_timeout_ms()) {
     config.self_adjacency_timeout_ms() = *oldConfig.self_adjacency_timeout_ms();
