@@ -544,7 +544,7 @@ NetlinkRouteMessage::parseMplsLabels(const struct rtattr* routeAttr) {
         pushLabels.emplace_back(ntohl(mplsLabels[i]) >> kLabelShift);
       }
       return pushLabels;
-    } break;
+    }
     }
     mplsAttr = RTA_NEXT(mplsAttr, mplsAttrLen);
   } while (RTA_OK(mplsAttr, mplsAttrLen));
