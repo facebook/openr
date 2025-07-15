@@ -324,10 +324,10 @@ TEST(RWQueueTest, CoroTest) {
   RWQueue<int> q;
   folly::ManualExecutor executor;
   for (size_t i = 0; i < kNumReaders; ++i) {
-    readerCoro(i, q, kCountPerWriter).scheduleOn(&executor).start();
+    co_withExecutor(&executor, readerCoro(i, q, kCountPerWriter)).start();
   }
   for (size_t i = 0; i < kNumWriters; ++i) {
-    writerCoro(i, q, kCountPerWriter).scheduleOn(&executor).start();
+    co_withExecutor(&executor, writerCoro(i, q, kCountPerWriter)).start();
   }
 
   executor.drain();
@@ -358,7 +358,7 @@ TEST(RQueueTest, ReadTest) {
   };
 
   folly::ManualExecutor executor;
-  coroRead(rq, 5).scheduleOn(&executor).start();
+  co_withExecutor(&executor, coroRead(rq, 5)).start();
   executor.drive();
   EXPECT_EQ(1, rwq->numPendingReads());
   EXPECT_EQ(0, rwq->size());
