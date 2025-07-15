@@ -9,25 +9,6 @@
 
 namespace openr {
 
-constexpr folly::StringPiece Constants::kAdjDbMarker;
-constexpr folly::StringPiece Constants::kDefaultArea;
-constexpr folly::StringPiece Constants::kEventLogCategory;
-constexpr folly::StringPiece Constants::kOpenrCtrlSessionContext;
-constexpr folly::StringPiece Constants::kPlatformHost;
-constexpr folly::StringPiece Constants::kPrefixDbMarker;
-constexpr folly::StringPiece Constants::kPrefixNameSeparator;
-constexpr folly::StringPiece Constants::kSparkMcastAddr;
-constexpr int32_t Constants::kDefaultPathPreference;
-constexpr int32_t Constants::kDefaultSourcePreference;
-constexpr int32_t Constants::kOpenrCtrlPort;
-constexpr int32_t Constants::kOpenrSupportedVersion;
-constexpr int32_t Constants::kOpenrVersion;
-constexpr int64_t Constants::kDefaultAdjWeight;
-constexpr int64_t Constants::kTtlInfinity;
-constexpr size_t Constants::kMaxFullSyncPendingCountThreshold;
-constexpr size_t Constants::kNumTimeSeries;
-constexpr std::chrono::milliseconds Constants::kAdjacencyThrottleTimeout;
-constexpr std::chrono::milliseconds Constants::kFibInitialBackoff;
 constexpr std::chrono::milliseconds Constants::kFibMaxBackoff;
 constexpr std::chrono::milliseconds Constants::kFloodPendingPublication;
 constexpr std::chrono::milliseconds Constants::kInitialBackoff;
