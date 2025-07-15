@@ -77,7 +77,11 @@ struct NextHopDeregistrationRequest {
 
 struct NextHopDeregistrationResponse {}
 
-struct StreamNextHopStatusRequest {}
+struct StreamNextHopStatusRequest {
+  // If true, FibAgent will stream nexthop status for all loopback
+  // routes even if there are no registered nexthops.
+  1: optional bool stream_all_loopbacks;
+}
 
 struct StreamNextHopStatusResponse {
   // nexthop->status
