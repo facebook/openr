@@ -5,15 +5,25 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-namespace cpp2 openr.thrift
-namespace go openr.OpenrConfig
-namespace py openr.OpenrConfig
-namespace py.asyncio openr.OpenrConfig
-namespace py3 openr.thrift
-namespace wiki Open_Routing.Thrift_APIs.OpenrConfig
-namespace hack OpenrConfig
+/* ------ WHY WE HAVE 2 VERSIONS OF SAME THRIFT, ONE WITH V2 ? ----------
+This file is a duplicate of the original OpenrConfig.thrift file, with all unspecified fields marked as optional.
+It has been created to facilitate a migration from Thrift-py to Thrift-python.The reason for this duplication is to address the non-backward
+compatible behavior of Thrift-python when handling unset unspecified fields, which differs from Thrift-py.
+See post for more details: https://fb.workplace.com/groups/netsystems.users/permalink/26099334936355108/:
 
-include "configerator/structs/neteng/config/routing_policy.thrift"
+Once the migration is complete, the original files will be replaced.(TODO: T223652622)
+-------------------------------------------------------- */
+
+namespace cpp2 openr.thrift
+namespace go openr.OpenrConfigV2
+namespace py openr.OpenrConfigV2
+namespace py.asyncio openr.OpenrConfigV2
+namespace py3 openr.thrift
+namespace wiki Open_Routing.Thrift_APIs.OpenrConfigV2
+namespace hack OpenrConfigV2
+
+# There is a difference here between fbcode and configerator paths, one is OSS the other is not
+include "configerator/structs/neteng/config/routing_policy_v2.thrift"
 include "configerator/structs/neteng/config/vip_service_config.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/thrift.thrift"
@@ -40,14 +50,9 @@ enum PrefixForwardingAlgorithm {
   KSP2_ED_ECMP = 1,
 }
 
-exception ConfigError {
-  @thrift.ExceptionMessage
-  1: string message;
-}
-
 struct KvstoreFloodRate {
-  1: i32 flood_msg_per_sec;
-  2: i32 flood_msg_burst_size;
+  1: optional i32 flood_msg_per_sec;
+  2: optional i32 flood_msg_burst_size;
 }
 
 @cpp.MinimizePadding
@@ -71,9 +76,9 @@ struct KvstoreConfig {
    * matches one of the prefixes in key_prefix_filters.
    */
   5: optional bool set_leaf_node;
-
   /**
-   * This comma separated string is set when requesting KEY_DUMP
+   * This comma separated string is used to set the key prefixes when key prefix
+   * filter is enabled (See set_leaf_node). It is also set when requesting KEY_DUMP
    * from peer to request keys that match one of these prefixes.
    */
   6: optional list<string> key_prefix_filters;
@@ -83,33 +88,11 @@ struct KvstoreConfig {
    */
   8: i32 sync_initial_backoff_ms = 4000;
   9: i32 sync_max_backoff_ms = 256000;
+
   10: optional i32 self_adjacency_timeout_ms;
 
   /* configuration of timeout before kvstore considered sync even when no peers learned */
   11: optional i32 kvstore_sync_timeout_ms;
-}
-
-/*
- * Enum to customize the best route selection algorithm amongst all areas. SHORTEST_DISTANCE is the default algorithm. PER_AREA_SHORTEST_DISTANCE will select both shortest and non shortest distance routes to help form non shortest path LSPs across areas
- */
-enum RouteSelectionAlgorithm {
-  /*
-   * In order of priority, selects the best routes with the best:
-   *  1) Path preference
-   *  2) Source preference
-   *  3) Distance
-   *
-   *  Default algorithm.
-   */
-  SHORTEST_DISTANCE = 0,
-
-  /*
-   * In order of priority, selects the best routes with the best:
-   *  1) Path preference
-   *  2) Source preference
-   *  3) Best distance for each area
-   */
-  PER_AREA_SHORTEST_DISTANCE = 2,
 }
 
 struct DecisionConfig {
@@ -205,7 +188,7 @@ struct SparkConfig {
    */
   6: i32 graceful_restart_time_s = 30;
 
-  7: StepDetectorConfig step_detector_conf;
+  7: optional StepDetectorConfig step_detector_conf;
 
   /**
    * The minimum time that must be elapsed, during Open/R Initialization process,
@@ -232,41 +215,6 @@ struct WatchdogConfig {
    * useful to guarantee protocol doesn’t cause trouble to other services on
    * device where it runs and takes care of slow memory leak kind of issues. */
   3: i32 max_memory_mb = 800;
-}
-
-struct MonitorConfig {
-  /** Max number for storing recent event logs. */
-  1: i32 max_event_log = 100;
-  /** If set, will enable Monitor::processEventLog() to submit the event logs. */
-  2: bool enable_event_log_submission = true;
-}
-
-struct MemoryProfilingConfig {
-  /** Knob to enable or disable memory profiling.
-      If enabled, it will dump the heap profile every heap_dump_interval_s second. */
-  1: bool enable_memory_profiling = false;
-  2: i32 heap_dump_interval_s = 300;
-}
-
-enum VerifyClientType {
-  // Request a cert and verify it. Fail if verification fails or no
-  // cert is presented
-  ALWAYS = 0,
-  // Request a cert from the peer and verify if one is presented.
-  // Will fail if verification fails.
-  // Do not fail if no cert is presented.
-  IF_PRESENTED = 1,
-  // No verification is done and no cert is requested.
-  DO_NOT_REQUEST = 2,
-}
-
-enum VerifyServerType {
-  // Server cert will be presented unless anon cipher,
-  // Verficiation will happen and a failure will result in termination
-  IF_PRESENTED = 0,
-  // Server cert will be presented unless anon cipher,
-  // Verification will happen but the result will be ignored
-  IGNORE_VERIFY_RESULT = 1,
 }
 
 struct ThriftServerConfig {
@@ -355,16 +303,51 @@ struct ThriftServerConfig {
   15: optional bool substitute_x509_paths_from_env;
 }
 
+struct MonitorConfig {
+  /** Max number for storing recent event logs. */
+  1: i32 max_event_log = 100;
+  /** If set, will enable Monitor::processEventLog() to submit the event logs. */
+  2: bool enable_event_log_submission = true;
+}
+
+struct MemoryProfilingConfig {
+  /** Knob to enable or disable memory profiling.
+      If enabled, it will dump the heap profile every heap_dump_interval_s second. */
+  1: bool enable_memory_profiling = false;
+  2: i32 heap_dump_interval_s = 300;
+}
+
+enum VerifyClientType {
+  // Request a cert and verify it. Fail if verification fails or no
+  // cert is presented
+  ALWAYS = 0,
+  // Request a cert from the peer and verify if one is presented.
+  // Will fail if verification fails.
+  // Do not fail if no cert is presented.
+  IF_PRESENTED = 1,
+  // No verification is done and no cert is requested.
+  DO_NOT_REQUEST = 2,
+}
+
+enum VerifyServerType {
+  // Server cert will be presented unless anon cipher,
+  // Verficiation will happen and a failure will result in termination
+  IF_PRESENTED = 0,
+  // Server cert will be presented unless anon cipher,
+  // Verification will happen but the result will be ignored
+  IGNORE_VERIFY_RESULT = 1,
+}
+
 struct ThriftClientConfig {
   /** Knob to enable/disable TLS thrift client. */
   1: bool enable_secure_thrift_client = false;
   /** Verify type for server when enabling secure client. */
-  2: VerifyServerType verify_server_type;
+  2: optional VerifyServerType verify_server_type;
 }
 
 @cpp.MinimizePadding
 struct OriginatedPrefix {
-  1: string prefix;
+  1: optional string prefix;
 
   2: PrefixForwardingType forwardingType = PrefixForwardingType.IP;
 
@@ -462,16 +445,16 @@ struct OriginatedPrefix {
 
 @cpp.MinimizePadding
 struct AreaConfig {
-  1: string area_id;
-  3: list<string> neighbor_regexes;
-  4: list<string> include_interface_regexes;
-  5: list<string> exclude_interface_regexes;
+  1: optional string area_id;
+  3: optional list<string> neighbor_regexes;
+  4: optional list<string> include_interface_regexes;
+  5: optional list<string> exclude_interface_regexes;
 
   /**
    * Comma-separated list of interface regexes whose addresses will be
    * advertised to this area
    */
-  6: list<string> redistribute_interface_regexes;
+  6: optional list<string> redistribute_interface_regexes;
 
   /**
    * Area import policy, applied when a route enters this area
@@ -481,7 +464,7 @@ struct AreaConfig {
 
 @cpp.MinimizePadding
 struct OpenrConfig {
-  1: string node_name;
+  1: optional string node_name;
   3: list<AreaConfig> areas = [];
 
   /** Thrift Server - Bind dddress */
@@ -504,20 +487,18 @@ struct OpenrConfig {
    */
   8: optional bool enable_netlink_fib_handler;
 
-  /* [TO_BE_DEPRECATED] */
   11: PrefixForwardingType prefix_forwarding_type = PrefixForwardingType.IP;
   12: PrefixForwardingAlgorithm prefix_forwarding_algorithm = PrefixForwardingAlgorithm.SP_ECMP;
 
   /**
    * Enables segment routing feature. Currently, it only elects node/adjacency labels.
-   * [TO_BE_DEPRECATED]
    */
   13: optional bool enable_segment_routing;
 
   # Config for different modules
-  15: KvstoreConfig kvstore_config;
-  16: LinkMonitorConfig link_monitor_config;
-  17: SparkConfig spark_config;
+  15: optional KvstoreConfig kvstore_config;
+  16: optional LinkMonitorConfig link_monitor_config;
+  17: optional SparkConfig spark_config;
 
   /**
    * Enable watchdog thread to periodically check aliveness counters from each
@@ -527,7 +508,7 @@ struct OpenrConfig {
   19: optional WatchdogConfig watchdog_config;
 
   /** TCP port on which FibService will be listening. */
-  23: i32 fib_port;
+  23: optional i32 fib_port;
 
   /**
    * Enables `RibPolicy` for computed routes. This knob allows thrift APIs to
@@ -537,7 +518,7 @@ struct OpenrConfig {
   24: bool enable_rib_policy = 0;
 
   /** Config for monitor module. */
-  25: MonitorConfig monitor_config;
+  25: optional MonitorConfig monitor_config;
 
   /**
    * RFC5549 -- IPv4 reachability over IPv6 nexthop
@@ -547,7 +528,7 @@ struct OpenrConfig {
   /**
    * Config for `decision` module
    */
-  29: DecisionConfig decision_config;
+  29: optional DecisionConfig decision_config;
 
   /**
    * Mark control plane traffic with specified IP-TOS value.
@@ -564,12 +545,12 @@ struct OpenrConfig {
   /**
    * area policy definitions
    */
-  32: optional routing_policy.PolicyConfig area_policies;
+  32: optional routing_policy_v2.PolicyConfig area_policies;
 
   /**
    * Config for thrift server.
    */
-  33: ThriftServerConfig thrift_server;
+  33: optional ThriftServerConfig thrift_server;
 
   /**
    * Config for thrift client. If no config provided,
@@ -663,9 +644,9 @@ struct OpenrConfig {
    */
   106: bool enable_clear_fib_state = false;
   /**
-   * ATTN: All of the temp config knobs serving for gradual rollout purpose use
-   * id range of 200 - 300
-   */
+ * ATTN: All of the temp config knobs serving for gradual rollout purpose use
+ * id range of 200 - 300
+ */
 
   /**
    * This flag indicates to enable OpenR initialization improvements
