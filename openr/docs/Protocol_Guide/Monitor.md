@@ -44,11 +44,9 @@ runs as an independent thread, which inherits from
 They mainly provide the following functions:
 
 - Calculate and update the Open/R process metric counters, including:
-
   1. Open/R process uptime (in second);
   2. Resident set size (RSS) of memory that Open/R process used (in Byte);
   3. CPU percentage the Open/R process currently used;
-
   - Details about how to calculate RSS and CPU%:
     [SystemMetrics](https://github.com/facebook/openr/blob/master/openr/monitor/SystemMetrics.cpp)
 

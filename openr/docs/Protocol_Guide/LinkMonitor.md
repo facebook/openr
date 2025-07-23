@@ -56,14 +56,12 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
 Typical workflow at a high level will be:
 
 - Link **UP**:
-
   - `LinkMonitor` receives interface updates and expands the interface database.
     It will update `Spark` for neighbor discovery work.
   - `Spark` sends back UP adjacency if any, which leads to adjacency key-value
     population towards `KvStore`.
 
 - Link **DOWN**:
-
   - `LinkMonitor` receives interface update and shrinks interface database.
     `Spark` will be updated and all established adjacency will be dropped.
     Finally, the neighbor DOWN event will be reported back;
