@@ -289,8 +289,8 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
     rssMemInUse = counters2[memKey] / 1e6;
   }
 
-  uint32_t memLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
-  auto openr1 = createOpenr("1", v4Enabled, memLimitMB);
+  uint32_t testMemLimitMB = static_cast<uint32_t>(rssMemInUse) + 500;
+  auto openr1 = createOpenr("1", v4Enabled, testMemLimitMB);
   openr1->run();
 
   /* sleep override */
@@ -315,12 +315,12 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   // catches the over the limit condition
   uint32_t memUsage = static_cast<uint32_t>(counters1[memKey] / 1e6);
 
-  if (memUsage < memLimitMB) {
+  if (memUsage < testMemLimitMB) {
     EXPECT_FALSE(openr1->watchdog->memoryLimitExceeded());
-    uint32_t allocMem = memLimitMB - memUsage + 10;
+    uint32_t allocMem = testMemLimitMB - memUsage + 10;
 
     LOG(INFO) << "Allocating:" << allocMem << ", Mem in use:" << memUsage
-              << ", Memory limit:" << memLimitMB << "MB";
+              << ", Memory limit:" << testMemLimitMB << "MB";
     vector<int8_t> v((allocMem) * 0x100000);
     fill(v.begin(), v.end(), 1);
     /* sleep override */
