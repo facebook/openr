@@ -8,8 +8,10 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <folly/coro/BlockingWait.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
+#include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/Types.h>
@@ -2596,7 +2598,6 @@ checkPublications(thrift::Publication& expected, thrift::Publication& actual) {
 // stream is updated accordingly. We also verify that when key expires, we
 // stream it to subscribers.
 TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
-#pragma region Data
   std::string kNewEntry = "newEntry";
   std::string kEntry1 = "key1";
   std::string kEntry2 = "key2";
@@ -2606,107 +2607,70 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
       {kEntry1, createThriftValue(1, "node1", std::string("value1"), 1000)},
       {kEntry2, createThriftValue(1, "node1", std::string("value2"), 3000)},
   });
-  std::atomic<int> received{0};
-#pragma endregion Data
 
-#pragma region Setup
   setKvStoreKeyVals(kvs, kSpineAreaId);
 
-  auto responseAndSubscription =
-      handler_
-          ->semifuture_subscribeAndGetAreaKvStores(
-              std::make_unique<thrift::KeyDumpParams>(),
-              std::make_unique<std::set<std::string>>(kSpineOnlySet))
+  // Get AsyncGenerator to process handler client stream response.
+  thrift::KeyDumpParams params;
+  auto ssit = std::make_unique<apache::thrift::ScopedServerInterfaceThread>(
+      handler_, "::1", 0);
+  auto client =
+      ssit->newClient<apache::thrift::Client<openr::thrift::OpenrCtrlCpp>>();
+  auto responseAndStream =
+      client->semifuture_subscribeAndGetAreaKvStores(params, kSpineOnlySet)
           .get();
 
-  checkKvs(kvs, *responseAndSubscription.response.begin()->keyVals());
+  auto gen = std::move(responseAndStream.stream).toAsyncGenerator();
+
+  auto lUpdateExpectedDeltas =
+      [&](const std::string& entry,
+          const thrift::Value& val,
+          std::vector<thrift::Publication>& expectedDeltas) {
+        thrift::Publication p;
+        p.keyVals()->insert({entry, val});
+        p.area() = kSpineAreaId;
+        expectedDeltas.emplace_back(p);
+      };
 
   std::vector<thrift::Publication> expectedDeltas;
-  auto subscription =
-      std::move(responseAndSubscription.stream)
-          .toClientStreamUnsafeDoNotUse()
-          .subscribeExTry(
-              folly::getEventBase(),
-              [&received, handler = handler_, &expectedDeltas](auto&& t) {
-                if (!t.hasValue()) {
-                  return;
-                }
-                auto& pub = *t;
-                XLOG(INFO) << fmt::format(
-                    "Check publication for update: {}.",
-                    std::to_string(received));
-                checkPublications(expectedDeltas[received], pub);
-                received++;
-              });
-  EXPECT_EQ(1, handler_->getNumKvStorePublishers());
-#pragma endregion Setup
 
-#pragma region StreamUpdate
-  // new key, received = 0
+  // New key
   auto val0 = createThriftValue(1, "node1", std::string("value1"), 30000);
   kvStoreWrapper_->setKey(kSpineAreaId, kNewEntry, val0, std::nullopt);
-  {
-    thrift::Publication p;
-    p.keyVals()->insert({kNewEntry, val0});
-    p.area() = kSpineAreaId;
-    expectedDeltas.emplace_back(p);
-  }
+  lUpdateExpectedDeltas(kNewEntry, val0, expectedDeltas);
 
-  // existing value update, received = 1
-
+  // Existing value update
   auto val1 = createThriftValue(2, "node1", std::string("value22"), 3000);
   kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val1, std::nullopt);
-  {
-    thrift::Publication p;
-    p.keyVals()->insert({kEntry2, val1});
-    p.area() = kSpineAreaId;
-    expectedDeltas.emplace_back(p);
-  }
+  lUpdateExpectedDeltas(kEntry2, val1, expectedDeltas);
 
-  // updating version only, received = 2
+  // Existing value update
   auto val2 = createThriftValue(3, "node1", std::string("value2"), 3000);
   kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val2, std::nullopt);
-  {
-    thrift::Publication p;
-    p.keyVals()->insert({kEntry2, val2});
-    p.area() = kSpineAreaId;
-    expectedDeltas.emplace_back(p);
-  }
+  lUpdateExpectedDeltas(kEntry2, val2, expectedDeltas);
 
+  // Updating version only
   auto val3 = createThriftValue(3, "node1", std::string("value2"), 3000, 100);
   kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val3, std::nullopt);
-  {
-    thrift::Publication p;
-    p.keyVals()->insert({kEntry2, val3});
-    p.area() = kSpineAreaId;
-    expectedDeltas.emplace_back(p);
-  }
+  lUpdateExpectedDeltas(kEntry2, val3, expectedDeltas);
 
-#pragma endregion StreamUpdate
+  // key1 expired
+  thrift::Publication p;
+  p.expiredKeys()->emplace_back(kEntry1);
+  p.area() = kSpineAreaId;
+  expectedDeltas.emplace_back(p);
 
-#pragma region FinalCheck
-  {
-    // key1 expired
-    thrift::Publication p;
-    p.expiredKeys()->emplace_back(kEntry1);
-    p.area() = kSpineAreaId;
-    expectedDeltas.emplace_back(p);
+  // Check the values from the AsyncGenerator of the client stream in order.
+  int verifiedIdx = 0;
+  while (auto pub = folly::coro::blockingWait(gen.next())) {
+    if (verifiedIdx >= expectedDeltas.size()) {
+      break;
+    }
+    auto pubVal = *pub;
+    checkPublications(expectedDeltas[verifiedIdx++], pubVal);
   }
-  // Check we should receive 1 updates in kSpineAreaId
-  while (received < 1) {
-    std::this_thread::yield();
-  }
-#pragma endregion FinalCheck
-
-#pragma region Cleanup
-  subscription.cancel();
-  std::move(subscription).detach();
-
-  // Wait until publisher is destroyed
-  while (handler_->getNumKvStorePublishers() != 0) {
-    std::this_thread::yield();
-  }
-#pragma endregion Cleanup
+  // Verify that all expected publications were checked.
+  EXPECT_EQ(verifiedIdx, expectedDeltas.size());
 }
 
 int
