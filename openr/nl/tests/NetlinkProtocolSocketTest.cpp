@@ -1879,7 +1879,7 @@ TEST_F(NlMessageFixture, LinkFlapScaleTest) {
       auto req = netlinkEventsReader.get(); // perform read
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* link = std::get_if<Link>(&req.value())) {
+      if (std::get_if<Link>(&req.value())) {
         --cnt;
       }
     }
