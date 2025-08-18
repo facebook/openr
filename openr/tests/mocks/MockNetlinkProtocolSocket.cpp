@@ -47,6 +47,21 @@ createIfAddress(const int ifIndex, const std::string& addrMask) {
   return builder.build();
 }
 
+fbnl::Neighbor
+createNeighbor(
+    const int ifIndex,
+    const int state,
+    const bool deleted,
+    const folly::IPAddress& dest,
+    const folly::MacAddress& linkAddress) {
+  fbnl::NeighborBuilder builder;
+  builder.setIfIndex(ifIndex);
+  builder.setState(state, deleted);
+  builder.setDestination(dest);
+  builder.setLinkAddress(linkAddress);
+  return builder.build();
+}
+
 } // namespace utils
 
 MockNetlinkProtocolSocket::MockNetlinkProtocolSocket(folly::EventBase* evb)
@@ -199,15 +214,35 @@ MockNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
 MockNetlinkProtocolSocket::getAllLinks() {
   std::vector<fbnl::Link> links;
+  links.reserve(links.size());
   for (auto& [_, link] : links_) {
     links.emplace_back(link);
   }
   return links;
 }
 
+folly::SemiFuture<int>
+MockNetlinkProtocolSocket::addNeighbor(const fbnl::Neighbor& nbr) {
+  // Add or update neighbor
+  nbrs_.insert_or_assign(nbr.getIfIndex(), nbr);
+
+  // Create entry in ifAddr_ for nbr if doesn't exists
+  ifAddrs_.emplace(nbr.getIfIndex(), std::list<fbnl::IfAddress>());
+
+  // Publish update via queue
+  netlinkEventsQueue_.push(nbr);
+
+  return folly::SemiFuture<int>(0);
+}
+
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
 MockNetlinkProtocolSocket::getAllNeighbors() {
-  return std::vector<fbnl::Neighbor>();
+  std::vector<fbnl::Neighbor> neighbors;
+  neighbors.reserve(nbrs_.size());
+  for (auto& [_, neighbor] : nbrs_) {
+    neighbors.emplace_back(neighbor);
+  }
+  return neighbors;
 }
 
 } // namespace openr::fbnl

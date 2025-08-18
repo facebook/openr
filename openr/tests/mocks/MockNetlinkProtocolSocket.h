@@ -28,6 +28,14 @@ fbnl::Link createLink(
 
 fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
 
+fbnl::Neighbor createNeighbor(
+    const int ifIndex,
+    const int state,
+    const bool deleted = false,
+    const folly::IPAddress& dest = folly::IPAddress{"fc00:cafe:3::3"},
+    const folly::MacAddress& linkAddress = folly::MacAddress{
+        "aa:bb:cc:dd:ee:ff"});
+
 } // namespace utils
 
 /**
@@ -46,6 +54,11 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
    * API to create links for testing purposes
    */
   folly::SemiFuture<int> addLink(const fbnl::Link& link);
+
+  /**
+   * API to create neighbors for testing purposes
+   */
+  folly::SemiFuture<int> addNeighbor(const fbnl::Neighbor& nbr);
 
   /**
    * Overrides API of NetlinkProtocolSocket for testing
@@ -98,6 +111,10 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
   // map<ifIndex -> list<IfAddress>>
   // NOTE: using map for ordered entries
   std::map<int, std::list<fbnl::IfAddress>> ifAddrs_;
+
+  // map<ifIndex -> list<Neighbor>>
+  // NOTE: using map for ordered entries
+  std::map<int, fbnl::Neighbor> nbrs_;
 
   // map<protocolId -> map<prefix/label, Route>
   // NOTE: using map for ordered entries
