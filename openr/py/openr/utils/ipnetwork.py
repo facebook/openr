@@ -68,35 +68,6 @@ def ip_str_to_addr(addr_str: str, if_index: str | None = None) -> BinaryAddress:
     return BinaryAddress(addr=addr, ifName=if_index)
 
 
-# to be deprecated
-def ip_str_to_addr_py(
-    addr_str: str, if_index: str | None = None
-) -> network_types.BinaryAddress:
-    """
-    :param addr_str: ip address in string representation
-
-    :returns: thrift-py struct BinaryAddress
-    :rtype: network_types.BinaryAddress
-    """
-
-    # Try v4
-    try:
-        addr = socket.inet_pton(socket.AF_INET, addr_str)
-        binary_address = network_types.BinaryAddress(addr=addr)
-        if if_index:
-            binary_address.ifName = if_index
-        return binary_address
-    except OSError:
-        pass
-
-    # Try v6
-    addr = socket.inet_pton(socket.AF_INET6, addr_str)
-    binary_address = network_types.BinaryAddress(addr=addr)
-    if if_index:
-        binary_address.ifName = if_index
-    return binary_address
-
-
 def ip_str_to_prefix(prefix_str: str) -> IpPrefix:
     """
     :param prefix_str: string representing a prefix (CIDR network)
@@ -107,21 +78,6 @@ def ip_str_to_prefix(prefix_str: str) -> IpPrefix:
 
     ip_str, ip_len_str = prefix_str.split("/")
     return IpPrefix(prefixAddress=ip_str_to_addr(ip_str), prefixLength=int(ip_len_str))
-
-
-# to be deprecated
-def ip_str_to_prefix_py(prefix_str: str) -> network_types.IpPrefix:
-    """
-    :param prefix_str: string representing a prefix (CIDR network)
-
-    :returns: thrift-py struct IpPrefix
-    :rtype: network_types.IpPrefix
-    """
-
-    ip_str, ip_len_str = prefix_str.split("/")
-    return network_types.IpPrefix(
-        prefixAddress=ip_str_to_addr_py(ip_str), prefixLength=int(ip_len_str)
-    )
 
 
 def ip_nexthop_to_nexthop_thrift(
