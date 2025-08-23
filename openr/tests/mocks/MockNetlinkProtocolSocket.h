@@ -26,7 +26,8 @@ fbnl::Link createLink(
     bool isUp = true,
     bool isLoopback = false);
 
-fbnl::IfAddress createIfAddress(const int ifIndex, const std::string& addrMask);
+fbnl::IfAddress createIfAddress(
+    const int ifIndex, const std::string& addrMask, const bool isValid = false);
 
 fbnl::Neighbor createNeighbor(
     const int ifIndex,

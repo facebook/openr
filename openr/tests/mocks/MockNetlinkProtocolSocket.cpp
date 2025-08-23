@@ -32,7 +32,8 @@ createLink(
 }
 
 fbnl::IfAddress
-createIfAddress(const int ifIndex, const std::string& addrMask) {
+createIfAddress(
+    const int ifIndex, const std::string& addrMask, const bool isValid) {
   const auto network = folly::IPAddress::createNetwork(addrMask, -1, false);
   fbnl::IfAddressBuilder builder;
   builder.setIfIndex(ifIndex);
@@ -44,6 +45,7 @@ createIfAddress(const int ifIndex, const std::string& addrMask) {
   } else {
     builder.setScope(RT_SCOPE_UNIVERSE);
   }
+  builder.setValid(isValid);
   return builder.build();
 }
 
