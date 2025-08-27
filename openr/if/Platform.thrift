@@ -90,6 +90,21 @@ struct StreamNextHopStatusResponse {
   1: map<binary, NextHopStatus> nexthopStatuses;
 }
 
+struct ConnectedNextHopStatus {
+  // Next Hop IP address
+  1: binary remoteAddress;
+  // Next Hop Interface name
+  2: optional string interfaceName;
+  // status of whether nexthop is reachable or not
+  3: bool isReachable;
+}
+
+struct ConnectedNextHopStatusRequest {
+  1: list<ConnectedNextHopStatus> nextHopStatuses;
+}
+
+struct ConnectedNextHopStatusResponse {}
+
 exception PlatformError {
   @thrift.ExceptionMessage
   1: string message;
@@ -201,6 +216,10 @@ service FibService extends fb303_core.BaseService {
 
   stream<StreamNextHopStatusResponse> streamNextHopStatus(
     StreamNextHopStatusRequest req,
+  ) throws (1: PlatformError error);
+
+  ConnectedNextHopStatusResponse updateConnectedNextHopStatus(
+    ConnectedNextHopStatusRequest request,
   ) throws (1: PlatformError error);
 }
 
