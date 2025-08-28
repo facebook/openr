@@ -16,6 +16,7 @@ namespace hack OpenrConfig
 include "configerator/structs/neteng/config/routing_policy.thrift"
 include "configerator/structs/neteng/config/vip_service_config.thrift"
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/python.thrift"
 include "thrift/annotation/thrift.thrift"
 
 enum PrefixForwardingType {
@@ -387,6 +388,7 @@ struct OriginatedPrefix {
    * Set of tags associated with this route. This is meta-data and intends to be
    * used by Policy. NOTE: There is no ordering on tags.
    */
+  @python.DeprecatedSortSetOnSerialize
   8: optional set<string> tags;
 
   /** To interact with BGP, area prepending is needed. */
