@@ -84,18 +84,14 @@ def ip_str_to_addr_py(
     # Try v4
     try:
         addr = socket.inet_pton(socket.AF_INET, addr_str)
-        binary_address = network_types.BinaryAddress(addr=addr)
-        if if_index:
-            binary_address.ifName = if_index
+        binary_address = network_types.BinaryAddress(addr=addr, ifName=if_index or None)
         return binary_address
     except OSError:
         pass
 
     # Try v6
     addr = socket.inet_pton(socket.AF_INET6, addr_str)
-    binary_address = network_types.BinaryAddress(addr=addr)
-    if if_index:
-        binary_address.ifName = if_index
+    binary_address = network_types.BinaryAddress(addr=addr, ifName=if_index or None)
     return binary_address
 
 
