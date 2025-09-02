@@ -94,7 +94,7 @@ std::optional<NeighborEvents>
 SparkWrapper::recvNeighborEvent(
     std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
-  while (not neighborUpdatesReader_.size()) {
+  while (!neighborUpdatesReader_.size()) {
     // Break if timeout occurs
     auto now = std::chrono::steady_clock::now();
     if (timeout.has_value() && now - startTime > timeout.value()) {
@@ -152,7 +152,7 @@ std::optional<thrift::InitializationEvent>
 SparkWrapper::recvInitializationEvent(
     std::optional<std::chrono::milliseconds> timeout) {
   auto startTime = std::chrono::steady_clock::now();
-  while (not neighborUpdatesReader_.size()) {
+  while (!neighborUpdatesReader_.size()) {
     // Break if timeout occurs.
     auto now = std::chrono::steady_clock::now();
     if (timeout.has_value() && now - startTime > timeout.value()) {

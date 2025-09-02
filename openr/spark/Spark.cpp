@@ -201,9 +201,9 @@ Spark::SparkNeighbor::SparkNeighbor(
           samplingPeriod /* sampling period */,
           rttChangeCb /* callback function */),
       area(adjArea) {
-  CHECK(not this->nodeName.empty());
-  CHECK(not this->localIfName.empty());
-  CHECK(not this->remoteIfName.empty());
+  CHECK(!this->nodeName.empty());
+  CHECK(!this->localIfName.empty());
+  CHECK(!this->remoteIfName.empty());
 }
 
 thrift::SparkNeighbor
@@ -248,12 +248,12 @@ bool
 Spark::SparkNeighbor::shouldResetAdjacency(
     const thrift::SparkHeartbeatMsg& heartbeatMsg) {
   // Skip resetting if adjacency is NOT on hold.
-  if (not this->adjOnlyUsedByOtherNode) {
+  if (!this->adjOnlyUsedByOtherNode) {
     return false;
   }
 
   // Honor the `holdAdjacency` flag from `SparkHeartbeatMsg`
-  return not *heartbeatMsg.holdAdjacency();
+  return !*heartbeatMsg.holdAdjacency();
 }
 
 Spark::Spark(
@@ -360,7 +360,7 @@ Spark::Spark(
         break;
       }
 
-      if (not initialInterfacesReceived_) {
+      if (!initialInterfacesReceived_) {
         // Set up min-max interval related timers that control when Spark can
         // publish the NEIGHBOR_DISCOVERED signal to LinkMonitor. The min
         // interval is a lower bound that must elapse before considering
@@ -614,7 +614,7 @@ Spark::sanityCheckMsg(
 bool
 Spark::shouldProcessPacket(
     std::string const& ifName, folly::IPAddress const& addr) {
-  if (not maybeMaxAllowedPps_.has_value()) {
+  if (!maybeMaxAllowedPps_.has_value()) {
     return true; // no rate limit
   }
 
@@ -677,7 +677,7 @@ Spark::parsePacket(
   // update counters for total size of packets received
   fb303::fbData->addStatValue("spark.packet_recv_size", bytesRead, fb303::SUM);
 
-  if (not shouldProcessPacket(ifName, clientAddr.getIPAddress())) {
+  if (!shouldProcessPacket(ifName, clientAddr.getIPAddress())) {
     XLOG(ERR) << fmt::format(
         "Dropping pkt due to rate limiting on iface: {} from addr: {}",
         ifName,
@@ -1000,7 +1000,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   heartbeatMsg.holdAdjacency() = false;
   // ATTN: notify peer to set special adjacency flag when node is still within
   // initialization procedure
-  heartbeatMsg.holdAdjacency() = (not initialized_);
+  heartbeatMsg.holdAdjacency() = (!initialized_);
 
   thrift::SparkHelloPacket pkt;
   pkt.heartbeatMsg() = std::move(heartbeatMsg);
@@ -1149,7 +1149,7 @@ Spark::getNeighbors() {
  */
 bool
 Spark::allNeighborsDiscovered() {
-  return (numActiveNeighbors_ == numTotalNeighbors_) and
+  return (numActiveNeighbors_ == numTotalNeighbors_) &&
       (numActiveNeighbors_ > 0);
 }
 
@@ -1265,8 +1265,8 @@ Spark::neighborUpWrapper(
  */
 bool
 Spark::isInitialNeighborDiscoveryComplete() {
-  return maxNeighborDiscoveryIntervalTimer_->isScheduled() and
-      not minNeighborDiscoveryIntervalTimer_->isScheduled() and
+  return maxNeighborDiscoveryIntervalTimer_->isScheduled() &&
+      ! minNeighborDiscoveryIntervalTimer_->isScheduled() &&
       allNeighborsDiscovered();
 }
 // clang-format on
@@ -1559,7 +1559,7 @@ Spark::processHelloMsg(
     //       To avoid running area deducing logic for every single helloMsg,
     //       ONLY deduce for unknown neighbors.
     auto areaId = getNeighborArea(neighborName, ifName, config_->getAreas());
-    if (not areaId.has_value()) {
+    if (!areaId.has_value()) {
       return;
     }
 
@@ -1808,7 +1808,7 @@ Spark::processHandshakeMsg(
   //       state will fall back from NEGOTIATE => WARM.
   //       Node should NOT ask for handshakeMsg reply to
   //       avoid infinite loop of pkt between nodes.
-  if (not(*handshakeMsg.isAdjEstablished())) {
+  if (!(*handshakeMsg.isAdjEstablished())) {
     sendHandshakeMsg(
         ifName,
         neighborName,
@@ -1848,7 +1848,7 @@ Spark::processHandshakeMsg(
 
   // v4 subnet validation if v4 is enabled. If we're using v4-over-v6 we no
   // longer need to validate the address reported by neighbor node
-  if (enableV4_ and not v4OverV6Nexthop_) {
+  if (enableV4_ && !v4OverV6Nexthop_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(ifName, *handshakeMsg.transportAddressV4())) {
       // state transition
@@ -2206,14 +2206,14 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
     const auto v4Networks = info.getSortedV4Addrs();
     const auto v6LinkLocalNetworks = info.getSortedV6LinkLocalAddrs();
 
-    if (not info.isUp) {
+    if (!info.isUp) {
       continue;
     }
     if (v6LinkLocalNetworks.empty()) {
       XLOG(DBG2) << "IPv6 link local address not found";
       continue;
     }
-    if (enableV4_ and v4Networks.empty()) {
+    if (enableV4_ && v4Networks.empty()) {
       XLOG(DBG2) << "IPv4 enabled but no IPv4 addresses are configured";
       continue;
     }
@@ -2275,14 +2275,14 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
       XLOG(INFO) << "Neighbor " << neighborName << " removed due to iface "
                  << ifName << " down";
 
-      CHECK(not neighbor.nodeName.empty());
-      CHECK(not neighbor.remoteIfName.empty());
+      CHECK(!neighbor.nodeName.empty());
+      CHECK(!neighbor.remoteIfName.empty());
 
       // Spark will NOT notify neighbor DOWN event in following cases:
       //    1). v6Addr is empty for this neighbor;
       //    2). v4 enabled and v4Addr is empty for this neighbor;
       if (neighbor.transportAddressV6.addr()->empty() ||
-          ((enableV4_ and not v4OverV6Nexthop_) &&
+          ((enableV4_ && !v4OverV6Nexthop_) &&
            neighbor.transportAddressV4.addr()->empty())) {
         continue;
       }

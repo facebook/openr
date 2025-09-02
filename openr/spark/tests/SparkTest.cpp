@@ -176,7 +176,7 @@ class SimpleSparkFixture : public SparkFixture {
     // Now wait for sparks to detect each other
     {
       auto events = node1_->waitForEvents(NB_UP);
-      ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
       auto& event = events.value().back();
       EXPECT_EQ(iface1, event.localIfName);
       EXPECT_EQ(nodeName2_, event.remoteNodeName);
@@ -192,7 +192,7 @@ class SimpleSparkFixture : public SparkFixture {
 
     {
       auto events = node2_->waitForEvents(NB_UP);
-      ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
       auto& event = events.value().back();
       EXPECT_EQ(iface2, event.localIfName);
       EXPECT_EQ(nodeName1_, event.remoteNodeName);
@@ -422,7 +422,7 @@ TEST_F(SimpleSparkFixture, ForceGRMsgTest) {
   {
     auto events1 = node1_->waitForEvents(NB_RESTARTING);
     auto neighState1 = node1_->getSparkNeighState(iface1, nodeName2_);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(iface1, event1.localIfName);
     EXPECT_TRUE(nodeName2_ == event1.remoteNodeName);
@@ -435,7 +435,7 @@ TEST_F(SimpleSparkFixture, ForceGRMsgTest) {
   {
     auto events2 = node2_->waitForEvents(NB_RESTARTING);
     auto neighState2 = node2_->getSparkNeighState(iface2, nodeName1_);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(iface2, event2.localIfName);
     EXPECT_TRUE(nodeName1_ == event2.remoteNodeName);
@@ -465,7 +465,7 @@ TEST_F(SimpleSparkFixture, RttTest) {
   // wait for spark nodes to detecct Rtt change
   {
     auto events = node1_->waitForEvents(NB_RTT_CHANGE);
-    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    ASSERT_TRUE(events.has_value() && events.value().size() == 1);
     auto& event = events.value().back();
 
     // Margin of error - 25% tolerance
@@ -485,7 +485,7 @@ TEST_F(SimpleSparkFixture, RttTest) {
 
   {
     auto events = node2_->waitForEvents(NB_RTT_CHANGE);
-    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    ASSERT_TRUE(events.has_value() && events.value().size() == 1);
     auto& event = events.value().back();
     // Margin of error - 25% tolerance
     auto rtt = event.rttUs;
@@ -823,7 +823,7 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
   // with wrapped seqNum
   {
     auto events = node1_->waitForEvents(NB_RESTARTED);
-    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    ASSERT_TRUE(events.has_value() && events.value().size() == 1);
     auto& event = events.value().back();
     EXPECT_EQ(iface1, event.localIfName);
     EXPECT_EQ(nodeName2_, event.remoteNodeName);
@@ -839,7 +839,7 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
   // node-2 should ultimately report node-1 as 'UP'
   {
     auto events = node2_->waitForEvents(NB_UP);
-    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    ASSERT_TRUE(events.has_value() && events.value().size() == 1);
     auto& event = events.value().back();
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeName1_, event.remoteNodeName);
@@ -1265,7 +1265,7 @@ TEST_F(SparkFixture, ReadConfigTest) {
   // Validate the config content from peer
   {
     auto events = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    ASSERT_TRUE(events.has_value() && events.value().size() == 1);
     auto& event = events.value().back();
     EXPECT_EQ(iface1, event.localIfName);
     EXPECT_EQ(nodeStark, event.remoteNodeName);
@@ -1276,7 +1276,7 @@ TEST_F(SparkFixture, ReadConfigTest) {
 
   {
     auto events = node2->waitForEvents(NB_UP);
-    ASSERT_TRUE(events.has_value() and events.value().size() == 1);
+    ASSERT_TRUE(events.has_value() && events.value().size() == 1);
     auto& event = events.value().back();
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeLannister, event.remoteNodeName);
@@ -1470,11 +1470,11 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
 
     // Gather the two distinct event with 1 neighbor each.
     auto maybeEvents = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& maybeEvent1 = maybeEvents.value().back();
     events.emplace(maybeEvent1.remoteNodeName, maybeEvent1);
     maybeEvents = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& maybeEvent2 = maybeEvents.value().back();
     events.emplace(maybeEvent2.remoteNodeName, maybeEvent2);
 
@@ -1506,7 +1506,7 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   // Drain neighbor up & initialization event.
   {
     auto maybeEvents = node2->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& event = maybeEvents.value().back();
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeName1, event.remoteNodeName);
@@ -1520,7 +1520,7 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
 
   {
     auto maybeEvents = node3->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& event = maybeEvents.value().back();
     EXPECT_EQ(iface3, event.localIfName);
     EXPECT_EQ(nodeName1, event.remoteNodeName);
@@ -1539,14 +1539,14 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   // subsequently down after hold-time expiry
   {
     auto events1 = node2->waitForEvents(NB_RESTARTING);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_TRUE(event1.remoteNodeName == nodeName1);
     ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
     auto events2 = node3->waitForEvents(NB_RESTARTING);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_TRUE(event2.remoteNodeName == nodeName1);
     ASSERT_TRUE(node3->getTotalNeighborCount() == 1);
@@ -1769,7 +1769,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // node-1 and node-2 should hear from node-3
   {
     auto events1 = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(iface1, event1.localIfName);
     EXPECT_EQ(nodeName3, event1.remoteNodeName);
@@ -1778,7 +1778,7 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
     ASSERT_TRUE(node1->getActiveNeighborCount() == 2);
 
     auto events2 = node2->waitForEvents(NB_UP);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(iface2, event2.localIfName);
     EXPECT_EQ(nodeName3, event2.remoteNodeName);
@@ -1793,11 +1793,11 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
 
     // Gather the two distinct event with 1 neighbor each.
     auto maybeEvents = node3->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& event1 = maybeEvents.value().back();
     events.emplace(event1.remoteNodeName, event1);
     maybeEvents = node3->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& event2 = maybeEvents.value().back();
     events.emplace(event2.remoteNodeName, event2);
 
@@ -1830,12 +1830,12 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // node-1 and node-2 should report node-3 down
   {
     auto events1 = node1->waitForEvents(NB_DOWN);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     EXPECT_EQ("node-3", events1.value().back().remoteNodeName);
     LOG(INFO) << nodeName1 << " reported down adjacency towards " << nodeName3;
 
     auto events2 = node2->waitForEvents(NB_DOWN);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     EXPECT_EQ("node-3", events2.value().back().remoteNodeName);
     LOG(INFO) << nodeName2 << " reported down adjacency towards" << nodeName3;
   }
@@ -2219,7 +2219,7 @@ TEST_F(SparkFixture, AreaMatch) {
   // RSW001 and FSW002 node should form adj in area 2 due to regex matching
   {
     auto events1 = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(event1.remoteNodeName, nodeName2);
     EXPECT_EQ(event1.area, area2);
@@ -2228,7 +2228,7 @@ TEST_F(SparkFixture, AreaMatch) {
 
     auto events2 = node2->waitForEvents(NB_UP);
     auto& event2 = events2.value().back();
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     EXPECT_EQ(event2.remoteNodeName, nodeName1);
     EXPECT_EQ(event2.area, area2);
     ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
@@ -2469,7 +2469,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
 
   {
     auto events1 = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(event1.remoteNodeName, nodeName2);
     EXPECT_EQ(event1.area, Constants::kDefaultArea.toString());
@@ -2477,7 +2477,7 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
     ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     auto events2 = node2->waitForEvents(NB_UP);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(event2.remoteNodeName, nodeName1);
     EXPECT_EQ(event2.area, area2);
@@ -2556,7 +2556,7 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
 
   {
     auto events1 = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(iface1, events1.value().back().localIfName);
     EXPECT_EQ(nodeName2, events1.value().back().remoteNodeName);
@@ -2567,7 +2567,7 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     ASSERT_TRUE(node1->getActiveNeighborCount() == 1);
 
     auto events2 = node2->waitForEvents(NB_UP);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(iface2, events2.value().back().localIfName);
     EXPECT_EQ(nodeName1, events2.value().back().remoteNodeName);
@@ -2592,7 +2592,7 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   // rsw001 and fsw002 should form adj with ssw003 in area2, area1 respectively
   {
     auto events1 = node2->waitForEvents(NB_UP);
-    ASSERT_TRUE(events1.has_value() and events1.value().size() == 1);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
     auto& event1 = events1.value().back();
     EXPECT_EQ(iface2, events1.value().back().localIfName);
     EXPECT_EQ(nodeName3, events1.value().back().remoteNodeName);
@@ -2602,7 +2602,7 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
     ASSERT_TRUE(node2->getActiveNeighborCount() == 2);
 
     auto events2 = node1->waitForEvents(NB_UP);
-    ASSERT_TRUE(events2.has_value() and events2.value().size() == 1);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
     auto& event2 = events2.value().back();
     EXPECT_EQ(iface1, events2.value().back().localIfName);
     EXPECT_EQ(nodeName3, events2.value().back().remoteNodeName);
@@ -2618,11 +2618,11 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
 
     // Gather the two distinct event with 1 neighbor each.
     auto maybeEvents = node3->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& maybeEvent1 = maybeEvents.value().back();
     events.emplace(maybeEvent1.remoteNodeName, maybeEvent1);
     maybeEvents = node3->waitForEvents(NB_UP);
-    ASSERT_TRUE(maybeEvents.has_value() and maybeEvents.value().size() == 1);
+    ASSERT_TRUE(maybeEvents.has_value() && maybeEvents.value().size() == 1);
     auto& maybeEvent2 = maybeEvents.value().back();
     events.emplace(maybeEvent2.remoteNodeName, maybeEvent2);
 

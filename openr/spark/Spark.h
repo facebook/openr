@@ -101,7 +101,7 @@ class Spark final : public OpenrEventBase {
 
     bool
     operator!=(const Interface& interface) const {
-      return ifIndex != interface.ifIndex or v4Network != interface.v4Network or
+      return ifIndex != interface.ifIndex || v4Network != interface.v4Network ||
           v6LinkLocalNetwork != interface.v6LinkLocalNetwork;
     }
 
