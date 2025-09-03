@@ -32,7 +32,7 @@ main(int argc, char** argv) {
   evb.runInEventBaseThread([&]() noexcept {
     auto adjDb =
         poller->getAdjacencyDatabases(openr::Constants::kServiceProcTimeout);
-    if (not adjDb.first) {
+    if (!adjDb.first) {
       LOG(ERROR) << "Failed to get adj: database from KvStore";
     } else {
       if (adjDb.first->empty()) {
@@ -44,7 +44,7 @@ main(int argc, char** argv) {
 
     auto prefixDb =
         poller->getPrefixDatabases(openr::Constants::kServiceProcTimeout);
-    if (not prefixDb.first) {
+    if (!prefixDb.first) {
       LOG(ERROR) << "Failed to get prefix: database from KvStore";
     } else {
       if (prefixDb.first->empty()) {
