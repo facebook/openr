@@ -50,6 +50,9 @@ fbnl::Neighbor createNeighbor(
 class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
  public:
   explicit MockNetlinkProtocolSocket(folly::EventBase* evb);
+  MockNetlinkProtocolSocket(
+      folly::EventBase* evb,
+      messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQueue);
 
   /**
    * API to create links for testing purposes
@@ -125,6 +128,9 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
 
   // queue to publish LINK/ADDR updates
   messaging::ReplicateQueue<NetlinkEvent> netlinkEventsQueue_;
+
+  // Reference to the active queue (either member or external)
+  messaging::ReplicateQueue<NetlinkEvent>& activeQueue_;
 };
 
 } // namespace openr::fbnl

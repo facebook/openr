@@ -67,7 +67,18 @@ createNeighbor(
 } // namespace utils
 
 MockNetlinkProtocolSocket::MockNetlinkProtocolSocket(folly::EventBase* evb)
-    : NetlinkProtocolSocket(evb, netlinkEventsQueue_) {
+    : NetlinkProtocolSocket(evb, netlinkEventsQueue_),
+      activeQueue_(netlinkEventsQueue_) {
+  // Initialize stats
+  fb303::fbData->addStatExportType("nlmock.add_route", fb303::SUM);
+  fb303::fbData->addStatExportType("nlmock.delete_route", fb303::SUM);
+}
+
+MockNetlinkProtocolSocket::MockNetlinkProtocolSocket(
+    folly::EventBase* evb,
+    messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQueue)
+    : NetlinkProtocolSocket(evb, netlinkEventsQueue),
+      activeQueue_(netlinkEventsQueue) {
   // Initialize stats
   fb303::fbData->addStatExportType("nlmock.add_route", fb303::SUM);
   fb303::fbData->addStatExportType("nlmock.delete_route", fb303::SUM);
@@ -163,7 +174,7 @@ MockNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
   it->second.emplace_back(addr); // Add
 
   // Publish update via queue
-  netlinkEventsQueue_.push(addr);
+  activeQueue_.push(addr);
   return folly::SemiFuture<int>(0);
 }
 
@@ -181,7 +192,7 @@ MockNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
       it->second.erase(addrIt);
 
       // Publish update via queue
-      netlinkEventsQueue_.push(addr);
+      activeQueue_.push(addr);
       return folly::SemiFuture<int>(0);
     }
   }
@@ -208,7 +219,7 @@ MockNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
   ifAddrs_.emplace(link.getIfIndex(), std::list<fbnl::IfAddress>());
 
   // Publish update via queue
-  netlinkEventsQueue_.push(link);
+  activeQueue_.push(link);
 
   return folly::SemiFuture<int>(0);
 }
@@ -232,7 +243,7 @@ MockNetlinkProtocolSocket::addNeighbor(const fbnl::Neighbor& nbr) {
   ifAddrs_.emplace(nbr.getIfIndex(), std::list<fbnl::IfAddress>());
 
   // Publish update via queue
-  netlinkEventsQueue_.push(nbr);
+  activeQueue_.push(nbr);
 
   return folly::SemiFuture<int>(0);
 }
