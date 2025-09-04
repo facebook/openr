@@ -102,7 +102,7 @@ NetlinkFibHandler::semifuture_addUnicastRoutes(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::UnicastRoute>> routes) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
@@ -122,7 +122,7 @@ folly::SemiFuture<folly::Unit>
 NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::IpPrefix>> prefixes) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
@@ -146,7 +146,7 @@ folly::SemiFuture<folly::Unit>
 NetlinkFibHandler::semifuture_addMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<thrift::MplsRoute>> routes) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
@@ -167,7 +167,7 @@ folly::SemiFuture<folly::Unit>
 NetlinkFibHandler::semifuture_deleteMplsRoutes(
     int16_t clientId, std::unique_ptr<std::vector<int32_t>> topLabels) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
@@ -192,7 +192,7 @@ NetlinkFibHandler::semifuture_syncFib(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::UnicastRoute>> unicastRoutes) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
@@ -236,7 +236,7 @@ NetlinkFibHandler::semifuture_syncFib(
     newPrefixes.insert(network);
     auto nlRoute = buildRoute(route, protocol.value());
     auto it = existingRoutes.find(network);
-    if (it != existingRoutes.end() and it->second == nlRoute) {
+    if (it != existingRoutes.end() && it->second == nlRoute) {
       // Existing route is same as the one we're trying to add. SKIP
       continue;
     }
@@ -274,7 +274,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
     int16_t clientId,
     std::unique_ptr<std::vector<thrift::MplsRoute>> mplsRoutes) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
@@ -303,7 +303,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
     newLabels.insert(label);
     auto nlRoute = buildMplsRoute(route, protocol.value());
     auto it = existingRoutes.find(label);
-    if (it != existingRoutes.end() and it->second == nlRoute) {
+    if (it != existingRoutes.end() && it->second == nlRoute) {
       // Existing route is same as the one we're trying to add. SKIP
       continue;
     }
@@ -351,7 +351,7 @@ NetlinkFibHandler::getSwitchRunState() {
 folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>
 NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<
         std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>();
   }
@@ -386,7 +386,7 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
 folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
 NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
   const auto protocol = getProtocol(clientId);
-  if (not protocol.has_value()) {
+  if (!protocol.has_value()) {
     return createSemiFutureWithClientIdError<
         std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>();
   }
