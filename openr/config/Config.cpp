@@ -48,7 +48,7 @@ AreaConfiguration::compileRegexSet(std::vector<std::string> const& strings) {
 
 Config::Config(const std::string& configFile) {
   std::string contents;
-  if (not FileUtil::readFileToString(configFile, contents)) {
+  if (!FileUtil::readFileToString(configFile, contents)) {
     auto errStr = fmt::format("Could not read config file: {}", configFile);
     XLOG(ERR) << errStr;
     throw thrift::ConfigError(errStr);
@@ -101,7 +101,7 @@ Config::populateAreaConfig() {
     }
 
     if (auto importPolicyName = areaConf.import_policy_name()) {
-      if (not propagationPolicy or
+      if (!propagationPolicy ||
           propagationPolicy->objects()->count(*importPolicyName) == 0) {
         throw std::invalid_argument(fmt::format(
             "No area policy definition found for {}", *importPolicyName));
@@ -280,7 +280,7 @@ Config::checkLinkMonitorConfig() const {
 void
 Config::checkVipServiceConfig() const {
   if (isVipServiceEnabled()) {
-    if (not config_.vip_service_config()) {
+    if (!config_.vip_service_config()) {
       throw std::invalid_argument(
           "enable_vip_service = true, but vip_service_config is empty");
     } else {
@@ -292,7 +292,7 @@ Config::checkVipServiceConfig() const {
               areaPolicies->filters()->routePropagationPolicy().to_optional();
         }
         auto ingress_policy = *config_.vip_service_config()->ingress_policy();
-        if (not propagationPolicy or
+        if (!propagationPolicy ||
             propagationPolicy->objects()->count(ingress_policy) == 0) {
           throw std::invalid_argument(fmt::format(
               "No area policy definition found for {}", ingress_policy));
@@ -313,7 +313,7 @@ Config::checkThriftServerConfig() const {
   const bool& fallBackCheck =
       thriftServerConfig.substitute_x509_paths_from_env().value_or(false);
 
-  if (not(caPath and certPath and eccCurve)) {
+  if (!(caPath && certPath && eccCurve)) {
     throw std::invalid_argument(
         "enable_secure_thrift_server = true, but x509_ca_path, x509_cert_path or ecc_curve_name is empty.");
   }
@@ -354,14 +354,14 @@ Config::populateInternalDb() {
 
   // validate IP-TOS
   if (const auto& ipTos = config_.ip_tos()) {
-    if (*ipTos < 0 or *ipTos >= 256) {
+    if (*ipTos < 0 || *ipTos >= 256) {
       throw std::out_of_range(
           "ip_tos must be greater or equal to 0 and less than 256");
     }
   }
 
   // check watchdog has config if enabled
-  if (isWatchdogEnabled() and not config_.watchdog_config()) {
+  if (isWatchdogEnabled() && !config_.watchdog_config()) {
     throw std::invalid_argument(
         "enable_watchdog = true, but watchdog_config is empty");
   }

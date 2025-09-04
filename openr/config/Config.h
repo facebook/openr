@@ -295,7 +295,7 @@ class Config {
   const std::string
   getSSLEccCurve() const {
     auto eccCurve = getThriftServerConfig().ecc_curve_name();
-    if ((not eccCurve) && isSecureThriftServerEnabled()) {
+    if ((!eccCurve) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but ecc_curve_name is empty");
     }
@@ -352,7 +352,7 @@ class Config {
   const std::string
   getSSLSeedPath() const {
     auto seedPath = getThriftServerConfig().ticket_seed_path();
-    if ((not seedPath) && isSecureThriftServerEnabled()) {
+    if ((!seedPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but ticket_seed_path is empty");
     }
@@ -439,14 +439,14 @@ class Config {
    */
   bool
   isDrainerFlagInUse() const {
-    return config_.undrained_flag_path().has_value() and
-        (not config_.undrained_flag_path()->empty());
+    return config_.undrained_flag_path().has_value() &&
+        (!config_.undrained_flag_path()->empty());
   }
 
   bool
   isUndrainedPathExist() const {
     auto undrainedFlagPath = config_.undrained_flag_path();
-    return undrainedFlagPath and fs::exists(*undrainedFlagPath);
+    return undrainedFlagPath && fs::exists(*undrainedFlagPath);
   }
 
   bool
@@ -470,7 +470,7 @@ class Config {
   bool
   isMemoryProfilingEnabled() const {
     auto memProfileConf = config_.memory_profiling_config();
-    return memProfileConf.has_value() and
+    return memProfileConf.has_value() &&
         memProfileConf.value().enable_memory_profiling().value();
   }
 
