@@ -164,7 +164,7 @@ DispatcherQueue::filterKeys(
 
         auto& keyVals = *pub.keyVals();
         for (auto it = keyVals.begin(); it != keyVals.end(); ++it) {
-          if (matchPrefix(it->first, filters) and it->second.value()) {
+          if (matchPrefix(it->first, filters) && it->second.value()) {
             // add keys that start with the any of the prefixes
             // and keys that have values
             filteredKeyVals.emplace(it->first, it->second);
@@ -181,7 +181,7 @@ DispatcherQueue::filterKeys(
 
         // only return the KvStorePublication if filteredExpiredKeys or
         // filteredKeyVals are non-empty
-        if (not filteredExpiredKeys.empty() or not filteredKeyVals.empty()) {
+        if (!filteredExpiredKeys.empty() || !filteredKeyVals.empty()) {
           // set the all of the fields if publication should be replicated to
           // reader
           filteredPublication.nodeIds().copy_from(pub.nodeIds());
