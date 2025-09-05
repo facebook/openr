@@ -926,7 +926,7 @@ LinkMonitor::advertiseRedistAddrs() {
   // Find prefixes to withdraw
   std::vector<thrift::PrefixEntry> toWithdraw;
   for (auto const& [prefix, areas] : advertisedPrefixes_) {
-    if (prefixesToAdvertise.count(prefix)) {
+    if (prefixesToAdvertise.contains(prefix)) {
       continue; // Do not mark for withdraw
     }
     thrift::PrefixEntry prefixEntry;
@@ -1006,7 +1006,7 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       auto adj = folly::copy(adjValue.adj_);
 
       // [Hard-Drain] set link overload bit
-      adj.isOverloaded() = state_.overloadedLinks()->count(*adj.ifName()) > 0;
+      adj.isOverloaded() = state_.overloadedLinks()->contains(*adj.ifName());
 
       // Calculate the adj metric - there are 3 places potentially contributing
       // to the final result, which is stackable:
@@ -1025,7 +1025,7 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       metric += *state_.nodeMetricIncrementVal();
 
       // increment the link-level metric if any
-      if (state_.linkMetricIncrementMap()->count(*adj.ifName())) {
+      if (state_.linkMetricIncrementMap()->contains(*adj.ifName())) {
         metric += state_.linkMetricIncrementMap()[*adj.ifName()];
       }
 
@@ -1197,14 +1197,14 @@ LinkMonitor::syncInterfaces() {
 
     // Remove old addresses if they are not in new
     for (auto const& oldNetwork : oldNetworks) {
-      if (newNetworks.count(oldNetwork) == 0) {
+      if (!newNetworks.contains(oldNetwork)) {
         interfaceEntry->updateAddr(oldNetwork, false);
       }
     }
 
     // Add new addresses if they are not in old
     for (auto const& newNetwork : newNetworks) {
-      if (oldNetworks.count(newNetwork) == 0) {
+      if (!oldNetworks.contains(newNetwork)) {
         interfaceEntry->updateAddr(newNetwork, true);
       }
     }
@@ -1469,7 +1469,7 @@ LinkMonitor::semifuture_setAdjacencyMetric(
     auto adjacencyKey = std::make_pair(adjNodeName, interfaceName);
     bool unknownAdj{true};
     for (const auto& [_, areaAdjacencies] : adjacencies_) {
-      if (areaAdjacencies.count(adjacencyKey)) {
+      if (areaAdjacencies.contains(adjacencyKey)) {
         unknownAdj = false;
         // Found it.
         break;
@@ -1719,7 +1719,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
       return;
     }
 
-    if (not state_.linkMetricIncrementMap()->count(interfaceName)) {
+    if (not state_.linkMetricIncrementMap()->contains(interfaceName)) {
       XLOG(INFO) << "Skip cmd: [unsetInterfaceMetricIncrement]."
                  << "due the interface " << interfaceName
                  << "didn't set the link-level metric increment before.";
@@ -1764,15 +1764,15 @@ LinkMonitor::semifuture_getInterfaces() {
       ifDetails.info() = interface.getInterfaceInfo().toThrift();
 
       // Populate link-level overload state
-      ifDetails.isOverloaded() = state_.overloadedLinks()->count(ifName) > 0;
+      ifDetails.isOverloaded() = state_.overloadedLinks()->contains(ifName);
 
       // [TO_BE_DEPRECATED] Add metric override if any
-      if (state_.linkMetricOverrides()->count(ifName) > 0) {
+      if (state_.linkMetricOverrides()->contains(ifName)) {
         ifDetails.metricOverride() = state_.linkMetricOverrides()->at(ifName);
       }
 
       // Populate link-level metric override if any
-      if (state_.linkMetricIncrementMap()->count(ifName) > 0) {
+      if (state_.linkMetricIncrementMap()->contains(ifName)) {
         ifDetails.linkMetricIncrementVal() =
             state_.linkMetricIncrementMap()->at(ifName);
       }
