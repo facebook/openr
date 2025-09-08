@@ -70,7 +70,7 @@ Watchdog::memoryLimitExceeded() {
 void
 Watchdog::monitorMemory() {
   auto memInUse_ = systemMetrics_.getRSSMemBytes();
-  if (not memInUse_.has_value()) {
+  if (!memInUse_.has_value()) {
     return;
   }
   if (memInUse_.value() / 1e6 > maxMemoryMB_) {
@@ -78,7 +78,7 @@ Watchdog::monitorMemory() {
         "[Mem Detector] Critical memory usage: {} bytes. Memory limit: {} MB.",
         memInUse_.value(),
         maxMemoryMB_);
-    if (not memExceedTime_.has_value()) {
+    if (!memExceedTime_.has_value()) {
       memExceedTime_ = std::chrono::steady_clock::now();
       return;
     }
@@ -123,7 +123,7 @@ Watchdog::monitorThreadStatus() {
     }
   }
 
-  if (stuckThreads.size() and isDeadThreadDetected_) {
+  if (stuckThreads.size() && isDeadThreadDetected_) {
     // fire a crash right now
     const std::string msg = fmt::format(
         "[Dead Thread Detector] Thread {} on {} is dead. Triggering crash.",
@@ -132,7 +132,7 @@ Watchdog::monitorThreadStatus() {
     fireCrash(msg);
   }
 
-  if ((not stuckThreads.size()) and isDeadThreadDetected_) {
+  if ((!stuckThreads.size()) && isDeadThreadDetected_) {
     XLOG(INFO) << "[Dead Thread Detector] Threads seem to have recovered.";
   }
 
