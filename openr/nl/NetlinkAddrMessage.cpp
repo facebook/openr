@@ -61,13 +61,13 @@ NetlinkAddrMessage::init(int type) {
 int
 NetlinkAddrMessage::addOrDeleteIfAddress(
     const IfAddress& ifAddr, const int type) {
-  if (type != RTM_NEWADDR and type != RTM_DELADDR) {
+  if (type != RTM_NEWADDR && type != RTM_DELADDR) {
     XLOG(ERR) << "Incorrect Netlink message type. " << ifAddr.str();
     return EINVAL;
-  } else if (ifAddr.getFamily() != AF_INET and ifAddr.getFamily() != AF_INET6) {
+  } else if (ifAddr.getFamily() != AF_INET && ifAddr.getFamily() != AF_INET6) {
     XLOG(ERR) << "Invalid address family. " << ifAddr.str();
     return EINVAL;
-  } else if (not ifAddr.getPrefix().has_value()) {
+  } else if (!ifAddr.getPrefix().has_value()) {
     // No IP address given
     XLOG(ERR) << "No interface address given. " << ifAddr.str();
     return EDESTADDRREQ;

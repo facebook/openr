@@ -172,7 +172,7 @@ NetlinkLinkMessage::parseInfoData(
     infoDataAttr = RTA_NEXT(infoDataAttr, attrLen);
   } while (RTA_OK(infoDataAttr, attrLen));
 
-  if (localAddr and remoteAddr and ttl) {
+  if (localAddr && remoteAddr && ttl) {
     greInfo = GreInfo(localAddr.value(), remoteAddr.value(), ttl.value());
   }
 

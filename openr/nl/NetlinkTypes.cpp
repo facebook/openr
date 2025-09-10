@@ -892,8 +892,8 @@ operator==(const IfAddress& lhs, const IfAddress& rhs) {
 
 bool
 isNeighborReachable(int state) {
-  return state == NUD_REACHABLE or state == NUD_STALE or state == NUD_DELAY or
-      state == NUD_PERMANENT or state == NUD_PROBE or state == NUD_NOARP;
+  return state == NUD_REACHABLE || state == NUD_STALE || state == NUD_DELAY ||
+      state == NUD_PERMANENT || state == NUD_PROBE || state == NUD_NOARP;
 }
 
 Neighbor
@@ -1121,8 +1121,8 @@ GreInfo::str() const {
 bool
 operator==(const GreInfo& lhs, const GreInfo& rhs) {
   return (
-      lhs.getLocalAddr() == rhs.getLocalAddr() and
-      lhs.getRemoteAddr() == rhs.getRemoteAddr() and
+      lhs.getLocalAddr() == rhs.getLocalAddr() &&
+      lhs.getRemoteAddr() == rhs.getRemoteAddr() &&
       lhs.getTtl() == rhs.getTtl());
 }
 
@@ -1299,11 +1299,11 @@ Link::str() const {
 
 bool
 operator==(const Link& lhs, const Link& rhs) {
-  return (lhs.getLinkName() == rhs.getLinkName() and
-          lhs.getIfIndex() == rhs.getIfIndex() and
-          lhs.getFlags() == rhs.getFlags() and
-          lhs.getLinkKind() == rhs.getLinkKind() and
-          lhs.getGreInfo() == rhs.getGreInfo()) and
+  return (lhs.getLinkName() == rhs.getLinkName() &&
+          lhs.getIfIndex() == rhs.getIfIndex() &&
+          lhs.getFlags() == rhs.getFlags() &&
+          lhs.getLinkKind() == rhs.getLinkKind() &&
+          lhs.getGreInfo() == rhs.getGreInfo()) &&
       lhs.getLinkGroup() == rhs.getLinkGroup();
 }
 
@@ -1375,10 +1375,9 @@ Rule::str() const {
 bool
 operator==(const Rule& lhs, const Rule& rhs) {
   return (
-      lhs.getFamily() == rhs.getFamily() and
-      lhs.getAction() == rhs.getAction() and
-      lhs.getTable() == rhs.getTable() and
-      lhs.getFwmark() == rhs.getFwmark() and
+      lhs.getFamily() == rhs.getFamily() &&
+      lhs.getAction() == rhs.getAction() && lhs.getTable() == rhs.getTable() &&
+      lhs.getFwmark() == rhs.getFwmark() &&
       lhs.getPriority() == rhs.getPriority());
 }
 

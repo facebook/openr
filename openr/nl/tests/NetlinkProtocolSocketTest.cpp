@@ -326,7 +326,7 @@ class NlMessageFixture : public ::testing::Test {
           maybeRoute = it->second;
         }
       }
-      if (maybeRoute.has_value() and route == maybeRoute.value()) {
+      if (maybeRoute.has_value() && route == maybeRoute.value()) {
         routeCount++;
       }
     }
@@ -713,8 +713,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
       if (auto* link = std::get_if<Link>(&req.value())) {
-        if (link->getLinkName() == ifName and link->isUp() == isUp and
-            link->getLinkKind().value_or("") == kind and
+        if (link->getLinkName() == ifName && link->isUp() == isUp &&
+            link->getLinkKind().value_or("") == kind &&
             link->getLinkGroup().value_or(0) == group) {
           return;
         }
@@ -790,10 +790,9 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
       // get_if returns `nullptr` if targeted variant is NOT populated
       if (auto* addr = std::get_if<IfAddress>(&req.value())) {
         ASSERT_TRUE(ifIndexToName.count(addr->getIfIndex()));
-        if (ifIndexToName.at(addr->getIfIndex()) == ifName and
-            addr->getPrefix().has_value() and
-            addr->getPrefix().value() == ipAddr and
-            addr->isValid() == isValid) {
+        if (ifIndexToName.at(addr->getIfIndex()) == ifName &&
+            addr->getPrefix().has_value() &&
+            addr->getPrefix().value() == ipAddr && addr->isValid() == isValid) {
           return;
         }
       }
@@ -923,15 +922,14 @@ TEST_F(NlMessageFixture, NeighborEventPublication) {
       ASSERT_TRUE(req.hasValue());
       // get_if returns `nullptr` if targeted variant is NOT populated
       if (auto* neigh = std::get_if<Neighbor>(&req.value())) {
-        if (neigh->getDestination() == ipAddr and
-            neigh->isReachable() == isReachable and
+        if (neigh->getDestination() == ipAddr &&
+            neigh->isReachable() == isReachable &&
             neigh->getFamily() == (ipAddr.isV4() ? AF_INET : AF_INET6)) {
           // ATTN: neighbor delete msg doesn't have link address field populated
-          if (isReachable and neigh->getLinkAddress().has_value() and
+          if (isReachable && neigh->getLinkAddress().has_value() &&
               neigh->getLinkAddress().value() == macAddress) {
             return;
-          } else if (
-              (not isReachable) and (not neigh->getLinkAddress().has_value())) {
+          } else if ((!isReachable) && (!neigh->getLinkAddress().has_value())) {
             return;
           }
         }
@@ -1270,7 +1268,7 @@ TEST_F(NlMessageFixture, MultiProtocolSameRoute) {
     auto kernelRoutes = nlSock->getAllRoutes().get().value();
     int16_t count = 0;
     for (auto const& r : kernelRoutes) {
-      if (r.getDestination() == prefixV4 or r.getDestination() == prefixV6) {
+      if (r.getDestination() == prefixV4 || r.getDestination() == prefixV6) {
         ++count;
       }
     }
@@ -2184,7 +2182,7 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
   bool found{false};
   auto after = nlSock->getRoutes(filter).get().value();
   for (const auto& r : after) {
-    if (r.getDestination() == network and r.getProtocolId() == kRouteProtoId and
+    if (r.getDestination() == network && r.getProtocolId() == kRouteProtoId &&
         r.getRouteTable() == kRouteTableId) {
       found = true;
     }
@@ -2422,7 +2420,7 @@ TEST_P(NlMessageFixtureV4OrV6, DropRoute) {
   EXPECT_EQ(before.size() + 1, after.size());
   bool found = false;
   for (const auto& r : after) {
-    if (r.getDestination() == network and r.getProtocolId() == kRouteProtoId and
+    if (r.getDestination() == network && r.getProtocolId() == kRouteProtoId &&
         r.getType() == RTN_BLACKHOLE) {
       found =
           (isV4 ? r.getNextHops().size() == 0 : r.getNextHops().size() == 1);
@@ -2886,7 +2884,7 @@ TEST_P(NlMessageFixtureV4OrV6, UpdateNextHop) {
         : nlSock->getIPv6Routes(kRouteProtoId).get().value();
     bool found = false;
     for (auto const& r : kernelRoutes) {
-      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+      if (r.getDestination() == network && r.getNextHops().size() == 1 &&
           r.getNextHops().begin()->getGateway() ==
               (isV4 ? ipAddrY1V4 : ipAddrY1V6)) {
         found = true;
@@ -2918,7 +2916,7 @@ TEST_P(NlMessageFixtureV4OrV6, UpdateNextHop) {
         : nlSock->getIPv6Routes(kRouteProtoId).get().value();
     bool found = false;
     for (auto const& r : kernelRoutes) {
-      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+      if (r.getDestination() == network && r.getNextHops().size() == 1 &&
           r.getNextHops().begin()->getGateway() ==
               (isV4 ? ipAddrY2V4 : ipAddrY2V6)) {
         found = true;
@@ -2945,7 +2943,7 @@ TEST_P(NlMessageFixtureV4OrV6, UpdateNextHop) {
         : nlSock->getIPv6Routes(kRouteProtoId).get().value();
     bool found = false;
     for (auto const& r : kernelRoutes) {
-      if (r.getDestination() == network and r.getNextHops().size() == 2) {
+      if (r.getDestination() == network && r.getNextHops().size() == 2) {
         found = true;
       }
     }
@@ -2970,7 +2968,7 @@ TEST_P(NlMessageFixtureV4OrV6, UpdateNextHop) {
         : nlSock->getIPv6Routes(kRouteProtoId).get().value();
     bool found = false;
     for (auto const& r : kernelRoutes) {
-      if (r.getDestination() == network and r.getNextHops().size() == 1 and
+      if (r.getDestination() == network && r.getNextHops().size() == 1 &&
           r.getNextHops().begin()->getGateway() ==
               (isV4 ? ipAddrY1V4 : ipAddrY1V6)) {
         found = true;
@@ -3164,8 +3162,8 @@ TEST_P(NlMessageFixtureV4OrV6, GetAllNeighbors) {
   int testNeighbors = 0;
   auto neighbors = nlSock->getAllNeighbors().get().value();
   for (const auto& neighbor : neighbors) {
-    if (neighbor.getIfIndex() == ifIndexX and
-        neighbor.getDestination().str().find(ipStr) != std::string::npos and
+    if (neighbor.getIfIndex() == ifIndexX &&
+        neighbor.getDestination().str().find(ipStr) != std::string::npos &&
         neighbor.isReachable()) {
       // Found neighbor on vethTestX
       testNeighbors += 1;
@@ -3190,8 +3188,8 @@ TEST_P(NlMessageFixtureV4OrV6, GetAllNeighbors) {
   testNeighbors = 0;
   neighbors = nlSock->getAllNeighbors().get().value();
   for (const auto& neighbor : neighbors) {
-    if (neighbor.getIfIndex() == ifIndexX and
-        neighbor.getDestination().str().find(ipStr) != std::string::npos and
+    if (neighbor.getIfIndex() == ifIndexX &&
+        neighbor.getDestination().str().find(ipStr) != std::string::npos &&
         neighbor.isReachable()) {
       // Found neighbor on vethTestX
       testNeighbors += 1;

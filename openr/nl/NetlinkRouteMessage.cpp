@@ -181,7 +181,7 @@ NetlinkRouteMessage::addIpNexthop(
 
   // speficy RTA_VIA or RTA_GATEWAY
   auto const via = path.getGateway();
-  if (not via.has_value()) {
+  if (!via.has_value()) {
     if (route.getType() == RTN_MULTICAST || route.getScope() == RT_SCOPE_LINK) {
       return 0;
     }
@@ -632,7 +632,7 @@ NetlinkRouteMessage::setMplsAction(
 bool
 NetlinkRouteMessage::isV4RouteOverV6Nexthop(
     const Route& route, const NextHop& nh) {
-  return static_cast<int>(route.getFamily()) == AF_INET and
+  return static_cast<int>(route.getFamily()) == AF_INET &&
       static_cast<int>(nh.getFamily()) == AF_INET6;
 }
 

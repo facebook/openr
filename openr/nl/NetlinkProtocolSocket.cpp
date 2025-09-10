@@ -26,7 +26,7 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
   // We expect ctrl-evb not be running. Attaching and scheduling
   // of timers is not thread safe.
   CHECK_NOTNULL(evb_);
-  CHECK(not evb_->isRunning());
+  CHECK(!evb_->isRunning());
 
   nlMessageTimer_ = folly::AsyncTimeout::make(*evb_, [this]() noexcept {
     DCHECK(false) << "This shouldn't occur usually. Adding DCHECK to get "
@@ -203,7 +203,7 @@ NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
   // We've successfully completed at-least one message. Send more messages
   // if any pending. Here we add optimization to wait for some more acks and
   // send pending message in batch of atleast `kMinIovMsg`
-  if (nlSeqNumMap_.empty() or (kMaxIovMsg - nlSeqNumMap_.size() > kMinIovMsg)) {
+  if (nlSeqNumMap_.empty() || (kMaxIovMsg - nlSeqNumMap_.size() > kMinIovMsg)) {
     sendNetlinkMessage();
   }
 }
@@ -336,7 +336,7 @@ NetlinkProtocolSocket::processMessage(
     case RTM_NEWADDR: {
       // process interface address information received from netlink
       auto addr = NetlinkAddrMessage::parseMessage(nlh);
-      if (not addr.getPrefix().has_value()) {
+      if (!addr.getPrefix().has_value()) {
         XLOG(WARNING) << "Address event with empty address: " << addr.str();
         break;
       }
@@ -463,7 +463,7 @@ NetlinkProtocolSocket::collectReturnStatus(
                  folly::Try<std::vector<folly::Try<int>>>&& results) {
         for (auto& result : results.value()) {
           auto retval = std::abs(result.value()); // Throws exeption if any
-          if (retval == 0 or ignoredErrors.count(retval)) {
+          if (retval == 0 || ignoredErrors.count(retval)) {
             continue;
           }
           throw fbnl::NlException("One or more netlink request failed", retval);
@@ -481,7 +481,7 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
   int status{0};
   switch (route.getFamily()) {
   case AF_INET6:
-    if (not enableIPv6RouteReplaceSemantics_) {
+    if (!enableIPv6RouteReplaceSemantics_) {
       // Special case for IPv6 route add. We first delete the route and then
       // add it.
       // NOTE: We ignore the error for the deleteRoute
