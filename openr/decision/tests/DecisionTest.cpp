@@ -3446,7 +3446,7 @@ TEST(DecisionPendingUpdates, perfEvents) {
   thrift::PrefixDatabase perfEventDb;
   perfEventDb.perfEvents() = openr::thrift::PerfEvents();
   auto& earlierEvents = *perfEventDb.perfEvents();
-  earlierEvents.events()->push_back({});
+  earlierEvents.events()->emplace_back();
   *earlierEvents.events()->back().nodeName() = "node3";
   *earlierEvents.events()->back().eventDescr() = "EARLIER";
   earlierEvents.events()->back().unixTs() = 1;
