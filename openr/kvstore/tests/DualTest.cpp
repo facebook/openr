@@ -102,7 +102,7 @@ validateRouteInfo(const Dual::RouteInfo& info) {
     LOG(ERROR) << "not in PASSIVE state";
     return false;
   }
-  if (not info.nexthop.has_value()) {
+  if (!info.nexthop.has_value()) {
     if (info.distance != std::numeric_limits<int64_t>::max()) {
       LOG(ERROR) << "nexthop: none but distance != intf";
       return false;
@@ -296,8 +296,8 @@ class DualBaseFixture : public ::testing::Test {
   void
   addLink(const std::string& node1, const std::string& node2, int64_t cost) {
     for (const auto& edge : edges) {
-      if ((edge.name1 == node1 and edge.name2 == node2) or
-          (edge.name1 == node2 and edge.name2 == node1)) {
+      if ((edge.name1 == node1 && edge.name2 == node2) ||
+          (edge.name1 == node2 && edge.name2 == node1)) {
         return; // edge exist already
       }
     }
@@ -309,8 +309,8 @@ class DualBaseFixture : public ::testing::Test {
   void
   peerUp(const std::string& node1, const std::string& node2, int64_t cost) {
     for (auto& edge : edges) {
-      if ((edge.name1 == node1 and edge.name2 == node2) or
-          (edge.name1 == node2 and edge.name2 == node1)) {
+      if ((edge.name1 == node1 && edge.name2 == node2) ||
+          (edge.name1 == node2 && edge.name2 == node1)) {
         if (edge.up) {
           // link already up
           return;
@@ -333,9 +333,9 @@ class DualBaseFixture : public ::testing::Test {
   void
   peerDown(const std::string& node1, const std::string& node2) {
     for (auto& edge : edges) {
-      if ((edge.name1 == node1 and edge.name2 == node2) or
-          (edge.name1 == node2 and edge.name2 == node1)) {
-        if (not edge.up) {
+      if ((edge.name1 == node1 && edge.name2 == node2) ||
+          (edge.name1 == node2 && edge.name2 == node1)) {
+        if (!edge.up) {
           // link already down
           return;
         }
@@ -357,9 +357,9 @@ class DualBaseFixture : public ::testing::Test {
   void
   linkFlap(const std::string& node1, const std::string& node2, int64_t cost) {
     for (auto& edge : edges) {
-      if ((edge.name1 == node1 and edge.name2 == node2) or
-          (edge.name1 == node2 and edge.name2 == node1)) {
-        if (not edge.up) {
+      if ((edge.name1 == node1 && edge.name2 == node2) ||
+          (edge.name1 == node2 && edge.name2 == node1)) {
+        if (!edge.up) {
           // link already down
           return;
         }
@@ -395,10 +395,10 @@ class DualBaseFixture : public ::testing::Test {
     }
     // bring corresponding edges down
     for (auto& edge : edges) {
-      if (edge.name1 != node and edge.name2 != node) {
+      if (edge.name1 != node && edge.name2 != node) {
         continue; // link not affected
       }
-      if (not edge.up) {
+      if (!edge.up) {
         continue;
       }
       peerDown(edge.name1, edge.name2);
@@ -415,7 +415,7 @@ class DualBaseFixture : public ::testing::Test {
       }
     }
     for (auto& edge : edges) {
-      if (edge.name1 != node and edge.name2 != node) {
+      if (edge.name1 != node && edge.name2 != node) {
         continue; // link not affected
       }
       if (edge.up) {
@@ -429,7 +429,7 @@ class DualBaseFixture : public ::testing::Test {
   void
   nodeFlap(const std::string& node) {
     for (auto& edge : edges) {
-      if (edge.name1 != node and edge.name2 != node) {
+      if (edge.name1 != node && edge.name2 != node) {
         continue; // link not affected
       }
       linkFlap(edge.name1, edge.name2, edge.weight);
@@ -477,7 +477,7 @@ class DualBaseFixture : public ::testing::Test {
     for (const auto& kv : results) {
       const auto& node = kv.first;
       const auto& infos = kv.second;
-      if (not infos.empty()) {
+      if (!infos.empty()) {
         LOG(ERROR) << node
                    << " has non-empty route-info map, size: " << infos.size();
         return false;
@@ -509,12 +509,12 @@ class DualBaseFixture : public ::testing::Test {
       const auto& nexthop = info.nexthop;
       const auto& distance = info.distance;
 
-      if (not validateRouteInfo(info)) {
+      if (!validateRouteInfo(info)) {
         LOG(ERROR) << node << " route-info validation failed.";
         return false;
       }
 
-      if (not nexthop.has_value() or
+      if (!nexthop.has_value() ||
           distance == std::numeric_limits<int64_t>::max()) {
         // skip disconnected node
         continue;
@@ -545,7 +545,7 @@ class DualBaseFixture : public ::testing::Test {
     }
 
     // 1. validate flooding topology is a SPT
-    if (not isSpt(floodTopo)) {
+    if (!isSpt(floodTopo)) {
       LOG(ERROR) << "flooding topology is not a SPT";
       return false;
     }
@@ -560,10 +560,10 @@ class DualBaseFixture : public ::testing::Test {
     }
     // add edge
     for (const auto& edge : edges) {
-      if (not edge.up) {
+      if (!edge.up) {
         continue; // skip down edge
       }
-      if (physicalDescriptors.count(edge.name1) == 0 or
+      if (physicalDescriptors.count(edge.name1) == 0 ||
           physicalDescriptors.count(edge.name2) == 0) {
         continue; // skip edge if any-end is down
       }
@@ -631,7 +631,7 @@ class DualBaseFixture : public ::testing::Test {
 
     if (rootIds.empty()) {
       VLOG(1) << "validate no-root case";
-      if (not validateNoRoot(infos)) {
+      if (!validateNoRoot(infos)) {
         LOG(ERROR) << "validate no root failed";
         printStatus(status);
         return false;
@@ -641,7 +641,7 @@ class DualBaseFixture : public ::testing::Test {
 
     for (const auto& rootId : rootIds) {
       VLOG(1) << "validate root " << rootId;
-      if (not validateOnRoot(rootId, infos)) {
+      if (!validateOnRoot(rootId, infos)) {
         LOG(ERROR) << "validate root " << rootId << " failed";
         printStatus(status, rootId);
         return false;
@@ -669,7 +669,7 @@ class DualBaseFixture : public ::testing::Test {
 
         /* sleep override */
         std::this_thread::sleep_for(syncms);
-        if (not validate()) {
+        if (!validate()) {
           LOG(ERROR) << "flap link " << edge.name1 << ", " << edge.name2
                      << " validation failed";
           return false;
@@ -683,7 +683,7 @@ class DualBaseFixture : public ::testing::Test {
 
       /* sleep override */
       std::this_thread::sleep_for(syncms);
-      if (not validate()) {
+      if (!validate()) {
         LOG(ERROR) << "down link " << edge.name1 << ", " << edge.name2
                    << " validation failed";
         return false;
@@ -695,7 +695,7 @@ class DualBaseFixture : public ::testing::Test {
 
       /* sleep override */
       std::this_thread::sleep_for(syncms);
-      if (not validate()) {
+      if (!validate()) {
         LOG(ERROR) << "up link " << edge.name1 << ", " << edge.name2
                    << " validation failed";
         return false;
@@ -725,7 +725,7 @@ class DualBaseFixture : public ::testing::Test {
 
         /* sleep override */
         std::this_thread::sleep_for(syncms);
-        if (not validate()) {
+        if (!validate()) {
           LOG(ERROR) << "flap node " << vertex.name << " validation failed";
           return false;
         }
@@ -738,7 +738,7 @@ class DualBaseFixture : public ::testing::Test {
 
       /* sleep override */
       std::this_thread::sleep_for(syncms);
-      if (not validate()) {
+      if (!validate()) {
         LOG(ERROR) << "down node " << vertex.name << " validation failed";
         return false;
       }
@@ -748,7 +748,7 @@ class DualBaseFixture : public ::testing::Test {
       nodeUp(vertex.name);
       /* sleep override */
       std::this_thread::sleep_for(syncms);
-      if (not validate()) {
+      if (!validate()) {
         LOG(ERROR) << "up node " << vertex.name << " validation failed";
         return false;
       }
@@ -779,7 +779,7 @@ class DualBaseFixture : public ::testing::Test {
 
       /* sleep override */
       std::this_thread::sleep_for(syncms);
-      if (not validate()) {
+      if (!validate()) {
         LOG(ERROR) << "multi links flap validation failed";
         return false;
       }
@@ -794,7 +794,7 @@ class DualBaseFixture : public ::testing::Test {
 
     /* sleep override */
     std::this_thread::sleep_for(syncms);
-    if (not validate()) {
+    if (!validate()) {
       LOG(ERROR) << "multi links down validation failed";
       return false;
     }
@@ -808,7 +808,7 @@ class DualBaseFixture : public ::testing::Test {
     // validate
     /* sleep override */
     std::this_thread::sleep_for(syncms);
-    if (not validate()) {
+    if (!validate()) {
       LOG(ERROR) << "multi links up validation failed";
       return false;
     }

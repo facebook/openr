@@ -66,7 +66,7 @@ template <class ClientType>
 void
 KvStoreWrapper<ClientType>::stop() {
   // Return immediately if not running
-  if (not kvStore_->isRunning()) {
+  if (!kvStore_->isRunning()) {
     return;
   }
 

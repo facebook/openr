@@ -44,13 +44,13 @@ KvStorePublisher::KvStorePublisher(
  */
 void
 KvStorePublisher::publish(const thrift::Publication& pub) {
-  if (not(selectAreas_.empty() || selectAreas_.count(*pub.area()))) {
+  if (!(selectAreas_.empty() || selectAreas_.count(*pub.area()))) {
     return;
   }
-  if ((not filter_.keys().has_value() or (*filter_.keys()).empty()) and
-      (not filter_.originatorIds().is_set() or
-       (*filter_.originatorIds()).empty()) and
-      not *filter_.ignoreTtl() and not *filter_.doNotPublishValue()) {
+  if ((!filter_.keys().has_value() || (*filter_.keys()).empty()) &&
+      (!filter_.originatorIds().is_set() ||
+       (*filter_.originatorIds()).empty()) &&
+      !*filter_.ignoreTtl() && !*filter_.doNotPublishValue()) {
     // No filtering criteria. Accept all updates as TTL updates are not be
     // to be updated. If we don't optimize here, we will have go through
     // key values of a publication and copy them.
@@ -74,7 +74,7 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
     publication_filtered.tobeUpdatedKeys() = *pub.tobeUpdatedKeys();
   }
 
-  if (publication_filtered.keyVals()->size() or
+  if (publication_filtered.keyVals()->size() ||
       publication_filtered.expiredKeys()->size()) {
     // There is at least one key value in the publication for the client
     // or there are some expiredKeys
@@ -89,16 +89,16 @@ KvStorePublisher::getFilteredKeyVals(const thrift::KeyVals& origKeyVals) {
   // flag
   thrift::KeyVals keyvals;
   for (auto& [key, val] : origKeyVals) {
-    if (*filter_.ignoreTtl() and not val.value().has_value()) {
+    if (*filter_.ignoreTtl() && !val.value().has_value()) {
       // ignore TTL updates
       continue;
     }
 
-    if (not keyPrefixFilter_.keyMatch(key, val)) {
+    if (!keyPrefixFilter_.keyMatch(key, val)) {
       continue;
     }
 
-    if (*filter_.doNotPublishValue() and val.value().has_value()) {
+    if (*filter_.doNotPublishValue() && val.value().has_value()) {
       // Exclude Value.value if it's filtered
       keyvals.emplace(key, createThriftValueWithoutBinaryValue(val));
     } else {
@@ -114,7 +114,7 @@ KvStorePublisher::getFilteredExpiredKeys(
     const std::vector<std::string>& origExpiredKeys) {
   std::vector<std::string> expiredKeys;
   for (auto& key : origExpiredKeys) {
-    if (not keyPrefixFilter_.keyMatch(key)) {
+    if (!keyPrefixFilter_.keyMatch(key)) {
       continue;
     }
 

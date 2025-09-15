@@ -597,7 +597,7 @@ class KvStore final : public OpenrEventBase {
 
   inline bool
   getIsStopped(std::string const& area) {
-    if (not kvStoreDb_.count(area)) {
+    if (!kvStoreDb_.count(area)) {
       throw std::runtime_error(std::string{"area not found"});
     }
     return kvStoreDb_.at(area).getIsStopped();

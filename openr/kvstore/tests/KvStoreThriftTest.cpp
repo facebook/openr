@@ -80,7 +80,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
         break;
       }
       auto val = kvStore->getKey(area, key);
-      if (val.has_value() and val.value() == thriftVal) {
+      if (val.has_value() && val.value() == thriftVal) {
         return true;
       }
 
@@ -111,7 +111,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
         break;
       }
       auto state = kvStore->getPeerState(area, peerName);
-      if (state.has_value() and state.value() == expPeerState) {
+      if (state.has_value() && state.value() == expPeerState) {
         return true;
       }
 
@@ -166,7 +166,7 @@ class SimpleKvStoreThriftTestFixture : public KvStoreThriftTestFixture {
     while (true) {
       // generate port between 1 - 65535
       uint16_t randPort = folly::Random::rand32() % 65535 + 1;
-      if (not ports.count(randPort)) {
+      if (!ports.count(randPort)) {
         return randPort;
       }
       // avoid hogging process
@@ -713,8 +713,8 @@ TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
   auto thriftVal3 =
       createThriftValue(3, store2->getNodeId(), std::string("value3"));
   EXPECT_TRUE(store2->setKey(kTestingAreaName, key3, thriftVal3));
-  while (not verifyKvStoreKeyVal(
-      store1.get(), key3, thriftVal3, kTestingAreaName)) {
+  while (
+      !verifyKvStoreKeyVal(store1.get(), key3, thriftVal3, kTestingAreaName)) {
     std::this_thread::yield();
   }
 

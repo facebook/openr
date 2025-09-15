@@ -140,7 +140,7 @@ class KvStoreBenchmarkTestFixture {
 
     while (true) {
       auto thriftPub = kvStoreUpdatesQ.get();
-      if (not thriftPub.hasValue()) {
+      if (!thriftPub.hasValue()) {
         continue;
       }
 

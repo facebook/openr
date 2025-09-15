@@ -104,7 +104,7 @@ Dual::routeAffected() {
     return false;
   }
 
-  if (info_.nexthop.has_value() and *info_.nexthop == nodeId) {
+  if (info_.nexthop.has_value() && *info_.nexthop == nodeId) {
     // my nextHop is myself
     return false;
   }
@@ -154,7 +154,7 @@ Dual::meetFeasibleCondition(std::string& nexthop, int64_t& distance) {
       continue;
     }
     const auto& rd = info_.neighborInfos[neighbor].reportDistance;
-    if (rd < info_.feasibleDistance and addDistances(ld, rd) == dmin) {
+    if (rd < info_.feasibleDistance && addDistances(ld, rd) == dmin) {
       XLOG(DBG2) << rootId << "::" << nodeId << ": meet FC: " << neighbor
                  << ", " << rd << ", " << dmin;
       nexthop = neighbor;
@@ -201,7 +201,7 @@ Dual::localComputation(
   info_.reportDistance = newDistance;
   info_.feasibleDistance = newDistance;
   // send out UPDATES if report-distance changed
-  if (not sameRd) {
+  if (!sameRd) {
     floodUpdates(msgsToSend);
   }
 }
@@ -246,7 +246,7 @@ Dual::tryLocalOrDiffusing(
     bool needReply,
     std::unordered_map<std::string, thrift::DualMessages>& msgsToSend) {
   auto affected = routeAffected();
-  if (not affected) {
+  if (!affected) {
     if (needReply) {
       sendReply(msgsToSend);
     }
@@ -256,7 +256,7 @@ Dual::tryLocalOrDiffusing(
   std::string newNexthop;
   int64_t newDistance;
   bool fc = meetFeasibleCondition(newNexthop, newDistance);
-  if (not info_.nexthop.has_value()) {
+  if (!info_.nexthop.has_value()) {
     CHECK_EQ(fc, true) << "my nexthop was invalid, must meet FC";
   }
   if (fc) {
@@ -267,7 +267,7 @@ Dual::tryLocalOrDiffusing(
     }
   } else {
     // not meet FC, perform diffusing computation
-    if (needReply and event != DualEvent::QUERY_FROM_SUCCESSOR) {
+    if (needReply && event != DualEvent::QUERY_FROM_SUCCESSOR) {
       // if received query from neighbor other than current next-hop,
       // send reply back before starting diffusing
       sendReply(msgsToSend);
@@ -277,7 +277,7 @@ Dual::tryLocalOrDiffusing(
     if (success) {
       info_.sm.processEvent(event, false);
     }
-    if (info_.nexthop.has_value() and not neighborUp(*info_.nexthop)) {
+    if (info_.nexthop.has_value() && !neighborUp(*info_.nexthop)) {
       // current successor is down
       if (nexthopCb_) {
         nexthopCb_(info_.nexthop, std::nullopt);
@@ -365,14 +365,14 @@ Dual::getInfo() const noexcept {
 bool
 Dual::hasValidRoute() const noexcept {
   return (
-      info_.sm.state == DualState::PASSIVE and
-      info_.distance != std::numeric_limits<int64_t>::max() and
+      info_.sm.state == DualState::PASSIVE &&
+      info_.distance != std::numeric_limits<int64_t>::max() &&
       info_.nexthop.has_value());
 }
 
 std::unordered_set<std::string>
 Dual::sptPeers() const noexcept {
-  if (not hasValidRoute()) {
+  if (!hasValidRoute()) {
     // route not ready
     return {};
   }
@@ -384,7 +384,7 @@ Dual::sptPeers() const noexcept {
 
 int64_t
 Dual::addDistances(int64_t d1, int64_t d2) {
-  if (d1 == std::numeric_limits<int64_t>::max() or
+  if (d1 == std::numeric_limits<int64_t>::max() ||
       d2 == std::numeric_limits<int64_t>::max()) {
     return std::numeric_limits<int64_t>::max();
   }
@@ -402,7 +402,7 @@ Dual::peerUp(
   // reset parent, if I chose this neighbor as parent before, but I didn't
   // receive peer-down event(non-graceful shutdown), reset nexthop and distance
   // as-if we received peer-down event before.
-  if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
+  if (info_.nexthop.has_value() && *info_.nexthop == neighbor) {
     if (nexthopCb_) {
       nexthopCb_(info_.nexthop, std::nullopt);
     }
@@ -523,7 +523,7 @@ Dual::processUpdate(
   } else {
     // active
     // only update d while leaving rd, fd as-is
-    if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
+    if (info_.nexthop.has_value() && *info_.nexthop == neighbor) {
       info_.distance = addDistances(localDistances_[*info_.nexthop], rd);
     }
     info_.sm.processEvent(DualEvent::OTHERS);
@@ -538,7 +538,7 @@ Dual::sendReply(
   std::string dstNode = info_.cornet.top();
   info_.cornet.pop();
 
-  if (not neighborUp(dstNode)) {
+  if (!neighborUp(dstNode)) {
     // neighbor was expecting a reply from me, but link is down on my end
     // two cases:
     // 1. link was up on both end, and now it's down: we can wait for neighbor
@@ -580,7 +580,7 @@ Dual::processQuery(
   info_.neighborInfos[neighbor].reportDistance = rd;
   info_.cornet.emplace(neighbor);
   DualEvent event = DualEvent::OTHERS;
-  if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
+  if (info_.nexthop.has_value() && *info_.nexthop == neighbor) {
     event = DualEvent::QUERY_FROM_SUCCESSOR;
   }
 
@@ -589,7 +589,7 @@ Dual::processQuery(
     tryLocalOrDiffusing(event, true /* need reply */, msgsToSend);
   } else {
     // active
-    if (info_.nexthop.has_value() and *info_.nexthop == neighbor) {
+    if (info_.nexthop.has_value() && *info_.nexthop == neighbor) {
       info_.distance = addDistances(
           localDistances_[*info_.nexthop],
           info_.neighborInfos[*info_.nexthop].reportDistance);
@@ -615,7 +615,7 @@ Dual::processReply(
   (*counters_[neighbor].replyRecv())++;
   (*counters_[neighbor].totalRecv())++;
 
-  if (not info_.neighborInfos[neighbor].expectReply) {
+  if (!info_.neighborInfos[neighbor].expectReply) {
     // received a reply when I don't expect to receive a reply from it
     // this is OK, this can happen when I detect link-down event before I
     // receive the reply, just ignore it.
@@ -636,7 +636,7 @@ Dual::processReply(
       break;
     }
   }
-  if (not lastReply) {
+  if (!lastReply) {
     return;
   }
 
@@ -666,7 +666,7 @@ Dual::processReply(
     }
     info_.nexthop = newNh;
   }
-  if (not sameRd) {
+  if (!sameRd) {
     floodUpdates(msgsToSend);
   }
 
@@ -753,7 +753,7 @@ DualNode::getSptRootId() const noexcept {
 
 std::unordered_set<std::string>
 DualNode::getSptPeers(const std::optional<std::string>& rootId) const noexcept {
-  if (not rootId.has_value()) {
+  if (!rootId.has_value()) {
     // none rootId, return empty peers
     return {};
   }
@@ -893,7 +893,7 @@ DualNode::sendAllDualMessages(
 
     // set srcId = myNodeId
     msgs.srcId() = nodeId;
-    if (not sendDualMessages(neighbor, msgs)) {
+    if (!sendDualMessages(neighbor, msgs)) {
       XLOG(ERR) << "failed to send dual messages to " << kv.first;
       continue;
     }

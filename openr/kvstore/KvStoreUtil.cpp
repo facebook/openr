@@ -20,7 +20,7 @@ isValidTtlAndLog(
     const thrift::Value& value,
     thrift::KvStoreMergeResult& stats) {
   bool result = isValidTtl(*value.ttl());
-  if (not result) {
+  if (!result) {
     XLOG(DBG4) << fmt::format(
         "(mergeKeyValues) key: {} has invalid ttl: {}", key, *value.ttl());
 
@@ -68,7 +68,7 @@ isValidVersionAndLog(
     const thrift::Value& value,
     thrift::KvStoreMergeResult& stats) {
   bool result = isValidVersion(myVersion, value);
-  if (not result) {
+  if (!result) {
     XLOG(DBG4) << fmt::format(
         "(mergeKeyValues) key: {} has invalid/old version: {}, local version: {}",
         key,
@@ -87,7 +87,7 @@ isKeyMatchAndLog(
     const std::string& key,
     const thrift::Value& value,
     thrift::KvStoreMergeResult& stats) {
-  if (filters.has_value() && not filters->keyMatch(key, value)) {
+  if (filters.has_value() && !filters->keyMatch(key, value)) {
     XLOG(DBG4) << fmt::format(
         "(mergeKeyValues) key: {} does NOT matching the fiter: {}",
         key,
@@ -228,7 +228,7 @@ updateKvStoreValue(
     kvStoreIt->second = std::move(newValue);
   }
   // update hash if it's not there
-  if (not kvStoreIt->second.hash().has_value()) {
+  if (!kvStoreIt->second.hash().has_value()) {
     kvStoreIt->second.hash() =
         generateHash(*value.version(), *value.originatorId(), value.value());
   }
@@ -285,7 +285,7 @@ getMergeType(
       return MergeType::UPDATE_TTL_NEEDED;
     }
   } else {
-    if (not util::isValidVersionAndLog(myVersion, key, value, stats)) {
+    if (!util::isValidVersionAndLog(myVersion, key, value, stats)) {
       /*
        * skip if the version is invalid or old
        *
@@ -384,7 +384,7 @@ isValidTtl(int64_t val) {
 
 bool
 isValidVersion(const int64_t myVersion, const thrift::Value& incomingVal) {
-  return (incomingVal.version() > 0) and (incomingVal.version() >= myVersion);
+  return (incomingVal.version() > 0) && (incomingVal.version() >= myVersion);
 }
 
 thrift::KvStoreMergeResult
@@ -398,12 +398,12 @@ mergeKeyValues(
   size_t nTtlUpdate{0};
 
   for (const auto& [key, value] : keyVals) {
-    if (not util::isKeyMatchAndLog(filters, key, value, result)) {
+    if (!util::isKeyMatchAndLog(filters, key, value, result)) {
       // skip if the filter is set and key does NOT match the filter
       continue;
     }
 
-    if (not util::isValidTtlAndLog(key, value, result)) {
+    if (!util::isValidTtlAndLog(key, value, result)) {
       // skip if the ttl is invalid
       continue;
     }
@@ -481,7 +481,7 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
   }
 
   // compare value
-  if (v1.hash().has_value() and v2.hash().has_value() and
+  if (v1.hash().has_value() && v2.hash().has_value() &&
       *v1.hash() == *v2.hash()) {
     // TODO: `ttlVersion` and `ttl` value can be different on neighbor nodes.
     // The ttl-update should never be sent over the full-sync
@@ -497,7 +497,7 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
 
   // can't use hash, either it's missing or they are different
   // compare values
-  if (v1.value().has_value() and v2.value().has_value()) {
+  if (v1.value().has_value() && v2.value().has_value()) {
     auto compareRes = (*v1.value()).compare(*v2.value());
     if (compareRes > 0) {
       return ComparisonResult::FIRST;
@@ -549,12 +549,11 @@ KvStoreFilters::keyMatchAll(
     return true;
   }
 
-  if (!keyPrefixList_.empty() && not keyRegexSet_.match(key)) {
+  if (!keyPrefixList_.empty() && !keyRegexSet_.match(key)) {
     return false;
   }
 
-  if (!originatorIds_.empty() &&
-      not originatorIds_.count(*value.originatorId())) {
+  if (!originatorIds_.empty() && !originatorIds_.count(*value.originatorId())) {
     return false;
   }
 
@@ -630,10 +629,10 @@ dumpDifference(
     const auto& reqVal = reqKv->second;
     ComparisonResult rc = compareValues(myVal, reqVal);
 
-    if (rc == ComparisonResult::FIRST or rc == ComparisonResult::UNKNOWN) {
+    if (rc == ComparisonResult::FIRST || rc == ComparisonResult::UNKNOWN) {
       thriftPub.keyVals()->emplace(myKey, myVal);
     }
-    if (rc == ComparisonResult::SECOND or rc == ComparisonResult::UNKNOWN) {
+    if (rc == ComparisonResult::SECOND || rc == ComparisonResult::UNKNOWN) {
       thriftPub.tobeUpdatedKeys()->emplace_back(myKey);
     }
   }
@@ -662,10 +661,10 @@ dumpAllWithFilters(
   thriftPub.area() = area;
 
   for (auto const& [key, val] : kvStore) {
-    if (not kvFilters.keyMatch(key, val)) {
+    if (!kvFilters.keyMatch(key, val)) {
       continue;
     }
-    if (not doNotPublishValue) {
+    if (!doNotPublishValue) {
       thriftPub.keyVals()[key] = val;
     } else {
       thriftPub.keyVals()[key] = createThriftValueWithoutBinaryValue(val);
@@ -685,7 +684,7 @@ dumpHashWithFilters(
   thrift::Publication thriftPub;
   thriftPub.area() = area;
   for (auto const& [key, val] : kvStore) {
-    if (not kvFilters.keyMatch(key, val)) {
+    if (!kvFilters.keyMatch(key, val)) {
       continue;
     }
     DCHECK(val.hash().has_value());
@@ -710,9 +709,9 @@ updatePublicationTtl(
   for (const auto& qE : ttlCountdownQueue) {
     // Find key and ensure we are taking time from right entry from queue
     auto kv = thriftPub.keyVals()->find(qE.key);
-    if (kv == thriftPub.keyVals()->end() or
-        *kv->second.version() != qE.version or
-        *kv->second.originatorId() != qE.originatorId or
+    if (kv == thriftPub.keyVals()->end() ||
+        *kv->second.version() != qE.version ||
+        *kv->second.originatorId() != qE.originatorId ||
         *kv->second.ttlVersion() != qE.ttlVersion) {
       continue;
     }
@@ -726,7 +725,7 @@ updatePublicationTtl(
     }
 
     // filter key from publication if time left is below ttl threshold
-    if (removeAboutToExpire and (timeLeft < Constants::kTtlThreshold)) {
+    if (removeAboutToExpire && (timeLeft < Constants::kTtlThreshold)) {
       thriftPub.keyVals()->erase(kv);
       continue;
     }

@@ -109,7 +109,7 @@ class KvStoreTestFixture : public ::testing::Test {
   void
   waitForAllPeersInitialized() const {
     bool allInitialized = false;
-    while (not allInitialized) {
+    while (!allInitialized) {
       std::this_thread::yield();
       allInitialized = true;
       for (auto const& store : stores_) {
@@ -132,7 +132,7 @@ class KvStoreTestFixture : public ::testing::Test {
       AreaId const& areaId,
       std::string const& key) const {
     auto const start = std::chrono::steady_clock::now();
-    while (not store->getKey(areaId, key).has_value() &&
+    while (!store->getKey(areaId, key).has_value() &&
            (std::chrono::steady_clock::now() - start <
             kTimeoutOfKvStorePropagation)) {
       std::this_thread::yield();

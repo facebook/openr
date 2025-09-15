@@ -167,7 +167,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
       // NOTE: It is not necessary to receive kNumKeys publications. Just one
       // publication can be published for all changes and depends on internal
       // implementation of KvStore (we do not rely on it).
-      if (not checkTtl) {
+      if (!checkTtl) {
         LOG(INFO) << "Expecting publications from stores. Iteration# " << i;
         for (unsigned int j = 0; j < kNumStores; ++j) {
           auto& store = stores_[j];
@@ -215,7 +215,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
           bool allStoreEmpty = true;
           for (auto& store : stores_) {
             auto keyVals = store->dumpAll(kTestingAreaName);
-            if (not keyVals.empty()) {
+            if (!keyVals.empty()) {
               VLOG(2) << store->getNodeId() << " still has " << keyVals.size()
                       << " keys remaining";
               for (auto& [key, val] : keyVals) {
