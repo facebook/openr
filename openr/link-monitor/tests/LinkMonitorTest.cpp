@@ -158,7 +158,7 @@ const auto adj_3_2 = createThriftAdjacency(
 
 void
 printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
-  std::string linkStatusRecordStr = "";
+  std::string linkStatusRecordStr;
   if (adjDb.linkStatusRecords().has_value()) {
     for (auto const& [ifName, linkStatusRecord] :
          *adjDb.linkStatusRecords()->linkStatusMap()) {
