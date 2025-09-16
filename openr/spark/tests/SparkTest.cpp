@@ -2643,6 +2643,118 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   }
 }
 
+//
+// Test v6 link-local address change
+//
+TEST_F(SimpleSparkFixture, V6LinkLocalAddressChange) {
+  // Establish initial adjacency
+  createAndConnect();
+
+  const folly::CIDRNetwork ip1V6_changed =
+      folly::IPAddress::createNetwork("fe80::101/128");
+
+  // Change the v6 link-local address on node1
+  node1_->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip1V4, ip1V6_changed} /* networks */)});
+
+  // Wait for adjacency to go down due to address change
+  {
+    auto events1 = node1_->waitForEvents(NB_DOWN);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
+    auto& event1 = events1.value().back();
+    EXPECT_EQ(iface1, event1.localIfName);
+    EXPECT_EQ(nodeName2_, event1.remoteNodeName);
+
+    auto events2 = node2_->waitForEvents(NB_DOWN);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
+    auto& event2 = events2.value().back();
+    EXPECT_EQ(iface2, event2.localIfName);
+    EXPECT_EQ(nodeName1_, event2.remoteNodeName);
+  }
+
+  // Wait for adjacency to come back up with new address
+  {
+    auto events1 = node1_->waitForEvents(NB_UP);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
+    auto& event1 = events1.value().back();
+    EXPECT_EQ(iface1, event1.localIfName);
+    EXPECT_EQ(nodeName2_, event1.remoteNodeName);
+    EXPECT_EQ(
+        std::make_pair(ip2V4.first, ip2V6.first),
+        SparkWrapper::getTransportAddrs(event1));
+
+    auto events2 = node2_->waitForEvents(NB_UP);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
+    auto& event2 = events2.value().back();
+    EXPECT_EQ(iface2, event2.localIfName);
+    EXPECT_EQ(nodeName1_, event2.remoteNodeName);
+    EXPECT_EQ(
+        std::make_pair(ip1V4.first, ip1V6_changed.first),
+        SparkWrapper::getTransportAddrs(event2));
+
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
+  }
+}
+
+//
+// Test v4 address change triggers
+//
+TEST_F(SimpleSparkFixture, V4AddressChange) {
+  // Establish initial adjacency
+  createAndConnect();
+
+  // Change the v4 address on node1
+  node1_->updateInterfaceDb({InterfaceInfo(
+      iface1 /* ifName */,
+      true /* isUp */,
+      ifIndex1 /* ifIndex */,
+      {ip3V4, ip1V6} /* networks */)});
+
+  // Wait for adjacency to go down and come back up
+  {
+    auto events1 = node1_->waitForEvents(NB_DOWN);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
+    auto& event1 = events1.value().back();
+    EXPECT_EQ(iface1, event1.localIfName);
+    EXPECT_EQ(nodeName2_, event1.remoteNodeName);
+
+    auto events2 = node2_->waitForEvents(NB_DOWN);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
+    auto& event2 = events2.value().back();
+    EXPECT_EQ(iface2, event2.localIfName);
+    EXPECT_EQ(nodeName1_, event2.remoteNodeName);
+  }
+
+  // Wait for adjacency to come back up with new v4 address
+  {
+    auto events1 = node1_->waitForEvents(NB_UP);
+    ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
+    auto& event1 = events1.value().back();
+    EXPECT_EQ(iface1, event1.localIfName);
+    EXPECT_EQ(nodeName2_, event1.remoteNodeName);
+
+    auto events2 = node2_->waitForEvents(NB_UP);
+    ASSERT_TRUE(events2.has_value() && events2.value().size() == 1);
+    auto& event2 = events2.value().back();
+    EXPECT_EQ(iface2, event2.localIfName);
+    EXPECT_EQ(nodeName1_, event2.remoteNodeName);
+    EXPECT_EQ(
+        std::make_pair(ip3V4.first, ip1V6.first),
+        SparkWrapper::getTransportAddrs(event2));
+
+    ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
+    ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
+  }
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

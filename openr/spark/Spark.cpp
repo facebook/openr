@@ -2366,6 +2366,7 @@ void
 Spark::updateInterface(
     const std::vector<std::string>& toUpdate,
     const std::unordered_map<std::string, Interface>& newInterfaceDb) {
+  std::vector<std::string> addressChangedInterfaces{};
   for (const auto& ifName : toUpdate) {
     auto& interface = interfaceDb_.at(ifName);
     auto& newInterface = newInterfaceDb.at(ifName);
@@ -2410,8 +2411,15 @@ Spark::updateInterface(
         interface.v6LinkLocalNetwork != newInterface.v6LinkLocalNetwork;
     interface = std::move(newInterface);
     if (v4Changed || v6Changed) {
-      sendHelloMsg(ifName, false, false, true);
+      addressChangedInterfaces.emplace_back(ifName);
     }
+  }
+  if (!addressChangedInterfaces.empty()) {
+    XLOG(INFO) << "Address change detected on "
+               << addressChangedInterfaces.size()
+               << " interfaces. Deleting/readding these interfaces.";
+    deleteInterface(addressChangedInterfaces);
+    addInterface(addressChangedInterfaces, newInterfaceDb);
   }
 }
 
