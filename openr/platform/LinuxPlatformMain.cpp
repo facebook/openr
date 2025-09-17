@@ -24,7 +24,7 @@ using openr::NetlinkFibHandler;
 int
 main(int argc, char** argv) {
   // Init everything
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   folly::EventBase mainEvb;
   openr::EventBaseStopSignalHandler handler(&mainEvb);
