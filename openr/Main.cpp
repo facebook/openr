@@ -81,7 +81,7 @@ main(int argc, char** argv) {
    * LOG_PID => Log PID along with each message
    * LOG_NODELAY => Connect immediately
    */
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::setThreadName("openr");
   setlogmask(LOG_UPTO(LOG_INFO));
   openlog("openr", LOG_CONS | LOG_PID | LOG_NDELAY | LOG_PERROR, LOG_LOCAL4);
