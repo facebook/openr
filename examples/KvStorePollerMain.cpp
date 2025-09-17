@@ -17,7 +17,7 @@ DEFINE_int32(port, openr::Constants::kOpenrCtrlPort, "OpenrCtrl server port");
 int
 main(int argc, char** argv) {
   // Initialize all params
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   // Define and start evb
   folly::EventBase evb;

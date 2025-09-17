@@ -336,7 +336,7 @@ int
 main(int argc, char** argv) {
   // parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   google::InstallFailureSignalHandler();
 
   // Run the tests

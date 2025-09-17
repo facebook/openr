@@ -209,7 +209,7 @@ int
 main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   // Run the tests
   return RUN_ALL_TESTS();
