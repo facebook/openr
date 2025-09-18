@@ -172,13 +172,13 @@ TEST(SpfSolver, DrainedNodeLeastPreferred) {
       addr1, thrift::PrefixType::CONFIG, createMetrics(100, 100, 0));
   auto prefixHighMetric = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::CONFIG, createMetrics(300, 300, 0));
-  const auto prefixDb1 = createPrefixDb("1", {prefix});
-  const auto prefixDb2 = createPrefixDb("2", {});
-  const auto prefixDb3 = createPrefixDb("3", {prefixHighMetric});
+  const auto localPrefixDb1 = createPrefixDb("1", {prefix});
+  const auto localPrefixDb2 = createPrefixDb("2", {});
+  const auto localPrefixDb3 = createPrefixDb("3", {prefixHighMetric});
 
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
-  EXPECT_TRUE(updatePrefixDatabase(prefixState, prefixDb2).empty());
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb1).empty());
+  EXPECT_TRUE(updatePrefixDatabase(prefixState, localPrefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb3).empty());
 
   // 0) nothing drained, we should choose 3 (baseline)
   {
@@ -407,13 +407,13 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
 
   // Originate same prefix
   const auto prefix1 = createPrefixEntry(addr1, thrift::PrefixType::CONFIG);
-  const auto prefixDb1 = createPrefixDb("1", {prefix1});
-  const auto prefixDb2 = createPrefixDb("2", {});
-  const auto prefixDb3 = createPrefixDb("3", {prefix1});
+  const auto localPrefixDb1 = createPrefixDb("1", {prefix1});
+  const auto localPrefixDb2 = createPrefixDb("2", {});
+  const auto localPrefixDb3 = createPrefixDb("3", {prefix1});
 
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
-  EXPECT_TRUE(updatePrefixDatabase(prefixState, prefixDb2).empty());
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb1).empty());
+  EXPECT_TRUE(updatePrefixDatabase(prefixState, localPrefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb3).empty());
 
   const unsigned int nodeIncVal50 = 50;
   const unsigned int nodeIncVal100 = 100;
@@ -542,13 +542,13 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
   // Originate same prefix differently
   const auto prefix1 = createPrefixEntry(addr1, thrift::PrefixType::CONFIG);
   const auto prefix3 = createPrefixEntry(addr1, thrift::PrefixType::VIP);
-  const auto prefixDb1 = createPrefixDb("1", {prefix1});
-  const auto prefixDb2 = createPrefixDb("2", {});
-  const auto prefixDb3 = createPrefixDb("3", {prefix3});
+  const auto localPrefixDb1 = createPrefixDb("1", {prefix1});
+  const auto localPrefixDb2 = createPrefixDb("2", {});
+  const auto localPrefixDb3 = createPrefixDb("3", {prefix3});
 
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
-  EXPECT_TRUE(updatePrefixDatabase(prefixState, prefixDb2).empty());
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb1).empty());
+  EXPECT_TRUE(updatePrefixDatabase(prefixState, localPrefixDb2).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb3).empty());
 
   //
   // dump routes for all nodes. expect one unicast route, no overload
@@ -1083,8 +1083,8 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   bool foundRouteV6 = false;
   if (routeDb.has_value()) {
-    for (auto const& [prefix, _] : routeDb->unicastRoutes) {
-      if (toIpPrefix(prefix) == addr3) {
+    for (auto const& [routePrefix, _] : routeDb->unicastRoutes) {
+      if (toIpPrefix(routePrefix) == addr3) {
         foundRouteV6 = true;
         break;
       }
@@ -1591,12 +1591,12 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
   // Advertise default prefixes from node-1 and node-4
   auto defaultRoutePrefix = v4Enabled ? "0.0.0.0/0" : "::/0";
   auto defaultRoute = toIpPrefix(defaultRoutePrefix);
-  auto prefixDb1 = createPrefixDb(
+  auto localPrefixDb1 = createPrefixDb(
       "1", {createPrefixEntry(addr1), createPrefixEntry(defaultRoute)});
-  auto prefixDb4 = createPrefixDb(
+  auto localPrefixDb4 = createPrefixDb(
       "4", {createPrefixEntry(addr4), createPrefixEntry(defaultRoute)});
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
-  EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb4).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb1).empty());
+  EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb4).empty());
 
   auto routeMap = getRouteMap(
       *spfSolver, {"1", "2", "3", "4"}, areaLinkStates, prefixState);
