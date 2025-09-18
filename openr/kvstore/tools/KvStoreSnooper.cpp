@@ -23,7 +23,7 @@ DEFINE_int32(processing_timeout_ms, 5000, "Processing timeout for client");
 int
 main(int argc, char** argv) {
   // Initialize all params
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
 
   // Define and start event base
   folly::EventBase evb;

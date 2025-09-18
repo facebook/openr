@@ -216,7 +216,7 @@ BENCHMARK_NAMED_PARAM(BM_ReplicateQueue, M1000000_R1_W100, 1, 100, 10000);
 
 int
 main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::runBenchmarks();
   return 0;
 }
