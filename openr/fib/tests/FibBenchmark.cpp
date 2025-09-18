@@ -327,7 +327,7 @@ BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100000);
 
 int
 main(int argc, char** argv) {
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   folly::runBenchmarks();
   return 0;
 }

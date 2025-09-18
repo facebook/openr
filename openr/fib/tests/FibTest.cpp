@@ -1703,7 +1703,7 @@ main(int argc, char* argv[]) {
   // Parse command line flags
   testing::InitGoogleTest(&argc, argv);
   testing::InitGoogleMock(&argc, argv);
-  folly::init(&argc, &argv);
+  const folly::Init init(&argc, &argv);
   google::InstallFailureSignalHandler();
 
   auto rc = RUN_ALL_TESTS();
