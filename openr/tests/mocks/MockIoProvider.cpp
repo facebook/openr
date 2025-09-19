@@ -328,7 +328,7 @@ MockIoProvider::processMailboxes() {
     std::lock_guard<std::mutex> lock(mutex_);
 
     for (auto& kv : mailboxes_) {
-      if (not kv.second.size()) {
+      if (!kv.second.size()) {
         continue; // no messages to read
       }
 

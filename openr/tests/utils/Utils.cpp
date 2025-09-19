@@ -336,7 +336,7 @@ equalPublication(thrift::Publication&& pub1, thrift::Publication&& pub2) {
       (*pub2.keyVals()).begin(), (*pub2.keyVals()).end());
 
   for (auto it1 = pub1KeyVals.begin(), it2 = pub2KeyVals.begin();
-       it1 != pub1KeyVals.end() and it2 != pub2KeyVals.end();
+       it1 != pub1KeyVals.end() && it2 != pub2KeyVals.end();
        ++it1, ++it2) {
     // check the key matches
     if (it1->first != it2->first) {
@@ -363,7 +363,7 @@ equalPublication(thrift::Publication&& pub1, thrift::Publication&& pub2) {
     return false;
   }
 
-  if (pub1.tobeUpdatedKeys().has_value() and
+  if (pub1.tobeUpdatedKeys().has_value() &&
       pub2.tobeUpdatedKeys().has_value()) {
     std::sort(
         (*pub1.tobeUpdatedKeys()).begin(), (*pub1.tobeUpdatedKeys()).end());

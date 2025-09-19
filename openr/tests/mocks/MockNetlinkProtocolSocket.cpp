@@ -159,7 +159,7 @@ folly::SemiFuture<int>
 MockNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
   // Search for addr list of interface index (it must exists)
   auto it = ifAddrs_.find(addr.getIfIndex());
-  if (it == ifAddrs_.end() or !addr.getPrefix().has_value()) {
+  if (it == ifAddrs_.end() || !addr.getPrefix().has_value()) {
     return folly::SemiFuture<int>(-ENXIO); // No such device or address
   }
 
@@ -182,7 +182,7 @@ folly::SemiFuture<int>
 MockNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
   // Search for addr list of interface index (it must exists)
   auto it = ifAddrs_.find(addr.getIfIndex());
-  if (it == ifAddrs_.end() or !addr.getPrefix().has_value()) {
+  if (it == ifAddrs_.end() || !addr.getPrefix().has_value()) {
     return folly::SemiFuture<int>(-ENXIO); // No such device or address
   }
 

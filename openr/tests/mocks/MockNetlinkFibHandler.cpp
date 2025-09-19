@@ -134,7 +134,7 @@ MockNetlinkFibHandler::syncFib(
   // Unicast route add. These would be the prefixes that we failed to delete
   for (auto& prefix : *dirtyPrefixes) {
     auto ipPrefix = toIpPrefix(prefix);
-    if (unicastRouteDb->count(prefix) or
+    if (unicastRouteDb->count(prefix) ||
         std::count(
             failedPrefixesToAdd.begin(), failedPrefixesToAdd.end(), ipPrefix)) {
       continue;
@@ -143,7 +143,7 @@ MockNetlinkFibHandler::syncFib(
   }
 
   // Throw FibUpdateError if applicable
-  if (failedPrefixesToAdd.size() or failedPrefixesToDelete.size()) {
+  if (failedPrefixesToAdd.size() || failedPrefixesToDelete.size()) {
     thrift::PlatformFibUpdateError error;
     error.vrf2failedAddUpdatePrefixes()->emplace(
         0, std::move(failedPrefixesToAdd));
@@ -228,7 +228,7 @@ MockNetlinkFibHandler::syncMplsFib(
   // Identify dirty labels that are not part of MPLS route db nor of failed MPLS
   // route add. These would be the labels that we failed to delete
   for (auto& label : *dirtyLabels) {
-    if (mplsRouteDb->count(label) or
+    if (mplsRouteDb->count(label) ||
         std::count(failedLabelsToAdd.begin(), failedLabelsToAdd.end(), label)) {
       continue;
     }
@@ -236,7 +236,7 @@ MockNetlinkFibHandler::syncMplsFib(
   }
 
   // Throw FibUpdateError if applicable
-  if (failedLabelsToAdd.size() or failedLabelsToDelete.size()) {
+  if (failedLabelsToAdd.size() || failedLabelsToDelete.size()) {
     thrift::PlatformFibUpdateError error;
     error.failedAddUpdateMplsLabels() = std::move(failedLabelsToAdd);
     error.failedDeleteMplsLabels() = std::move(failedLabelsToDelete);
@@ -378,7 +378,7 @@ MockNetlinkFibHandler::restart() {
 
 void
 MockNetlinkFibHandler::ensureHealthy() {
-  if (not isHealthy_) {
+  if (!isHealthy_) {
     unhealthyExceptionQueue_.push(folly::Unit());
     throw std::runtime_error("Handler rejects routes since it is unhealthy");
   }

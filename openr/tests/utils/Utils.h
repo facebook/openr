@@ -188,7 +188,7 @@ checkUntilTimeout(
     std::chrono::milliseconds timeout = std::chrono::milliseconds(0),
     std::chrono::milliseconds retryInterval = std::chrono::milliseconds(100)) {
   bool checkIndefinitely = timeout.count() == 0;
-  if (not checkIndefinitely) {
+  if (!checkIndefinitely) {
     CHECK_GE(timeout.count(), retryInterval.count());
   }
 
