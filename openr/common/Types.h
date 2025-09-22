@@ -208,7 +208,7 @@ class ClearKeyValueRequest {
       const bool setValue = false)
       : area(area), key(key), value(value), setValue(setValue) {
     // Value is required if `setValue` flag is true.
-    CHECK(not(setValue && value.empty()))
+    CHECK(!(setValue && value.empty()))
         << "Must specify value in ClearKeyValueRequest when setValue flag is set to true.";
   }
 

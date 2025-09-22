@@ -379,8 +379,8 @@ struct InterfaceInfo {
 
   inline bool
   operator==(const InterfaceInfo& other) const {
-    return (ifName == other.ifName) and (isUp == other.isUp) and
-        (ifIndex == other.ifIndex) and (networks == other.networks);
+    return (ifName == other.ifName) && (isUp == other.isUp) &&
+        (ifIndex == other.ifIndex) && (networks == other.networks);
   }
 
   // Utility function to retrieve v4 addresses
@@ -400,7 +400,7 @@ struct InterfaceInfo {
   getSortedV6LinkLocalAddrs() const {
     std::set<folly::CIDRNetwork> v6Addrs;
     for (auto const& ntwk : networks) {
-      if (ntwk.first.isV6() and ntwk.first.isLinkLocal()) {
+      if (ntwk.first.isV6() && ntwk.first.isLinkLocal()) {
         v6Addrs.insert(ntwk);
       }
     }

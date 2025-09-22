@@ -733,10 +733,10 @@ TEST(UtilTest, AddJitter) {
   auto t1_jitter_ms = addJitter<std::chrono::milliseconds>(t1_ms, pct);
   auto t2_jitter_s = addJitter<std::chrono::seconds>(t2_s, pct);
   CHECK(
-      t1_jitter_ms >= (1 - pct / 100.0) * t1_ms and
+      t1_jitter_ms >= (1 - pct / 100.0) * t1_ms &&
       t1_jitter_ms <= (1 + pct / 100.0) * t1_jitter_ms);
   CHECK(
-      t2_jitter_s >= (1 - pct / 100.0) * t2_s and
+      t2_jitter_s >= (1 - pct / 100.0) * t2_s &&
       t2_jitter_s <= (1 + pct / 100.0) * t2_jitter_s);
 }
 

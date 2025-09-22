@@ -21,7 +21,7 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
    *  - signalHandlerEvb is still running, aka, NO SIGINT/SIGQUIT/SIGTERM
    *  - switch is NOT ready to accept thrift request, aka, NOT CONFIGURED
    */
-  while (signalHandlerEvb.isRunning() and
+  while (signalHandlerEvb.isRunning() &&
          thrift::SwitchRunState::CONFIGURED != switchState) {
     openr::Fib::createFibClient(evb, client, port);
     try {
@@ -98,7 +98,7 @@ void
 waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server) {
   while (true) {
     auto evb = server->getServeEventBase();
-    if (evb != nullptr and evb->isRunning()) {
+    if (evb != nullptr && evb->isRunning()) {
       break;
     }
     std::this_thread::yield();

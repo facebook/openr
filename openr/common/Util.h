@@ -129,7 +129,7 @@ getUnixTimeStampMs() noexcept {
 template <class T>
 T
 addJitter(T base, double pct = 20.0) {
-  CHECK(pct > 0 and pct <= 100) << "percentage input must between 0 and 100";
+  CHECK(pct > 0 && pct <= 100) << "percentage input must between 0 and 100";
   thread_local static std::default_random_engine generator;
   std::uniform_int_distribution<int> distribution(
       pct / -100.0 * base.count(), pct / 100.0 * base.count());

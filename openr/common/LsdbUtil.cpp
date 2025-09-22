@@ -232,7 +232,7 @@ getNthPrefix(
   if (allocBits < 0) {
     throw std::invalid_argument("Alloc prefix is bigger than seed prefix.");
   }
-  if (allocBits < 32 and prefixIndex >= (1u << allocBits)) {
+  if (allocBits < 32 && prefixIndex >= (1u << allocBits)) {
     throw std::invalid_argument("Prefix index is out of range.");
   }
 
@@ -284,7 +284,7 @@ createLoopbackPrefix(const folly::CIDRNetwork& prefix) noexcept {
 
 std::string
 getRemoteIfName(const thrift::Adjacency& adj) {
-  if (not adj.otherIfName()->empty()) {
+  if (!adj.otherIfName()->empty()) {
     return *adj.otherIfName();
   }
   return fmt::format("neigh-{}", *adj.ifName());
@@ -376,7 +376,7 @@ hasBestRoutesInArea(
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& bestNodeAreas) {
   for (auto const& [nodeAndArea, prefixEntry] : prefixEntries) {
-    if (not bestNodeAreas.count(nodeAndArea)) {
+    if (!bestNodeAreas.count(nodeAndArea)) {
       continue; // Skip the prefix-entry of non best node-area
     }
     if (area != nodeAndArea.second) {
@@ -783,9 +783,9 @@ selectRoutes(
   for (auto& [key, metricsWrapper] : prefixEntries) {
     auto& metrics = *metricsWrapper->metrics();
     std::tuple<int32_t, int32_t, int32_t> metricsTuple{
-        -(*metrics.drain_metric() or
-          (int32_t) drainedNodes.count(key)), /* prefer-lower, set to -1 if
-                                                 drained, otherwise 0*/
+        -(*metrics.drain_metric() ||
+          (int32_t)drainedNodes.count(key)), /* prefer-lower, set to -1 if
+                                                drained, otherwise 0*/
         *metrics.path_preference(), /* prefer-higher */
         *metrics.source_preference() /* prefer-higher */};
 

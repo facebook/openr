@@ -34,7 +34,7 @@ PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
 
   auto pattV2 =
       RE2::FullMatch(key, PrefixKey::getPrefixRE2V2(), &node, &ipStr, &plen);
-  if (not pattV2) {
+  if (!pattV2) {
     return folly::makeUnexpected(
         fmt::format("Invalid format for key: {}.", key));
   }

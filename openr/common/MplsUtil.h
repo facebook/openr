@@ -18,7 +18,7 @@ namespace openr {
  */
 inline bool
 isMplsLabelValid(int32_t mplsLabel) {
-  return (mplsLabel & 0xfff00000) == 0 and mplsLabel != 0;
+  return (mplsLabel & 0xfff00000) == 0 && mplsLabel != 0;
 }
 
 /**
@@ -29,11 +29,11 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
   switch (*mplsAction.action()) {
   case thrift::MplsActionCode::PUSH:
     // Swap label shouldn't be set
-    CHECK(not mplsAction.swapLabel().has_value());
+    CHECK(!mplsAction.swapLabel().has_value());
     // Push labels should be set
     CHECK(mplsAction.pushLabels().has_value());
     // there should be atleast one push label
-    CHECK(not mplsAction.pushLabels()->empty());
+    CHECK(!mplsAction.pushLabels()->empty());
     for (auto const& label : mplsAction.pushLabels().value()) {
       CHECK(isMplsLabelValid(label));
     }
@@ -43,13 +43,13 @@ checkMplsAction(thrift::MplsAction const& mplsAction) {
     CHECK(mplsAction.swapLabel().has_value());
     CHECK(isMplsLabelValid(mplsAction.swapLabel().value()));
     // Push labels shouldn't be set
-    CHECK(not mplsAction.pushLabels().has_value());
+    CHECK(!mplsAction.pushLabels().has_value());
     break;
   case thrift::MplsActionCode::PHP:
   case thrift::MplsActionCode::POP_AND_LOOKUP:
     // Swap label should not be set
-    CHECK(not mplsAction.swapLabel().has_value());
-    CHECK(not mplsAction.pushLabels().has_value());
+    CHECK(!mplsAction.swapLabel().has_value());
+    CHECK(!mplsAction.pushLabels().has_value());
     break;
   default:
     CHECK(false) << "Unknown action code";
