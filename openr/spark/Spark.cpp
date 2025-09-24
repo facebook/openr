@@ -2411,13 +2411,14 @@ Spark::updateInterface(
         interface.v6LinkLocalNetwork != newInterface.v6LinkLocalNetwork;
     interface = std::move(newInterface);
     if (v4Changed || v6Changed) {
+      XLOG(INFO) << "Address change detected on ifIndex: " << interface.ifIndex
+                 << "for iface: " << ifName;
       addressChangedInterfaces.emplace_back(ifName);
     }
   }
   if (!addressChangedInterfaces.empty()) {
-    XLOG(INFO) << "Address change detected on "
-               << addressChangedInterfaces.size()
-               << " interfaces. Deleting/readding these interfaces.";
+    XLOG(INFO) << "Deleting/Readding " << addressChangedInterfaces.size()
+               << " interfaces with updated address.";
     deleteInterface(addressChangedInterfaces);
     addInterface(addressChangedInterfaces, newInterfaceDb);
   }
