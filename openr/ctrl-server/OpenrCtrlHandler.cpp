@@ -54,7 +54,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
   // We expect ctrl-evb not be running otherwise adding fiber task is not
   // thread safe.
   CHECK_NOTNULL(ctrlEvb);
-  CHECK(not ctrlEvb->isRunning());
+  CHECK(!ctrlEvb->isRunning());
 
   if (kvStore_) {
     // Add fiber task to receive publication from Dispatcher
@@ -308,7 +308,7 @@ OpenrCtrlHandler::getRegexCounters(
     std::unique_ptr<std::string> regex) {
   // Compile regex
   re2::RE2 compiledRegex(*regex);
-  if (not compiledRegex.ok()) {
+  if (!compiledRegex.ok()) {
     return;
   }
 
@@ -366,13 +366,13 @@ OpenrCtrlHandler::getBuildInfo(thrift::BuildInfo& _buildInfo) {
 void
 OpenrCtrlHandler::dryrunConfig(
     std::string& _return, std::unique_ptr<std::string> file) {
-  if (not file) {
+  if (!file) {
     throw thrift::OpenrError("Dereference nullptr for config file");
   }
 
   // check if the config file exists and readable
   const auto& fileName = *file;
-  if (not fs::exists(fileName)) {
+  if (!fs::exists(fileName)) {
     throw thrift::OpenrError(
         fmt::format("Config file doesn't exist: {}", fileName));
   }
@@ -679,7 +679,7 @@ OpenrCtrlHandler::semifuture_getDecisionAreaAdjacenciesFiltered(
 //
 folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
 OpenrCtrlHandler::semifuture_getDispatcherFilters() {
-  if (not dispatcher_) {
+  if (!dispatcher_) {
     folly::Promise<std::unique_ptr<std::vector<std::vector<std::string>>>> p;
     auto sf = p.getSemiFuture();
     p.setValue(nullptr);
@@ -1313,7 +1313,7 @@ OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
   auto sf = configStore_->load(std::move(*key));
   return std::move(sf).defer(
       [](folly::Try<std::optional<std::string>>&& val) mutable {
-        if (val.hasException() or not val->has_value()) {
+        if (val.hasException() || !val->has_value()) {
           throw thrift::OpenrError("key doesn't exists");
         }
         return std::make_unique<std::string>(std::move(val).value().value());

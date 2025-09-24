@@ -239,7 +239,7 @@ class OpenrCtrlFixture : public ::testing::Test {
       const std::string& nodeId = "") {
     thrift::KeySetParams setParams;
     setParams.keyVals() = keyVals;
-    if (not nodeId.empty()) {
+    if (!nodeId.empty()) {
       setParams.nodeIds() = {nodeId};
     }
     return handler_
@@ -1622,12 +1622,12 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, keyvals](auto&& t) {
-                  if (not t.hasValue()) {
+                  if (!t.hasValue()) {
                     return;
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals()->count(kv.first)) {
+                    if (!t->keyVals()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -1721,7 +1721,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                       found = true;
                     }
                   }
-                  if (not found) {
+                  if (!found) {
                     return;
                   }
                 });
@@ -1812,7 +1812,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                       found = true;
                     }
                   }
-                  if (not found) {
+                  if (!found) {
                     return;
                   }
                 });
@@ -1938,12 +1938,12 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, keyvals](auto&& t) {
-                  if (not t.hasValue()) {
+                  if (!t.hasValue()) {
                     return;
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals()->count(kv.first)) {
+                    if (!t->keyVals()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -2070,12 +2070,12 @@ TEST_F(
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [keyvals, &newTtlVersionSeen](auto&& t) {
-                  if (not t.hasValue()) {
+                  if (!t.hasValue()) {
                     return;
                   }
 
                   for (const auto& kv : keyvals) {
-                    if (not t->keyVals()->count(kv.first)) {
+                    if (!t->keyVals()->count(kv.first)) {
                       continue;
                     }
                     auto& pub = *t;
@@ -2102,7 +2102,7 @@ TEST_F(
     kvStoreWrapper_->setKey(kSpineAreaId, key, thriftValue2);
 
     // Wait until new TTL version is seen.
-    while (not newTtlVersionSeen) {
+    while (!newTtlVersionSeen) {
       std::this_thread::yield();
     }
 
@@ -2168,12 +2168,12 @@ TEST_F(
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [keyvals](auto&& t) {
-              if (not t.hasValue()) {
+              if (!t.hasValue()) {
                 return;
               }
 
               for (const auto& kv : keyvals) {
-                if (not t->keyVals()->count(kv.first)) {
+                if (!t->keyVals()->count(kv.first)) {
                   continue;
                 }
                 auto& pub = *t;
@@ -2276,7 +2276,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
               folly::getUnsafeMutableGlobalEventBase(),
               [&test_key, &newUpdateSeen](
                   folly::Try<openr::thrift::Publication>&& t) mutable {
-                if (not t.hasValue()) {
+                if (!t.hasValue()) {
                   return;
                 }
 
@@ -2309,7 +2309,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
   kvStoreWrapper_->setKey(kSpineAreaId, test_key, thriftValue2);
 
   // Wait until new update is seen by stream subscriber
-  while (not newUpdateSeen) {
+  while (!newUpdateSeen) {
     std::this_thread::yield();
   }
 
