@@ -641,7 +641,7 @@ BM_DecisionGridInitialUpdate(
     }
 
     suspender.dismiss(); // Start measuring benchmark time
-    for (uint32_t i = 0; i < iters; i++) {
+    for (uint32_t j = 0; j < iters; j++) {
       auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
       sendRecvInitialUpdate(
           decisionWrapper, nodeName, std::move(adjs), std::move(prefixes));
