@@ -179,6 +179,8 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
    */
   NetlinkFibHandler(const NetlinkFibHandler&) = delete;
   NetlinkFibHandler& operator=(const NetlinkFibHandler&) = delete;
+  NetlinkFibHandler(NetlinkFibHandler&&) = delete;
+  NetlinkFibHandler& operator=(NetlinkFibHandler&&) = delete;
 
   /**
    * Test if ifindex returned by cache is valid or not,
