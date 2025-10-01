@@ -1023,15 +1023,15 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
   EXPECT_TRUE(checkEqualDecisionRouteUpdate(
       emptyUpdate, fibRouteUpdatesQueueReader.get().value()));
 
-  const auto prefix1 = toIpPrefix("192.168.20.16/28");
-  const auto prefix2 = toIpPrefix("192.168.0.0/16");
-  const auto prefix3 = toIpPrefix("fd00::48:2:0/128");
-  const auto prefix4 = toIpPrefix("fd00::48:2:0/126");
+  const auto testPrefix1 = toIpPrefix("192.168.20.16/28");
+  const auto testPrefix2 = toIpPrefix("192.168.0.0/16");
+  const auto testPrefix3 = toIpPrefix("fd00::48:2:0/128");
+  const auto testPrefix4 = toIpPrefix("fd00::48:2:0/126");
 
-  auto route1 = RibUnicastEntry(toIPNetwork(prefix1), {});
-  auto route2 = RibUnicastEntry(toIPNetwork(prefix2), {});
-  auto route3 = RibUnicastEntry(toIPNetwork(prefix3), {});
-  auto route4 = RibUnicastEntry(toIPNetwork(prefix4), {});
+  auto route1 = RibUnicastEntry(toIPNetwork(testPrefix1), {});
+  auto route2 = RibUnicastEntry(toIPNetwork(testPrefix2), {});
+  auto route3 = RibUnicastEntry(toIPNetwork(testPrefix3), {});
+  auto route4 = RibUnicastEntry(toIPNetwork(testPrefix4), {});
 
   const auto& tRoute1 = route1.toThrift();
   const auto& tRoute2 = route2.toThrift();
@@ -1191,15 +1191,15 @@ TEST_F(FibTestFixture, doNotInstall) {
   mockFibHandler_->getRouteTableByClient(routes, kFibId);
   EXPECT_EQ(routes.size(), 0);
 
-  const auto prefix1 = toIpPrefix("192.168.20.16/28");
-  const auto prefix2 = toIpPrefix("192.168.0.0/16");
-  const auto prefix3 = toIpPrefix("fd00::48:2:0/128");
-  const auto prefix4 = toIpPrefix("fd00::48:2:0/126");
+  const auto testPrefix1 = toIpPrefix("192.168.20.16/28");
+  const auto testPrefix2 = toIpPrefix("192.168.0.0/16");
+  const auto testPrefix3 = toIpPrefix("fd00::48:2:0/128");
+  const auto testPrefix4 = toIpPrefix("fd00::48:2:0/126");
 
-  auto route1 = RibUnicastEntry(toIPNetwork(prefix1), {});
-  auto route2 = RibUnicastEntry(toIPNetwork(prefix2), {});
-  auto route3 = RibUnicastEntry(toIPNetwork(prefix3), {});
-  auto route4 = RibUnicastEntry(toIPNetwork(prefix4), {});
+  auto route1 = RibUnicastEntry(toIPNetwork(testPrefix1), {});
+  auto route2 = RibUnicastEntry(toIPNetwork(testPrefix2), {});
+  auto route3 = RibUnicastEntry(toIPNetwork(testPrefix3), {});
+  auto route4 = RibUnicastEntry(toIPNetwork(testPrefix4), {});
 
   route1.doNotInstall = true;
   route3.doNotInstall = true;
