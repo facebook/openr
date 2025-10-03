@@ -349,7 +349,7 @@ Fib::RouteState::createUpdate() {
   // Return all updates
   //
 
-  if (state == SYNCING and not isInitialSynced) {
+  if (state == SYNCING && !isInitialSynced) {
     update.type = DecisionRouteUpdate::FULL_SYNC;
     update.unicastRoutesToUpdate = unicastRoutes;
     update.mplsRoutesToUpdate = mplsRoutes;
@@ -391,8 +391,8 @@ Fib::nextRetryDuration() const {
   // Schedule retry timer immediately if this is initial Fib sync, or delayed
   // deletion is not enabled, or if there is no pending (dirty) routes for
   // processing.
-  if ((routeState_.state == RouteState::SYNCING) or
-      (routeState_.dirtyPrefixes.empty() and routeState_.dirtyLabels.empty())) {
+  if ((routeState_.state == RouteState::SYNCING) ||
+      (routeState_.dirtyPrefixes.empty() && routeState_.dirtyLabels.empty())) {
     // Return backoff duration if any
     return retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
   }
@@ -477,7 +477,7 @@ Fib::dumpPerfDb() const {
 void
 Fib::printUnicastRoutesAddUpdate(
     const std::vector<thrift::UnicastRoute>& unicastRoutesToUpdate) {
-  if (not unicastRoutesToUpdate.size()) {
+  if (!unicastRoutesToUpdate.size()) {
     return;
   }
 
@@ -504,7 +504,7 @@ Fib::updateUnicastRoutes(
   // Delete Unicast routes
   //
   auto& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete();
-  if (delayedDeletionEnabled() and useDeleteDelay) {
+  if (delayedDeletionEnabled() && useDeleteDelay) {
     // Clear the routes to delete
     unicastRoutesToDelete.clear();
 
@@ -701,7 +701,7 @@ Fib::syncRoutes() {
      * fib routes programmed by its previous incarnation. This handles Open/R
      * rollback from write mode(dryrun_=false) to shadow mode(dryrun_=true).
      */
-    if (enableClearFibState_ and (not isUnicastRoutesCleared_)) {
+    if (enableClearFibState_ && (!isUnicastRoutesCleared_)) {
       try {
         auto emptyRoutes = std::vector<thrift::UnicastRoute>{};
         createFibClient(*getEvb(), client_, thriftPort_);
@@ -723,7 +723,7 @@ Fib::syncRoutes() {
           "Skipping programming of {} unicast routes.", unicastRoutes.size());
     }
   } else {
-    CHECK(not isUnicastRoutesCleared_)
+    CHECK(!isUnicastRoutesCleared_)
         << "flag should ONLY be set in dry_run mode";
 
     try {
@@ -758,7 +758,7 @@ Fib::syncRoutes() {
 
   // Transition state on successful sync. Also record our first sync
   transitionRouteState(RouteState::FIB_SYNCED);
-  if (not routeState_.isInitialSynced) {
+  if (!routeState_.isInitialSynced) {
     routeState_.isInitialSynced = true;
     logInitializationEvent("Fib", thrift::InitializationEvent::FIB_SYNCED);
   }
@@ -855,7 +855,7 @@ Fib::keepAliveTask(folly::fibers::Baton& stopSignal) noexcept {
 void
 Fib::keepAlive() noexcept {
   int64_t aliveSince{0};
-  if (not dryrun_) {
+  if (!dryrun_) {
     try {
       createFibClient(*getEvb(), client_, thriftPort_);
       aliveSince = client_->sync_aliveSince();
@@ -887,7 +887,7 @@ Fib::createFibClient(
     int32_t port) {
   if (client) {
     auto channel = (apache::thrift::RocketClientChannel*)client->getChannel();
-    if (channel and channel->good()) {
+    if (channel && channel->good()) {
       // Do not create new client if one exists already with a good channel
       return;
     }

@@ -178,7 +178,7 @@ checkEqualRouteDatabaseDeltaUnicast(
     const thrift::RouteDatabaseDelta& lhs,
     const thrift::RouteDatabaseDelta& rhs) {
   // Check routes to update
-  if (not checkEqualUnicastRoutes(
+  if (!checkEqualUnicastRoutes(
           *lhs.unicastRoutesToUpdate(), *rhs.unicastRoutesToUpdate())) {
     return false;
   }
@@ -205,7 +205,7 @@ checkEqualRouteDatabaseDeltaDetailUnicast(
     const thrift::RouteDatabaseDeltaDetail& lhs,
     const thrift::RouteDatabaseDeltaDetail& rhs) {
   // Check routes to update
-  if (not checkEqualUnicastRoutesDetail(
+  if (!checkEqualUnicastRoutesDetail(
           *lhs.unicastRoutesToUpdate(), *rhs.unicastRoutesToUpdate())) {
     return false;
   }
@@ -231,12 +231,12 @@ checkEqualDecisionRouteUpdate(
   // Check unicast and MPLS routes are the same (assuming no dups in the
   // vectors). perfEvents is not considered here.
 
-  if (lhs.unicastRoutesToUpdate.size() != rhs.unicastRoutesToUpdate.size() or
+  if (lhs.unicastRoutesToUpdate.size() != rhs.unicastRoutesToUpdate.size() ||
       lhs.unicastRoutesToDelete.size() != rhs.unicastRoutesToDelete.size()) {
     return false;
   }
 
-  if (lhs.unicastRoutesToUpdate != rhs.unicastRoutesToUpdate or
+  if (lhs.unicastRoutesToUpdate != rhs.unicastRoutesToUpdate ||
       std::unordered_set(
           lhs.unicastRoutesToDelete.begin(), lhs.unicastRoutesToDelete.end()) !=
           std::unordered_set(
@@ -374,7 +374,7 @@ class FibTestFixture : public ::testing::Test {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received](auto&& t) {
-              if (not t.hasValue()) {
+              if (!t.hasValue()) {
                 return;
               }
 
@@ -411,7 +411,7 @@ class FibTestFixture : public ::testing::Test {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received](auto&& t) {
-              if (not t.hasValue()) {
+              if (!t.hasValue()) {
                 return;
               }
 
@@ -541,7 +541,7 @@ TEST_F(FibTestFixture, initialRouteCleanupTest) {
   routeUpdatesQueue.push(routeUpdate1);
 
   // wait for the counter to be published
-  while (not fb303::fbData->hasCounter(counterKey)) {
+  while (!fb303::fbData->hasCounter(counterKey)) {
   }
 
   // waiting for one-time clean up signal under dryrun
@@ -567,7 +567,7 @@ TEST_F(FibDryRunTestFixture, initialRouteCleanupTest) {
   routeUpdatesQueue.push(routeUpdate1);
 
   // wait for the counter to be published
-  while (not fb303::fbData->hasCounter(counterKey)) {
+  while (!fb303::fbData->hasCounter(counterKey)) {
   }
 
   EXPECT_TRUE(fib_->getUnicastRoutesCleared());
@@ -636,7 +636,7 @@ TEST_F(FibTestFixture, fibStreamingSingleSubscriber) {
           .subscribeExTry(
               folly::getEventBase(),
               [&received, &routeDbExpected3, &routeDbExpected4](auto&& t) {
-                if (not t.hasValue()) {
+                if (!t.hasValue()) {
                   return;
                 }
 
@@ -735,7 +735,7 @@ TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
           .subscribeExTry(
               folly::getEventBase(),
               [&received_1, &routeDbExpected2](auto&& t) {
-                if (not t.hasValue()) {
+                if (!t.hasValue()) {
                   return;
                 }
                 EXPECT_TRUE(
@@ -749,7 +749,7 @@ TEST_F(FibTestFixture, fibStreamingTwoSubscribers) {
           .subscribeExTry(
               folly::getEventBase(),
               [&received_2, &routeDbExpected2](auto&& t) {
-                if (not t.hasValue()) {
+                if (!t.hasValue()) {
                   return;
                 }
                 EXPECT_TRUE(
@@ -831,7 +831,7 @@ TEST_F(FibTestFixture, fibDetailStreaming) {
           .toClientStreamUnsafeDoNotUse()
           .subscribeExTry(
               folly::getEventBase(), [&received, &routeDbExpected2](auto&& t) {
-                if (not t.hasValue()) {
+                if (!t.hasValue()) {
                   return;
                 }
 
@@ -1167,7 +1167,7 @@ TEST_F(FibTestFixture, longestPrefixMatchTest) {
   //
   // input 192.168.0.0/14 has no match
   const auto& result4 = Fib::longestPrefixMatch(inputPrefix4, unicastRoutes);
-  EXPECT_TRUE(not result4.has_value());
+  EXPECT_TRUE(!result4.has_value());
 
   // input 192.168.0.0/18 matched 192.168.0.0/16
   const auto& result5 = Fib::longestPrefixMatch(inputPrefix5, unicastRoutes);

@@ -265,7 +265,7 @@ class Fib final : public OpenrEventBase {
      */
     bool
     needsRetry() const {
-      return state == SYNCING or dirtyPrefixes.size() or dirtyLabels.size();
+      return state == SYNCING || dirtyPrefixes.size() || dirtyLabels.size();
     }
 
     // Util function to convert ENUM State to string
