@@ -48,19 +48,6 @@ getTestKvConf(std::string nodeId) {
   return kvConf;
 }
 
-// [SECURE CONFIG OVERRIDE]
-thrift::KvStoreConfig
-getSecureTestKvConf(std::string nodeId) {
-  thrift::KvStoreConfig kvConf;
-  kvConf.node_name() = nodeId;
-  kvConf.enable_secure_thrift_client() = true;
-
-  kvConf.x509_cert_path() = fmt::format("{}certs/test_cert1.pem", kTestDir);
-  kvConf.x509_key_path() = fmt::format("{}certs/test_key1.pem", kTestDir);
-  kvConf.x509_ca_path() = fmt::format("{}certs/ca_cert.pem", kTestDir);
-  return kvConf;
-}
-
 /**
  * Fixture for abstracting out common functionality for unittests.
  */
