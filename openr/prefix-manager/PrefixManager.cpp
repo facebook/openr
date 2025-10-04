@@ -810,29 +810,30 @@ PrefixManager::getAdvertisedRoutesFiltered(
     thrift::AdvertisedRouteFilter filter) {
   auto [p, sf] = folly::makePromiseContract<
       std::unique_ptr<std::vector<thrift::AdvertisedRouteDetail>>>();
-  runInEventBaseThread(
-      [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
-        auto routes =
-            std::make_unique<std::vector<thrift::AdvertisedRouteDetail>>();
-        if (filter.prefixes()) {
-          // Explicitly lookup the requested prefixes
-          for (auto& prefix : filter.prefixes().value()) {
-            auto it = prefixMap_.find(toIPNetwork(prefix));
-            if (it == prefixMap_.end()) {
-              continue;
-            }
-            filterAndAddAdvertisedRoute(
-                *routes, filter.prefixType(), it->first, it->second);
-          }
-        } else {
-          // Iterate over all prefixes
-          for (auto& [prefix, prefixEntries] : prefixMap_) {
-            filterAndAddAdvertisedRoute(
-                *routes, filter.prefixType(), prefix, prefixEntries);
-          }
+  runInEventBaseThread([this,
+                        promise = std::move(p),
+                        filter = std::move(filter)]() mutable noexcept {
+    auto routes =
+        std::make_unique<std::vector<thrift::AdvertisedRouteDetail>>();
+    if (filter.prefixes()) {
+      // Explicitly lookup the requested prefixes
+      for (auto& prefix : filter.prefixes().value()) {
+        auto it = prefixMap_.find(toIPNetwork(prefix));
+        if (it == prefixMap_.end()) {
+          continue;
         }
-        p.setValue(std::move(routes));
-      });
+        filterAndAddAdvertisedRoute(
+            *routes, filter.prefixType(), it->first, it->second);
+      }
+    } else {
+      // Iterate over all prefixes
+      for (auto& [prefix, prefixEntries] : prefixMap_) {
+        filterAndAddAdvertisedRoute(
+            *routes, filter.prefixType(), prefix, prefixEntries);
+      }
+    }
+    promise.setValue(std::move(routes));
+  });
   return std::move(sf);
 }
 
@@ -843,7 +844,7 @@ PrefixManager::getAdvertisedRoutesWithOriginationPolicy(
   auto [p, sf] = folly::makePromiseContract<
       std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>();
   runInEventBaseThread([this,
-                        p = std::move(p),
+                        promise = std::move(p),
                         filter = std::move(filter),
                         routeFilterType = routeFilterType]() mutable noexcept {
     auto routes = std::make_unique<std::vector<thrift::AdvertisedRoute>>();
@@ -863,7 +864,7 @@ PrefixManager::getAdvertisedRoutesWithOriginationPolicy(
             *routes, routeFilterType, prefixEntries, filter.prefixType());
       }
     }
-    p.setValue(std::move(routes));
+    promise.setValue(std::move(routes));
   });
   return std::move(sf);
 }
@@ -988,7 +989,7 @@ PrefixManager::getAreaAdvertisedRoutes(
   auto [p, sf] = folly::makePromiseContract<
       std::unique_ptr<std::vector<thrift::AdvertisedRoute>>>();
   runInEventBaseThread([this,
-                        p = std::move(p),
+                        promise = std::move(p),
                         filter = std::move(filter),
                         areaName = std::move(areaName),
                         routeFilterType = routeFilterType]() mutable noexcept {
@@ -1017,7 +1018,7 @@ PrefixManager::getAreaAdvertisedRoutes(
             filter.prefixType());
       }
     }
-    p.setValue(std::move(routes));
+    promise.setValue(std::move(routes));
   });
   return std::move(sf);
 }
