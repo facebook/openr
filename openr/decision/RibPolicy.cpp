@@ -22,14 +22,14 @@ RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
       action_(*stmt.action()),
       counterID_(stmt.counterID().to_optional()) {
   // Verify that at-least one action must be specified
-  if (not stmt.action()->set_weight()) {
+  if (!stmt.action()->set_weight()) {
     thrift::OpenrError error;
     *error.message() = "Missing policy_statement.action.set_weight attribute";
     throw error;
   }
 
   // Verify that at-least one match criteria must be specified
-  if (not stmt.matcher()->prefixes() && not stmt.matcher()->tags()) {
+  if (!stmt.matcher()->prefixes() && !stmt.matcher()->tags()) {
     thrift::OpenrError error;
     *error.message() =
         "Missing policy_statement.matcher.prefixes or policy_statement.matcher.tags attribute";
@@ -108,7 +108,7 @@ RibPolicyStatement::match(const RibUnicastEntry& route) const {
 
 bool
 RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
-  if (not match(route)) {
+  if (!match(route)) {
     return false;
   }
 
@@ -232,7 +232,7 @@ RibPolicy::PolicyChange
 RibPolicy::applyPolicy(std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
                            unicastEntries) const {
   PolicyChange change;
-  if (not isActive()) {
+  if (!isActive()) {
     return change;
   }
   auto iter = unicastEntries.begin();

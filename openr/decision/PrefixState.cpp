@@ -21,11 +21,11 @@ PrefixState::updatePrefix(
       key.getNodeAndArea(), std::make_shared<thrift::PrefixEntry>(entry));
 
   // Skip rest of code, if prefix exists and has no change
-  if (not inserted && *it->second == entry) {
+  if (!inserted && *it->second == entry) {
     return changed;
   }
   // Update prefix
-  if (not inserted) {
+  if (!inserted) {
     it->second = std::make_shared<thrift::PrefixEntry>(entry);
   }
   changed.insert(key.getCIDRNetwork());
@@ -41,8 +41,7 @@ PrefixState::deletePrefix(PrefixKey const& key) {
   std::unordered_set<folly::CIDRNetwork> changed;
 
   auto search = prefixes_.find(key.getCIDRNetwork());
-  if (search != prefixes_.end() and
-      search->second.erase(key.getNodeAndArea())) {
+  if (search != prefixes_.end() && search->second.erase(key.getNodeAndArea())) {
     changed.insert(key.getCIDRNetwork());
     XLOG(DBG1) << "[ROUTE WITHDRAW] " << "Area: " << key.getPrefixArea()
                << ", Node: " << key.getNodeName() << ", "

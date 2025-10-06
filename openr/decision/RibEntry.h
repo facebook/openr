@@ -178,7 +178,7 @@ struct RibMplsEntry : RibEntry {
       // Action can't be push (we don't push labels in MPLS routes)
       // or POP with multiple nexthops. It must be either SWAP or PHP
       CHECK(
-          action == thrift::MplsActionCode::SWAP or
+          action == thrift::MplsActionCode::SWAP ||
           action == thrift::MplsActionCode::PHP);
       if (action == thrift::MplsActionCode::PHP) {
         mplsActionCode = thrift::MplsActionCode::PHP;

@@ -302,7 +302,7 @@ SpfSolver::buildRouteDb(
   for (const auto& [_, linkState] : areaLinkStates) {
     nodeExist |= linkState.hasNode(myNodeName);
   }
-  if (not nodeExist) {
+  if (!nodeExist) {
     return std::nullopt;
   }
 
@@ -387,7 +387,7 @@ SpfSolver::getMinNextHopThreshold(
   for (const auto& nodeArea : nodes.allNodeAreas) {
     const auto& prefixEntry = prefixEntries.at(nodeArea);
     maxMinNexthopForPrefix = prefixEntry->minNexthop().has_value() &&
-            (not maxMinNexthopForPrefix.has_value() ||
+            (!maxMinNexthopForPrefix.has_value() ||
              prefixEntry->minNexthop().value() > maxMinNexthopForPrefix.value())
         ? prefixEntry->minNexthop().value()
         : maxMinNexthopForPrefix;
@@ -433,7 +433,7 @@ SpfSolver::isNodeDrained(
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
   const auto& [node, area] = nodeArea;
   const auto& linkState = areaLinkStates.at(area);
-  return linkState.isNodeOverloaded(node) or
+  return linkState.isNodeOverloaded(node) ||
       linkState.getNodeMetricIncrement(node) != 0;
 }
 
@@ -495,7 +495,7 @@ SpfSolver::addBestPaths(
   // Apply min-nexthop requirements. Ignore the route from programming if
   // min-nexthop requirement is not met.
   auto minNextHop = getMinNextHopThreshold(routeSelectionResult, prefixEntries);
-  if (minNextHop.has_value() and minNextHop.value() > nextHops.size()) {
+  if (minNextHop.has_value() && minNextHop.value() > nextHops.size()) {
     XLOG(WARNING) << "Ignore programming of route to "
                   << folly::IPAddress::networkToString(prefix)
                   << " because of min-nexthop requirement. "
@@ -584,7 +584,7 @@ SpfSolver::getNextHopsThrift(
   // Use reference to avoid copy
   const auto& nextHopNodes = bestNextHopMetrics.second;
   const auto& minMetric = bestNextHopMetrics.first;
-  CHECK(not nextHopNodes.empty());
+  CHECK(!nextHopNodes.empty());
 
   std::unordered_set<thrift::NextHopThrift> nextHops;
   for (const auto& link : linkState.linksFromNode(myNodeName)) {
@@ -602,7 +602,7 @@ SpfSolver::getNextHopsThrift(
      *
      * Ignore overloaded links or nexthops.
      */
-    if (search == nextHopNodes.end() or not link->isUp()) {
+    if (search == nextHopNodes.end() || !link->isUp()) {
       continue;
     }
 
@@ -628,8 +628,8 @@ SpfSolver::getNextHopsThrift(
     }
 
     nextHops.emplace(createNextHop(
-        isV4 and not v4OverV6Nexthop_ ? link->getNhV4FromNode(myNodeName)
-                                      : link->getNhV6FromNode(myNodeName),
+        isV4 && !v4OverV6Nexthop_ ? link->getNhV4FromNode(myNodeName)
+                                  : link->getNhV6FromNode(myNodeName),
         link->getIfaceFromNode(myNodeName),
         distOverLink,
         std::nullopt, /* mplsAction */

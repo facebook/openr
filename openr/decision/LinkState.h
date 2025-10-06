@@ -33,7 +33,7 @@ adjUsable(const thrift::Adjacency& adj, const std::string& nodeName) {
   // Case3: we are not adjacent to the initilizing node, return
   //      false; (other != self)
   // Case4: Initilized: return true;
-  if (*adj.adjOnlyUsedByOtherNode() and *adj.otherNodeName() != nodeName) {
+  if (*adj.adjOnlyUsedByOtherNode() && *adj.otherNodeName() != nodeName) {
     return false;
   }
   return true;
@@ -117,7 +117,7 @@ class Link {
    */
   inline bool
   isUp() const {
-    return (not overload1_) and (not overload2_) and usable_;
+    return (!overload1_) && (!overload2_) && usable_;
   }
 
   inline const std::string&
@@ -469,7 +469,7 @@ class LinkState {
   linkUsable(
       const thrift::Adjacency& adj1, const thrift::Adjacency& adj2) const {
     // link is usable, only if both adj are usable by us.
-    return adjUsable(adj1, myNodeName_) and adjUsable(adj2, myNodeName_);
+    return adjUsable(adj1, myNodeName_) && adjUsable(adj2, myNodeName_);
   }
 
   // get adjacency databases

@@ -319,7 +319,7 @@ LinkState::updateNodeOverloaded(
    *  - TRUE: if the insertion took place
    *  - FALSE: if the assignment took place
    */
-  if (nodeOverloads_.count(nodeName) and
+  if (nodeOverloads_.count(nodeName) &&
       nodeOverloads_.at(nodeName) == isOverloaded) {
     // don't indicate LinkState change for duplicate update
     return false;
@@ -328,7 +328,7 @@ LinkState::updateNodeOverloaded(
   const auto [_, inserted] =
       nodeOverloads_.insert_or_assign(nodeName, isOverloaded);
   // don't indicate LinkState changed if this is a new node
-  return not inserted;
+  return !inserted;
 }
 
 /*
@@ -390,7 +390,7 @@ LinkState::mayHaveLinkEventPropagationTime(
 
 bool
 LinkState::isNodeOverloaded(const std::string& nodeName) const {
-  return nodeOverloads_.count(nodeName) and nodeOverloads_.at(nodeName);
+  return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName);
 }
 
 std::uint64_t
@@ -737,7 +737,7 @@ LinkState::runSpf(
     auto const recordedNodeMetric = emplaceRc.first->second.metric();
     auto const& recordedNodeNextHops = emplaceRc.first->second.nextHops();
 
-    if (isNodeOverloaded(recordedNodeName) and
+    if (isNodeOverloaded(recordedNodeName) &&
         recordedNodeName != thisNodeName) {
       /*
        * [Node Hard-Drain]
@@ -758,7 +758,7 @@ LinkState::runSpf(
      */
     for (const auto& link : linksFromNode(recordedNodeName)) {
       auto& otherNodeName = link->getOtherNodeName(recordedNodeName);
-      if (!link->isUp() or result.count(otherNodeName) or
+      if (!link->isUp() || result.count(otherNodeName) ||
           linksToIgnore.count(link)) {
         /*
          * [Interface Hard-Drain]

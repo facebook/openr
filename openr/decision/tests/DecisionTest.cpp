@@ -171,10 +171,10 @@ class DecisionTestFixture : public ::testing::Test {
       thrift::ReceivedRouteFilter filter;
       filter.prefixes() = std::vector<thrift::IpPrefix>({toIpPrefix(network)});
       auto routes = decision->getReceivedRoutesFiltered(filter).get();
-      if ((not isRemoved) and routes->size()) {
+      if ((!isRemoved) && routes->size()) {
         return;
       }
-      if (isRemoved and routes->empty()) {
+      if (isRemoved && routes->empty()) {
         return;
       }
       // yield CPU
@@ -1029,11 +1029,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
 
         EXPECT_THAT(
             routeToUpdate.at(networkV4), testing::Truly([&networkV4](auto i) {
-              return i.prefix == networkV4 and i.doNotInstall == false;
+              return i.prefix == networkV4 && i.doNotInstall == false;
             }));
         EXPECT_THAT(
             routeToUpdate.at(networkV6), testing::Truly([&networkV6](auto i) {
-              return i.prefix == networkV6 and i.doNotInstall == false;
+              return i.prefix == networkV6 && i.doNotInstall == false;
             }));
         // NOTE: no SAME route from decision, program DROP route
         EXPECT_THAT(

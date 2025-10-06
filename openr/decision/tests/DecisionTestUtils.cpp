@@ -64,7 +64,7 @@ createNextHopFromAdj(
     bool v4OverV6Nexthop,
     int64_t weight) {
   return createNextHop(
-      isV4 and not v4OverV6Nexthop ? *adj.nextHopV4() : *adj.nextHopV6(),
+      isV4 && !v4OverV6Nexthop ? *adj.nextHopV4() : *adj.nextHopV6(),
       *adj.ifName(),
       metric,
       std::move(mplsAction),

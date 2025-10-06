@@ -56,8 +56,8 @@ struct DecisionRouteUpdate {
   bool
   empty() const {
     return (
-        unicastRoutesToUpdate.empty() and unicastRoutesToDelete.empty() and
-        mplsRoutesToUpdate.empty() and mplsRoutesToDelete.empty());
+        unicastRoutesToUpdate.empty() && unicastRoutesToDelete.empty() &&
+        mplsRoutesToUpdate.empty() && mplsRoutesToDelete.empty());
   }
 
   size_t

@@ -488,7 +488,7 @@ Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
 folly::SemiFuture<folly::Unit>
 Decision::clearRibPolicy() {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
-  if (not config_->isRibPolicyEnabled()) {
+  if (!config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
     error.message() = "RibPolicy feature is not enabled";
     p.setException(error);
@@ -496,7 +496,7 @@ Decision::clearRibPolicy() {
   }
 
   runInEventBaseThread([this, p = std::move(p)]() mutable {
-    if (not ribPolicy_) {
+    if (!ribPolicy_) {
       thrift::OpenrError error;
       error.message() = "No RIB policy configured";
       p.setException(error);
@@ -515,7 +515,7 @@ Decision::clearRibPolicy() {
 folly::SemiFuture<folly::Unit>
 Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
   auto [p, sf] = folly::makePromiseContract<folly::Unit>();
-  if (not config_->isRibPolicyEnabled()) {
+  if (!config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
     error.message() = "RibPolicy feature is not enabled";
     p.setException(error);
@@ -563,7 +563,7 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
 folly::SemiFuture<thrift::RibPolicy>
 Decision::getRibPolicy() {
   auto [p, sf] = folly::makePromiseContract<thrift::RibPolicy>();
-  if (not config_->isRibPolicyEnabled()) {
+  if (!config_->isRibPolicyEnabled()) {
     thrift::OpenrError error;
     error.message() = "RibPolicy feature is not enabled";
     p.setException(error);
@@ -584,7 +584,7 @@ Decision::getRibPolicy() {
 
 void
 Decision::processPeerUpdates(PeerEvent&& event) {
-  if (not initialPeersReceivedBaton_.ready()) {
+  if (!initialPeersReceivedBaton_.ready()) {
     XLOG(INFO) << "[Initialization] Received initial PeerEvent.";
     // LinkMonitor publishes detected peers in one shot in Open/R initialization
     // process. Initial route computation will blocked until adjacence with all
@@ -614,7 +614,7 @@ Decision::processPeerUpdates(PeerEvent&& event) {
     // Remove deleted peers from areaToPendingAdjacency_.
     for (const auto& peerName : areaPeerEvent.peersToDel) {
       if (areaToPendingAdjacency_[area].erase(
-              std::make_pair(peerName, myNodeName_)) and
+              std::make_pair(peerName, myNodeName_)) &&
           areaToPendingAdjacency_[area].erase(
               std::make_pair(myNodeName_, peerName))) {
         XLOG(INFO) << "[Initialization] No need to wait for dual directional "
@@ -675,7 +675,7 @@ void
 Decision::saveRibPolicy() {
   std::ofstream ribPolicyFile;
   ribPolicyFile.open(FLAGS_rib_policy_file, std::ios::out | std::ios::trunc);
-  if (not ribPolicyFile.is_open()) {
+  if (!ribPolicyFile.is_open()) {
     XLOG(ERR) << "Could not open rib policy file for writing";
     return;
   }
@@ -699,13 +699,13 @@ Decision::saveRibPolicy() {
 void
 Decision::readRibPolicy() {
   // Only save rib policy when Open/R initialization is enabled.
-  if (not config_->isRibPolicyEnabled()) {
+  if (!config_->isRibPolicyEnabled()) {
     return;
   }
 
   std::ifstream ribPolicyFile;
   ribPolicyFile.open(FLAGS_rib_policy_file);
-  if (not ribPolicyFile.is_open()) {
+  if (!ribPolicyFile.is_open()) {
     XLOG(INFO) << "Could not open rib policy file " << FLAGS_rib_policy_file;
     return;
   }
@@ -754,7 +754,7 @@ Decision::updateKeyInLsdb(
     LinkState& areaLinkState,
     const std::string& key,
     const thrift::Value& rawVal) {
-  if (not rawVal.value().has_value()) {
+  if (!rawVal.value().has_value()) {
     // skip TTL update
     DCHECK(*rawVal.ttlVersion() > 0);
     return;
@@ -861,7 +861,7 @@ Decision::deleteKeyFromLsdb(
 
 void
 Decision::processPublication(thrift::Publication&& thriftPub) {
-  CHECK(not thriftPub.area()->empty());
+  CHECK(!thriftPub.area()->empty());
   auto const& area = *thriftPub.area();
 
   auto it = areaLinkStates_.find(area);
@@ -871,7 +871,7 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   auto& areaLinkState = it->second;
 
   // Nothing to process if no adj/prefix db changes
-  if (thriftPub.keyVals()->empty() and thriftPub.expiredKeys()->empty()) {
+  if (thriftPub.keyVals()->empty() && thriftPub.expiredKeys()->empty()) {
     return;
   }
 
@@ -914,7 +914,7 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
   rebuildRoutesDebounced_();
 
   auto prefixType = routeUpdate.prefixType;
-  if (prefixType.has_value() and
+  if (prefixType.has_value() &&
       unreceivedRouteTypes_.erase(prefixType.value())) {
     // Received initial route of prefix type in OpenR initialization process.
     XLOG(INFO) << fmt::format(
@@ -929,7 +929,7 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
 void
 Decision::rebuildRoutes(std::string const& event) {
   // Do NOT trigger initial route computation until all conditions are met.
-  if (not unblockInitialRoutesBuild()) {
+  if (!unblockInitialRoutesBuild()) {
     return;
   }
 
@@ -1074,7 +1074,7 @@ Decision::forceInitialRoutesBuild() noexcept {
 
 void
 Decision::triggerInitialBuildRoutes() {
-  if (not unblockInitialRoutesBuild()) {
+  if (!unblockInitialRoutesBuild()) {
     return;
   }
 

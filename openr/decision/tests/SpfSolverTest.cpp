@@ -69,7 +69,7 @@ updatePrefixDatabase(
   }
 
   for (auto const& key : oldKeys) {
-    if (not newKeys.count(key)) {
+    if (!newKeys.count(key)) {
       changed.merge(state.deletePrefix(key));
     }
   }
@@ -87,7 +87,7 @@ getRouteMap(
 
   for (string const& node : nodes) {
     auto routeDb = spfSolver.buildRouteDb(node, areaLinkStates, prefixState);
-    if (not routeDb.has_value()) {
+    if (!routeDb.has_value()) {
       continue;
     }
 
