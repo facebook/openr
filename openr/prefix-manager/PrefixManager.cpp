@@ -246,14 +246,14 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
         continue;
       }
 
-      if (not *prefixDb.deletePrefix()) {
+      if (!*prefixDb.deletePrefix()) {
         // get the key prefix and area from the thrift::PrefixDatabase
         auto const& tPrefixEntry = prefixDb.prefixEntries()->front();
         auto const& thisNodeName = *prefixDb.thisNodeName();
         auto const& network = toIPNetwork(*tPrefixEntry.prefix());
 
         // Skip none-self advertised prefixes or already persisted keys.
-        if (thisNodeName != nodeId_ or advertiseStatus_.count(network) > 0) {
+        if (thisNodeName != nodeId_ || advertiseStatus_.count(network) > 0) {
           continue;
         }
 
@@ -366,7 +366,7 @@ PrefixManager::getBestPrefixEntry(
   // If decision calculation has already considered local routes, then we should
   // use the best entry provided by decision instead of calculating here again.
   const auto it = prefixTypeToEntry.find(thrift::PrefixType::RIB);
-  if (prefixTypeToEntry.end() != it and it->second.preferredForRedistribution) {
+  if (prefixTypeToEntry.end() != it && it->second.preferredForRedistribution) {
     return std::make_pair(thrift::PrefixType::RIB, it->second);
   }
   // select the best entry/entries by comparing metric field
@@ -409,7 +409,7 @@ PrefixManager::populateRouteUpdates(
     // if shouldInstall() is true, nexthops is guaranteed to have value.
     RibUnicastEntry unicastEntry(prefix, prefixEntry.nexthops.value());
     unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
-    if (advertiseStatus.publishedRoute.has_value() and
+    if (advertiseStatus.publishedRoute.has_value() &&
         advertiseStatus.publishedRoute.value() == unicastEntry) {
       // Avoid publishing duplicate routes for the prefix.
       return;
@@ -484,7 +484,7 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
               entry.policyMatchData);
 
       // policy reject prefix, nothing to do.
-      if (not postPolicyTPrefixEntry) {
+      if (!postPolicyTPrefixEntry) {
         XLOG(DBG2) << "[Area Policy] " << *policy
                    << " rejected prefix: " << "(Type, PrefixEntry): ("
                    << toString(type) << ", " << toString(*tPrefixEntry, true)
@@ -678,9 +678,8 @@ PrefixManager::syncKvStore() {
        * from KvStore.
        */
       const auto& it = advertiseStatus_.find(prefix);
-      if (advertiseStatus_.cend() != it and
-          (not prefixEntryReadyToBeAdvertised(
-              it->second.advertisedBestEntry))) {
+      if (advertiseStatus_.cend() != it &&
+          (!prefixEntryReadyToBeAdvertised(it->second.advertisedBestEntry))) {
         XLOG(DBG1) << fmt::format(
             "Deleting previously advertised key: {} from area: {}",
             folly::IPAddress::networkToString(prefix),
@@ -696,7 +695,7 @@ PrefixManager::syncKvStore() {
   pendingUpdates_.clear();
 
   // Push originatedRoutes update to staticRouteUpdatesQueue_.
-  if (not routeUpdatesForDecision.empty()) {
+  if (!routeUpdatesForDecision.empty()) {
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
   }
 
@@ -956,21 +955,21 @@ PrefixManager::filterAndAddOriginatedRoute(
         prePolicyTPrefixEntry,
         std::nullopt /* policy Action Data */,
         prePolicyPrefixEntry.policyMatchData);
-    if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED and
+    if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED &&
         postPolicyTPrefixEntry) {
       // add post filter advertised route
       thrift::AdvertisedRoute route;
       route.key() = *prePolicyTPrefixEntry->type();
       route.route() = *postPolicyTPrefixEntry;
-      if (not hitPolicyName.empty()) {
+      if (!hitPolicyName.empty()) {
         route.hitPolicy() = hitPolicyName;
       }
       routes.emplace_back(std::move(route));
       continue;
     }
 
-    if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE and
-        not postPolicyTPrefixEntry) {
+    if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE &&
+        !postPolicyTPrefixEntry) {
       // add post filter rejected route
       thrift::AdvertisedRoute route;
       route.key() = *prePolicyTPrefixEntry->type();
@@ -1106,7 +1105,7 @@ PrefixManager::filterAndAddAreaRoute(
   const auto& bestPrefixEntry = bestTypeEntry.second;
 
   // The prefix will not be advertised to user provided area
-  if (not bestPrefixEntry.dstAreas.count(area)) {
+  if (!bestPrefixEntry.dstAreas.count(area)) {
     return;
   }
   // return if type does not match
@@ -1142,19 +1141,19 @@ PrefixManager::filterAndAddAreaRoute(
     postPolicyTPrefixEntry = prePolicyTPrefixEntry;
   }
 
-  if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED and
+  if (routeFilterType == thrift::RouteFilterType::POSTFILTER_ADVERTISED &&
       postPolicyTPrefixEntry) {
     // add post filter advertised route
     route.route() = *postPolicyTPrefixEntry;
-    if (not hitPolicyName.empty()) {
+    if (!hitPolicyName.empty()) {
       route.hitPolicy() = hitPolicyName;
     }
     routes.emplace_back(std::move(route));
     return;
   }
 
-  if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE and
-      not postPolicyTPrefixEntry) {
+  if (routeFilterType == thrift::RouteFilterType::REJECTED_ON_ADVERTISE &&
+      !postPolicyTPrefixEntry) {
     // add post filter rejected route
     route.route() = *prePolicyTPrefixEntry;
     route.hitPolicy() = hitPolicyName;
@@ -1253,7 +1252,7 @@ PrefixManager::advertisePrefixesImpl(
     //       used intentionally.
     auto [it, inserted] = prefixMap_[prefixCidr].emplace(type, entry);
 
-    if (not inserted) {
+    if (!inserted) {
       if (it->second == entry) {
         // Case 1: ignore SAME `PrefixEntry`
         continue;
@@ -1293,7 +1292,7 @@ PrefixManager::withdrawPrefixesImpl(
     auto typeIt = prefixMap_.find(prefixCidr);
 
     // ONLY populate changed collection when successfully erased key
-    if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
+    if (typeIt != prefixMap_.end() && typeIt->second.erase(type)) {
       updated = true;
       // store pendingUpdate for batch processing
       pendingUpdates_.addPrefixChange(prefixCidr);
@@ -1330,7 +1329,7 @@ PrefixManager::withdrawPrefixEntriesImpl(
     auto typeIt = prefixMap_.find(prefixEntry.network);
 
     // ONLY populate changed collection when successfully erased key
-    if (typeIt != prefixMap_.end() and typeIt->second.erase(type)) {
+    if (typeIt != prefixMap_.end() && typeIt->second.erase(type)) {
       updated = true;
       // store pendingUpdate for batch processing
       pendingUpdates_.addPrefixChange(prefixEntry.network);
@@ -1401,14 +1400,14 @@ PrefixManager::aggregatesToAdvertise(const folly::CIDRNetwork& prefix) {
   //       as it won't affect `supporting_route_cnt`
   auto [ribPrefixIt, inserted] =
       ribPrefixDb_.emplace(prefix, std::vector<folly::CIDRNetwork>());
-  if (not inserted) {
+  if (!inserted) {
     return;
   }
 
   for (auto& [network, route] : originatedPrefixDb_) {
     // folly::CIDRNetwork.first -> IPAddress
     // folly::CIDRNetwork.second -> cidr length
-    if (not prefix.first.inSubnet(network.first, network.second)) {
+    if (!prefix.first.inSubnet(network.first, network.second)) {
       continue;
     }
 
@@ -1487,8 +1486,8 @@ PrefixManager::processOriginatedPrefixes() {
       // initialization process should be deleted.
       // TODO: Consider moving static route generation and best entry
       // selection logic to Decision.
-      if ((not route.supportingRoutesFulfilled()) and
-          advertiseStatus_.count(network) > 0 and
+      if ((!route.supportingRoutesFulfilled()) &&
+          advertiseStatus_.count(network) > 0 &&
           advertiseStatus_[network].publishedRoute.has_value()) {
         routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(network);
         advertiseStatus_[network].publishedRoute.reset();
@@ -1499,7 +1498,7 @@ PrefixManager::processOriginatedPrefixes() {
   advertisePrefixesImpl(advertisedPrefixes);
   withdrawPrefixesImpl(withdrawnPrefixes);
 
-  if (not routeUpdatesForDecision.empty()) {
+  if (!routeUpdatesForDecision.empty()) {
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
   }
 }
@@ -1515,7 +1514,7 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
   // Re-advertise prefixes received from one area to other areas.
   redistributePrefixesAcrossAreas(std::move(fibRouteUpdate));
 
-  if (type == DecisionRouteUpdate::FULL_SYNC and
+  if (type == DecisionRouteUpdate::FULL_SYNC &&
       uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
     XLOG(INFO) << "[Initialization] Received initial RIB type routes.";
     triggerInitialPrefixDbSync();

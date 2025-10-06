@@ -115,7 +115,7 @@ class PMToKvStoreBMTestFixture {
     suspender.dismiss();
     while (true) {
       auto thriftPub = kvStoreUpdatesQ.get();
-      if (not thriftPub.hasValue()) {
+      if (!thriftPub.hasValue()) {
         continue;
       }
 
@@ -123,7 +123,7 @@ class PMToKvStoreBMTestFixture {
       suspender.rehire();
 
       if (auto* pub = std::get_if<thrift::Publication>(&thriftPub.value())) {
-        if (not checkDeletion) {
+        if (!checkDeletion) {
           total += pub->keyVals()->size();
         } else {
           for (const auto& [key, tVal] : *pub->keyVals()) {

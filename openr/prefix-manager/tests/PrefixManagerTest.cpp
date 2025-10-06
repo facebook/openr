@@ -185,7 +185,7 @@ class PrefixManagerTestFixture : public testing::Test {
     auto keyVals = kvStoreWrapper->dumpAll(
         kTestingAreaName, KvStoreFilters({keyPrefix}, {} /* originatorIds */));
     for (const auto& [_, val] : keyVals) {
-      if (not val.value()) {
+      if (!val.value()) {
         continue;
       }
 
@@ -211,7 +211,7 @@ class PrefixManagerTestFixture : public testing::Test {
       std::optional<thrift::PrefixType> expectedPrefixType = std::nullopt,
       std::chrono::milliseconds timeout = kRouteUpdateTimeout) {
     auto startTime = std::chrono::steady_clock::now();
-    while (not reader.size()) {
+    while (!reader.size()) {
       // break of timeout occurs
       auto now = std::chrono::steady_clock::now();
       if (now - startTime > timeout) {
@@ -452,7 +452,7 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
     auto db = readThriftObjStr<thrift::PrefixDatabase>(
         val->value().value(), serializer);
     EXPECT_EQ(*db.thisNodeName(), nodeId_);
-    if (expectedPrefix.has_value() and db.prefixEntries()->size() != 0) {
+    if (expectedPrefix.has_value() && db.prefixEntries()->size() != 0) {
       // we should always be advertising one prefix until we withdraw all
       EXPECT_EQ(db.prefixEntries()->size(), 1);
       EXPECT_EQ(expectedPrefix, db.prefixEntries()->at(0))
@@ -1219,7 +1219,7 @@ class PrefixManagerMultiAreaTestFixture : public PrefixManagerTestFixture {
     EXPECT_EQ(1, pub.keyVals()->size());
     auto kv = pub.keyVals()->begin();
 
-    if (not kv->second.value().has_value()) {
+    if (!kv->second.value().has_value()) {
       // skip TTL update
       CHECK_GT(*kv->second.ttlVersion(), 0);
       return false;
@@ -1615,11 +1615,11 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
           std::pair<std::string /* prefixStr */, std::string /* areaStr */>,
           thrift::PrefixEntry>& exp,
       std::unordered_set<std::pair<std::string, std::string>>& expDeleted) {
-    while (exp.size() or expDeleted.size()) {
+    while (exp.size() || expDeleted.size()) {
       auto maybePub = reader.get().value();
       if (auto* pub = std::get_if<thrift::Publication>(&maybePub)) {
         for (const auto& [key, thriftVal] : *pub->keyVals()) {
-          if (not thriftVal.value().has_value()) {
+          if (!thriftVal.value().has_value()) {
             // skip TTL update
             continue;
           }
@@ -1629,14 +1629,14 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
           auto isDeleted = *db.deletePrefix();
           auto prefixEntry = db.prefixEntries()->at(0);
           auto prefixKeyWithArea = std::make_pair(key, *pub->area());
-          if (isDeleted and expDeleted.count(prefixKeyWithArea)) {
+          if (isDeleted && expDeleted.count(prefixKeyWithArea)) {
             VLOG(2) << fmt::format(
                 "Withdraw of prefix: {} in area: {} received",
                 prefixKeyWithArea.first,
                 prefixKeyWithArea.second);
             expDeleted.erase(prefixKeyWithArea);
           }
-          if ((not isDeleted) and exp.count(prefixKeyWithArea) and
+          if ((!isDeleted) && exp.count(prefixKeyWithArea) &&
               prefixEntry == exp.at(prefixKeyWithArea)) {
             VLOG(2) << fmt::format(
                 "Advertising of prefix: {} in area: {} received",
@@ -1922,11 +1922,11 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
 
       // v4Prefix - advertised, v6Prefix - NOT advertised
       EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == true and
+                    return *i.installed_ref() == true &&
                         i.supporting_prefixes_ref()->size() == 1;
                   }));
       EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == false and
+                    return *i.installed_ref() == false &&
                         i.supporting_prefixes_ref()->size() == 1;
                   }));
 
@@ -1979,11 +1979,11 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
 
       // v4Prefix - advertised, v6Prefix - withdrawn
       EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == true and
+                    return *i.installed_ref() == true &&
                         i.supporting_prefixes_ref()->size() == 1;
                   }));
       EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == false and
+                    return *i.installed_ref() == false &&
                         i.supporting_prefixes_ref()->size() == 1;
                   }));
 
@@ -2054,11 +2054,11 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
 
       // v4Prefix - advertised, v6Prefix - advertised
       EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == true and
+                    return *i.installed_ref() == true &&
                         i.supporting_prefixes_ref()->size() == 1;
                   }));
       EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == true and
+                    return *i.installed_ref() == true &&
                         i.supporting_prefixes_ref()->size() == 2;
                   }));
 
@@ -2131,11 +2131,11 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
 
       // v4Prefix - withdrawn, v6Prefix - withdrawn
       EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == false and
+                    return *i.installed_ref() == false &&
                         i.supporting_prefixes_ref()->size() == 0;
                   }));
       EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                    return *i.installed_ref() == false and
+                    return *i.installed_ref() == false &&
                         i.supporting_prefixes_ref()->size() == 1;
                   }));
 
@@ -2592,11 +2592,11 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
 
     // v4Prefix - advertised, v6Prefix - NOT advertised
     EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                  return *i.installed_ref() == true and
+                  return *i.installed_ref() == true &&
                       i.supporting_prefixes_ref()->size() == 1;
                 }));
     EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                  return *i.installed_ref() == false and
+                  return *i.installed_ref() == false &&
                       i.supporting_prefixes_ref()->size() == 1;
                 }));
 
@@ -2643,11 +2643,11 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
 
     // v4Prefix - advertised, v6Prefix - advertised
     EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                  return *i.installed_ref() == true and
+                  return *i.installed_ref() == true &&
                       i.supporting_prefixes_ref()->size() == 1;
                 }));
     EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                  return *i.installed_ref() == true and
+                  return *i.installed_ref() == true &&
                       i.supporting_prefixes_ref()->size() == 2;
                 }));
 
@@ -2703,11 +2703,11 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
 
     // v4Prefix - withdrawn, v6Prefix - withdrawn
     EXPECT_THAT(prefixEntryV4, testing::Truly([&](auto i) {
-                  return *i.installed_ref() == false and
+                  return *i.installed_ref() == false &&
                       i.supporting_prefixes_ref()->size() == 0;
                 }));
     EXPECT_THAT(prefixEntryV6, testing::Truly([&](auto i) {
-                  return *i.installed_ref() == false and
+                  return *i.installed_ref() == false &&
                       i.supporting_prefixes_ref()->size() == 1;
                 }));
 
