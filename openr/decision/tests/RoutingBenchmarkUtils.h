@@ -132,6 +132,11 @@ class DecisionWrapper {
     decision->waitUntilRunning();
   }
 
+  DecisionWrapper(const DecisionWrapper&) = delete;
+  DecisionWrapper& operator=(const DecisionWrapper&) = delete;
+  DecisionWrapper(DecisionWrapper&&) = delete;
+  DecisionWrapper& operator=(DecisionWrapper&&) = delete;
+
   ~DecisionWrapper() {
     peerUpdatesQueue.close();
     kvStoreUpdatesQueue.close();
