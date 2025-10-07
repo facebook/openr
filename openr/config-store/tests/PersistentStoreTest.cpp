@@ -27,7 +27,7 @@ StoreDatabase
 loadDatabaseFromDisk(const std::string& filePath) {
   StoreDatabase newDatabase;
   std::string fileData("");
-  if (not folly::readFile(filePath.c_str(), fileData)) {
+  if (!folly::readFile(filePath.c_str(), fileData)) {
     return newDatabase;
   }
 
@@ -44,7 +44,7 @@ loadDatabaseFromDisk(const std::string& filePath) {
     }
 
     // Read finish
-    if (not optionalObject->has_value()) {
+    if (!optionalObject->has_value()) {
       break;
     }
     auto pObject = std::move(optionalObject->value());

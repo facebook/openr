@@ -50,7 +50,7 @@ PersistentStore::PersistentStore(
 
   // Load initial database. On failure we will just report error and continue
   // with empty database
-  if (not loadDatabaseFromDisk()) {
+  if (!loadDatabaseFromDisk()) {
     XLOG(ERR) << "Failed to load config-database from file: "
               << storageFilePath_;
   }
@@ -118,11 +118,11 @@ PersistentStore::load(std::string key) {
 
 void
 PersistentStore::maybeSaveObjectToDisk() noexcept {
-  if (not saveDbTimerBackoff_) {
+  if (!saveDbTimerBackoff_) {
     // This is primarily used for unit testing to save DB immediately
     // Block the response till file is saved
     savePersistentObjectToDisk();
-  } else if (not saveDbTimer_->isScheduled()) {
+  } else if (!saveDbTimer_->isScheduled()) {
     saveDbTimer_->scheduleTimeout(
         saveDbTimerBackoff_->getTimeRemainingUntilRetry());
   }
@@ -130,7 +130,7 @@ PersistentStore::maybeSaveObjectToDisk() noexcept {
 
 bool
 PersistentStore::savePersistentObjectToDisk() noexcept {
-  if (not dryrun_) {
+  if (!dryrun_) {
     // Write PersistentObject to ioBuf
     std::vector<PersistentObject> newObjects;
     newObjects = std::move(pObjects_);
@@ -162,7 +162,7 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
     if (numOfNewWritesToDisk_ >= kDbFlushRatio) {
       numOfNewWritesToDisk_ = 0;
       const auto startTs = std::chrono::steady_clock::now();
-      if (not saveDatabaseToDisk()) {
+      if (!saveDatabaseToDisk()) {
         return false;
       }
       XLOG(INFO) << "Updated database on disk. Took "
@@ -221,7 +221,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
 bool
 PersistentStore::loadDatabaseFromDisk() noexcept {
   // Check if file exists
-  if (not fs::exists(storageFilePath_)) {
+  if (!fs::exists(storageFilePath_)) {
     XLOG(INFO) << "Storage file " << storageFilePath_ << " doesn't exists. "
                << "Starting with empty database";
     return true;
@@ -229,7 +229,7 @@ PersistentStore::loadDatabaseFromDisk() noexcept {
 
   // Read data from file
   std::string fileData{""};
-  if (not folly::readFile(storageFilePath_.c_str(), fileData)) {
+  if (!folly::readFile(storageFilePath_.c_str(), fileData)) {
     XLOG(ERR) << "Failed to read file contents from '" << storageFilePath_
               << "'. Error (" << errno << "): " << folly::errnoStr(errno);
     return false;
@@ -268,7 +268,7 @@ PersistentStore::loadDatabaseTlvFormat(
     }
 
     // Read finish
-    if (not optionalObject->has_value()) {
+    if (!optionalObject->has_value()) {
       break;
     }
     auto pObject = std::move(optionalObject->value());
@@ -349,7 +349,7 @@ PersistentStore::encodePersistentObject(
 folly::Expected<std::optional<PersistentObject>, std::string>
 PersistentStore::decodePersistentObject(folly::io::Cursor& cursor) noexcept {
   // If nothing can be read, return
-  if (not cursor.canAdvance(1)) {
+  if (!cursor.canAdvance(1)) {
     return std::nullopt;
   }
 

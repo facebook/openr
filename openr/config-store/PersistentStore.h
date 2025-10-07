@@ -102,7 +102,7 @@ class PersistentStore : public OpenrEventBase {
     return std::move(futureVal).defer(
         [](folly::Try<std::optional<std::string>>&& value)
             -> folly::Expected<ThriftType, folly::Unit> {
-          if (value.hasException() or not value->has_value()) {
+          if (value.hasException() || !value->has_value()) {
             return folly::makeUnexpected(folly::Unit());
           }
           apache::thrift::CompactSerializer serializer;
