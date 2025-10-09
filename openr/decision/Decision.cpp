@@ -449,39 +449,41 @@ folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
 Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
   auto [p, sf] = folly::makePromiseContract<
       std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>();
-  runInEventBaseThread(
-      [this, p = std::move(p), filter = std::move(filter)]() mutable noexcept {
-        try {
-          // Get route details
-          auto routes = prefixState_.getReceivedRoutesFiltered(filter);
+  runInEventBaseThread([this,
+                        promise = std::move(p),
+                        filter = std::move(filter)]() mutable noexcept {
+    try {
+      // Get route details
+      auto routes = prefixState_.getReceivedRoutesFiltered(filter);
 
-          // Add best path result to this
-          auto const& bestRoutesCache = spfSolver_->getBestRoutesCache();
-          for (auto& route : routes) {
-            auto const& bestRoutesIt =
-                bestRoutesCache.find(toIPNetwork(*route.prefix()));
-            if (bestRoutesIt != bestRoutesCache.end()) {
-              auto const& bestRoutes = bestRoutesIt->second;
-              // Set all selected node-area
-              for (auto const& [node, area] : bestRoutes.allNodeAreas) {
-                route.bestKeys()->emplace_back();
-                auto& key = route.bestKeys()->back();
-                key.node() = node;
-                key.area() = area;
-              }
-              // Set best node-area
-              route.bestKey()->node() = bestRoutes.bestNodeArea.first;
-              route.bestKey()->area() = bestRoutes.bestNodeArea.second;
-            }
+      // Add best path result to this
+      auto const& bestRoutesCache = spfSolver_->getBestRoutesCache();
+      for (auto& route : routes) {
+        auto const& bestRoutesIt =
+            bestRoutesCache.find(toIPNetwork(*route.prefix()));
+        if (bestRoutesIt != bestRoutesCache.end()) {
+          auto const& bestRoutes = bestRoutesIt->second;
+          // Set all selected node-area
+          for (auto const& [node, area] : bestRoutes.allNodeAreas) {
+            route.bestKeys()->emplace_back();
+            auto& key = route.bestKeys()->back();
+            key.node() = node;
+            key.area() = area;
           }
-
-          // Set the promise
-          p.setValue(std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
-              std::move(routes)));
-        } catch (const thrift::OpenrError& e) {
-          p.setException(e);
+          // Set best node-area
+          route.bestKey()->node() = bestRoutes.bestNodeArea.first;
+          route.bestKey()->area() = bestRoutes.bestNodeArea.second;
         }
-      });
+      }
+
+      // Set the promise
+      promise.setValue(
+          std::make_unique<std::vector<thrift::ReceivedRouteDetail>>(
+              std::move(routes)));
+    } catch (const thrift::OpenrError& e) {
+      promise.setException(e);
+    }
+  });
   return std::move(sf);
 }
 
@@ -495,17 +497,17 @@ Decision::clearRibPolicy() {
     return std::move(sf);
   }
 
-  runInEventBaseThread([this, p = std::move(p)]() mutable {
+  runInEventBaseThread([this, promise = std::move(p)]() mutable {
     if (!ribPolicy_) {
       thrift::OpenrError error;
       error.message() = "No RIB policy configured";
-      p.setException(error);
+      promise.setException(error);
     } else {
       ribPolicy_ = nullptr;
       // Trigger route computation
       pendingUpdates_.setNeedsFullRebuild();
       rebuildRoutes("RIB_POLICY_CLEARED");
-      p.setValue();
+      promise.setValue();
     }
   });
 
@@ -530,33 +532,34 @@ Decision::setRibPolicy(thrift::RibPolicy const& ribPolicyThrift) {
     return std::move(sf);
   }
 
-  runInEventBaseThread(
-      [this, p = std::move(p), ribPolicy = std::move(ribPolicy)]() mutable {
-        const auto durationLeft = ribPolicy->getTtlDuration();
-        if (durationLeft.count() <= 0) {
-          XLOG(ERR) << "Ignoring RibPolicy update with new instance because of "
-                    << "staleness. Validity " << durationLeft.count() << "ms";
-          return;
-        }
+  runInEventBaseThread([this,
+                        promise = std::move(p),
+                        ribPolicy = std::move(ribPolicy)]() mutable {
+    const auto durationLeft = ribPolicy->getTtlDuration();
+    if (durationLeft.count() <= 0) {
+      XLOG(ERR) << "Ignoring RibPolicy update with new instance because of "
+                << "staleness. Validity " << durationLeft.count() << "ms";
+      return;
+    }
 
-        // Update local policy instance
-        XLOG(INFO) << "Updating RibPolicy with new instance. Validity "
-                   << durationLeft.count() << "ms";
-        ribPolicy_ = std::move(ribPolicy);
+    // Update local policy instance
+    XLOG(INFO) << "Updating RibPolicy with new instance. Validity "
+               << durationLeft.count() << "ms";
+    ribPolicy_ = std::move(ribPolicy);
 
-        // Schedule timer for processing routes on expiry
-        ribPolicyTimer_->scheduleTimeout(durationLeft);
+    // Schedule timer for processing routes on expiry
+    ribPolicyTimer_->scheduleTimeout(durationLeft);
 
-        // Trigger route computation
-        pendingUpdates_.setNeedsFullRebuild();
-        rebuildRoutes("RIB_POLICY_UPDATE");
+    // Trigger route computation
+    pendingUpdates_.setNeedsFullRebuild();
+    rebuildRoutes("RIB_POLICY_UPDATE");
 
-        // Save rib policy to file.
-        saveRibPolicyDebounced_();
+    // Save rib policy to file.
+    saveRibPolicyDebounced_();
 
-        // Mark the policy update request to be done
-        p.setValue();
-      });
+    // Mark the policy update request to be done
+    promise.setValue();
+  });
   return std::move(sf);
 }
 
@@ -570,13 +573,13 @@ Decision::getRibPolicy() {
     return std::move(sf);
   }
 
-  runInEventBaseThread([this, p = std::move(p)]() mutable {
+  runInEventBaseThread([this, promise = std::move(p)]() mutable {
     if (ribPolicy_) {
-      p.setValue(ribPolicy_->toThrift());
+      promise.setValue(ribPolicy_->toThrift());
     } else {
       thrift::OpenrError e;
       e.message() = "RibPolicy is not configured";
-      p.setException(e);
+      promise.setException(e);
     }
   });
   return std::move(sf);
