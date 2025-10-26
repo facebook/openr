@@ -89,6 +89,9 @@ struct NextHopThrift {
 
   // Name of next-hop device
   54: optional string neighborNodeName;
+
+  // Connection status of next-hop.
+  55: optional bool isConnected;
 }
 
 @cpp.MinimizePadding
