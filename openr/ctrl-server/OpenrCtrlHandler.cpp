@@ -163,8 +163,9 @@ OpenrCtrlHandler::closeKvStorePublishers() {
   for (auto& publisher : publishers) {
     // We have to send an exception as part of the completion, otherwise
     // thrift doesn't seem to notify the peer of the shutdown
-    publisher->complete(folly::make_exception_wrapper<std::runtime_error>(
-        "publisher terminated"));
+    publisher->complete(
+        folly::make_exception_wrapper<std::runtime_error>(
+            "publisher terminated"));
   }
 }
 

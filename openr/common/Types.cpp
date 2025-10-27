@@ -25,10 +25,11 @@ RegexSet::RegexSet(std::vector<std::string> const& keyPrefixList) {
 
   for (auto const& keyPrefix : keyPrefixList) {
     if (regexSet_->Add(keyPrefix, &re2AddError) < 0) {
-      throw RegexSetException(fmt::format(
-          "Failed to add prefixes to RE2 set: '{}', error: '{}'",
-          keyPrefix,
-          re2AddError));
+      throw RegexSetException(
+          fmt::format(
+              "Failed to add prefixes to RE2 set: '{}', error: '{}'",
+              keyPrefix,
+              re2AddError));
       return;
     }
   }

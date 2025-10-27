@@ -70,12 +70,13 @@ sprintPerfEvents(const thrift::PerfEvents& perfEvents) noexcept {
   for (auto const& event : events) {
     auto durationMs = *event.unixTs() - recentTs;
     recentTs = *event.unixTs();
-    eventStrs.emplace_back(fmt::format(
-        "node: {}, event: {}, duration: {}ms, unix-timestamp: {}",
-        *event.nodeName(),
-        *event.eventDescr(),
-        durationMs,
-        *event.unixTs()));
+    eventStrs.emplace_back(
+        fmt::format(
+            "node: {}, event: {}, duration: {}ms, unix-timestamp: {}",
+            *event.nodeName(),
+            *event.eventDescr(),
+            durationMs,
+            *event.unixTs()));
   }
   return eventStrs;
 }
@@ -255,8 +256,9 @@ getNthPrefix(
   }
 
   // convert back to CIDR
-  auto allocPrefixIp = folly::IPAddress::fromBinary(folly::ByteRange(
-      reinterpret_cast<const uint8_t*>(ipBytes.data()), ipBytes.size()));
+  auto allocPrefixIp = folly::IPAddress::fromBinary(
+      folly::ByteRange(
+          reinterpret_cast<const uint8_t*>(ipBytes.data()), ipBytes.size()));
   return {allocPrefixIp.mask(allocPrefixLen), allocPrefixLen};
 }
 
@@ -269,8 +271,9 @@ createLoopbackAddr(const folly::CIDRNetwork& prefix) noexcept {
     auto bytes = std::string(
         reinterpret_cast<const char*>(addr.bytes()), addr.byteCount());
     bytes[bytes.size() - 1] |= 0x01; // Set last bit to 1
-    addr = folly::IPAddress::fromBinary(folly::ByteRange(
-        reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
+    addr = folly::IPAddress::fromBinary(
+        folly::ByteRange(
+            reinterpret_cast<const uint8_t*>(bytes.data()), bytes.size()));
   }
 
   return addr;

@@ -2486,7 +2486,9 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
   }
 
   // Get API
-  { EXPECT_NO_THROW(handler_->semifuture_getRibPolicy().get()); }
+  {
+    EXPECT_NO_THROW(handler_->semifuture_getRibPolicy().get());
+  }
 
   // Clear API
   {

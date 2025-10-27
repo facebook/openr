@@ -103,10 +103,12 @@ TEST_F(WatchdogTestFixture, CounterReport) {
         auto counters = fb303::fbData->getCounters();
 
         // Verify the counter keys exist
-        ASSERT_TRUE(counters.count(fmt::format(
-            "watchdog.evb_queue_size.{}", dummyEvb_->getEvbName())));
-        ASSERT_TRUE(counters.count(fmt::format(
-            "watchdog.thread_mem_usage_kb.{}", dummyEvb_->getEvbName())));
+        ASSERT_TRUE(counters.count(
+            fmt::format(
+                "watchdog.evb_queue_size.{}", dummyEvb_->getEvbName())));
+        ASSERT_TRUE(counters.count(
+            fmt::format(
+                "watchdog.thread_mem_usage_kb.{}", dummyEvb_->getEvbName())));
 
         evb.stop();
       });
@@ -158,43 +160,51 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
             q2.getNumReaders());
 
         ASSERT_EQ(
-            fb303::fbData->getCounter(fmt::format(
-                "messaging.replicate_queue.{}.messages_sent", "Queue1")),
+            fb303::fbData->getCounter(
+                fmt::format(
+                    "messaging.replicate_queue.{}.messages_sent", "Queue1")),
             q1.getNumWrites());
         ASSERT_EQ(
-            fb303::fbData->getCounter(fmt::format(
-                "messaging.replicate_queue.{}.messages_sent", "Queue2")),
+            fb303::fbData->getCounter(
+                fmt::format(
+                    "messaging.replicate_queue.{}.messages_sent", "Queue2")),
             q2.getNumWrites());
 
         // Check the internal replicated queues
         auto stats = q1.getReplicationStats();
         for (auto& stat : stats) {
           ASSERT_EQ(
-              fb303::fbData->getCounter(fmt::format(
-                  "messaging.rw_queue.{}-{}.size", "Queue1", stat.queueId)),
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.size", "Queue1", stat.queueId)),
               stat.size);
           ASSERT_EQ(
-              fb303::fbData->getCounter(fmt::format(
-                  "messaging.rw_queue.{}-{}.read", "Queue1", stat.queueId)),
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.read", "Queue1", stat.queueId)),
               stat.reads);
           ASSERT_EQ(
-              fb303::fbData->getCounter(fmt::format(
-                  "messaging.rw_queue.{}-{}.sent", "Queue1", stat.queueId)),
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.sent", "Queue1", stat.queueId)),
               stat.writes);
         }
         stats = q2.getReplicationStats();
         for (auto& stat : stats) {
           ASSERT_EQ(
-              fb303::fbData->getCounter(fmt::format(
-                  "messaging.rw_queue.{}-{}.size", "Queue2", stat.queueId)),
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.size", "Queue2", stat.queueId)),
               stat.size);
           ASSERT_EQ(
-              fb303::fbData->getCounter(fmt::format(
-                  "messaging.rw_queue.{}-{}.read", "Queue2", stat.queueId)),
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.read", "Queue2", stat.queueId)),
               stat.reads);
           ASSERT_EQ(
-              fb303::fbData->getCounter(fmt::format(
-                  "messaging.rw_queue.{}-{}.sent", "Queue2", stat.queueId)),
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.sent", "Queue2", stat.queueId)),
               stat.writes);
         }
 

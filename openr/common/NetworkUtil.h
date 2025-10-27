@@ -95,15 +95,17 @@ toIPAddress(const T& input) {
 
 inline folly::IPAddress
 toIPAddress(const std::string& binAddr) {
-  return folly::IPAddress::fromBinary(folly::ByteRange(
-      reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
+  return folly::IPAddress::fromBinary(
+      folly::ByteRange(
+          reinterpret_cast<const uint8_t*>(binAddr.data()), binAddr.size()));
 }
 
 inline folly::IPAddress
 toIPAddress(const thrift::BinaryAddress& addr) {
-  return folly::IPAddress::fromBinary(folly::ByteRange(
-      reinterpret_cast<const unsigned char*>(addr.addr()->data()),
-      addr.addr()->size()));
+  return folly::IPAddress::fromBinary(
+      folly::ByteRange(
+          reinterpret_cast<const unsigned char*>(addr.addr()->data()),
+          addr.addr()->size()));
 }
 
 // construct thrift::IpPrefix
@@ -201,8 +203,11 @@ toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
         *prefix.prefixLength(),
         applyMask);
   } catch (const folly::IPAddressFormatException& e) {
-    throw thrift::OpenrError(fmt::format(
-        "Invalid IPAddress: {}, exception: {}", toString(prefix), e.what()));
+    throw thrift::OpenrError(
+        fmt::format(
+            "Invalid IPAddress: {}, exception: {}",
+            toString(prefix),
+            e.what()));
   }
   return network;
 }

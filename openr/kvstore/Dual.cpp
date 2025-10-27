@@ -291,17 +291,18 @@ std::string
 Dual::getStatusString() const noexcept {
   std::vector<std::string> counterStrs;
   for (const auto& [neighbor, counters] : counters_) {
-    counterStrs.emplace_back(fmt::format(
-        "{}: Q ({}, {}), R ({}, {}), U ({}, {}), total ({}, {})",
-        neighbor,
-        *counters.querySent(),
-        *counters.queryRecv(),
-        *counters.replySent(),
-        *counters.replyRecv(),
-        *counters.updateSent(),
-        *counters.updateRecv(),
-        *counters.totalSent(),
-        *counters.totalRecv()));
+    counterStrs.emplace_back(
+        fmt::format(
+            "{}: Q ({}, {}), R ({}, {}), U ({}, {}), total ({}, {})",
+            neighbor,
+            *counters.querySent(),
+            *counters.queryRecv(),
+            *counters.replySent(),
+            *counters.replyRecv(),
+            *counters.updateSent(),
+            *counters.updateRecv(),
+            *counters.totalSent(),
+            *counters.totalRecv()));
   }
   return fmt::format(
       "root({})::{}: {}\n{}",
@@ -834,13 +835,14 @@ DualNode::getStatusStrings() const noexcept {
   for (const auto& kv : counters_) {
     const auto& neighbor = kv.first;
     const auto& counters = kv.second;
-    strs.emplace_back(fmt::format(
-        "{}: pkt ({}, {}), msg ({}, {})",
-        neighbor,
-        *counters.pktSent(),
-        *counters.pktRecv(),
-        *counters.msgSent(),
-        *counters.msgRecv()));
+    strs.emplace_back(
+        fmt::format(
+            "{}: pkt ({}, {}), msg ({}, {})",
+            neighbor,
+            *counters.pktSent(),
+            *counters.pktRecv(),
+            *counters.msgSent(),
+            *counters.msgRecv()));
   }
 
   std::unordered_map<std::string, std::string> allStatus;

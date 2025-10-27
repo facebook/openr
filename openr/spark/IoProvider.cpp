@@ -120,8 +120,9 @@ IoProvider::recvMessage(
   ssize_t bytesRead = ioProvider->recvmsg(fd, &msg, MSG_DONTWAIT);
 
   if (bytesRead < 0) {
-    throw std::runtime_error(fmt::format(
-        "Failed reading message on fd {}: {}", fd, folly::errnoStr(errno)));
+    throw std::runtime_error(
+        fmt::format(
+            "Failed reading message on fd {}: {}", fd, folly::errnoStr(errno)));
   }
 
   if (msg.msg_flags & MSG_TRUNC) {
@@ -156,9 +157,7 @@ IoProvider::recvMessage(
       }
     }
     if (cmsg->cmsg_level == SOL_SOCKET && cmsg->cmsg_type == SO_TIMESTAMPNS) {
-      struct timespec ts {
-        0, 0
-      };
+      struct timespec ts{0, 0};
       memcpy(reinterpret_cast<void*>(&ts), CMSG_DATA(cmsg), sizeof(ts));
 
       // cast to int64_t since ts.tv_sec is 32 bits on some platforms like arm

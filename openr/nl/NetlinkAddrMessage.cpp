@@ -151,8 +151,9 @@ NetlinkAddrMessage::parseMessage(const struct nlmsghdr* nlmsg) {
         builder = builder.setPrefix(prefix);
       } else if (addrEntry->ifa_family == AF_INET6) {
         struct in6_addr* addr6 = reinterpret_cast<in6_addr*> RTA_DATA(addrAttr);
-        auto ipAddress = folly::IPAddressV6::tryFromBinary(folly::ByteRange(
-            reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
+        auto ipAddress = folly::IPAddressV6::tryFromBinary(
+            folly::ByteRange(
+                reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
         if (ipAddress.hasValue()) {
           folly::CIDRNetwork prefix = std::make_pair(
               ipAddress.value(), (uint8_t)addrEntry->ifa_prefixlen);

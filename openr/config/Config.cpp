@@ -103,8 +103,9 @@ Config::populateAreaConfig() {
     if (auto importPolicyName = areaConf.import_policy_name()) {
       if (!propagationPolicy ||
           propagationPolicy->objects()->count(*importPolicyName) == 0) {
-        throw std::invalid_argument(fmt::format(
-            "No area policy definition found for {}", *importPolicyName));
+        throw std::invalid_argument(
+            fmt::format(
+                "No area policy definition found for {}", *importPolicyName));
       }
     }
 
@@ -136,10 +137,11 @@ void
 Config::checkDecisionConfig() const {
   auto& decisionConf = *config_.decision_config();
   if (*decisionConf.debounce_min_ms() > *decisionConf.debounce_max_ms()) {
-    throw std::invalid_argument(fmt::format(
-        "decision_config.debounce_min_ms ({}) should be <= decision_config.debounce_max_ms ({})",
-        *decisionConf.debounce_min_ms(),
-        *decisionConf.debounce_max_ms()));
+    throw std::invalid_argument(
+        fmt::format(
+            "decision_config.debounce_min_ms ({}) should be <= decision_config.debounce_max_ms ({})",
+            *decisionConf.debounce_min_ms(),
+            *decisionConf.debounce_max_ms()));
   }
 }
 
@@ -148,14 +150,16 @@ Config::checkSparkConfig() const {
   auto& sparkConfig = *config_.spark_config();
   if (*sparkConfig.neighbor_discovery_port() <= 0 ||
       *sparkConfig.neighbor_discovery_port() > 65535) {
-    throw std::out_of_range(fmt::format(
-        "neighbor_discovery_port ({}) should be in range [0, 65535]",
-        *sparkConfig.neighbor_discovery_port()));
+    throw std::out_of_range(
+        fmt::format(
+            "neighbor_discovery_port ({}) should be in range [0, 65535]",
+            *sparkConfig.neighbor_discovery_port()));
   }
 
   if (*sparkConfig.hello_time_s() <= 0) {
-    throw std::out_of_range(fmt::format(
-        "hello_time_s ({}) should be > 0", *sparkConfig.hello_time_s()));
+    throw std::out_of_range(
+        fmt::format(
+            "hello_time_s ({}) should be > 0", *sparkConfig.hello_time_s()));
   }
 
   // When a node starts or a new link comes up we perform fast initial neighbor
@@ -163,82 +167,92 @@ Config::checkSparkConfig() const {
   // an immediate reply. This allows us to discover new neighbors in hundreds
   // of milliseconds (or as configured).
   if (*sparkConfig.fastinit_hello_time_ms() <= 0) {
-    throw std::out_of_range(fmt::format(
-        "fastinit_hello_time_ms ({}) should be > 0",
-        *sparkConfig.fastinit_hello_time_ms()));
+    throw std::out_of_range(
+        fmt::format(
+            "fastinit_hello_time_ms ({}) should be > 0",
+            *sparkConfig.fastinit_hello_time_ms()));
   }
 
   if (*sparkConfig.fastinit_hello_time_ms() >
       1000 * *sparkConfig.hello_time_s()) {
-    throw std::invalid_argument(fmt::format(
-        "fastinit_hello_time_ms ({}) should be <= hold_time_s ({}) * 1000",
-        *sparkConfig.fastinit_hello_time_ms(),
-        *sparkConfig.hello_time_s()));
+    throw std::invalid_argument(
+        fmt::format(
+            "fastinit_hello_time_ms ({}) should be <= hold_time_s ({}) * 1000",
+            *sparkConfig.fastinit_hello_time_ms(),
+            *sparkConfig.hello_time_s()));
   }
 
   // The rate of hello packet send is defined by keepAliveTime.
   // This time must be less than the holdTime for each node.
   if (*sparkConfig.keepalive_time_s() <= 0) {
-    throw std::out_of_range(fmt::format(
-        "keepalive_time_s ({}) should be > 0",
-        *sparkConfig.keepalive_time_s()));
+    throw std::out_of_range(
+        fmt::format(
+            "keepalive_time_s ({}) should be > 0",
+            *sparkConfig.keepalive_time_s()));
   }
 
   if (*sparkConfig.keepalive_time_s() > *sparkConfig.hold_time_s()) {
-    throw std::invalid_argument(fmt::format(
-        "keepalive_time_s ({}) should be <= hold_time_s ({})",
-        *sparkConfig.keepalive_time_s(),
-        *sparkConfig.hold_time_s()));
+    throw std::invalid_argument(
+        fmt::format(
+            "keepalive_time_s ({}) should be <= hold_time_s ({})",
+            *sparkConfig.keepalive_time_s(),
+            *sparkConfig.hold_time_s()));
   }
 
   // Hold time tells the receiver how long to keep the information valid for.
   if (*sparkConfig.hold_time_s() <= 0) {
-    throw std::out_of_range(fmt::format(
-        "hold_time_s ({}) should be > 0", *sparkConfig.hold_time_s()));
+    throw std::out_of_range(
+        fmt::format(
+            "hold_time_s ({}) should be > 0", *sparkConfig.hold_time_s()));
   }
 
   if (*sparkConfig.graceful_restart_time_s() <= 0) {
-    throw std::out_of_range(fmt::format(
-        "graceful_restart_time_s ({}) should be > 0",
-        *sparkConfig.graceful_restart_time_s()));
+    throw std::out_of_range(
+        fmt::format(
+            "graceful_restart_time_s ({}) should be > 0",
+            *sparkConfig.graceful_restart_time_s()));
   }
 
   if (*sparkConfig.graceful_restart_time_s() <
       3 * *sparkConfig.keepalive_time_s()) {
-    throw std::invalid_argument(fmt::format(
-        "graceful_restart_time_s ({}) should be >= 3 * keepalive_time_s ({})",
-        *sparkConfig.graceful_restart_time_s(),
-        *sparkConfig.keepalive_time_s()));
+    throw std::invalid_argument(
+        fmt::format(
+            "graceful_restart_time_s ({}) should be >= 3 * keepalive_time_s ({})",
+            *sparkConfig.graceful_restart_time_s(),
+            *sparkConfig.keepalive_time_s()));
   }
 
   if (*sparkConfig.step_detector_conf()->lower_threshold() < 0 ||
       *sparkConfig.step_detector_conf()->upper_threshold() < 0 ||
       *sparkConfig.step_detector_conf()->lower_threshold() >=
           *sparkConfig.step_detector_conf()->upper_threshold()) {
-    throw std::invalid_argument(fmt::format(
-        "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({}), and they should be >= 0",
-        *sparkConfig.step_detector_conf()->lower_threshold(),
-        *sparkConfig.step_detector_conf()->upper_threshold()));
+    throw std::invalid_argument(
+        fmt::format(
+            "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({}), and they should be >= 0",
+            *sparkConfig.step_detector_conf()->lower_threshold(),
+            *sparkConfig.step_detector_conf()->upper_threshold()));
   }
 
   if (*sparkConfig.step_detector_conf()->fast_window_size() < 0 ||
       *sparkConfig.step_detector_conf()->slow_window_size() < 0 ||
       (*sparkConfig.step_detector_conf()->fast_window_size() >
        *sparkConfig.step_detector_conf()->slow_window_size())) {
-    throw std::invalid_argument(fmt::format(
-        "step_detector_conf.fast_window_size ({}) should be <= step_detector_conf.slow_window_size ({}), and they should be >= 0",
-        *sparkConfig.step_detector_conf()->fast_window_size(),
-        *sparkConfig.step_detector_conf()->slow_window_size()));
+    throw std::invalid_argument(
+        fmt::format(
+            "step_detector_conf.fast_window_size ({}) should be <= step_detector_conf.slow_window_size ({}), and they should be >= 0",
+            *sparkConfig.step_detector_conf()->fast_window_size(),
+            *sparkConfig.step_detector_conf()->slow_window_size()));
   }
 
   if (*sparkConfig.step_detector_conf()->lower_threshold() < 0 ||
       *sparkConfig.step_detector_conf()->upper_threshold() < 0 ||
       *sparkConfig.step_detector_conf()->lower_threshold() >=
           *sparkConfig.step_detector_conf()->upper_threshold()) {
-    throw std::invalid_argument(fmt::format(
-        "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({})",
-        *sparkConfig.step_detector_conf()->lower_threshold(),
-        *sparkConfig.step_detector_conf()->upper_threshold()));
+    throw std::invalid_argument(
+        fmt::format(
+            "step_detector_conf.lower_threshold ({}) should be < step_detector_conf.upper_threshold ({})",
+            *sparkConfig.step_detector_conf()->lower_threshold(),
+            *sparkConfig.step_detector_conf()->upper_threshold()));
   }
 }
 
@@ -246,9 +260,10 @@ void
 Config::checkMonitorConfig() const {
   auto& monitorConfig = *config_.monitor_config();
   if (*monitorConfig.max_event_log() < 0) {
-    throw std::out_of_range(fmt::format(
-        "monitor_max_event_log ({}) should be >= 0",
-        *monitorConfig.max_event_log()));
+    throw std::out_of_range(
+        fmt::format(
+            "monitor_max_event_log ({}) should be >= 0",
+            *monitorConfig.max_event_log()));
   }
 }
 
@@ -257,23 +272,26 @@ Config::checkLinkMonitorConfig() const {
   auto& lmConf = *config_.link_monitor_config();
   // backoff validation
   if (*lmConf.linkflap_initial_backoff_ms() < 0) {
-    throw std::out_of_range(fmt::format(
-        "linkflap_initial_backoff_ms ({}) should be >= 0",
-        *lmConf.linkflap_initial_backoff_ms()));
+    throw std::out_of_range(
+        fmt::format(
+            "linkflap_initial_backoff_ms ({}) should be >= 0",
+            *lmConf.linkflap_initial_backoff_ms()));
   }
 
   if (*lmConf.linkflap_max_backoff_ms() < 0) {
-    throw std::out_of_range(fmt::format(
-        "linkflap_max_backoff_ms ({}) should be >= 0",
-        *lmConf.linkflap_max_backoff_ms()));
+    throw std::out_of_range(
+        fmt::format(
+            "linkflap_max_backoff_ms ({}) should be >= 0",
+            *lmConf.linkflap_max_backoff_ms()));
   }
 
   if (*lmConf.linkflap_initial_backoff_ms() >
       *lmConf.linkflap_max_backoff_ms()) {
-    throw std::out_of_range(fmt::format(
-        "linkflap_initial_backoff_ms ({}) should be < linkflap_max_backoff_ms ({})",
-        *lmConf.linkflap_initial_backoff_ms(),
-        *lmConf.linkflap_max_backoff_ms()));
+    throw std::out_of_range(
+        fmt::format(
+            "linkflap_initial_backoff_ms ({}) should be < linkflap_max_backoff_ms ({})",
+            *lmConf.linkflap_initial_backoff_ms(),
+            *lmConf.linkflap_max_backoff_ms()));
   }
 }
 
@@ -294,8 +312,9 @@ Config::checkVipServiceConfig() const {
         auto ingress_policy = *config_.vip_service_config()->ingress_policy();
         if (!propagationPolicy ||
             propagationPolicy->objects()->count(ingress_policy) == 0) {
-          throw std::invalid_argument(fmt::format(
-              "No area policy definition found for {}", ingress_policy));
+          throw std::invalid_argument(
+              fmt::format(
+                  "No area policy definition found for {}", ingress_policy));
         }
       }
     }

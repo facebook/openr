@@ -778,8 +778,9 @@ PrefixManager::getPrefixes() {
         prefixes.emplace_back(*entry.tPrefixEntry);
       }
     }
-    p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
-        std::move(prefixes)));
+    p.setValue(
+        std::make_unique<std::vector<thrift::PrefixEntry>>(
+            std::move(prefixes)));
   });
   return sf;
 }
@@ -798,8 +799,9 @@ PrefixManager::getPrefixesByType(thrift::PrefixType prefixType) {
         prefixes.emplace_back(*it->second.tPrefixEntry);
       }
     }
-    p.setValue(std::make_unique<std::vector<thrift::PrefixEntry>>(
-        std::move(prefixes)));
+    p.setValue(
+        std::make_unique<std::vector<thrift::PrefixEntry>>(
+            std::move(prefixes)));
   });
   return sf;
 }

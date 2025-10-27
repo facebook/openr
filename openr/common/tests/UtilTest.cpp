@@ -1027,17 +1027,20 @@ TEST(UtilTest, ThriftValueConstruction) {
 
 TEST(UtilTest, logInitializationEvent) {
   logInitializationEvent("Main", thrift::InitializationEvent::AGENT_CONFIGURED);
-  EXPECT_TRUE(facebook::fb303::fbData->hasCounter(
-      "initialization.AGENT_CONFIGURED.duration_ms"));
-  EXPECT_FALSE(facebook::fb303::fbData->hasCounter(
-      "initialization.KVSTORE_SYNCED.duration_ms"));
+  EXPECT_TRUE(
+      facebook::fb303::fbData->hasCounter(
+          "initialization.AGENT_CONFIGURED.duration_ms"));
+  EXPECT_FALSE(
+      facebook::fb303::fbData->hasCounter(
+          "initialization.KVSTORE_SYNCED.duration_ms"));
 
   logInitializationEvent(
       "moduleA",
       thrift::InitializationEvent::KVSTORE_SYNCED,
       "this is a message.");
-  EXPECT_TRUE(facebook::fb303::fbData->hasCounter(
-      "initialization.KVSTORE_SYNCED.duration_ms"));
+  EXPECT_TRUE(
+      facebook::fb303::fbData->hasCounter(
+          "initialization.KVSTORE_SYNCED.duration_ms"));
 }
 
 TEST(UtilTest, ToStringTest) {

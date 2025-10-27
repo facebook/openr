@@ -71,8 +71,9 @@ setUpThriftServer(
   // Set the port and interface for OpenrCtrl thrift server
   server->setPort(*config->getThriftServerConfig().openr_ctrl_port());
   // Set workers join timeout
-  server->setWorkersJoinTimeout(std::chrono::seconds{
-      *config->getThriftServerConfig().workers_join_timeout()});
+  server->setWorkersJoinTimeout(
+      std::chrono::seconds{
+          *config->getThriftServerConfig().workers_join_timeout()});
   // Set the time the thrift requests are allowed to stay on the queue.
   // (if not set explicitly, the default value is 100ms)
   server->setQueueTimeout(Constants::kThriftServerQueueTimeout);

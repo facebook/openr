@@ -266,23 +266,29 @@ Spark::Spark(
     std::pair<uint32_t, uint32_t> version,
     std::optional<uint32_t> maybeMaxAllowedPps)
     : myNodeName_(config->getNodeName()),
-      neighborDiscoveryPort_(static_cast<uint16_t>(
-          *config->getSparkConfig().neighbor_discovery_port())),
+      neighborDiscoveryPort_(
+          static_cast<uint16_t>(
+              *config->getSparkConfig().neighbor_discovery_port())),
       helloTime_(
           std::chrono::seconds(*config->getSparkConfig().hello_time_s())),
-      fastInitHelloTime_(std::chrono::milliseconds(
-          *config->getSparkConfig().fastinit_hello_time_ms())),
-      handshakeTime_(std::chrono::milliseconds(
-          *config->getSparkConfig().fastinit_hello_time_ms())),
-      minNeighborDiscoveryInterval_(std::chrono::seconds(
-          *config->getSparkConfig().min_neighbor_discovery_interval_s())),
-      maxNeighborDiscoveryInterval_(std::chrono::seconds(
-          *config->getSparkConfig().max_neighbor_discovery_interval_s())),
+      fastInitHelloTime_(
+          std::chrono::milliseconds(
+              *config->getSparkConfig().fastinit_hello_time_ms())),
+      handshakeTime_(
+          std::chrono::milliseconds(
+              *config->getSparkConfig().fastinit_hello_time_ms())),
+      minNeighborDiscoveryInterval_(
+          std::chrono::seconds(
+              *config->getSparkConfig().min_neighbor_discovery_interval_s())),
+      maxNeighborDiscoveryInterval_(
+          std::chrono::seconds(
+              *config->getSparkConfig().max_neighbor_discovery_interval_s())),
       handshakeHoldTime_(
           std::chrono::seconds(*config->getSparkConfig().keepalive_time_s())),
       holdTime_(std::chrono::seconds(*config->getSparkConfig().hold_time_s())),
-      gracefulRestartTime_(std::chrono::seconds(
-          *config->getSparkConfig().graceful_restart_time_s())),
+      gracefulRestartTime_(
+          std::chrono::seconds(
+              *config->getSparkConfig().graceful_restart_time_s())),
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
@@ -2328,8 +2334,9 @@ Spark::addInterface(
             ifIndex,
             true /* join */,
             ioProvider_.get())) {
-      throw std::runtime_error(fmt::format(
-          "Failed joining multicast group: {}", folly::errnoStr(errno)));
+      throw std::runtime_error(
+          fmt::format(
+              "Failed joining multicast group: {}", folly::errnoStr(errno)));
     }
 
     {
@@ -2394,8 +2401,9 @@ Spark::updateInterface(
               newInterface.ifIndex,
               true /* join */,
               ioProvider_.get())) {
-        throw std::runtime_error(fmt::format(
-            "Failed joining multicast group: {}", folly::errnoStr(errno)));
+        throw std::runtime_error(
+            fmt::format(
+                "Failed joining multicast group: {}", folly::errnoStr(errno)));
       }
     }
     XLOG(INFO) << "Updating iface " << ifName << " in spark tracking from "

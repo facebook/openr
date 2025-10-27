@@ -229,8 +229,9 @@ RibPolicy::applyAction(RibUnicastEntry& route) const {
 }
 
 RibPolicy::PolicyChange
-RibPolicy::applyPolicy(std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
-                           unicastEntries) const {
+RibPolicy::applyPolicy(
+    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>& unicastEntries)
+    const {
   PolicyChange change;
   if (!isActive()) {
     return change;

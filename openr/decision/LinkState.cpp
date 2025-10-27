@@ -61,9 +61,10 @@ Link::Link(
       usable_(usable),
       orderedNames_(
           std::minmax(std::make_pair(n1_, if1_), std::make_pair(n2_, if2_))),
-      hash(std::hash<std::pair<
-               std::pair<std::string, std::string>,
-               std::pair<std::string, std::string>>>()(orderedNames_)) {}
+      hash(
+          std::hash<std::pair<
+              std::pair<std::string, std::string>,
+              std::pair<std::string, std::string>>>()(orderedNames_)) {}
 
 Link::Link(
     const std::string& area,

@@ -153,8 +153,9 @@ class FibHandlerFixture : public testing::TestWithParam<bool> {
       ASSERT_EQ(
           0,
           nlSock_
-              .addLink(fbnl::utils::createLink(
-                  i + 1, kInterfaces.at(i), true, false))
+              .addLink(
+                  fbnl::utils::createLink(
+                      i + 1, kInterfaces.at(i), true, false))
               .get());
     }
   }

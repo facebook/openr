@@ -2307,8 +2307,9 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
       Constants::kTtlInfinity /* ttl */,
       0 /* ttl version */,
       0 /* hash */);
-  EXPECT_TRUE(stores[kNumStores - 1]->setKey(
-      kTestingAreaName, kKeyName, thriftValLast));
+  EXPECT_TRUE(
+      stores[kNumStores - 1]->setKey(
+          kTestingAreaName, kKeyName, thriftValLast));
   // Update hash
   thriftValLast.hash() = generateHash(
       *thriftValLast.version(),

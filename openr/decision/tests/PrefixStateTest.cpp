@@ -19,8 +19,9 @@ class PrefixStateTestFixture : public ::testing::Test {
   static thrift::IpPrefix
   getAddrFromSeed(size_t seed, bool isV4) {
     CHECK_LE(seed, 255);
-    return toIpPrefix(fmt::format(
-        "{}10.0.0.{}/{}", isV4 ? "" : "::ffff:", seed, isV4 ? 32 : 128));
+    return toIpPrefix(
+        fmt::format(
+            "{}10.0.0.{}/{}", isV4 ? "" : "::ffff:", seed, isV4 ? 32 : 128));
   }
 
   PrefixState state_;

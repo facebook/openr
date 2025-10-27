@@ -458,9 +458,10 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
 
     // Collect "full_sync" duration
-    fullSyncDurationBefore = allCounters.at(fmt::format(
-        "kvstore.thrift.{}_duration_ms.avg",
-        Constants::kTypeFullSync.toString()));
+    fullSyncDurationBefore = allCounters.at(
+        fmt::format(
+            "kvstore.thrift.{}_duration_ms.avg",
+            Constants::kTypeFullSync.toString()));
 
     EXPECT_EQ(0, numIdlePeer);
     EXPECT_EQ(2, numInitializedPeer);
@@ -487,9 +488,10 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     // Verify if no peers is in INITIALIZED state
     auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
     // Collect "full_sync" duration
-    fullSyncDurationAfter = allCounters.at(fmt::format(
-        "kvstore.thrift.{}_duration_ms.avg",
-        Constants::kTypeFullSync.toString()));
+    fullSyncDurationAfter = allCounters.at(
+        fmt::format(
+            "kvstore.thrift.{}_duration_ms.avg",
+            Constants::kTypeFullSync.toString()));
 
     // verify the number of IDLE and INITIALIZED peers
     //

@@ -211,8 +211,9 @@ Fib::getRouteDetailDb() {
     for (const auto& route : routeState_.mplsRoutes) {
       routeDetailDb.mplsRoutes()->emplace_back(route.second.toThriftDetail());
     }
-    p.setValue(std::make_unique<thrift::RouteDatabaseDetail>(
-        std::move(routeDetailDb)));
+    p.setValue(
+        std::make_unique<thrift::RouteDatabaseDetail>(
+            std::move(routeDetailDb)));
   });
   return sf;
 }
@@ -223,8 +224,9 @@ Fib::getUnicastRoutes(std::vector<std::string> prefixes) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread(
       [p = std::move(p), prefixes = std::move(prefixes), this]() mutable {
-        p.setValue(std::make_unique<std::vector<thrift::UnicastRoute>>(
-            getUnicastRoutesFiltered(std::move(prefixes))));
+        p.setValue(
+            std::make_unique<std::vector<thrift::UnicastRoute>>(
+                getUnicastRoutesFiltered(std::move(prefixes))));
       });
   return sf;
 }
@@ -235,8 +237,9 @@ Fib::getMplsRoutes(std::vector<int32_t> labels) {
   auto sf = p.getSemiFuture();
   runInEventBaseThread(
       [p = std::move(p), labels = std::move(labels), this]() mutable {
-        p.setValue(std::make_unique<std::vector<thrift::MplsRoute>>(
-            getMplsRoutesFiltered(std::move(labels))));
+        p.setValue(
+            std::make_unique<std::vector<thrift::MplsRoute>>(
+                getMplsRoutesFiltered(std::move(labels))));
       });
   return sf;
 }

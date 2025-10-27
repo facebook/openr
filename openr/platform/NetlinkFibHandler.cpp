@@ -41,9 +41,10 @@ NetlinkFibHandler::NetlinkFibHandler(
     fbnl::NetlinkProtocolSocket* nlSock, uint8_t routeTable)
     : facebook::fb303::BaseService("openr"),
       nlSock_(nlSock),
-      startTime_(std::chrono::duration_cast<std::chrono::seconds>(
-                     std::chrono::system_clock::now().time_since_epoch())
-                     .count()),
+      startTime_(
+          std::chrono::duration_cast<std::chrono::seconds>(
+              std::chrono::system_clock::now().time_since_epoch())
+              .count()),
       routeTable_(routeTable) {
   CHECK_NOTNULL(nlSock);
 }
@@ -362,10 +363,11 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
   auto v6Routes = nlSock_->getIPv6Routes(protocol.value(), routeTable_);
   return folly::collectAll(std::move(v4Routes), std::move(v6Routes))
       .deferValue(
-          [this](std::tuple<
-                 folly::Try<folly::Expected<std::vector<fbnl::Route>, int>>,
-                 folly::Try<folly::Expected<std::vector<fbnl::Route>, int>>>&&
-                     res) {
+          [this](
+              std::tuple<
+                  folly::Try<folly::Expected<std::vector<fbnl::Route>, int>>,
+                  folly::Try<folly::Expected<std::vector<fbnl::Route>, int>>>&&
+                  res) {
             auto routes = std::make_unique<std::vector<thrift::UnicastRoute>>();
             for (auto& nlRoutes : {std::get<0>(res), std::get<1>(res)}) {
               if (nlRoutes.value().hasError()) {

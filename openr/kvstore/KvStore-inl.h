@@ -757,8 +757,10 @@ KvStore<ClientType>::semifuture_getKvStorePeers(std::string area) {
   runInEventBaseThread([this, p = std::move(p), area]() mutable {
     XLOG(DBG2) << fmt::format("Peer dump requested for AREA: {}", area);
     try {
-      p.setValue(std::make_unique<thrift::PeersMap>(
-          getAreaDbOrThrow(area, "semifuture_getKvStorePeers").dumpPeers()));
+      p.setValue(
+          std::make_unique<thrift::PeersMap>(
+              getAreaDbOrThrow(area, "semifuture_getKvStorePeers")
+                  .dumpPeers()));
       fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
     } catch (thrift::KvStoreError const& e) {
       p.setException(e);
@@ -776,8 +778,9 @@ KvStore<ClientType>::semifuture_getKvStoreAreaSummaryInternal(
   runInEventBaseThread(
       [this, p = std::move(p), selectAreas = std::move(selectAreas)]() mutable {
         auto result = getKvStoreAreaSummaryImpl(std::move(selectAreas));
-        p.setValue(std::make_unique<std::vector<thrift::KvStoreAreaSummary>>(
-            std::move(result)));
+        p.setValue(
+            std::make_unique<std::vector<thrift::KvStoreAreaSummary>>(
+                std::move(result)));
       });
   return sf;
 }
@@ -801,8 +804,9 @@ KvStore<ClientType>::semifuture_addUpdateKvStorePeers(
       auto& kvStoreDb =
           getAreaDbOrThrow(area, "semifuture_addUpdateKvStorePeers");
       if (peersToAdd.empty()) {
-        p.setException(thrift::KvStoreError(
-            "Empty peerNames from peer-add request, ignoring"));
+        p.setException(
+            thrift::KvStoreError(
+                "Empty peerNames from peer-add request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
         kvStoreDb.addThriftPeers(peersToAdd);
@@ -830,8 +834,9 @@ KvStore<ClientType>::semifuture_deleteKvStorePeers(
     try {
       auto& kvStoreDb = getAreaDbOrThrow(area, "semifuture_deleteKvStorePeers");
       if (peersToDel.empty()) {
-        p.setException(thrift::KvStoreError(
-            "Empty peerNames from peer-del request, ignoring"));
+        p.setException(
+            thrift::KvStoreError(
+                "Empty peerNames from peer-del request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_per_del", 1, fb303::COUNT);
         kvStoreDb.delThriftPeers(peersToDel);
@@ -1211,39 +1216,40 @@ KvStoreDb<ClientType>::getNextState(
   // certain event. Invalid state jump will cause fatal error.
   //
   static const std::vector<std::vector<std::optional<thrift::KvStorePeerState>>>
-      stateMap = {/*
-                   * index 0 - IDLE
-                   * PEER_ADD => SYNCING
-                   * THRIFT_API_ERROR => IDLE
-                   * INCONSISTENCY_DETECTED => IDLE
-                   */
-                  {thrift::KvStorePeerState::SYNCING,
-                   std::nullopt,
-                   std::nullopt,
-                   thrift::KvStorePeerState::IDLE,
-                   thrift::KvStorePeerState::IDLE},
-                  /*
-                   * index 1 - SYNCING
-                   * SYNC_RESP_RCVD => INITIALIZED
-                   * THRIFT_API_ERROR => IDLE
-                   * INCONSISTENCY_DETECTED => IDLE
-                   */
-                  {std::nullopt,
-                   std::nullopt,
-                   thrift::KvStorePeerState::INITIALIZED,
-                   thrift::KvStorePeerState::IDLE,
-                   thrift::KvStorePeerState::IDLE},
-                  /*
-                   * index 2 - INITIALIZED
-                   * SYNC_RESP_RCVD => INITIALIZED
-                   * THRIFT_API_ERROR => IDLE
-                   * INCONSISTENCY_DETECTED => IDLE
-                   */
-                  {std::nullopt,
-                   std::nullopt,
-                   thrift::KvStorePeerState::INITIALIZED,
-                   thrift::KvStorePeerState::IDLE,
-                   thrift::KvStorePeerState::IDLE}};
+      stateMap = {
+          /*
+           * index 0 - IDLE
+           * PEER_ADD => SYNCING
+           * THRIFT_API_ERROR => IDLE
+           * INCONSISTENCY_DETECTED => IDLE
+           */
+          {thrift::KvStorePeerState::SYNCING,
+           std::nullopt,
+           std::nullopt,
+           thrift::KvStorePeerState::IDLE,
+           thrift::KvStorePeerState::IDLE},
+          /*
+           * index 1 - SYNCING
+           * SYNC_RESP_RCVD => INITIALIZED
+           * THRIFT_API_ERROR => IDLE
+           * INCONSISTENCY_DETECTED => IDLE
+           */
+          {std::nullopt,
+           std::nullopt,
+           thrift::KvStorePeerState::INITIALIZED,
+           thrift::KvStorePeerState::IDLE,
+           thrift::KvStorePeerState::IDLE},
+          /*
+           * index 2 - INITIALIZED
+           * SYNC_RESP_RCVD => INITIALIZED
+           * THRIFT_API_ERROR => IDLE
+           * INCONSISTENCY_DETECTED => IDLE
+           */
+          {std::nullopt,
+           std::nullopt,
+           thrift::KvStorePeerState::INITIALIZED,
+           thrift::KvStorePeerState::IDLE,
+           thrift::KvStorePeerState::IDLE}};
 
   CHECK(currState.has_value()) << "Current state is 'UNDEFINED'";
 

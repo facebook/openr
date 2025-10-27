@@ -471,9 +471,10 @@ class DualBaseFixture : public ::testing::Test {
   // validate no-root case (no node declares itself as root)
   // if this case, we expect everynode reports a empty route-info map
   bool
-  validateNoRoot(const std::unordered_map<
-                 std::string,
-                 std::unordered_map<std::string, Dual::RouteInfo>>& results) {
+  validateNoRoot(
+      const std::unordered_map<
+          std::string,
+          std::unordered_map<std::string, Dual::RouteInfo>>& results) {
     for (const auto& kv : results) {
       const auto& node = kv.first;
       const auto& infos = kv.second;

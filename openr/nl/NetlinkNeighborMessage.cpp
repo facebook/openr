@@ -80,8 +80,9 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) {
         // IPv6 Address
         struct in6_addr* addr6 =
             reinterpret_cast<in6_addr*> RTA_DATA(neighAttr);
-        auto ipAddress = folly::IPAddressV6::tryFromBinary(folly::ByteRange(
-            reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
+        auto ipAddress = folly::IPAddressV6::tryFromBinary(
+            folly::ByteRange(
+                reinterpret_cast<const uint8_t*>(addr6->s6_addr), 16));
         if (ipAddress.hasValue()) {
           builder = builder.setDestination(ipAddress.value());
         } else {
@@ -91,8 +92,9 @@ NetlinkNeighborMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     } break;
 
     case NDA_LLADDR: {
-      auto macAddress = folly::MacAddress::fromBinary(folly::ByteRange(
-          reinterpret_cast<const uint8_t*>(RTA_DATA(neighAttr)), ETH_ALEN));
+      auto macAddress = folly::MacAddress::fromBinary(
+          folly::ByteRange(
+              reinterpret_cast<const uint8_t*>(RTA_DATA(neighAttr)), ETH_ALEN));
       builder.setLinkAddress(macAddress);
     } break;
     }

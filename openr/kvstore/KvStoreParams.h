@@ -63,12 +63,15 @@ struct KvStoreParams {
         floodRate(kvStoreConfig.flood_rate().to_optional()), /* Kvstore
                                                                 flooding rate
                                                               */
-        ttlDecr(std::chrono::milliseconds(
-            *kvStoreConfig.ttl_decrement_ms())), /* TTL decrement factor */
-        keyTtl(std::chrono::milliseconds(
-            *kvStoreConfig.key_ttl_ms())), /*TTL for self-originated keys */
-        syncInitialBackoff(std::chrono::milliseconds(
-            *kvStoreConfig.sync_initial_backoff_ms())),
+        ttlDecr(
+            std::chrono::milliseconds(
+                *kvStoreConfig.ttl_decrement_ms())), /* TTL decrement factor */
+        keyTtl(
+            std::chrono::milliseconds(
+                *kvStoreConfig.key_ttl_ms())), /*TTL for self-originated keys */
+        syncInitialBackoff(
+            std::chrono::milliseconds(
+                *kvStoreConfig.sync_initial_backoff_ms())),
         syncMaxBackoff(
             std::chrono::milliseconds(*kvStoreConfig.sync_max_backoff_ms())),
         enable_secure_thrift_client(

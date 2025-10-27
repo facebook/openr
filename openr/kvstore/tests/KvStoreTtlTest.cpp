@@ -96,10 +96,11 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
       for (const auto& j : adjacencyList[i]) {
         const auto neighborId = buildNodeId(kOriginBase, j);
         LOG(INFO) << "Adding neighbor " << neighborId << " to store " << nodeId;
-        EXPECT_TRUE(stores_[i]->addPeer(
-            kTestingAreaName,
-            stores_[j]->getNodeId(),
-            stores_[j]->getPeerSpec()));
+        EXPECT_TRUE(
+            stores_[i]->addPeer(
+                kTestingAreaName,
+                stores_[j]->getNodeId(),
+                stores_[j]->getPeerSpec()));
       }
     }
 

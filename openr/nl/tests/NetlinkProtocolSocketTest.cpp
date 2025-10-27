@@ -310,18 +310,20 @@ class NlMessageFixture : public ::testing::Test {
     for (auto const& route : routes) {
       std::optional<Route> maybeRoute;
       if (route.getFamily() == AF_MPLS) {
-        auto it = mplsRoutes.find(std::make_tuple(
-            route.getRouteTable(),
-            route.getProtocolId(),
-            route.getMplsLabel().value()));
+        auto it = mplsRoutes.find(
+            std::make_tuple(
+                route.getRouteTable(),
+                route.getProtocolId(),
+                route.getMplsLabel().value()));
         if (it != mplsRoutes.end()) {
           maybeRoute = it->second;
         }
       } else {
-        auto it = unicastRoutes.find(std::make_tuple(
-            route.getRouteTable(),
-            route.getProtocolId(),
-            route.getDestination()));
+        auto it = unicastRoutes.find(
+            std::make_tuple(
+                route.getRouteTable(),
+                route.getProtocolId(),
+                route.getDestination()));
         if (it != unicastRoutes.end()) {
           maybeRoute = it->second;
         }
@@ -487,11 +489,11 @@ class NlMessageFixture : public ::testing::Test {
         ifIndexY,
         1));
 
-    struct v4Addr addr4 {};
+    struct v4Addr addr4{};
     for (uint32_t i = 0; i < count; i++) {
       addr4.u32_addr = 0x000000A0 + i;
-      folly::IPAddress ipAddress =
-          folly::IPAddress::fromBinary(folly::ByteRange(
+      folly::IPAddress ipAddress = folly::IPAddress::fromBinary(
+          folly::ByteRange(
               static_cast<const unsigned char*>(&addr4.u8_addr[0]), 4));
       folly::CIDRNetwork prefix = std::make_pair(ipAddress, 30);
       routes.emplace_back(
@@ -528,15 +530,11 @@ class NlMessageFixture : public ::testing::Test {
         ipAddrY1V6,
         ifIndexX,
         1));
-    struct v6Addr addr6 {
-      {
-        { 0 }
-      }
-    };
+    struct v6Addr addr6{{{0}}};
     for (uint32_t i = 0; i < count; i++) {
       addr6.u32_addr[0] = htonl(0x50210000 + i);
-      folly::IPAddress ipAddress =
-          folly::IPAddress::fromBinary(folly::ByteRange(
+      folly::IPAddress ipAddress = folly::IPAddress::fromBinary(
+          folly::ByteRange(
               static_cast<const unsigned char*>(&addr6.u8_addr[0]), 16));
       folly::CIDRNetwork prefix = std::make_pair(ipAddress, 64);
       routes.emplace_back(
@@ -1319,15 +1317,12 @@ TEST_F(NlMessageFixture, MaxPayloadExceeded) {
   // Should error out
 
   std::vector<NextHop> paths;
-  struct v6Addr addr6 {
-    {
-      { 0 }
-    }
-  };
+  struct v6Addr addr6{{{0}}};
   for (uint32_t i = 0; i < 200; i++) {
     addr6.u32_addr[0] = htonl(0xfe800000 + i);
-    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(folly::ByteRange(
-        static_cast<const unsigned char*>(&addr6.u8_addr[0]), 16));
+    folly::IPAddress ipAddress = folly::IPAddress::fromBinary(
+        folly::ByteRange(
+            static_cast<const unsigned char*>(&addr6.u8_addr[0]), 16));
     paths.push_back(buildNextHop(
         outLabel5,
         std::nullopt,

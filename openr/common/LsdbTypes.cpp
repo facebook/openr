@@ -18,12 +18,13 @@ PrefixKey::PrefixKey(
     const std::string& area)
     : nodeAndArea_(node, area),
       prefix_(prefix),
-      prefixKeyStringV2_(fmt::format(
-          "{}{}:[{}/{}]",
-          Constants::kPrefixDbMarker.toString(),
-          node,
-          prefix_.first.str(),
-          prefix_.second)) {}
+      prefixKeyStringV2_(
+          fmt::format(
+              "{}{}:[{}/{}]",
+              Constants::kPrefixDbMarker.toString(),
+              node,
+              prefix_.first.str(),
+              prefix_.second)) {}
 
 folly::Expected<PrefixKey, std::string>
 PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
@@ -43,10 +44,11 @@ PrefixKey::fromStr(const std::string& key, const std::string& areaIn) {
     network =
         folly::IPAddress::createNetwork(fmt::format("{}/{}", ipStr, plen));
   } catch (const folly::IPAddressFormatException& e) {
-    return folly::makeUnexpected(fmt::format(
-        "Exception in converting string to IP address for key: {}. Exception: {}",
-        key,
-        e.what()));
+    return folly::makeUnexpected(
+        fmt::format(
+            "Exception in converting string to IP address for key: {}. Exception: {}",
+            key,
+            e.what()));
   }
   return PrefixKey(node, network, areaIn);
 }

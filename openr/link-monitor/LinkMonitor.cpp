@@ -117,10 +117,12 @@ LinkMonitor::LinkMonitor(
           *config->getLinkMonitorConfig().enable_link_status_measurement()),
       enableV4_(config->isV4Enabled()),
       useRttMetric_(*config->getLinkMonitorConfig().use_rtt_metric()),
-      linkflapInitBackoff_(std::chrono::milliseconds(
-          *config->getLinkMonitorConfig().linkflap_initial_backoff_ms())),
-      linkflapMaxBackoff_(std::chrono::milliseconds(
-          *config->getLinkMonitorConfig().linkflap_max_backoff_ms())),
+      linkflapInitBackoff_(
+          std::chrono::milliseconds(
+              *config->getLinkMonitorConfig().linkflap_initial_backoff_ms())),
+      linkflapMaxBackoff_(
+          std::chrono::milliseconds(
+              *config->getLinkMonitorConfig().linkflap_max_backoff_ms())),
       areas_(config->getAreas()),
       interfaceUpdatesQueue_(interfaceUpdatesQueue),
       prefixUpdatesQueue_(prefixUpdatesQueue),

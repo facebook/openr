@@ -938,8 +938,9 @@ TEST_F(DecisionTestFixture, UnblockInitialRoutesTimeout) {
   // For some reason, we have to call getCounters first or else hasCounter will
   // return false.
   facebook::fb303::fbData->getCounters();
-  EXPECT_TRUE(facebook::fb303::fbData->hasCounter(
-      "initialization.RIB_COMPUTED.duration_ms"));
+  EXPECT_TRUE(
+      facebook::fb303::fbData->hasCounter(
+          "initialization.RIB_COMPUTED.duration_ms"));
 }
 
 /*
