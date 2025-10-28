@@ -23,7 +23,7 @@ InterfaceEntry::InterfaceEntry(
     : backoff_(initBackoff, maxBackoff),
       updateCallback_(updateCallback),
       updateTimeout_(updateTimeout) {
-  CHECK(not ifName.empty());
+  CHECK(!ifName.empty());
   // other attributes will be updated via:
   //  - updateAttrs()
   //  - updateAddr()
@@ -44,13 +44,13 @@ InterfaceEntry::updateAttrs(int ifIndex, bool isUp) {
   }
 
   // Look for specific case of interface state transition to DOWN
-  if (wasUp != isUp and wasUp) {
+  if (wasUp != isUp && wasUp) {
     // Penalize backoff on transitioning to DOWN state
     backoff_.reportError();
   }
 
   // Look for active to down transition
-  if (wasActive and not isUp) {
+  if (wasActive && !isUp) {
     // Schedule immediate timeout for fast propagation of link-down event
     updateTimeout_.scheduleTimeout(Constants::kLinkImmediateTimeout);
   }
@@ -63,7 +63,7 @@ InterfaceEntry::updateAttrs(int ifIndex, bool isUp) {
 
 bool
 InterfaceEntry::isActive() {
-  if (not info_.isUp) {
+  if (!info_.isUp) {
     return false;
   }
 
@@ -97,7 +97,7 @@ InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
       info_.ifName,
       isUp() ? "UP" : "DOWN");
 
-  if (isUpdated and isActive()) {
+  if (isUpdated && isActive()) {
     updateCallback_();
   }
 
@@ -114,7 +114,7 @@ InterfaceEntry::getGlobalUnicastNetworks(bool enableV4) const {
     }
 
     // Ignore v4 address if not enabled
-    if (ip.isV4() and not enableV4) {
+    if (ip.isV4() && !enableV4) {
       continue;
     }
 
