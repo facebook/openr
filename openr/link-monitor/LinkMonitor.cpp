@@ -40,7 +40,7 @@ printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   XLOG(DBG1) << fmt::format(
       "[Drain Status] Node Overloaded: {}",
       (*state.isOverloaded() ? "true" : "false"));
-  if (not state.overloadedLinks()->empty()) {
+  if (!state.overloadedLinks()->empty()) {
     XLOG(DBG1) << fmt::format(
         "[Drain Status] Overloaded Links: {}",
         folly::join(",", *state.overloadedLinks()));
@@ -50,7 +50,7 @@ printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   XLOG(DBG1) << fmt::format(
       "[Drain Status] Node Metric Increment: {}",
       *state.nodeMetricIncrementVal());
-  if (not state.linkMetricIncrementMap()->empty()) {
+  if (!state.linkMetricIncrementMap()->empty()) {
     XLOG(DBG1) << fmt::format("[Drain Status] Link Metric Increment:");
     for (auto const& [key, val] : *state.linkMetricIncrementMap()) {
       XLOG(DBG1) << fmt::format("\t{}: {}", key, val);
@@ -58,7 +58,7 @@ printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   }
 
   // [TO BE DEPRECATED]
-  if (not state.linkMetricOverrides()->empty()) {
+  if (!state.linkMetricOverrides()->empty()) {
     XLOG(DBG1) << "\tlinkMetricOverrides: ";
     for (auto const& [key, val] : *state.linkMetricOverrides()) {
       XLOG(DBG1) << "\t\t" << key << ": " << val;
@@ -342,7 +342,7 @@ LinkMonitor::LinkMonitor(
                        "Unexpected initialization event: {}",
                        apache::thrift::util::enumNameSafe(event));
             // Publish all peers to KvStore in OpenR initialization procedure.
-            CHECK(not initialNeighborsReceived_)
+            CHECK(!initialNeighborsReceived_)
                 << "Received NEIGHBOR_DISCOVERED when initial neighbors received is set to true";
             initialNeighborsReceived_ = true;
 
@@ -452,7 +452,7 @@ LinkMonitor::neighborUpEvent(
   fb303::fbData->addStatValue("link_monitor.neighbor_up", 1, fb303::SUM);
 
   std::string peerAddr;
-  if (not mockMode_) {
+  if (!mockMode_) {
     // peer address used for KvStore external sync over thrift
     peerAddr = fmt::format("{}%{}", toString(neighborAddrV6), localIfName);
   } else {
@@ -460,7 +460,7 @@ LinkMonitor::neighborUpEvent(
     peerAddr =
         fmt::format("{}%{}", Constants::kPlatformHost.toString(), localIfName);
   }
-  CHECK(not peerAddr.empty()) << "Got empty peerAddr";
+  CHECK(!peerAddr.empty()) << "Got empty peerAddr";
 
   // create AdjacencyKey to uniquely map to AdjacencyEntry
   const auto adjKey = std::make_pair(remoteNodeName, localIfName);
@@ -660,7 +660,7 @@ LinkMonitor::updateKvStorePeerNeighborUp(
 
   // Do not publish incremental peer event before initial peers are received and
   // published.
-  if (not initialNeighborsReceived_) {
+  if (!initialNeighborsReceived_) {
     return;
   }
 
@@ -833,7 +833,7 @@ LinkMonitor::advertiseInterfaces() {
   InterfaceDatabase ifDb;
   for (auto& [_, interface] : interfaces_) {
     // Perform regex match
-    if (not anyAreaShouldDiscoverOnIface(interface.getIfName())) {
+    if (!anyAreaShouldDiscoverOnIface(interface.getIfName())) {
       continue;
     }
     // Transform to `InterfaceInfo` object
@@ -850,7 +850,7 @@ LinkMonitor::advertiseInterfaces() {
   interfaceUpdatesQueue_.push(std::move(ifDb));
 
   // Mark `initialLinkDiscovered_` for the first call upon initialization
-  if (not initialLinksDiscovered_) {
+  if (!initialLinksDiscovered_) {
     initialLinksDiscovered_ = true;
 
     logInitializationEvent(
@@ -866,7 +866,7 @@ LinkMonitor::advertiseRedistAddrs() {
   // Add redistribute addresses
   for (auto& [_, interface] : interfaces_) {
     // Ignore in-active interfaces
-    if (not interface.isActive()) {
+    if (!interface.isActive()) {
       XLOG(DBG2) << fmt::format(
           "Interface: {} is NOT active. Skip advertising.",
           interface.getIfName());
@@ -1070,8 +1070,8 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 InterfaceEntry* FOLLY_NULLABLE
 LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
   // Return null if ifName doesn't quality regex match criteria
-  if (not anyAreaShouldDiscoverOnIface(ifName) &&
-      not anyAreaShouldRedistributeIface(ifName)) {
+  if (!anyAreaShouldDiscoverOnIface(ifName) &&
+      !anyAreaShouldRedistributeIface(ifName)) {
     return nullptr;
   }
 
@@ -1137,7 +1137,7 @@ LinkMonitor::syncInterfaces() {
   folly::Try<InterfaceDatabase> maybeIfDb;
   try {
     maybeIfDb = semifuture_getAllLinks().getTry(Constants::kReadTimeout);
-    if (not maybeIfDb.hasValue()) {
+    if (!maybeIfDb.hasValue()) {
       XLOG(ERR) << fmt::format(
           "[Interface Sync] Failed to sync interfaceDb. Exception: {}",
           folly::exceptionStr(maybeIfDb.exception()));
@@ -1172,7 +1172,7 @@ LinkMonitor::syncInterfaces() {
 
     // Get interface entry
     auto interfaceEntry = getOrCreateInterfaceEntry(info.ifName);
-    if (not interfaceEntry) {
+    if (!interfaceEntry) {
       continue;
     }
 
@@ -1721,7 +1721,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
       return;
     }
 
-    if (not state_.linkMetricIncrementMap()->contains(interfaceName)) {
+    if (!state_.linkMetricIncrementMap()->contains(interfaceName)) {
       XLOG(INFO) << "Skip cmd: [unsetInterfaceMetricIncrement]."
                  << "due the interface " << interfaceName
                  << "didn't set the link-level metric increment before.";

@@ -448,7 +448,7 @@ class LinkMonitorTestFixture : public testing::Test {
       for (const auto& network : info.networks) {
         if (network.first.isV4()) {
           v4AddrsCount++;
-        } else if (network.first.isV6() and network.first.isLinkLocal()) {
+        } else if (network.first.isV6() && network.first.isLinkLocal()) {
           v6LinkLocalAddrsCount++;
         }
       }
@@ -484,7 +484,7 @@ class LinkMonitorTestFixture : public testing::Test {
     }
 
     auto kv = pub.keyVals()->find(key);
-    if (kv == pub.keyVals()->end() or !kv->second.value()) {
+    if (kv == pub.keyVals()->end() || !kv->second.value()) {
       return std::nullopt;
     }
 
@@ -505,7 +505,7 @@ class LinkMonitorTestFixture : public testing::Test {
       std::optional<thrift::Value> value;
       try {
         value = getPublicationValueForKey(key, area);
-        if (not value.has_value()) {
+        if (!value.has_value()) {
           continue;
         }
       } catch (std::exception const& e) {
@@ -2203,7 +2203,7 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1_);
       prefixesArea2 = getNextPrefixDb(nodeName, area2_);
-    } while (prefixesArea1.size() != 5 or prefixesArea2.size() != 5);
+    } while (prefixesArea1.size() != 5 || prefixesArea2.size() != 5);
 
     // verify prefixes with VALID prefixes has been advertised
     EXPECT_EQ(
@@ -2255,7 +2255,7 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1_);
       prefixesArea2 = getNextPrefixDb(nodeName, area2_);
-    } while (prefixesArea1.size() != 1 or prefixesArea2.size() != 1);
+    } while (prefixesArea1.size() != 1 || prefixesArea2.size() != 1);
 
     ASSERT_EQ(
         1,
@@ -2291,7 +2291,7 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1_);
       prefixesArea2 = getNextPrefixDb(nodeName, area2_);
-    } while (prefixesArea1.size() != 0 or prefixesArea2.size() != 0);
+    } while (prefixesArea1.size() != 0 || prefixesArea2.size() != 0);
   }
 
   LOG(INFO) << "All prefixes get withdrawn.";
