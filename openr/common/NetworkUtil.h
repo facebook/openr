@@ -212,4 +212,10 @@ toIPNetwork(const thrift::IpPrefix& prefix, bool applyMask = true) {
   return network;
 }
 
+inline std::string
+toBinaryString(const folly::IPAddress& ip) {
+  std::string binary;
+  binary.assign(reinterpret_cast<const char*>(ip.bytes()), ip.byteCount());
+  return binary;
+}
 } // namespace openr
