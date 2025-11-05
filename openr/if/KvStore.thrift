@@ -536,6 +536,16 @@ service KvStoreService extends fb303_core.BaseService {
   ) throws (1: KvStoreError error);
 
   /**
+   * Set/Update key-values in KvStore as a Persisted Self Originated Key.
+   *
+   * NOTE: This is an authoritative call, meaning if someone else advertises the key, we try to win over it. Use with caution.
+   */
+  void persistSelfOriginatedKey(
+    1: KeySetParams setParams,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
    * Get KvStore peers
    */
   PeersMap getKvStorePeers() throws (1: KvStoreError error);
