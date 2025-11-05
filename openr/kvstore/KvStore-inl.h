@@ -595,6 +595,55 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
 }
 
 template <class ClientType>
+folly::SemiFuture<folly::Unit>
+KvStore<ClientType>::semifuture_persistSelfOriginatedKey(
+    std::string&& area, thrift::KeySetParams&& keySetParams) {
+  folly::Promise<folly::Unit> p;
+  auto sf = p.getSemiFuture();
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        keySetParams = std::move(keySetParams),
+                        area]() mutable {
+    XLOG(WARNING) << fmt::format(
+        "PersistSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
+        area,
+        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                             : ""),
+        (keySetParams.timestamp_ms().has_value()
+             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+             : ""));
+    try {
+      auto& kvStoreDb =
+          getAreaDbOrThrow(area, "semifuture_persistSelfOriginatedKey");
+
+      // Persist each key-value pair from keyVals
+      for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
+        XLOG(DBG3) << fmt::format(
+            "Persist self-originated key requested for AREA: {}, key: {}",
+            area,
+            key);
+
+        // Extract the value from thrift::Value
+        if (!thriftValue.value().has_value()) {
+          XLOG(WARNING) << fmt::format(
+              "Key {} has no value in keyVals, skipping persist operation",
+              key);
+          continue;
+        }
+
+        // Persist the key-value pair
+        kvStoreDb.persistSelfOriginatedKey(key, *thriftValue.value());
+      }
+
+      p.setValue();
+    } catch (thrift::KvStoreError const& e) {
+      p.setException(e);
+    }
+  });
+  return sf;
+}
+
+template <class ClientType>
 folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
 KvStore<ClientType>::semifuture_setKvStoreKeyValues(
     std::string area, thrift::KeySetParams keySetParams) {
@@ -3490,6 +3539,58 @@ KvStore<ClientType>::co_getKvStorePeers(std::string area) {
   fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
   auto result = getAreaDbOrThrow(area, "co_getKvStorePeers").dumpPeers();
   co_return std::make_unique<thrift::PeersMap>(result);
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_persistSelfOriginatedKeyInternal(
+    std::string&& area, thrift::KeySetParams&& keySetParams) {
+  auto& kvStoreDb = getAreaDbOrThrow(area, "co_persistSelfOriginatedKey");
+
+  // Persist each key-value pair from keyVals
+  for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
+    XLOG(DBG3) << fmt::format(
+        "Persist self-originated key requested for AREA: {}, key: {}",
+        area,
+        key);
+
+    // Extract the value from thrift::Value
+    if (!thriftValue.value().has_value()) {
+      XLOG(WARNING) << fmt::format(
+          "Key {} has no value in keyVals, skipping persist operation", key);
+      continue;
+    }
+
+    // Persist the key-value pair
+    kvStoreDb.persistSelfOriginatedKey(key, *thriftValue.value());
+  }
+
+  co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_persistSelfOriginatedKey(
+    std::string&& area, thrift::KeySetParams&& keySetParams) {
+  XLOG(WARNING) << fmt::format(
+      "PersistSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    co_await co_withExecutor(
+        getEvb(),
+        co_persistSelfOriginatedKeyInternal(
+            std::move(area), std::move(keySetParams)));
+  } catch (thrift::KvStoreError const& e) {
+    XLOG(ERR) << fmt::format(
+        "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw;
+  }
+  co_return folly::Unit();
 }
 #endif // FOLLY_HAS_COROUTINES
 } // namespace openr

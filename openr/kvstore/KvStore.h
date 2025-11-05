@@ -684,6 +684,16 @@ class KvStore final : public OpenrEventBase {
   /*
    * [Public APIs]
    *
+   * API to persist a self-originated key in KvStore.
+   * This is an authoritative call - if someone else advertises the same key,
+   * KvStore will try to win over it by setting key-value with higher version.
+   */
+  folly::SemiFuture<folly::Unit> semifuture_persistSelfOriginatedKey(
+      std::string&& area, thrift::KeySetParams&& keySetParams);
+
+  /*
+   * [Public APIs]
+   *
    * Set of APIs to interact with KvStore peers
    */
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
@@ -750,6 +760,9 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
       std::string area);
 
+  folly::coro::Task<folly::Unit> co_persistSelfOriginatedKey(
+      std::string&& area, thrift::KeySetParams&& keySetParams);
+
   // [private APIs]
  private:
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
@@ -767,6 +780,9 @@ class KvStore final : public OpenrEventBase {
 
   folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
   co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
+
+  folly::coro::Task<folly::Unit> co_persistSelfOriginatedKeyInternal(
+      std::string&& area, thrift::KeySetParams&& keySetParams);
 #endif // FOLLY_HAS_COROUTINES
 
  private:

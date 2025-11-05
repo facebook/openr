@@ -10,6 +10,7 @@
 
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/GtestHelpers.h>
+#include <folly/coro/Sleep.h>
 #include <folly/init/Init.h>
 #include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
@@ -2505,6 +2506,142 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
     EXPECT_THROW(handler_->semifuture_getRibPolicy().get(), thrift::OpenrError);
   }
 }
+
+TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
+  const std::string key1 = "persist-key1";
+  const std::string value1 = "persist-value1";
+  const std::string updatedValue = "persist-value-updated";
+
+  // Test 1: Persist a new key-value pair
+  {
+    thrift::KeyVals keyVals;
+    keyVals[key1] = createThriftValue(0, nodeName_, value1);
+
+    thrift::KeySetParams params;
+    params.keyVals() = keyVals;
+
+    handler_
+        ->semifuture_persistSelfOriginatedKey(
+            std::make_unique<thrift::KeySetParams>(params),
+            std::make_unique<std::string>(kSpineAreaId))
+        .get();
+
+    folly::EventBase evb;
+    evb.scheduleAt(
+        [this, &key1, &value1]() {
+          std::vector<std::string> filterKeys{key1};
+          auto pub = handler_
+                         ->semifuture_getKvStoreKeyValsArea(
+                             std::make_unique<std::vector<std::string>>(
+                                 std::move(filterKeys)),
+                             std::make_unique<std::string>(kSpineAreaId))
+                         .get();
+          auto keyVals_read = *pub->keyVals();
+          EXPECT_EQ(1, keyVals_read.size());
+          EXPECT_EQ(1, keyVals_read.count(key1));
+          EXPECT_EQ(value1, *keyVals_read.at(key1).value());
+          EXPECT_EQ(1, *keyVals_read.at(key1).version());
+          EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
+        },
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(100));
+    evb.loop();
+  }
+
+  // Test 2: Update an existing persisted key with new value
+  {
+    thrift::KeyVals keyVals;
+    keyVals[key1] = createThriftValue(0, nodeName_, updatedValue);
+
+    thrift::KeySetParams params;
+    params.keyVals() = keyVals;
+
+    handler_
+        ->semifuture_persistSelfOriginatedKey(
+            std::make_unique<thrift::KeySetParams>(params),
+            std::make_unique<std::string>(kSpineAreaId))
+        .get();
+
+    folly::EventBase evb;
+    evb.scheduleAt(
+        [this, &key1, &updatedValue]() {
+          std::vector<std::string> filterKeys{key1};
+          auto pub = handler_
+                         ->semifuture_getKvStoreKeyValsArea(
+                             std::make_unique<std::vector<std::string>>(
+                                 std::move(filterKeys)),
+                             std::make_unique<std::string>(kSpineAreaId))
+                         .get();
+          auto keyVals_read = *pub->keyVals();
+          EXPECT_EQ(1, keyVals_read.size());
+          EXPECT_EQ(1, keyVals_read.count(key1));
+          EXPECT_EQ(updatedValue, *keyVals_read.at(key1).value());
+          EXPECT_EQ(2, *keyVals_read.at(key1).version());
+          EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
+        },
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(100));
+    evb.loop();
+  }
+}
+
+#if FOLLY_HAS_COROUTINES
+CO_TEST_F(OpenrCtrlFixture, CoPersistSelfOriginatedKeyApi) {
+  const std::string key1 = "co-persist-key1";
+  const std::string value1 = "co-persist-value1";
+  const std::string updatedValue = "co-persist-value-updated";
+
+  // Test 1: Persist a new key-value pair
+  {
+    thrift::KeyVals keyVals;
+    keyVals[key1] = createThriftValue(1, nodeName_, value1);
+
+    thrift::KeySetParams params;
+    params.keyVals() = keyVals;
+
+    co_await handler_->co_persistSelfOriginatedKey(
+        std::make_unique<thrift::KeySetParams>(params),
+        std::make_unique<std::string>(kSpineAreaId));
+
+    // Wait for async operations to complete
+    co_await folly::coro::sleep(std::chrono::milliseconds(100));
+
+    std::vector<std::string> filterKeys{key1};
+    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
+        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
+        std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals_read = *pub->keyVals();
+    EXPECT_EQ(1, keyVals_read.size());
+    EXPECT_EQ(1, keyVals_read.count(key1));
+    EXPECT_EQ(value1, *keyVals_read.at(key1).value());
+    EXPECT_EQ(1, *keyVals_read.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
+  }
+
+  // Test 2: Update an existing persisted key with new value
+  {
+    thrift::KeyVals keyVals;
+    keyVals[key1] = createThriftValue(1, nodeName_, updatedValue);
+
+    thrift::KeySetParams params;
+    params.keyVals() = keyVals;
+
+    co_await handler_->co_persistSelfOriginatedKey(
+        std::make_unique<thrift::KeySetParams>(params),
+        std::make_unique<std::string>(kSpineAreaId));
+
+    // Wait for async operations to complete
+    co_await folly::coro::sleep(std::chrono::milliseconds(100));
+
+    std::vector<std::string> filterKeys{key1};
+    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
+        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
+        std::make_unique<std::string>(kSpineAreaId));
+    auto keyVals_read = *pub->keyVals();
+    EXPECT_EQ(1, keyVals_read.size());
+    EXPECT_EQ(updatedValue, *keyVals_read.at(key1).value());
+    EXPECT_EQ(2, *keyVals_read.at(key1).version());
+  }
+}
+#endif // FOLLY_HAS_COROUTINES
 
 TEST_F(OpenrCtrlFixture, verifyDataPathTest) {
   thrift::KeyVals kvs(
