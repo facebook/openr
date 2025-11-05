@@ -694,6 +694,16 @@ class KvStore final : public OpenrEventBase {
   /*
    * [Public APIs]
    *
+   * API to unset self-originated keys in KvStore.
+   * This call sets a final value (deletion marker) with incremented version
+   * and stops ttl-refreshing by clearing from local cache.
+   */
+  folly::SemiFuture<folly::Unit> semifuture_unsetSelfOriginatedKey(
+      std::string&& area, thrift::KeySetParams&& keySetParams);
+
+  /*
+   * [Public APIs]
+   *
    * Set of APIs to interact with KvStore peers
    */
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
@@ -763,6 +773,9 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<folly::Unit> co_persistSelfOriginatedKey(
       std::string&& area, thrift::KeySetParams&& keySetParams);
 
+  folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKey(
+      std::string&& area, thrift::KeySetParams&& keySetParams);
+
   // [private APIs]
  private:
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
@@ -782,6 +795,9 @@ class KvStore final : public OpenrEventBase {
   co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
 
   folly::coro::Task<folly::Unit> co_persistSelfOriginatedKeyInternal(
+      std::string&& area, thrift::KeySetParams&& keySetParams);
+
+  folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKeyInternal(
       std::string&& area, thrift::KeySetParams&& keySetParams);
 #endif // FOLLY_HAS_COROUTINES
 

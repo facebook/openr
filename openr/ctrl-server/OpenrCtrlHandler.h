@@ -343,6 +343,15 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<std::string> area) override;
 
   /*
+   * API to unset self-originated key-val pairs by given:
+   *  - thrift::KeySetParams;
+   *  - a specifc area;
+   */
+  folly::SemiFuture<folly::Unit> semifuture_unsetSelfOriginatedKey(
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
+
+  /*
    * API to dump existing peers in a specified area
    */
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
@@ -544,6 +553,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<std::string> area) override;
 
   folly::coro::Task<void> co_persistSelfOriginatedKey(
+      std::unique_ptr<thrift::KeySetParams> setParams,
+      std::unique_ptr<std::string> area) override;
+
+  folly::coro::Task<void> co_unsetSelfOriginatedKey(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 

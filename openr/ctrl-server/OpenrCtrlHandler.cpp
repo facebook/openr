@@ -797,6 +797,22 @@ OpenrCtrlHandler::semifuture_persistSelfOriginatedKey(
       std::move(*area), std::move(*setParams));
 }
 
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_unsetSelfOriginatedKey(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*setParams.get()),
+      *area);
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+
+  return kvStore_->semifuture_unsetSelfOriginatedKey(
+      std::move(*area), std::move(*setParams));
+}
+
 folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
 OpenrCtrlHandler::semifuture_setKvStoreKeyValues(
     std::unique_ptr<thrift::KeySetParams> setParams,
@@ -1423,6 +1439,19 @@ OpenrCtrlHandler::co_persistSelfOriginatedKey(
   XCHECK(kvStore_) << "no kvstore initialized";
 
   co_await kvStore_->co_persistSelfOriginatedKey(
+      std::move(*area), std::move(*setParams));
+}
+
+folly::coro::Task<void>
+OpenrCtrlHandler::co_unsetSelfOriginatedKey(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  XLOG(DBG5) << fmt::format(
+      "{} for keys: {}", __FUNCTION__, toString(*setParams.get()));
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+
+  co_await kvStore_->co_unsetSelfOriginatedKey(
       std::move(*area), std::move(*setParams));
 }
 

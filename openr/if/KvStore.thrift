@@ -546,6 +546,15 @@ service KvStoreService extends fb303_core.BaseService {
   ) throws (1: KvStoreError error);
 
   /**
+   * Unset self-originated key-values in KvStore.
+   * Sets a final value (deletion marker) with incremented version and stops ttl-refreshing.
+   */
+  void unsetSelfOriginatedKey(
+    1: KeySetParams setParams,
+    2: string area,
+  ) throws (1: KvStoreError error);
+
+  /**
    * Get KvStore peers
    */
   PeersMap getKvStorePeers() throws (1: KvStoreError error);
