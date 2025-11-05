@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+package "meta.com/openr"
+
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace go openr.Network

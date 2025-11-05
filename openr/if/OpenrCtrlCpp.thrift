@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+package "meta.com/openr"
+
 namespace cpp2 openr.thrift
 namespace py3 openr.thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrlCpp
