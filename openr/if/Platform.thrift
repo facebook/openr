@@ -223,6 +223,64 @@ service FibService extends fb303_core.BaseService {
   ConnectedNextHopStatusResponse updateConnectedNextHopStatus(
     ConnectedNextHopStatusRequest request,
   ) throws (1: PlatformError error);
+
+  // Get cached FIB state including routes and nexthop groups from FibAgent
+  FibCachedStateResponse getFibCachedState(
+    FibCachedStateRequest request,
+  ) throws (1: PlatformError error);
+}
+
+// Represents a NextHopVia entry
+struct NextHopVia {
+  1: optional string nextHopGroupName;
+  2: optional string remoteAddress;
+  3: optional string interfaceName;
+  4: optional i32 igpMetric;
+}
+
+// Represents a NextHop entry within a NextHopGroup
+struct NextHopEntry {
+  1: string remoteAddress;
+  2: optional string interfaceName;
+}
+
+// Represents FibRoute with all its data
+struct FibRoute {
+  1: Network.IpPrefix prefix;
+  2: list<NextHopVia> vias;
+  3: i16 adminDistance;
+}
+
+// Represents NextHopGroup with all its data
+struct NextHopGroup {
+  1: string nhgName;
+  2: map<i32, NextHopEntry> vias;
+  3: i32 refCount;
+  4: bool isProgrammed;
+}
+
+// Request for cached FIB state
+struct FibCachedStateRequest {}
+
+// Route state
+struct RouteState {
+  1: list<FibRoute> routes;
+}
+
+// NextHopGroup cache state
+struct NextHopGroupCacheState {
+  1: list<NextHopGroup> nextHopGroups;
+  2: i64 nhgCreationCounter;
+  3: i64 programmedNhgsCount;
+  4: bool isProgrammingPaused;
+  5: i32 numNhgsHighWaterMark;
+  6: i32 numNhgsLowWaterMark;
+}
+
+// Complete cached FIB state including routes and nexthop groups
+struct FibCachedStateResponse {
+  1: RouteState routeState;
+  2: NextHopGroupCacheState nextHopGroupCacheState;
 }
 
 service NeighborListenerClientForFibagent {
