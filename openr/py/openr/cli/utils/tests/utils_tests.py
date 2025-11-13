@@ -76,6 +76,7 @@ class UtilsTests(unittest.TestCase):
             "adjLabel": 0,
             "ifName": "ifaceX",
             "isOverloaded": False,
+            "linkMetricIncrementVal": 0,
             "metric": 10,
             "nextHopV4": {"addr": "0.0.0.0", "ifName": None},
             "nextHopV6": {"addr": "fe80::20a2:1ff:fef4:59be", "ifName": None},

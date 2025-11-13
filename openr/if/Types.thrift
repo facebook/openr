@@ -224,6 +224,12 @@ struct Adjacency {
    * adj for route computation.
    */
   12: bool adjOnlyUsedByOtherNode = false;
+
+  /**
+   * Link level metric increment value set on the adjacency. A non-zero
+   * value indicates that this adjacency is soft-drained.
+   */
+  13: i32 linkMetricIncrementVal = 0;
 }
 
 /**

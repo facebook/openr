@@ -179,6 +179,7 @@ printAdjDb(const thrift::AdjacencyDatabase& adjDb) {
     LOG(INFO) << "  " << *adj.otherNodeName() << "@" << *adj.ifName()
               << ", metric: " << *adj.metric() << ", label: " << *adj.adjLabel()
               << ", overloaded: " << *adj.isOverloaded()
+              << ", Link Metric Increment: " << *adj.linkMetricIncrementVal()
               << ", rtt: " << *adj.rtt() << ", ts: " << *adj.timestamp() << ", "
               << toString(*adj.nextHopV4()) << ", "
               << toString(*adj.nextHopV6());
@@ -887,6 +888,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // 11.3 add interface-level metric
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = changeNodeMetric + linkMetric + linkIncMetric;
+      adj_2_1_modified.linkMetricIncrementVal() = linkIncMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
@@ -897,6 +899,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() =
           changeNodeMetric + linkMetric + changelinkIncMetric;
+      adj_2_1_modified.linkMetricIncrementVal() = changelinkIncMetric;
 
       adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
@@ -909,6 +912,7 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       // metric override + interface-level metric increment
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric + changelinkIncMetric;
+      adj_2_1_modified.linkMetricIncrementVal() = changelinkIncMetric;
 
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;

@@ -1009,7 +1009,12 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
 
       // [Hard-Drain] set link overload bit
       adj.isOverloaded() = state_.overloadedLinks()->contains(*adj.ifName());
-
+      // [Soft-Drain] set linkMetricIncrementVal.
+      auto linkMetricIt = state_.linkMetricIncrementMap()->find(*adj.ifName());
+      adj.linkMetricIncrementVal() =
+          linkMetricIt != state_.linkMetricIncrementMap()->end()
+          ? linkMetricIt->second
+          : 0;
       // Calculate the adj metric - there are 3 places potentially contributing
       // to the final result, which is stackable:
       //
@@ -1027,9 +1032,7 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       metric += *state_.nodeMetricIncrementVal();
 
       // increment the link-level metric if any
-      if (state_.linkMetricIncrementMap()->contains(*adj.ifName())) {
-        metric += state_.linkMetricIncrementMap()[*adj.ifName()];
-      }
+      metric += *adj.linkMetricIncrementVal();
 
       // ATTN: adj-metric override will be honored if being configured.
       thrift::AdjKey tAdjKey;
@@ -1603,8 +1606,9 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
       return;
     }
 
-    if (state_.linkMetricIncrementMap()->count(interfaceName) &&
-        state_.linkMetricIncrementMap()[interfaceName] == metricIncrementVal) {
+    auto it = state_.linkMetricIncrementMap()->find(interfaceName);
+    if (it != state_.linkMetricIncrementMap()->end() &&
+        it->second == metricIncrementVal) {
       XLOG(INFO) << "Skip cmd: setInterfaceMetricIncrement."
                  << "\n  Increment metric: " << metricIncrementVal
                  << " already set for interface: " << interfaceName;
@@ -1721,7 +1725,8 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
       return;
     }
 
-    if (!state_.linkMetricIncrementMap()->contains(interfaceName)) {
+    auto it = state_.linkMetricIncrementMap()->find(interfaceName);
+    if (it == state_.linkMetricIncrementMap()->end()) {
       XLOG(INFO) << "Skip cmd: [unsetInterfaceMetricIncrement]."
                  << "due the interface " << interfaceName
                  << "didn't set the link-level metric increment before.";
@@ -1731,7 +1736,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
 
     SYSLOG(INFO) << "Removing link-level metric increment for interface: "
                  << interfaceName;
-    state_.linkMetricIncrementMap()->erase(interfaceName);
+    state_.linkMetricIncrementMap()->erase(it);
 
     scheduleAdvertiseAdjAllArea();
     p.setValue();
@@ -1774,9 +1779,9 @@ LinkMonitor::semifuture_getInterfaces() {
       }
 
       // Populate link-level metric override if any
-      if (state_.linkMetricIncrementMap()->contains(ifName)) {
-        ifDetails.linkMetricIncrementVal() =
-            state_.linkMetricIncrementMap()->at(ifName);
+      auto it = state_.linkMetricIncrementMap()->find(ifName);
+      if (it != state_.linkMetricIncrementMap()->end()) {
+        ifDetails.linkMetricIncrementVal() = it->second;
       }
 
       // Add link-backoff
