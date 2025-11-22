@@ -295,11 +295,9 @@ LinkState::linksFromNode(const std::string& nodeName) const {
 std::vector<std::shared_ptr<Link>>
 LinkState::orderedLinksFromNode(const std::string& nodeName) const {
   std::vector<std::shared_ptr<Link>> links;
-  if (linkMap_.count(nodeName)) {
-    links.insert(
-        links.begin(),
-        linkMap_.at(nodeName).begin(),
-        linkMap_.at(nodeName).end());
+  auto it = linkMap_.find(nodeName);
+  if (it != linkMap_.end()) {
+    links.insert(links.begin(), it->second.begin(), it->second.end());
     std::sort(links.begin(), links.end(), LinkPtrLess{});
   }
   return links;
@@ -320,8 +318,8 @@ LinkState::updateNodeOverloaded(
    *  - TRUE: if the insertion took place
    *  - FALSE: if the assignment took place
    */
-  if (nodeOverloads_.count(nodeName) &&
-      nodeOverloads_.at(nodeName) == isOverloaded) {
+  auto it = nodeOverloads_.find(nodeName);
+  if (it != nodeOverloads_.end() && it->second == isOverloaded) {
     // don't indicate LinkState change for duplicate update
     return false;
   }
@@ -391,7 +389,11 @@ LinkState::mayHaveLinkEventPropagationTime(
 
 bool
 LinkState::isNodeOverloaded(const std::string& nodeName) const {
-  return nodeOverloads_.count(nodeName) && nodeOverloads_.at(nodeName);
+  auto it = nodeOverloads_.find(nodeName);
+  if (it == nodeOverloads_.end()) {
+    return false;
+  }
+  return it->second;
 }
 
 std::uint64_t
@@ -665,8 +667,9 @@ LinkState::getMetricFromAToB(
     return 0;
   }
   auto const& spfResult = getSpfResult(a, useLinkMetric);
-  if (spfResult.count(b)) {
-    return spfResult.at(b).metric();
+  auto it = spfResult.find(b);
+  if (it != spfResult.end()) {
+    return it->second.metric();
   }
   return std::nullopt;
 }

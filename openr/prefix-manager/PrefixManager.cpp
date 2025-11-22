@@ -1488,11 +1488,13 @@ PrefixManager::processOriginatedPrefixes() {
       // initialization process should be deleted.
       // TODO: Consider moving static route generation and best entry
       // selection logic to Decision.
-      if ((!route.supportingRoutesFulfilled()) &&
-          advertiseStatus_.count(network) > 0 &&
-          advertiseStatus_[network].publishedRoute.has_value()) {
-        routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(network);
-        advertiseStatus_[network].publishedRoute.reset();
+      if (!route.supportingRoutesFulfilled()) {
+        auto it = advertiseStatus_.find(network);
+        if (it != advertiseStatus_.end() &&
+            it->second.publishedRoute.has_value()) {
+          routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(network);
+          it->second.publishedRoute.reset();
+        }
       }
     }
   }

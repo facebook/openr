@@ -1354,13 +1354,13 @@ Spark::processNegotiation(
       *getEvb(), [this, ifName, neighborName, neighborAreaId]() noexcept {
         sendHandshakeMsg(ifName, neighborName, neighborAreaId, false);
         // send out handshake msg periodically to this neighbor
-        CHECK(sparkNeighbors_.contains(ifName))
+        auto ifNameIt = sparkNeighbors_.find(ifName);
+        CHECK(ifNameIt != sparkNeighbors_.end())
             << fmt::format("Key NOT found for: {}", ifName);
-        CHECK(sparkNeighbors_.at(ifName).contains(neighborName))
+        auto neighborNameIt = ifNameIt->second.find(neighborName);
+        CHECK(neighborNameIt != ifNameIt->second.end())
             << fmt::format("Key NOT found: {} under: {}", neighborName, ifName);
-        sparkNeighbors_.at(ifName)
-            .at(neighborName)
-            .negotiateTimer->scheduleTimeout(handshakeTime_);
+        neighborNameIt->second.negotiateTimer->scheduleTimeout(handshakeTime_);
       });
   neighbor.negotiateTimer->scheduleTimeout(handshakeTime_);
 
@@ -2016,7 +2016,7 @@ Spark::sendHelloMsg(
     bool inFastInitState,
     bool restarting,
     bool addressChange) {
-  if (!interfaceDb_.contains(ifName)) {
+  if (!interfaceDb_.count(ifName)) {
     XLOG(ERR) << fmt::format(
         "[SparkHelloMsg] Interface: {} is no longer being tracked.", ifName);
     return;

@@ -134,7 +134,7 @@ Dual::routeAffected() {
   // nexthop MUST has value, if it's none, it will be handled in
   // above "distance changed" or "no valid route found" cases
   CHECK(info_.nexthop.has_value());
-  if (!nexthops.contains(*info_.nexthop)) {
+  if (!nexthops.count(*info_.nexthop)) {
     // nextHop changed
     auto oldnh = info_.nexthop.has_value() ? *info_.nexthop : "none";
     XLOG(DBG2) << rootId << "::" << nodeId << ": nexthop changed " << oldnh
@@ -319,7 +319,7 @@ Dual::getCounters() const noexcept {
 
 void
 Dual::clearCounters(const std::string& neighbor) noexcept {
-  if (!counters_.contains(neighbor)) {
+  if (!counters_.count(neighbor)) {
     XLOG(WARNING) << "clearCounters called on non-existing neighbor "
                   << neighbor;
     return;
@@ -329,7 +329,7 @@ Dual::clearCounters(const std::string& neighbor) noexcept {
 
 void
 Dual::addChild(const std::string& child) noexcept {
-  if (children_.contains(child)) {
+  if (children_.count(child)) {
     XLOG(WARNING) << rootId << ": adding an existing child " << child;
     return;
   }
@@ -338,7 +338,7 @@ Dual::addChild(const std::string& child) noexcept {
 
 void
 Dual::removeChild(const std::string& child) noexcept {
-  if (!children_.contains(child)) {
+  if (!children_.count(child)) {
     XLOG(WARNING) << rootId << ": removing an non-existing child " << child;
     return;
   }
@@ -352,7 +352,7 @@ Dual::children() const noexcept {
 
 bool
 Dual::neighborUp(const std::string& neighbor) {
-  if (!localDistances_.contains(neighbor)) {
+  if (!localDistances_.count(neighbor)) {
     return false;
   }
   return localDistances_.at(neighbor) != std::numeric_limits<int64_t>::max();
@@ -513,7 +513,7 @@ Dual::processUpdate(
   // update report-distance
   info_.neighborInfos[neighbor].reportDistance = rd;
 
-  if (!localDistances_.contains(neighbor)) {
+  if (!localDistances_.count(neighbor)) {
     // received UPDATE before having local info_ (LINK-UP), done here
     return;
   }
@@ -719,7 +719,7 @@ DualNode::peerDown(const std::string& neighbor) {
 
 bool
 DualNode::hasDual(const std::string& rootId) {
-  if (duals_.contains(rootId)) {
+  if (duals_.count(rootId)) {
     return true;
   }
   return false;
@@ -806,7 +806,7 @@ DualNode::processDualMessages(const thrift::DualMessages& messages) {
 
 std::optional<Dual::RouteInfo>
 DualNode::getInfo(const std::string& rootId) const noexcept {
-  if (!duals_.contains(rootId)) {
+  if (!duals_.count(rootId)) {
     return std::nullopt;
   }
   return duals_.at(rootId).getInfo();
@@ -823,7 +823,7 @@ DualNode::getInfos() const noexcept {
 
 std::string
 DualNode::getStatusString(const std::string& rootId) const noexcept {
-  if (!duals_.contains(rootId)) {
+  if (!duals_.count(rootId)) {
     return fmt::format("{}: route info for root {} not exist", nodeId, rootId);
   }
   return duals_.at(rootId).getStatusString();
@@ -856,7 +856,7 @@ DualNode::getStatusStrings() const noexcept {
 
 bool
 DualNode::neighborUp(const std::string& neighbor) const noexcept {
-  if (!localDistances_.contains(neighbor)) {
+  if (!localDistances_.count(neighbor)) {
     return false;
   }
   return localDistances_.at(neighbor) != std::numeric_limits<int64_t>::max();
@@ -874,7 +874,7 @@ DualNode::getCounters() const noexcept {
 
 void
 DualNode::clearCounters(const std::string& neighbor) noexcept {
-  if (!counters_.contains(neighbor)) {
+  if (!counters_.count(neighbor)) {
     XLOG(WARNING) << "clearCounters called on non-existing neighbor "
                   << neighbor;
     return;
@@ -907,7 +907,7 @@ DualNode::sendAllDualMessages(
 
 void
 DualNode::addDual(const std::string& rootId) {
-  if (duals_.contains(rootId)) {
+  if (duals_.count(rootId)) {
     return;
   }
 

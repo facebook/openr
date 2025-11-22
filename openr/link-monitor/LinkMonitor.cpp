@@ -928,7 +928,7 @@ LinkMonitor::advertiseRedistAddrs() {
   // Find prefixes to withdraw
   std::vector<thrift::PrefixEntry> toWithdraw;
   for (auto const& [prefix, areas] : advertisedPrefixes_) {
-    if (prefixesToAdvertise.contains(prefix)) {
+    if (prefixesToAdvertise.count(prefix)) {
       continue; // Do not mark for withdraw
     }
     thrift::PrefixEntry prefixEntry;
@@ -1202,14 +1202,14 @@ LinkMonitor::syncInterfaces() {
 
     // Remove old addresses if they are not in new
     for (auto const& oldNetwork : oldNetworks) {
-      if (!newNetworks.contains(oldNetwork)) {
+      if (!newNetworks.count(oldNetwork)) {
         interfaceEntry->updateAddr(oldNetwork, false);
       }
     }
 
     // Add new addresses if they are not in old
     for (auto const& newNetwork : newNetworks) {
-      if (!oldNetworks.contains(newNetwork)) {
+      if (!oldNetworks.count(newNetwork)) {
         interfaceEntry->updateAddr(newNetwork, true);
       }
     }
@@ -1474,7 +1474,7 @@ LinkMonitor::semifuture_setAdjacencyMetric(
     auto adjacencyKey = std::make_pair(adjNodeName, interfaceName);
     bool unknownAdj{true};
     for (const auto& [_, areaAdjacencies] : adjacencies_) {
-      if (areaAdjacencies.contains(adjacencyKey)) {
+      if (areaAdjacencies.count(adjacencyKey)) {
         unknownAdj = false;
         // Found it.
         break;
@@ -1771,7 +1771,7 @@ LinkMonitor::semifuture_getInterfaces() {
       ifDetails.info() = interface.getInterfaceInfo().toThrift();
 
       // Populate link-level overload state
-      ifDetails.isOverloaded() = state_.overloadedLinks()->contains(ifName);
+      ifDetails.isOverloaded() = state_.overloadedLinks()->count(ifName);
 
       // [TO_BE_DEPRECATED] Add metric override if any
       if (state_.linkMetricOverrides()->contains(ifName)) {

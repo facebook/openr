@@ -722,10 +722,11 @@ selectShortestDistance(
   std::set<NodeAndArea> ret;
   int32_t shortestDist = std::numeric_limits<int32_t>::max();
   for (const auto& nodeArea : nodeAreaSet) {
-    if (prefixEntries.count(nodeArea) == 0) {
+    auto it = prefixEntries.find(nodeArea);
+    if (it == prefixEntries.end()) {
       continue;
     }
-    int32_t dist = *prefixEntries.at(nodeArea)->metrics()->distance();
+    int32_t dist = *it->second->metrics()->distance();
     if (dist > shortestDist) {
       continue;
     }

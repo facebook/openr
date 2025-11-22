@@ -612,7 +612,7 @@ Decision::processPeerUpdates(PeerEvent&& event) {
 
   // Incremental peer events.
   for (const auto& [area, areaPeerEvent] : event) {
-    if (!areaToPendingAdjacency_.contains(area)) {
+    if (!areaToPendingAdjacency_.count(area)) {
       continue;
     }
     // Remove deleted peers from areaToPendingAdjacency_.
@@ -651,7 +651,7 @@ Decision::updatePendingAdjacency(
   // without deadlock, here we will ignore `adjOnlyUsedByOtherNode` and remove
   // adj `A->B` and 'B->A' from pending list.
   for (const auto& adj : *newAdjacencyDb.adjacencies()) {
-    if (!areaToPendingAdjacency_.contains(area)) {
+    if (!areaToPendingAdjacency_.count(area)) {
       return;
     }
     const auto& node = *newAdjacencyDb.thisNodeName();
@@ -977,7 +977,7 @@ Decision::rebuildRoutes(std::string const& event) {
       if (auto maybeRibEntry = spfSolver_->createRouteForPrefixOrGetStaticRoute(
               myNodeName_, areaLinkStates_, prefixState_, prefix)) {
         update.addRouteToUpdate(std::move(maybeRibEntry).value());
-      } else if (routeDb_.unicastRoutes.contains(prefix)) {
+      } else if (routeDb_.unicastRoutes.count(prefix)) {
         update.unicastRoutesToDelete.emplace_back(prefix);
       }
     }
