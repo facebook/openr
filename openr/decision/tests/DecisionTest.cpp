@@ -1956,18 +1956,20 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
 //
 
 TEST_F(DecisionTestFixture, ParallelLinks) {
-  auto adj12_1 =
+  auto parallelAdj12_1 =
       createAdjacency("2", "1/2-1", "2/1-1", "fe80::2", "192.168.0.2", 100, 0);
-  auto adj12_2 =
+  auto parallelAdj12_2 =
       createAdjacency("2", "1/2-2", "2/1-2", "fe80::2", "192.168.0.2", 800, 0);
-  auto adj21_1 =
+  auto parallelAdj21_1 =
       createAdjacency("1", "2/1-1", "1/2-1", "fe80::1", "192.168.0.1", 100, 0);
-  auto adj21_2 =
+  auto parallelAdj21_2 =
       createAdjacency("1", "2/1-2", "1/2-2", "fe80::1", "192.168.0.1", 800, 0);
 
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12_1, adj12_2})},
-       {"adj:2", createAdjValue(serializer, "2", 1, {adj21_1, adj21_2})},
+      {{"adj:1",
+        createAdjValue(serializer, "1", 1, {parallelAdj12_1, parallelAdj12_2})},
+       {"adj:2",
+        createAdjValue(serializer, "2", 1, {parallelAdj21_1, parallelAdj21_2})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {},
@@ -1985,10 +1987,13 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
 
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12_1, false, 100)}));
+      NextHops({createNextHopFromAdj(parallelAdj12_1, false, 100)}));
 
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue(serializer, "2", 2, {adj21_2})}}, {}, {}, {});
+      {{"adj:2", createAdjValue(serializer, "2", 2, {parallelAdj21_2})}},
+      {},
+      {},
+      {});
 
   routeDbBefore = dumpRouteDb({"1"})["1"];
   sendKvPublication(publication);
@@ -2002,11 +2007,13 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12_2, false, 800)}));
+      NextHops({createNextHopFromAdj(parallelAdj12_2, false, 800)}));
 
   // restore the original state
   publication = createThriftPublication(
-      {{"adj:2", createAdjValue(serializer, "2", 2, {adj21_1, adj21_2})}},
+      {{"adj:2",
+        createAdjValue(
+            serializer, "2", 2, {parallelAdj21_1, parallelAdj21_2})}},
       {},
       {},
       {});
@@ -2022,15 +2029,19 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12_1, false, 100)}));
+      NextHops({createNextHopFromAdj(parallelAdj12_1, false, 100)}));
 
   // overload the least cost link
-  auto adj21_1_overloaded = adj21_1;
-  adj21_1_overloaded.isOverloaded() = true;
+  auto parallelAdj21_1_overloaded = parallelAdj21_1;
+  parallelAdj21_1_overloaded.isOverloaded() = true;
 
   publication = createThriftPublication(
       {{"adj:2",
-        createAdjValue(serializer, "2", 2, {adj21_1_overloaded, adj21_2})}},
+        createAdjValue(
+            serializer,
+            "2",
+            2,
+            {parallelAdj21_1_overloaded, parallelAdj21_2})}},
       {},
       {},
       {});
@@ -2046,7 +2057,7 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
   fillRouteMap("1", routeMap, routeDb);
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj12_2, false, 800)}));
+      NextHops({createNextHopFromAdj(parallelAdj12_2, false, 800)}));
 }
 
 // The following topology is used:
@@ -2289,13 +2300,13 @@ TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
  */
 TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   // Note: local copy overwriting global ones, to be changed in this test
-  auto adj14 =
+  auto localAdj14 =
       createAdjacency("4", "1/4", "4/1", "fe80::4", "192.168.0.4", 5, 0);
-  auto adj41 =
+  auto localAdj41 =
       createAdjacency("1", "4/1", "1/4", "fe80::1", "192.168.0.1", 5, 0);
-  auto adj12 =
+  auto localAdj12 =
       createAdjacency("2", "1/2", "2/1", "fe80::2", "192.168.0.2", 10, 0);
-  auto adj21 =
+  auto localAdj21 =
       createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 0);
 
   //
@@ -2303,10 +2314,11 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   // SPF run.
   //
   auto publication = createThriftPublication(
-      {{"adj:1", createAdjValue(serializer, "1", 1, {adj14, adj12, adj13})},
-       {"adj:2", createAdjValue(serializer, "2", 1, {adj21})},
+      {{"adj:1",
+        createAdjValue(serializer, "1", 1, {localAdj14, localAdj12, adj13})},
+       {"adj:2", createAdjValue(serializer, "2", 1, {localAdj21})},
        {"adj:3", createAdjValue(serializer, "3", 1, {adj31})},
-       {"adj:4", createAdjValue(serializer, "4", 1, {adj41})},
+       {"adj:4", createAdjValue(serializer, "4", 1, {localAdj41})},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2),
        // node3 has same address w/ node2
@@ -2345,14 +2357,14 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops(
-          {createNextHopFromAdj(adj12, false, 10),
+          {createNextHopFromAdj(localAdj12, false, 10),
            createNextHopFromAdj(adj13, false, 10)}));
 
   // 2
   EXPECT_EQ(2, routeMapList["2"].unicastRoutes()->size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj21, false, 10)}));
+      NextHops({createNextHopFromAdj(localAdj21, false, 10)}));
 
   // 3
   EXPECT_EQ(2, routeMapList["3"].unicastRoutes()->size());
@@ -2364,7 +2376,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(2, routeMapList["4"].unicastRoutes()->size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj41, false, 15)}));
+      NextHops({createNextHopFromAdj(localAdj41, false, 15)}));
 
   /**
    * Overload node-2 and node-4. Now we on node-1 will only route p2 toward
@@ -2383,9 +2395,11 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   publication = createThriftPublication(
       {{"adj:2",
-        createAdjValue(serializer, "2", 1, {adj21}, true /* overloaded */)},
+        createAdjValue(
+            serializer, "2", 1, {localAdj21}, true /* overloaded */)},
        {"adj:4",
-        createAdjValue(serializer, "4", 1, {adj41}, true /* overloaded */)}},
+        createAdjValue(
+            serializer, "4", 1, {localAdj41}, true /* overloaded */)}},
       {},
       {},
       {});
@@ -2405,7 +2419,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
 
   EXPECT_EQ(
       routeMap2[make_pair("1", toString(addr4))],
-      NextHops({createNextHopFromAdj(adj14, false, 5)}));
+      NextHops({createNextHopFromAdj(localAdj14, false, 5)}));
 
   /**
    * Increase the distance between node-1 and node-2 to 100. Now we on node-1
@@ -2421,12 +2435,13 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
    *     |
    *  node3(p2)
    */
-  adj12.metric() = 100;
-  adj21.metric() = 100;
+  localAdj12.metric() = 100;
+  localAdj21.metric() = 100;
 
   publication = createThriftPublication(
-      {{"adj:1", createAdjValue(serializer, "1", 2, {adj12, adj13, adj14})},
-       {"adj:2", createAdjValue(serializer, "2", 2, {adj21, adj23})}},
+      {{"adj:1",
+        createAdjValue(serializer, "1", 2, {localAdj12, adj13, localAdj14})},
+       {"adj:2", createAdjValue(serializer, "2", 2, {localAdj21, adj23})}},
       {},
       {},
       {});
@@ -2454,7 +2469,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(2, routeMapList["2"].unicastRoutes()->size());
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
-      NextHops({createNextHopFromAdj(adj21, false, 100)}));
+      NextHops({createNextHopFromAdj(localAdj21, false, 100)}));
 
   // 3
   EXPECT_EQ(2, routeMapList["3"].unicastRoutes()->size());
@@ -2466,7 +2481,7 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   EXPECT_EQ(2, routeMapList["4"].unicastRoutes()->size());
   EXPECT_EQ(
       routeMap[make_pair("4", toString(addr2))],
-      NextHops({createNextHopFromAdj(adj41, false, 15)}));
+      NextHops({createNextHopFromAdj(localAdj41, false, 15)}));
 }
 
 /**
@@ -2695,9 +2710,9 @@ TEST_F(DecisionTestFixture, PrefixWithMixedTypeRoutes) {
 
   // node 2/3 announce loopbacks
   {
-    const auto prefixDb2 = createPrefixDb(
+    const auto localPrefixDb2 = createPrefixDb(
         "2", {createPrefixEntry(addr2), createPrefixEntry(addr2V4)});
-    const auto prefixDb3 = createPrefixDb(
+    const auto localPrefixDb3 = createPrefixDb(
         "3", {createPrefixEntry(addr3), createPrefixEntry(addr3V4)});
 
     // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
