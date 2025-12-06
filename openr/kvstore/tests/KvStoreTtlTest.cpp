@@ -145,12 +145,13 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         // Verify 1. hash is updated in KvStore
         // 2. dumpHashes request returns key values as expected
         const auto hashDump = store->dumpHashes(kTestingAreaName);
-        for (const auto& [key, value] : dump) {
-          EXPECT_TRUE(value.hash().value() != 0);
-          if (!hashDump.contains(key)) {
+        for (const auto& [dumpKey, dumpValue] : dump) {
+          EXPECT_TRUE(dumpValue.hash().value() != 0);
+          if (!hashDump.contains(dumpKey)) {
             continue;
           }
-          EXPECT_EQ(value.hash().value(), hashDump.at(key).hash().value());
+          EXPECT_EQ(
+              dumpValue.hash().value(), hashDump.at(dumpKey).hash().value());
         }
 
         // Update hash
