@@ -56,6 +56,10 @@ class PersistentStore : public OpenrEventBase {
 
   // Destructor will try to save DB to disk before destroying the object
   ~PersistentStore() override;
+  PersistentStore(const PersistentStore&) = delete;
+  PersistentStore& operator=(const PersistentStore&) = delete;
+  PersistentStore(PersistentStore&&) = delete;
+  PersistentStore& operator=(PersistentStore&&) = delete;
 
   uint64_t
   getNumOfDbWritesToDisk() const {
