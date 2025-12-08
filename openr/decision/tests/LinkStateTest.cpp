@@ -294,7 +294,7 @@ TEST(LinkStateTest, getKthPaths) {
     EXPECT_THAT(secondPaths, Each(SizeIs(2)));
 
     // verify edge disjoint between all paths
-    openr::LinkState::LinkSet set;
+    openr::Link::LinkSet set;
     auto allPaths = firstPaths;
     allPaths.insert(allPaths.end(), secondPaths.begin(), secondPaths.end());
     for (auto const& path : allPaths) {

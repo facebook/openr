@@ -259,11 +259,6 @@ class Link {
   std::string toString() const;
 
   std::string directionalToString(const std::string& fromNode) const;
-}; // class Link
-
-class LinkState {
- public:
-  explicit LinkState(const std::string& area, const std::string& myNodeName);
 
   struct LinkPtrHash {
     size_t operator()(const std::shared_ptr<Link>& l) const;
@@ -283,6 +278,11 @@ class LinkState {
 
   using LinkSet =
       std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
+}; // class Link
+
+class LinkState {
+ public:
+  explicit LinkState(const std::string& area, const std::string& myNodeName);
 
   // Class holding a network node's SPF result. and useful apis to get and set
   //   - nexthops toward the node
@@ -449,7 +449,7 @@ class LinkState {
     return 0 != adjacencyDatabases_.count(nodeName);
   }
 
-  const LinkSet& linksFromNode(const std::string& nodeName) const;
+  const Link::LinkSet& linksFromNode(const std::string& nodeName) const;
 
   bool isNodeOverloaded(const std::string& nodeName) const;
 
@@ -511,7 +511,7 @@ class LinkState {
       std::string const& src,
       std::string const& dest,
       SpfResult const& result,
-      LinkSet& linksToIgnore) const;
+      Link::LinkSet& linksToIgnore) const;
 
   void addLink(std::shared_ptr<Link> link);
 
@@ -545,7 +545,7 @@ class LinkState {
   SpfResult runSpf(
       const std::string& src,
       bool useLinkMetric,
-      const LinkSet& linksToIgnore = {}) const;
+      const Link::LinkSet& linksToIgnore = {}) const;
 
   /*
    * Util method to create Link object:
@@ -562,10 +562,10 @@ class LinkState {
       const std::string& nodeName) const;
 
   // this stores the same link object accessible from either nodeName
-  std::unordered_map<std::string /* nodeName */, LinkSet> linkMap_;
+  std::unordered_map<std::string /* nodeName */, Link::LinkSet> linkMap_;
 
   // useful for iterating over all the links
-  LinkSet allLinks_;
+  Link::LinkSet allLinks_;
 
   // [hard-drain]
   std::unordered_map<std::string /* nodeName */, bool> nodeOverloads_;
@@ -673,15 +673,14 @@ struct hash<openr::Link> {
 };
 
 template <>
-struct hash<openr::LinkState::LinkSet> {
-  size_t operator()(openr::LinkState::LinkSet const& set) const;
+struct hash<openr::Link::LinkSet> {
+  size_t operator()(openr::Link::LinkSet const& set) const;
 };
 
 template <>
-struct equal_to<openr::LinkState::LinkSet> {
+struct equal_to<openr::Link::LinkSet> {
   bool operator()(
-      openr::LinkState::LinkSet const& a,
-      openr::LinkState::LinkSet const& b) const;
+      openr::Link::LinkSet const& a, openr::Link::LinkSet const& b) const;
 };
 
 } // namespace std

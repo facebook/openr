@@ -18,9 +18,8 @@ std::hash<openr::Link>::operator()(openr::Link const& link) const {
 }
 
 bool
-std::equal_to<openr::LinkState::LinkSet>::operator()(
-    openr::LinkState::LinkSet const& a,
-    openr::LinkState::LinkSet const& b) const {
+std::equal_to<openr::Link::LinkSet>::operator()(
+    openr::Link::LinkSet const& a, openr::Link::LinkSet const& b) const {
   if (a.size() == b.size()) {
     for (auto const& i : a) {
       if (!b.count(i)) {
@@ -33,8 +32,8 @@ std::equal_to<openr::LinkState::LinkSet>::operator()(
 }
 
 size_t
-std::hash<openr::LinkState::LinkSet>::operator()(
-    openr::LinkState::LinkSet const& set) const {
+std::hash<openr::Link::LinkSet>::operator()(
+    openr::Link::LinkSet const& set) const {
   size_t hash = 0;
   for (auto const& link : set) {
     // Note: XOR is associative and communitive so we get a consitent hash no
@@ -207,18 +206,18 @@ LinkState::LinkState(const std::string& area, const std::string& myNodeName)
     : area_(area), myNodeName_(myNodeName) {}
 
 size_t
-LinkState::LinkPtrHash::operator()(const std::shared_ptr<Link>& l) const {
+Link::LinkPtrHash::operator()(const std::shared_ptr<Link>& l) const {
   return l->hash;
 }
 
 bool
-LinkState::LinkPtrLess::operator()(
+Link::LinkPtrLess::operator()(
     const std::shared_ptr<Link>& lhs, const std::shared_ptr<Link>& rhs) const {
   return *lhs < *rhs;
 }
 
 bool
-LinkState::LinkPtrEqual::operator()(
+Link::LinkPtrEqual::operator()(
     const std::shared_ptr<Link>& lhs, const std::shared_ptr<Link>& rhs) const {
   return *lhs == *rhs;
 }
@@ -228,7 +227,7 @@ LinkState::traceOnePath(
     std::string const& src,
     std::string const& dest,
     SpfResult const& result,
-    LinkSet& linksToIgnore) const {
+    Link::LinkSet& linksToIgnore) const {
   if (src == dest) {
     return LinkState::Path{};
   }
@@ -282,9 +281,9 @@ LinkState::removeNode(const std::string& nodeName) {
   nodeOverloads_.erase(nodeName);
 }
 
-const LinkState::LinkSet&
+const Link::LinkSet&
 LinkState::linksFromNode(const std::string& nodeName) const {
-  static const LinkState::LinkSet defaultEmptySet;
+  static const Link::LinkSet defaultEmptySet;
   auto search = linkMap_.find(nodeName);
   if (search != linkMap_.end()) {
     return search->second;
@@ -298,7 +297,7 @@ LinkState::orderedLinksFromNode(const std::string& nodeName) const {
   auto it = linkMap_.find(nodeName);
   if (it != linkMap_.end()) {
     links.insert(links.begin(), it->second.begin(), it->second.end());
-    std::sort(links.begin(), links.end(), LinkPtrLess{});
+    std::sort(links.begin(), links.end(), Link::LinkPtrLess{});
   }
   return links;
 }
@@ -435,7 +434,7 @@ LinkState::getOrderedLinkSet(const thrift::AdjacencyDatabase& adjDb) const {
     }
   }
   links.shrink_to_fit();
-  std::sort(links.begin(), links.end(), LinkState::LinkPtrLess{});
+  std::sort(links.begin(), links.end(), Link::LinkPtrLess{});
   return links;
 }
 
@@ -681,7 +680,7 @@ LinkState::getKthPaths(
   std::tuple<std::string, std::string, size_t> key(src, dest, k);
   auto entryIter = kthPathResults_.find(key);
   if (kthPathResults_.end() == entryIter) {
-    LinkSet linksToIgnore;
+    Link::LinkSet linksToIgnore;
     for (size_t i = 1; i < k; ++i) {
       for (auto const& path : getKthPaths(src, dest, i)) {
         for (auto const& link : path) {
@@ -693,7 +692,7 @@ LinkState::getKthPaths(
     auto const& res = linksToIgnore.empty() ? getSpfResult(src, true)
                                             : runSpf(src, true, linksToIgnore);
     if (res.count(dest)) {
-      LinkSet visitedLinks;
+      Link::LinkSet visitedLinks;
       auto path = traceOnePath(src, dest, res, visitedLinks);
       while (path && !path->empty()) {
         paths.push_back(std::move(*path));
@@ -724,7 +723,7 @@ LinkState::SpfResult
 LinkState::runSpf(
     const std::string& thisNodeName,
     bool useLinkMetric,
-    const LinkState::LinkSet& linksToIgnore) const {
+    const Link::LinkSet& linksToIgnore) const {
   LinkState::SpfResult result;
 
   fb303::fbData->addStatValue("decision.spf_runs", 1, fb303::COUNT);
