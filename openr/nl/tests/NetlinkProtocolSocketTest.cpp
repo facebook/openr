@@ -693,34 +693,46 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
   // Spawn RQueue to receive platformUpdate request
   auto netlinkEventsReader = netlinkEventsQ.getReader();
 
-  auto waitForLinkEvent = [&](const std::string& ifName,
-                              const bool& isUp,
-                              const std::string& kind,
-                              const uint32_t& group) {
-    auto startTime = std::chrono::steady_clock::now();
-    while (true) {
-      // check if it is beyond kProcTimeout
-      auto endTime = std::chrono::steady_clock::now();
-      if (endTime - startTime > kProcTimeout) {
-        ASSERT_TRUE(0) << fmt::format(
-            "Timeout receiving expected link event for intf: {}. Time limit: {}",
-            ifName,
-            kProcTimeout.count());
-      }
-      auto req = netlinkEventsReader.get(); // perform read
-      ASSERT_TRUE(req.hasValue());
-      // get_if returns `nullptr` if targeted variant is NOT populated
-      if (auto* link = std::get_if<Link>(&req.value())) {
-        if (link->getLinkName() == ifName && link->isUp() == isUp &&
-            link->getLinkKind().value_or("") == kind &&
-            link->getLinkGroup().value_or(0) == group) {
-          return;
+  auto waitForLinkEvents =
+      [&](std::vector<std::tuple<std::string, bool, std::string, uint32_t>>
+              expectedEvents) {
+        auto startTime = std::chrono::steady_clock::now();
+        while (!expectedEvents.empty()) {
+          auto endTime = std::chrono::steady_clock::now();
+          if (endTime - startTime > kProcTimeout) {
+            std::string remaining;
+            for (const auto& e : expectedEvents) {
+              remaining += fmt::format(
+                  "({}, {}, {}, {}), ",
+                  std::get<0>(e),
+                  std::get<1>(e),
+                  std::get<2>(e),
+                  std::get<3>(e));
+            }
+            ASSERT_TRUE(0) << fmt::format(
+                "Timeout waiting for link events. Remaining: {}. Time limit: "
+                "{}",
+                remaining,
+                kProcTimeout.count());
+          }
+          auto req = netlinkEventsReader.get();
+          ASSERT_TRUE(req.hasValue());
+          if (auto* link = std::get_if<Link>(&req.value())) {
+            // Check if this event matches any expected event
+            for (auto it = expectedEvents.begin(); it != expectedEvents.end();
+                 ++it) {
+              if (link->getLinkName() == std::get<0>(*it) &&
+                  link->isUp() == std::get<1>(*it) &&
+                  link->getLinkKind().value_or("") == std::get<2>(*it) &&
+                  link->getLinkGroup().value_or(0) == std::get<3>(*it)) {
+                expectedEvents.erase(it);
+                break;
+              }
+            }
+          }
+          std::this_thread::yield();
         }
-      }
-      // yield CPU
-      std::this_thread::yield();
-    }
-  };
+      };
 
   {
     VLOG(1) << "Bring link DOWN for interfaces: "
@@ -729,8 +741,10 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
     bringDownIntf(kVethNameX);
     bringDownIntf(kVethNameY);
 
-    waitForLinkEvent(kVethNameX, false, kVethKind, kVethGroup);
-    waitForLinkEvent(kVethNameY, false, kVethKind, kVethGroup);
+    waitForLinkEvents({
+        {kVethNameX, false, kVethKind, kVethGroup},
+        {kVethNameY, false, kVethKind, kVethGroup},
+    });
   }
 
   {
@@ -740,8 +754,10 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
 
-    waitForLinkEvent(kVethNameX, true, kVethKind, kVethGroup);
-    waitForLinkEvent(kVethNameX, true, kVethKind, kVethGroup);
+    waitForLinkEvents({
+        {kVethNameX, true, kVethKind, kVethGroup},
+        {kVethNameY, true, kVethKind, kVethGroup},
+    });
   }
 }
 
