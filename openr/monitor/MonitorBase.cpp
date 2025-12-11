@@ -21,6 +21,7 @@ MonitorBase::MonitorBase(
       startTime_{std::chrono::steady_clock::now()} {
   // Initialize stats counter
   fb303::fbData->addStatExportType("monitor.log.publish.failure", fb303::COUNT);
+  fb303::fbData->addStatExportType("process.cpu.pct", fb303::AVG);
 
   // Periodically set process cpu/uptime/memory counter
   setProcessCounterTimer_ =
@@ -114,6 +115,7 @@ MonitorBase::updateProcessCounters() {
     fb303::fbData->setCounter("process.cpu.pct", cpuPct.value());
     cpuPeakPct_ = std::max(cpuPeakPct_, cpuPct.value());
     fb303::fbData->setCounter("process.cpu.peak_pct", cpuPeakPct_);
+    fb303::fbData->addStatValue("process.cpu.pct", cpuPct.value(), fb303::AVG);
   }
 }
 

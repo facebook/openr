@@ -116,6 +116,7 @@ TEST_F(MonitorTestFixture, ProcessCounterTest) {
     if (counters.find("process.cpu.peak_pct") != counters.end()) {
       EXPECT_GT(counters["process.cpu.pct"], 0);
       EXPECT_GT(counters["process.cpu.peak_pct"], 0);
+      EXPECT_GT(counters["process.cpu.pct.avg.60"], 0);
       EXPECT_GT(counters["process.memory.rss"], 0);
       // Need kCounterSubmitInterval seconds to call getCPUpercentage() twice
       EXPECT_GE(
