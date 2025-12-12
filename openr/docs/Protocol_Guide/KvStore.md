@@ -275,7 +275,7 @@ fashion. For all practical purposes, `Delete` operation can be acheived via
 optional `time-to-live` aka `ttl` field, which indicates the lifetime of
 key-value.
 
-#### Time-To-Live(ttl)
+#### Time-To-Live (TTL)
 
 When advertising a key-value, set the `ttl` to a specified amount of time and
 submit to the local store. On update, the local store will flood it to all other
@@ -286,7 +286,7 @@ the key is deleted from all stores. When key-dump is requested, then an updated
 ttl is sent (received - elapsed time) reflecting the remaining lifetime of a
 key-value since it's origination.
 
-#### ttl updates
+##### TTL Updates
 
 In order to keep key-values with limited lifetime persisted for long duration,
 originators emit `ttl updates` with new ttl values. On receipt of a ttl update
@@ -301,7 +301,28 @@ update is flooded to its neighbors.
    and eventual consistency). User is responsible for refreshing `ttl updates`
    periodically and updating ttlVersion on their own.
 
-#### Key Expiry Notifications
+##### TTL Countdown Queue
+
+The TTL countdown queue (`ttlCountdownQueue_`) is the internal data structure
+that tracks expiring keys. It uses a `boost::heap::d_ary_heap` (binary heap)
+with mutability enabled.
+
+A key can receive multiple TTL updates over its lifetime (e.g., periodic
+refreshes). Without proper handling, each update would add a new entry to the
+queue, causing unbounded growth. The mutable heap solves this:
+
+- **Handle Map**: A `ttlCountdownHandleMap_` tracks entries using a composite
+  key of `(key, originatorId)`. When a TTL update arrives, we check if an entry
+  already exists. If so, we update it in-place via the heap's `update()`
+  operation rather than pushing a duplicate. This keeps the queue size
+  proportional to the number of unique keys, not the number of TTL updates.
+- **Infinite TTL Handling**: Keys with infinite TTL (`Constants::kTtlInfinity`)
+  are not added to the countdown queue. When a key transitions from finite to
+  infinite TTL, the old finite entry remains in the queue but is safely ignored
+  upon expiry since the key still exists in `kvStore_` with a higher
+  `ttlVersion`.
+
+##### Key Expiry Notifications
 
 Whenever keys are expired in a given KvStore, the notification is generated and
 published via thrift channel. All subscribers can take appropriate action to
