@@ -114,8 +114,8 @@ MonitorBase::updateProcessCounters() {
   if (cpuPct.has_value()) {
     fb303::fbData->setCounter("process.cpu.pct", cpuPct.value());
     cpuPeakPct_ = std::max(cpuPeakPct_, cpuPct.value());
-    fb303::fbData->setCounter("process.cpu.peak_pct", cpuPeakPct_);
     fb303::fbData->addStatValue("process.cpu.pct", cpuPct.value(), fb303::AVG);
+    fb303::fbData->setCounter("process.cpu.peak_pct", cpuPeakPct_);
   }
 }
 
