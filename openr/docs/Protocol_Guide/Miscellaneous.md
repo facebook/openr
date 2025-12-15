@@ -1,7 +1,6 @@
 # Miscellaneous
 
 ## OpenR and V4
-
 ---
 
 OpenR was initially designed to work on networks which support IPv6 only.
@@ -21,7 +20,6 @@ OpenR processes running on different machines and link discovery is done using
 IPv6 transport layer.
 
 ## Traffic Class for Control Packets
-
 ---
 
 All IP packets being exchanged between two OpenR intsnaces running on different
@@ -30,7 +28,6 @@ underlying network can differentiate control plane traffic from normal traffic
 packets and give them higher priority.
 
 ## OpenR Graceful Restart
-
 ---
 
 All the pieces of OpenR make it a routing protocol which is able to do dynamic
@@ -83,7 +80,6 @@ and it doesn't do unless it sees itself in the subsequent neighbor's hello
 packets.
 
 ## Parallel link Support
-
 ---
 
 Two nodes can have multiple Adjacencies between them if they are connected over
@@ -94,7 +90,6 @@ a node is selected as a nexthop then all interfaces over which the node has an
 adjacency will be used as the nexthop.
 
 ## Persistent Store
-
 ---
 
 This module helps in persisting various state information of OpenR so that
@@ -105,7 +100,6 @@ across restart/reboots OpenR comes back with the same state as before.
 - Previously elected prefix for a node
 
 ## Drain Support
-
 ---
 
 Drain/Undrain of links or nodes is often exercised for planned network
@@ -130,16 +124,7 @@ You can set custom metric values on a link (usually to a high number) in order
 to perform soft drain. Most traffic will be drained except traffic which doesn't
 have alternate paths.
 
-## Security Concerns
-
----
-
-We understand that this is a difficult problem with subtle pitfalls. Going
-forward we hope to move towards an approach built on top of widely deployed and
-well verified solutions such as OpenSSL.
-
 ## Potential Extensions
-
 ---
 
 Some potential extensions we have been thinking of and are on our roadmaps

@@ -6,7 +6,6 @@ overview of the packets and their signatures. Also highlights how Operators can
 ensure reliable Open/R communication in the network.
 
 ## Control Plane Packets
-
 ---
 
 Every data packet that is exchanged between Open/R instances is termed as
@@ -63,7 +62,6 @@ The packets exchanged between KvStore have following characteristics
 ```
 
 ## Prioritizing Control Plane IO
-
 ---
 
 Underlying Hardware or ASIC will be responsible for forwarding both `Data Plane`
@@ -89,7 +87,6 @@ network state or issuing drain/undrain commands. These are miscellaneous packets
 and not Open/R specific. `Internet Protocol` can be IPv4 or IPv6.
 
 ## FBOSS's SwitchAgent - Control Plane IO & WARM boot
-
 ---
 
 FBOSS is an open-sourced switch operating system. Open/R is natively supported

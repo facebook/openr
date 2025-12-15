@@ -15,7 +15,6 @@ Checkout
 for more detail about these services.
 
 ## Quick Start
-
 ---
 
 You can run the openr binary directly with some command line parameters and
@@ -43,8 +42,6 @@ You can also pass in a custom configuration file and override/add openr flags:
 
 ### Running as a Daemon
 
----
-
 `openr` should be run as a daemon so that if it crashes or node gets restarted,
 the service comes up automatically. For newer Linux versions like CentOS we run
 it as a `systemd` service. The following describes `openr.service` for systems
@@ -70,7 +67,6 @@ WantedBy=multi-user.target
 ```
 
 ## Thrift-based JSON Configuration File
-
 ---
 
 The configuration file is expected to be in JSON format of the Open/R
@@ -81,7 +77,6 @@ configuration options before. Please check it out for configuration
 specification.
 
 ## Command Line Configuration Options
-
 ---
 
 ### MIN_LOG_LEVEL

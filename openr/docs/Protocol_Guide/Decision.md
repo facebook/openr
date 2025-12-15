@@ -1,7 +1,6 @@
 # Decision - Route Computation
 
 ## Introduction
-
 ---
 
 `Decision` is the module that computes the routing table (IPv4, IPv6, MPLS). It
@@ -10,7 +9,6 @@ computation. Outputs RIB, aka `Routing Information Base`, which will get
 programmed and/or redistributed.
 
 ## Inter Module Communication
-
 ---
 
 ![Decision Intermodule Communication](https://user-images.githubusercontent.com/51382140/102831445-b70f6580-43a0-11eb-8a8e-190df6c13ec5.png)
@@ -27,7 +25,6 @@ programmed and/or redistributed.
   `PrefixManager` module for route redistribution
 
 ## General Workflow
-
 ---
 
 Below diagram describes two main things
@@ -38,7 +35,6 @@ Below diagram describes two main things
 ![openr-route-computation-flow](https://user-images.githubusercontent.com/1482609/89572763-70004980-d7de-11ea-8c07-a8b3e446ef40.png)
 
 ## Deep Dive
-
 ---
 
 ### Storage

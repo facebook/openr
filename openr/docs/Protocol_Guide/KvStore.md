@@ -1,7 +1,6 @@
 # KvStore - Store and Sync
 
 ## Introduction
-
 ---
 
 `KvStore` is the in-memory `key-value` datastore module of Open/R. It provides a
@@ -20,7 +19,6 @@ Each `KvStoreDb` will do sync/update individually with its counterpart of peer
 node. For `AREA` concept, see `Area.md` for more details.
 
 ## Inter Module Communication
-
 ---
 
 ![KvStore flow diagram](https://user-images.githubusercontent.com/10733132/130928965-f0f94f67-5d08-4e20-9b02-e491debfe89d.png)
@@ -41,7 +39,6 @@ node. For `AREA` concept, see `Area.md` for more details.
   originated by local node.
 
 ## Operations
-
 ---
 
 Typical workflow at a high level will be:
@@ -59,7 +56,6 @@ Typical workflow at a high level will be:
     up all data-structures for this peer and stop periodic syncing.
 
 ## Deep Dive
-
 ---
 
 ### KvStore Public APIs

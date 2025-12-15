@@ -1,7 +1,6 @@
 # Monitor - Process telemetry and events
 
 ## Introduction
-
 ---
 
 `Monitor` is responsible for calculating and exporting the counters of the
@@ -9,7 +8,6 @@ Open/R system metrics, as well as processing the Open/R event logs injected from
 other individual modules.
 
 ## Inter Module Communication
-
 ---
 
 `LogSampleQueue` is the channel for event log collection. Each module logs the
@@ -34,7 +32,6 @@ important event, packs it as a LogSample object and pushes it into the queue.
   logs.
 
 ## Deep Dive
-
 ---
 
 High-level speaking, the instance of

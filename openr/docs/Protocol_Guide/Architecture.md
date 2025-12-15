@@ -6,7 +6,6 @@ network of nodes. Routing is a core functionality implemented on the top, unlike
 other protocols where design is greatly influenced by routing functions.
 
 ## Design Principles
-
 ---
 
 **CPU & Memory**
@@ -41,6 +40,7 @@ right problem.
 Use asynchronous communication patterns to bake efficiency in the design itself.
 
 ## Modules
+---
 
 Open/R process consists of multiple modules stitched together with a messaging
 interface. Below we describe module invariants
@@ -65,7 +65,6 @@ flow. For more details refer to the module's documentation.
 > developer to create integrate with BGP with their own implementation.
 
 ## Messages
-
 ---
 
 Every arrow in the picture above depicts a flow of messages from one module to

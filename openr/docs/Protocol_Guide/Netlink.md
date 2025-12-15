@@ -1,7 +1,6 @@
 # Netlink C++ Interface
 
 ## Netlink Overview
-
 ---
 
 Linux `Netlink` is a messaging system for intra-kernel as well as kernel and
@@ -15,7 +14,6 @@ from the kernel. To program the kernel, a process can send a Netlink message(s)
 to the Linux socket and listen to responses.
 
 ## Introduction
-
 ---
 
 Each Netlink packet comprises of one or more Netlink messages. Each Netlink
@@ -43,7 +41,6 @@ ECMP/UCMP). Below we describe the organization of code in this directory. Refer
 to inline code documentation in header files for more information.
 
 ## Deep Dive
-
 ---
 
 ### NetlinkTypes

@@ -1,7 +1,6 @@
 # Spark - Neighbor Discovery
 
 ## Introduction
-
 ---
 
 `Spark` is the neighbor discovery module of Open/R. It leverages IPv6 link-local
@@ -10,7 +9,6 @@ Relationships". The discovered neighbors, aka "Local Topology" of the node, is
 fed into the system for KvStore database synchronization, and SPF Computation.
 
 ## Inter Module Communication
-
 ---
 
 ![Spark Intermodule Communication](https://user-images.githubusercontent.com/51382140/90570487-a33ec300-e164-11ea-84ca-98485a646157.png)
@@ -25,7 +23,6 @@ fed into the system for KvStore database synchronization, and SPF Computation.
   be applied on those interfaces ONLY.
 
 ## Operations
-
 ---
 
 `Spark` relies on `LinkMonitor` for interface and address notifications of the
@@ -38,6 +35,7 @@ corresponding interfaces will be modified inside database:
   neighbor down notification;
 
 ## Areas
+---
 
 Spark only forms adjacencies with nodes in the same area. This is configured in
 the `area` stanza of the Open/R config. For example, the following node is in
@@ -78,7 +76,6 @@ other node not validating what area they claim to be in. Example Config:
 ```
 
 ## Deep Dive
-
 ---
 
 ### Spark Packet
@@ -270,7 +267,6 @@ request immediate reply, which allows quicker discovery of new
 neighbors(configurable).
 
 ## References
-
 ---
 
 - Link-local address: https://en.wikipedia.org/wiki/Link-local_address

@@ -5,7 +5,8 @@ a network operator to express `Preference`, `Performance`, and `Policy Metadata`
 with every route announcement. This document describes the route representation
 in detail.
 
-### Design Rationale
+## Design Rationale
+---
 
 Simplicity and flexibility are the two main criteria that we considered into the
 design of Open/R route. Traditional protocols like BGP, OSPF, and ISIS
@@ -17,27 +18,29 @@ influenced the design. The key takeaways
 - Expressing performance requirements
 - Path tracing
 
-### Definitions
+## Definitions
+---
 
-#### `transitive`
+### `transitive`
 
 Attributes that are preserved during route re-distribution at Area Border. Note
 that not all `transitive` attributes are `mutable` by the policy.
 `non-transitive` is the opposite of `transitive`.
 
-#### `mutable`
+### `mutable`
 
 The route attribute that can be altered by the policy during route
 re-distribution at Area Border. `immutable` is the opposite of `mutable`.
 
-### Attributes
+## Attributes
+---
 
-#### > `prefix`
+### > `prefix`
 
 `transitive`, `immutable` Express Network Layer Reachability Information (NLRI)
 for IPv4 or IPv6. This is a key attribute of the advertised route.
 
-#### > `metrics`
+### > `metrics`
 
 Expresses the relative preference of route among all received advertisements.
 The metrics can be tuned to prefer one network path over another or prefer
@@ -67,7 +70,7 @@ ensure loop-free routing. This resembles AS-Path length of BGP
 > Take a look at [Decision Route Computation](../Protocol_Guide/Decision.md) for
 > understanding best route selection process
 
-#### > `tags`
+### > `tags`
 
 `set[string]`, `transitive`, `mutable` Meta-data associated with the route to
 facilitate route policing as the route propagates through the network. Encoded
@@ -76,7 +79,7 @@ to express various things like origination node name, propagation scopes, route
 type, etc. This analogous to BGP Communities, except this, is much more flexible
 as there is no byte limit.
 
-#### > `area_stack`
+### > `area_stack`
 
 `list[string]`, `transitive`, `immutable` An ordered list of areas the route has
 traversed so far. The entry at the front indicates the `originating area`, while
@@ -86,17 +89,17 @@ helps in preventing route looping and debugging.
 You can draw similar to BGP AS-Path. However, note that it is not used in best
 route selection and can't be modified by the policy.
 
-#### > `forwarding-algorithm`
+### > `forwarding-algorithm`
 
 `non-transitive`, `mutable` Link-state algorithm for route computaion. Open/R
 supports one forwarding algorithm, `SP_ECMP` (Shortest Path ECMP).
 
-#### > `forwarding-type`
+### > `forwarding-type`
 
 `non-transitive`, `mutable` Data plane forwarding mechanism to use. Open/R
 supports one forwarding type, `IP` (Usual IP routing).
 
-#### > `min-nexthops`
+### > `min-nexthops`
 
 `optional[numeric]`, `non-transitive`, `mutable` Expresses the minimum number of
 next-hops on a computed route. The route is programmed and hence re-distributed
@@ -105,7 +108,8 @@ helps to avoid funneling in the CLOS-Fabric networks when the capacity of one of
 the planes is reduced greatly compared to others because of maintenance or
 device failure.
 
-### Thrift Struct
+## Thrift Struct
+---
 
 Refer to
 [struct PrefixEntry in openr/if/Types.thrift](https://github.com/facebook/openr/blob/master/openr/if/Types.thrift)

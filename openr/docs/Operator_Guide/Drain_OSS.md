@@ -13,6 +13,7 @@ Open/R has a few ways to be put in different classes of a "drained state". Here
 we attempt to explain them.
 
 ## Drain a running Open/R Device
+---
 
 Open/R has thrift endpoints to ask the daemon to drain itself. Open/R supports
 draining a link and whole device/node. Using the `breeze` CLI is an option to
@@ -58,6 +59,7 @@ code to workout the thrift calls used and the thrift files to inspect other API
 options avaliable.
 
 ## Drain startup flow
+---
 
 Here is the order of evaluation Open/R performs to work out if it should be in a
 "drained" state or not:
@@ -76,6 +78,7 @@ Here is the order of evaluation Open/R performs to work out if it should be in a
    is set or not
 
 ## Configuration File Options
+---
 
 The config file has options to tune draining behavior. The CLI options default
 from the configuration file. The configuration file is the preferred way to
@@ -88,8 +91,8 @@ configure Open/R.
   bit at startup
 
 ### CLI Arguments
+---
 
 Open/R has the following CLI/configuration options to control drain behavior:
-
 - `-override_drain_state`: override persistent store drain state with value
   passed in `assume_drained` configuration setting

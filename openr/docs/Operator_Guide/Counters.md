@@ -12,7 +12,6 @@ a structured fashion via Monitor which can be logged to data stores like `Druid`
 to do real-time monitoring of log events across the fleet.
 
 ## Understanding Counters
-
 ---
 
 Counters are exported as key-value pairs where the key is string and value is a
@@ -31,7 +30,6 @@ For example:
   all SPF calculations
 
 ### Important Counters to Monitor
-
 ---
 
 Here are some important counters to monitor for a production system and alert
@@ -78,7 +76,6 @@ lot of other counters as well. Most names are self-explanatory.
   flapping on system
 
 ## Log Events
-
 ---
 
 Along with counters OpenR also publishes certain log events. Each log event is a

@@ -14,7 +14,6 @@ includes:
 - Add/Del/Modify keys in KvStore
 
 ## How it Works
-
 ---
 
 All Open/R modules expose various Thrift APIs to access their internal state
@@ -24,7 +23,6 @@ for each module which Breeze leverages to talk to Open/R, retrieve information,
 and display it
 
 ## How to use `breeze`
-
 ---
 
 Breeze is very intuitive to use. Just do `--help` at any stage to see options,
@@ -103,6 +101,7 @@ fsw008.p008.f01.vll2.tfbnw.net  fboss4004     fboss2075             1        0  
 ```
 
 ## Debugging Open/R with `breeze`
+---
 
 `breeze` can be daunting as it has so many sub-commands. This section attempts
 to walk through debugging Open/R modules in an order that makes sesnse due to
@@ -363,6 +362,7 @@ By going through all these steps we have checked:
 - Current FIB entries
 
 ## Module Specific `breeze` Examples
+---
 
 ### KvStore Commands
 
@@ -659,8 +659,6 @@ KVSTORE_SYNCED event is not published
 
 ### Decision Commands
 
----
-
 #### Adjacency/Prefixes Database
 
 Dump the link-state and prefixes databases from Decision module.
@@ -771,8 +769,6 @@ Time elapsed for event, RIB_COMPUTED, since Open/R started: 2566ms
 ```
 
 ### LinkMonitor Commands
-
----
 
 #### links
 
@@ -953,8 +949,6 @@ Time elapsed for event, PREFIX_DB_SYNCED, since Open/R started: 2567ms
 
 ### Config Commands
 
----
-
 Config is stored as opaque key-values on the disk. Here are APIs to read and
 update it.
 
@@ -1020,8 +1014,6 @@ Key stored
 
 ### Monitor Commands
 
----
-
 #### counters
 
 Fetch and display Open/R counters. You can programmatically fetch these counters
@@ -1053,8 +1045,6 @@ decision.spf_runs.count.600 : 0.0
 ```
 
 ### FIB Commands
-
----
 
 FIB is the only platform-specific part of Open/R. FibAgent runs as a separate
 service on the node which is primarily responsible for managing the routing

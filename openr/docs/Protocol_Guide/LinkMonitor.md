@@ -1,7 +1,6 @@
 # LinkMonitor - Links Discovery
 
 ## Introduction
-
 ---
 
 `LinkMonitor` is the module interacts with the system to monitor link, aka,
@@ -15,7 +14,6 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
   `adj:<node-name>`;
 
 ## Inter Module Communication
-
 ---
 
 ![LinkMonitor Intermodule Communication](https://user-images.githubusercontent.com/10733132/130930966-4c2557ce-bc88-4781-a37a-dff29da52363.png)
@@ -50,7 +48,6 @@ Linux kernel through `Netlink Protocol`. Main functions of this module are:
   case. See the later section for detail.
 
 ## Operations
-
 ---
 
 Typical workflow at a high level will be:
@@ -71,7 +68,6 @@ Typical workflow at a high level will be:
 > parallel adjacencies between them.
 
 ## Deep Dive
-
 ---
 
 ### Link/Address Discovery

@@ -1,7 +1,6 @@
 # PrefixManager - Route Advertisement
 
 ## Introduction
-
 ---
 
 `PrefixManager` is the module which keeps track of the prefixes originated from
@@ -13,7 +12,6 @@ Main functions of this module are:
 - Prefix redistribution(cross-AREA);
 
 ## Inter Module Communication
-
 ---
 
 ![PrefixManager Intermodule Communication](https://user-images.githubusercontent.com/51382140/110161227-ec253480-7da1-11eb-8584-844de9568e1d.png)
@@ -44,7 +42,6 @@ These routes supports route-aggregation logic with `minimum_supporting_routes`
 knob. Each originated route maintains a count of its supporting routes.
 
 ## Operations
-
 ---
 
 To fulfill operations defined in previous section, `PrefixManager` updates its
@@ -76,7 +73,6 @@ Above requests come from two places:
   [CLI.md](../Operator_Guide/CLI.md) for more details
 
 ## Deep Dive
-
 ---
 
 ### Redistribute Prefix Workflow

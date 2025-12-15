@@ -4,7 +4,6 @@ This document provides formal specifications, event flow chart, and formal
 verification of Open/R’s initialization process.
 
 ## Overview
-
 ---
 
 The initialization process is an ordered flow of **Events** in the system that
@@ -29,7 +28,6 @@ disruptive (no packet drop) throughout the startup process Respect operational
 state (e.g. drain) throughout the initialization process
 
 ## Events
-
 ---
 
 Here we describe all the events that take part in Open/R's initialization
@@ -104,7 +102,6 @@ computation and start pouring traffic to node which undergoes INITIALIZATION
 sequence.
 
 ## Formal Specification (FS)
-
 ---
 
 Formal specification defines the constraints in the system that are important to
@@ -140,7 +137,6 @@ the correct functioning of the system.
     restarting node on "Topology Update".
 
 ## Event Flow Chart
-
 ---
 
 The diagram below defines the order of events throughout the Initialization
@@ -172,7 +168,6 @@ soon as the Prefix database synchronizes. However, we can avoid this altogether
 by performing Adjacency synchronization after Prefix synchronization.
 
 ## Implementation
-
 ---
 
 **Important Note** - This work is in progress. So everything described here may

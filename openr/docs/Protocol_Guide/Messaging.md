@@ -7,7 +7,6 @@ library provides various `Queue` interfaces using which modules can write or
 read messages.
 
 ## Design Principles
-
 ---
 
 Our choice of design principles aims to reduce code complexity and support the
@@ -32,7 +31,6 @@ later section follows the below principles
 > communication in near future.
 
 ## Queue Architecture
-
 ---
 
 There are two types of Queue that we support, namely `RWQueue<T>` and
@@ -76,7 +74,6 @@ queue indicative of its performance. As of now, it hasn't been the bottleneck in
 the context of performance.
 
 ## Learn More
-
 ---
 
 Header files are well documented. Use that as a guide for using the messaging

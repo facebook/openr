@@ -1,7 +1,6 @@
 # Config
 
 ## Introduction
-
 ---
 
 As the name suggests, this module provides library interface for Configuration,
@@ -9,7 +8,6 @@ passed by `--config`, that Open/R needs. It performs sanitization checks and
 provide C++ wrapper over config object.
 
 ## APIs
-
 ---
 
 For more information about config format, check out

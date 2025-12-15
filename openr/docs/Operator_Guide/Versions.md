@@ -1,5 +1,4 @@
 # Versioning
-
 ---
 
 This page describes the major changes inside Open/R including:
@@ -9,7 +8,6 @@ This page describes the major changes inside Open/R including:
 - Non backward-compatible changes in message format/CLI interface/etc.
 
 ## Overview of Version Usage
-
 ---
 
 Open/R use `SparkHelloMsg` to carry `version` attribute during neighbor
@@ -27,7 +25,6 @@ See [Spark.md](../Protocol_Guide/Spark.md) for more details about neighbor
 discivery mechanism inside `Spark`.
 
 ### Backward Compatibility
-
 ---
 
 There are multiple aspects of backward comaptibility concern within Open/R:
@@ -42,7 +39,6 @@ regarding to messgaes between `Spark` neighbor and `KvStore` peers. This is to
 make sure core functionality of Open/R can be fulfilled without interruption.
 
 ### Version History
-
 ---
 
 - Version 20200825
