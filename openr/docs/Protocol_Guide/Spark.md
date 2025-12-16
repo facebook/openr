@@ -266,6 +266,50 @@ discovery by sending `SparkHelloMsg` with `solicitResponse` bit set. This is to
 request immediate reply, which allows quicker discovery of new
 neighbors(configurable).
 
+### Link-Local Address Change Handling
+
+`Spark` can handle address changes dynamically without requiring a restart.
+Spark monitors two types of addresses on each interface:
+
+- **IPv6 Link-Local Address**: Required for all tracked interfaces
+- **IPv4 Address**: Tracked when IPv4 is enabled (`enableV4` config)
+
+When an address change is detected on an interface, Spark performs the
+following steps:
+
+1. **Neighbor Down**: Immediately tears down the neighbor adjacency with the old
+   address, transitioning the FSM out of the `ESTABLISHED` state.
+2. **Neighbor Up**: Initiates re-establishment of the neighbor with the new
+   address, triggering the full FSM workflow (IDLE -> WARM -> NEGOTIATE ->
+   ESTABLISHED).
+3. **Fast Discovery**: Triggers fast neighbor discovery by sending
+   `SparkHelloMsg` at an accelerated rate to quickly re-establish adjacencies.
+
+During the re-establishment period, `breeze spark validate` will
+report the neighbor as not established until the adjacency is fully
+re-negotiated.
+
+#### Multiple Addresses on an Interface
+
+An interface can have multiple IPv4 or IPv6 link-local addresses. Spark handles
+this by selecting a single address of each type using a deterministic algorithm:
+
+1. Addresses are retrieved in sorted order (lexicographically by IP)
+2. The **lowest** address is selected for neighbor discovery
+3. Both nodes on a link use the same selection logic, ensuring agreement
+
+This means:
+- Adding/removing addresses that are **higher** than the current lowest address
+  will not trigger an address change event
+- Adding an address that is **lower** than the current one will trigger an
+  address change and adjacency re-establishment
+
+> NOTE: Since `Spark` uses multicast (ff02::1) for heartbeat messages rather
+> than the link-local address directly, heartbeats may continue to succeed even
+> after an address change. The explicit neighbor down/up sequence ensures the
+> address change is properly propagated to all Open/R components including
+> `KvStore`, which uses the link-local address for TCP connections.
+
 ## References
 ---
 
