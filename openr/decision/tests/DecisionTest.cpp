@@ -1431,7 +1431,7 @@ TEST_F(DecisionTestFixture, SelfRedistributePrefixPublication) {
   auto redistributePfx = createPrefixEntry(addr2, thrift::PrefixType::RIB);
   redistributePfx.area_stack() = {"65000", kTestingAreaName};
   auto redistributePfxVal =
-      createPrefixValue("1", 1, createPrefixDb("1", {redistributePfx}, "B"));
+      createPrefixValue("1", 1, createPrefixDb("1", {redistributePfx}, true));
 
   publication = createThriftPublication(
       {{redistributeKeyStr, redistributePfxVal}},
