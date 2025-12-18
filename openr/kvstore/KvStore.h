@@ -232,6 +232,8 @@ class KvStoreDb {
   // disable copying
   KvStoreDb(KvStoreDb const&) = delete;
   KvStoreDb& operator=(KvStoreDb const&) = delete;
+  KvStoreDb(KvStoreDb&&) = delete;
+  KvStoreDb& operator=(KvStoreDb&&) = delete;
 
   /*
    * Private methods
@@ -805,6 +807,8 @@ class KvStore final : public OpenrEventBase {
   // disable copying
   KvStore(KvStore const&) = delete;
   KvStore& operator=(KvStore const&) = delete;
+  KvStore(KvStore&&) = delete;
+  KvStore& operator=(KvStore&&) = delete;
 
   /*
    * Private methods
