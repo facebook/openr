@@ -12,6 +12,9 @@ namespace py3 neteng.config
 
 include "thrift/annotation/thrift.thrift"
 
+@thrift.AllowLegacyMissingUris
+package;
+
 enum Operator {
   add = 1,
   rewrite = 2,

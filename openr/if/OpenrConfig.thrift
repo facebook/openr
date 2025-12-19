@@ -19,6 +19,9 @@ include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/python.thrift"
 include "thrift/annotation/thrift.thrift"
 
+@thrift.AllowLegacyMissingUris
+package;
+
 enum PrefixForwardingType {
   /** IP nexthop is used for routing to the prefix. */
   IP = 0,

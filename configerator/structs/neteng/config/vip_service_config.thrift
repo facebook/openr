@@ -5,6 +5,11 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+include "thrift/annotation/thrift.thrift"
+
+@thrift.AllowLegacyMissingUris
+package;
+
 namespace cpp2 vipconfig.config
 namespace py vipconfig.config.vip_service_config
 namespace go vipconfig.config.vip_service_config

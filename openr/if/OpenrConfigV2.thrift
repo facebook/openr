@@ -28,6 +28,9 @@ include "configerator/structs/neteng/config/vip_service_config.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/thrift.thrift"
 
+@thrift.AllowLegacyMissingUris
+package;
+
 enum PrefixForwardingType {
   /** IP nexthop is used for routing to the prefix. */
   IP = 0,
