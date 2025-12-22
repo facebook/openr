@@ -33,8 +33,8 @@ TEST(KvStorePublisher, OnlyExpiredKeysFilterTest) {
       0);
 
   thrift::Publication publication;
-  publication.expiredKeys()->push_back("adj:test1");
-  publication.expiredKeys()->push_back("prefix:test2");
+  publication.expiredKeys()->emplace_back("adj:test1");
+  publication.expiredKeys()->emplace_back("prefix:test2");
 
   publication.area() = "default";
 
