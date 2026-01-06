@@ -146,8 +146,8 @@ TEST(ConfigTest, PopulateAreaConfig) {
     Config cfg = Config(confValidArea);
     // default area and domain area
     EXPECT_EQ(cfg.getAreas().size(), 1);
-    EXPECT_EQ(cfg.getAreas().contains(myArea), 1);
-    EXPECT_EQ(cfg.getAreas().contains("1"), 0);
+    EXPECT_TRUE(cfg.getAreas().contains(myArea));
+    EXPECT_FALSE(cfg.getAreas().contains("1"));
   }
 
   // invalid include_interface_regexes
@@ -458,7 +458,7 @@ TEST(ConfigTest, GeneralGetter) {
 
     // getAreaIds
     EXPECT_EQ(1, config.getAreas().size());
-    EXPECT_EQ(1, config.getAreas().contains(kTestingAreaName));
+    EXPECT_TRUE(config.getAreas().contains(kTestingAreaName));
 
     // enable_v4
     EXPECT_TRUE(config.isV4Enabled());
