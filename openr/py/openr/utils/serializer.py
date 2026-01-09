@@ -7,9 +7,8 @@
 # pyre-unsafe
 
 import json
-from typing import Any, Dict, Optional
+from typing import Any
 
-from openr.Network import ttypes as network_types_py
 from openr.py.openr.utils.consts import Consts
 from openr.py.openr.utils.ipnetwork import sprint_addr, sprint_prefix
 from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
@@ -19,13 +18,8 @@ from thrift.util import Serializer
 
 TO_DICT_OVERRIDES = {
     # Convert IpPrefix to human readable format
-    network_types_py.IpPrefix: sprint_prefix,
     IpPrefix: sprint_prefix,
     # Convert BinaryAddress to human readable format
-    network_types_py.BinaryAddress: lambda x: {
-        "addr": sprint_addr(x.addr),
-        "ifName": x.ifName,
-    },
     BinaryAddress: lambda x: {
         "addr": sprint_addr(x.addr),
         "ifName": x.ifName,
