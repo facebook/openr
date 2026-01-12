@@ -9,7 +9,6 @@
 from enum import Enum
 
 from openr.py.openr.utils import ipnetwork
-
 from openr.thrift.Network.thrift_types import IpPrefix, NextHopThrift, UnicastRoute
 from openr.thrift.Types.thrift_types import Adjacency, AdjacencyDatabase
 

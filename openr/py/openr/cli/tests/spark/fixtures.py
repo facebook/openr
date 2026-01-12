@@ -9,7 +9,6 @@
 from enum import Enum
 
 from openr.py.openr.utils.consts import Consts
-
 from openr.thrift.KvStore import thrift_types as openr_kvstore_types
 from openr.thrift.Network.thrift_types import BinaryAddress
 from openr.thrift.OpenrConfig.thrift_types import AreaConfig, OpenrConfig

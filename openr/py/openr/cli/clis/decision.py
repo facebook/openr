@@ -13,7 +13,6 @@ from typing import Any, List, Optional
 import bunch
 import click
 from openr.py.openr.cli.clis.baseGroup import deduceCommandGroup
-
 from openr.py.openr.cli.commands import decision
 from openr.py.openr.cli.utils.utils import parse_nodes
 
@@ -38,12 +37,12 @@ class DecisionCli:
 class PathCli:
     @click.command()
     @click.option(
-        "--src", default="", help="source node, " "default will be the current host"
+        "--src", default="", help="source node, default will be the current host"
     )
     @click.option(
         "--dst",
         default="",
-        help="destination node or prefix, " "default will be the current host",
+        help="destination node or prefix, default will be the current host",
     )
     @click.option("--max-hop", default=256, help="max hop count")
     @click.option("--area", default=None, help="area identifier")

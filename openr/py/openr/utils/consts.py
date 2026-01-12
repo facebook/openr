@@ -10,7 +10,6 @@
 import re
 
 from nettools.ebb.py.agents.constants import FIB_AGENT_PORT
-
 from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
 
 

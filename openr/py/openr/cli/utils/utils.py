@@ -2081,7 +2081,7 @@ def print_route_helper(
             rows.append(f"     Misc - weight: {route.route.weight}")
         tag_map = tag_map if tag_map is not None else {}
         rows.append(
-            f"     Tags - {', '.join(sorted([format_openr_tag(t,tag_map) for t in route.route.tags]))}"
+            f"     Tags - {', '.join(sorted([format_openr_tag(t, tag_map) for t in route.route.tags]))}"
         )
         rows.append(f"     Area Stack - {', '.join(route.route.area_stack)}")
         if (

@@ -10,7 +10,6 @@ from collections.abc import Sequence
 from typing import Dict, List, Optional, Tuple
 
 from openr.py.openr.cli.utils import utils
-
 from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.cli.utils.utils import (
     get_tag_to_name_map,
@@ -167,13 +166,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
         )
         rows.append("")
 
-        rows.append(
-            f"{'Prefix':<36} "
-            f"{'Community':>15} "
-            f"{'SR':>6} "
-            f"{'MSR':>6} "
-            f"{'I':>6} "
-        )
+        rows.append(f"{'Prefix':<36} {'Community':>15} {'SR':>6} {'MSR':>6} {'I':>6} ")
         rows.append("")
         tag_to_name = tag_to_name if tag_to_name is not None else {}
         for prefix_entry in originated_prefixes:
@@ -231,7 +224,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
             prefix_tags = prefix_entry.prefix.tags
             if prefix_tags:
                 rows.append(
-                    f"     Tags - {', '.join([utils.format_openr_tag(t,tag_to_name) for t in prefix_tags])}"
+                    f"     Tags - {', '.join([utils.format_openr_tag(t, tag_to_name) for t in prefix_tags])}"
                 )
             area_stack = prefix_entry.prefix.area_stack
             if area_stack:

@@ -11,7 +11,6 @@ from collections.abc import Sequence
 from typing import Any, Dict, List, Tuple
 
 import click
-
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
 from openr.py.openr.utils import ipnetwork, printing, serializer

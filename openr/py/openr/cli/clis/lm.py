@@ -285,7 +285,7 @@ class ClearAdjMetricOverrideCli:
         """
         Clear previously overridden adjacency metric value.
         """
-        question_str = "Are you sure to unset metric " "for adjacency {} {} ?".format(
+        question_str = "Are you sure to unset metric for adjacency {} {} ?".format(
             node, interface
         )
         if not utils.yesno(question_str, yes):
