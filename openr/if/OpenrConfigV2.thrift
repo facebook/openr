@@ -14,7 +14,7 @@ See post for more details: https://fb.workplace.com/groups/netsystems.users/perm
 Once the migration is complete, the original files will be replaced.(TODO: T223652622)
 -------------------------------------------------------- */
 
-namespace cpp2 openr.thrift
+namespace cpp2 openr.thrift_v2
 namespace go openr.OpenrConfigV2
 namespace py openr.OpenrConfigV2
 namespace py.asyncio openr.OpenrConfigV2
