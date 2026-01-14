@@ -397,7 +397,7 @@ class NlMessageFixture : public ::testing::Test {
   NextHop
   buildNextHop(
       std::optional<std::vector<int32_t>> pushLabels,
-      std::optional<uint32_t> swapLabel,
+      std::optional<uint32_t> swapLabelOpt,
       std::optional<thrift::MplsActionCode> action,
       std::optional<folly::IPAddress> gateway,
       std::optional<int> ifIndex,
@@ -410,8 +410,8 @@ class NlMessageFixture : public ::testing::Test {
     if (pushLabels.has_value()) {
       nhBuilder.setPushLabels(pushLabels.value());
     }
-    if (swapLabel.has_value()) {
-      nhBuilder.setSwapLabel(swapLabel.value());
+    if (swapLabelOpt.has_value()) {
+      nhBuilder.setSwapLabel(swapLabelOpt.value());
     }
     if (action.has_value()) {
       nhBuilder.setLabelAction(action.value());
@@ -2165,7 +2165,7 @@ TEST_F(NlMessageFixture, LinkAddDelete) {
 TEST_F(NlMessageFixture, RouteTableIdTest) {
   uint32_t ackCount{0};
   folly::CIDRNetwork network = folly::IPAddress::createNetwork("192.0.2.0/24");
-  const uint32_t kRouteTableId = 1000;
+  const uint32_t kTestRouteTableId = 1000;
   const auto nexthop = NextHopBuilder()
                            .setIfIndex(ifIndexY)
                            .setLabelAction(openr::thrift::MplsActionCode::PUSH)
@@ -2173,7 +2173,7 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
                            .build();
   const auto filter = RouteBuilder()
                           .setProtocolId(kRouteProtoId)
-                          .setRouteTable(kRouteTableId)
+                          .setRouteTable(kTestRouteTableId)
                           .build();
 
   const auto before = nlSock->getRoutes(filter).get().value();
@@ -2182,7 +2182,7 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
   const auto route = RouteBuilder()
                          .setDestination(network)
                          .setProtocolId(kRouteProtoId)
-                         .setRouteTable(kRouteTableId)
+                         .setRouteTable(kTestRouteTableId)
                          .addNextHop(nexthop)
                          .build();
   ackCount = getAckCount();
@@ -2194,7 +2194,7 @@ TEST_F(NlMessageFixture, RouteTableIdTest) {
   auto after = nlSock->getRoutes(filter).get().value();
   for (const auto& r : after) {
     if (r.getDestination() == network && r.getProtocolId() == kRouteProtoId &&
-        r.getRouteTable() == kRouteTableId) {
+        r.getRouteTable() == kTestRouteTableId) {
       found = true;
     }
   }
