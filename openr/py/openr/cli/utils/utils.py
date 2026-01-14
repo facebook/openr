@@ -26,7 +26,7 @@ from openr.KvStore import ttypes as kv_store_types_py
 from openr.Network import ttypes as network_types_py
 from openr.OpenrCtrl import ttypes as ctrl_types_py
 from openr.py.openr.clients.openr_client import get_openr_ctrl_client_py
-from openr.py.openr.utils import ipnetwork, printing
+from openr.py.openr.utils import ipnetwork, ipnetwork_deprecated, printing
 from openr.py.openr.utils.consts import Consts
 from openr.py.openr.utils.serializer import deserialize_thrift_py_object, object_to_dict
 from openr.thrift.KvStore import thrift_types as kv_store_types
@@ -167,10 +167,12 @@ def sprint_prefixes_db_full(prefix_db, loopback_only: bool = False) -> str:
             continue
         prefix_strs.append(
             [
-                ipnetwork.sprint_prefix(prefix_entry.prefix),
-                ipnetwork.sprint_prefix_type(prefix_entry.type),
-                ipnetwork.sprint_prefix_forwarding_type(prefix_entry.forwardingType),
-                ipnetwork.sprint_prefix_forwarding_algorithm(
+                ipnetwork_deprecated.sprint_prefix(prefix_entry.prefix),
+                ipnetwork_deprecated.sprint_prefix_type(prefix_entry.type),
+                ipnetwork_deprecated.sprint_prefix_forwarding_type(
+                    prefix_entry.forwardingType
+                ),
+                ipnetwork_deprecated.sprint_prefix_forwarding_algorithm(
                     prefix_entry.forwardingAlgorithm
                 ),
             ]
@@ -341,7 +343,7 @@ def prefix_entry_to_dict(prefix_entry):
         # represented as a dict so we update them
         prefix_entry_dict.update(
             {
-                "prefix": ipnetwork.sprint_prefix(prefix_entry.prefix),
+                "prefix": ipnetwork_deprecated.sprint_prefix(prefix_entry.prefix),
                 "metrics": thrift_to_dict(prefix_entry.metrics),
                 "tags": list(prefix_entry.tags if prefix_entry.tags else []),
                 "area_stack": list(
@@ -853,7 +855,7 @@ def unicast_route_to_dict(route):
     def _update(route_dict, route):
         route_dict.update(
             {
-                "dest": ipnetwork.sprint_prefix(route.dest),
+                "dest": ipnetwork_deprecated.sprint_prefix(route.dest),
                 "nextHops": [next_hop_thrift_to_dict(nh) for nh in route.nextHops],
             }
         )
@@ -1234,7 +1236,7 @@ def sprint_prefixes_db_delta(
     cur_prefixes = set()
 
     for prefix_entry in prefix_db.prefixEntries:
-        cur_prefixes.add(ipnetwork.sprint_prefix(prefix_entry.prefix))
+        cur_prefixes.add(ipnetwork_deprecated.sprint_prefix(prefix_entry.prefix))
 
     # per prefix key format contains only one key, it can be an 'add' or 'delete'
     if key and re.match(Consts.PER_PREFIX_KEY_REGEX, key):
@@ -1325,7 +1327,7 @@ def get_route_as_dict_in_str(
     if route_type == "unicast":
         routes_dict = {
             # pyre-fixme[16]: `MplsRoute` has no attribute `dest`.
-            ipnetwork.sprint_prefix(route.dest): sorted(
+            ipnetwork_deprecated.sprint_prefix(route.dest): sorted(
                 ip_nexthop_to_str(nh, True) for nh in route.nextHops
             )
             for route in routes
@@ -1357,7 +1359,7 @@ def get_route_as_dict(
     if route_type == "unicast":
         for route in routes:
             # pyre-fixme[16]: `MplsRoute` has no attribute `dest`.
-            routes_dict[ipnetwork.sprint_prefix(route.dest)] = route
+            routes_dict[ipnetwork_deprecated.sprint_prefix(route.dest)] = route
     elif route_type == "mpls":
         for route in routes:
             # pyre-fixme[16]: `UnicastRoute` has no attribute `topLabel`.
@@ -1544,7 +1546,7 @@ def validate_route_nexthops(routes, interfaces, sources, quiet: bool = False):
     error_msg = []
 
     for route in routes:
-        dest = ipnetwork.sprint_prefix(route.dest)
+        dest = ipnetwork_deprecated.sprint_prefix(route.dest)
         # record invalid nexthops in dict<error, list<nexthops>>
         invalid_nexthop = defaultdict(list)
         for nextHop in route.nextHops:
@@ -1734,7 +1736,7 @@ def build_unicast_route(
         :param filter_exact_match: Indicate exact match or subnet match.
     """
 
-    dest = ipnetwork.sprint_prefix(route.dest)
+    dest = ipnetwork_deprecated.sprint_prefix(route.dest)
     if filter_for_networks:
         if filter_exact_match:
             if not ipaddress.ip_network(dest) in filter_for_networks:
@@ -1810,7 +1812,7 @@ def get_routes_json(
     data = {"host": host, "client": client, "routes": [], "mplsRoutes": []}
 
     for route in routes:
-        dest = ipnetwork.sprint_prefix(route.dest)
+        dest = ipnetwork_deprecated.sprint_prefix(route.dest)
         if not ipnetwork.contain_any_prefix(dest, networks):
             continue
         route_data = {
@@ -1956,7 +1958,7 @@ def print_route_details(
 
         # Create a title for the route
         rows.append(
-            f"> {ipnetwork.sprint_prefix(route_detail.prefix)}"
+            f"> {ipnetwork_deprecated.sprint_prefix(route_detail.prefix)}"
             f", {len(best_keys)}/{len(route_detail.routes)}"
         )
 
@@ -2000,7 +2002,7 @@ def print_advertised_routes(
 
     for route in routes:
         # Create a title for the route
-        rows.append(f"> {ipnetwork.sprint_prefix(route.route.prefix)}")
+        rows.append(f"> {ipnetwork_deprecated.sprint_prefix(route.route.prefix)}")
         print_route_helper(rows, route, key_to_str_fn, detailed, "{*@}", tag_map)
         rows.append("")
 

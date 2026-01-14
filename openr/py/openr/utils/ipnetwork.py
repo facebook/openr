@@ -9,11 +9,9 @@
 
 import ipaddress
 import socket
-from typing import List, Optional, Union
 
-from openr.Network import ttypes as network_types
-from openr.OpenrConfig import ttypes as openr_config_types
 from openr.thrift.Network import types as network_types_py3
+from openr.thrift.Network.thrift_enums import PrefixType as PrefixTypeThriftEnum
 from openr.thrift.Network.thrift_types import (
     BinaryAddress,
     IpPrefix,
@@ -23,7 +21,11 @@ from openr.thrift.Network.thrift_types import (
     NextHopThrift,
     UnicastRoute,
 )
-from openr.Types import ttypes as openr_types
+from openr.thrift.OpenrConfig.thrift_enums import (
+    PrefixForwardingAlgorithm as PrefixForwardingAlgorithmThriftEnum,
+    PrefixForwardingType as PrefixForwardingTypeThriftEnum,
+)
+from openr.thrift.Types.thrift_types import RouteDatabase as RouteDatabaseThriftPython
 
 
 def sprint_addr(addr: bytes) -> str:
@@ -35,11 +37,9 @@ def sprint_addr(addr: bytes) -> str:
     return str(ipaddress.ip_address(addr))
 
 
-def sprint_prefix(
-    prefix: IpPrefix | network_types_py3.IpPrefix | network_types.IpPrefix,
-) -> str:
+def sprint_prefix(prefix: IpPrefix | network_types_py3.IpPrefix) -> str:
     """
-    :param prefix: network_types.IpPrefix representing an CIDR network
+    :param prefix: IpPrefix representing an CIDR network
 
     :returns: string representation of prefix (CIDR network)
     :rtype: str or unicode
@@ -68,31 +68,6 @@ def ip_str_to_addr(addr_str: str, if_index: str | None = None) -> BinaryAddress:
     return BinaryAddress(addr=addr, ifName=if_index)
 
 
-# to be deprecated
-def ip_str_to_addr_py(
-    addr_str: str, if_index: str | None = None
-) -> network_types.BinaryAddress:
-    """
-    :param addr_str: ip address in string representation
-
-    :returns: thrift-py struct BinaryAddress
-    :rtype: network_types.BinaryAddress
-    """
-
-    # Try v4
-    try:
-        addr = socket.inet_pton(socket.AF_INET, addr_str)
-        binary_address = network_types.BinaryAddress(addr=addr, ifName=if_index or None)
-        return binary_address
-    except OSError:
-        pass
-
-    # Try v6
-    addr = socket.inet_pton(socket.AF_INET6, addr_str)
-    binary_address = network_types.BinaryAddress(addr=addr, ifName=if_index or None)
-    return binary_address
-
-
 def ip_str_to_prefix(prefix_str: str) -> IpPrefix:
     """
     :param prefix_str: string representing a prefix (CIDR network)
@@ -103,21 +78,6 @@ def ip_str_to_prefix(prefix_str: str) -> IpPrefix:
 
     ip_str, ip_len_str = prefix_str.split("/")
     return IpPrefix(prefixAddress=ip_str_to_addr(ip_str), prefixLength=int(ip_len_str))
-
-
-# to be deprecated
-def ip_str_to_prefix_py(prefix_str: str) -> network_types.IpPrefix:
-    """
-    :param prefix_str: string representing a prefix (CIDR network)
-
-    :returns: thrift-py struct IpPrefix
-    :rtype: network_types.IpPrefix
-    """
-
-    ip_str, ip_len_str = prefix_str.split("/")
-    return network_types.IpPrefix(
-        prefixAddress=ip_str_to_addr_py(ip_str), prefixLength=int(ip_len_str)
-    )
 
 
 def ip_nexthop_to_nexthop_thrift(
@@ -191,9 +151,9 @@ def mpls_nexthop_to_nexthop_thrift(
 
 def routes_to_route_db(
     node: str,
-    unicast_routes: list[network_types.UnicastRoute] | None = None,
-    mpls_routes: list[network_types.MplsRoute] | None = None,
-) -> openr_types.RouteDatabase:
+    unicast_routes: list[UnicastRoute] | None = None,
+    mpls_routes: list[MplsRoute] | None = None,
+) -> RouteDatabaseThriftPython:
     """
     :param node: node name
     :param unicast_routes: list of unicast IP routes
@@ -202,36 +162,36 @@ def routes_to_route_db(
     unicast_routes = [] if unicast_routes is None else unicast_routes
     mpls_routes = [] if mpls_routes is None else mpls_routes
 
-    return openr_types.RouteDatabase(
+    return RouteDatabaseThriftPython(
         thisNodeName=node, unicastRoutes=unicast_routes, mplsRoutes=mpls_routes
     )
 
 
-def sprint_prefix_type(prefix_type):
+def sprint_prefix_type(prefix_type: PrefixTypeThriftEnum):
     """
-    :param prefix: network_types.PrefixType
-    """
-
-    return network_types.PrefixType._VALUES_TO_NAMES.get(prefix_type, None)
-
-
-def sprint_prefix_forwarding_type(forwarding_type):
-    """
-    :param forwarding_type: openr_config_types.PrefixForwardingType
+    :param prefix: PrefixTypeThriftEnum
     """
 
-    return openr_config_types.PrefixForwardingType._VALUES_TO_NAMES.get(forwarding_type)
+    return prefix_type.name
+
+
+def sprint_prefix_forwarding_type(
+    forwarding_type: PrefixForwardingTypeThriftEnum,
+):
+    """
+    :param forwarding_type: PrefixForwardingTypeThriftEnum
+    """
+
+    return forwarding_type.name
 
 
 def sprint_prefix_forwarding_algorithm(
-    forwarding_algo: openr_config_types.PrefixForwardingAlgorithm,
+    forwarding_algo: PrefixForwardingAlgorithmThriftEnum,
 ) -> str | None:
     """
-    :param forwarding_algorithm: openr_config_types.PrefixForwardingAlgorithm
+    :param forwarding_algorithm: PrefixForwardingAlgorithmThriftEnum
     """
-    return openr_config_types.PrefixForwardingAlgorithm._VALUES_TO_NAMES.get(
-        forwarding_algo
-    )
+    return forwarding_algo.name
 
 
 def ip_version(addr: object):
