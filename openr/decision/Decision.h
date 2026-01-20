@@ -140,7 +140,7 @@ class Decision : public OpenrEventBase {
       // Queue for publishing route updates
       messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
 
-  ~Decision();
+  ~Decision() override;
 
   /**
    * Override stop method of OpenrEventBase
@@ -212,6 +212,8 @@ class Decision : public OpenrEventBase {
  private:
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
+  Decision(Decision&&) = delete;
+  Decision& operator=(Decision&&) = delete;
 
   // Process peer updates
   void processPeerUpdates(PeerEvent&& event);

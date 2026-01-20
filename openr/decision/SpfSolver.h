@@ -147,6 +147,8 @@ class SpfSolver {
   // no-copy
   SpfSolver(SpfSolver const&) = delete;
   SpfSolver& operator=(SpfSolver const&) = delete;
+  SpfSolver(SpfSolver&&) = delete;
+  SpfSolver& operator=(SpfSolver&&) = delete;
 
   /*
    * Structure which holds the results of per area spf next-hop selection
