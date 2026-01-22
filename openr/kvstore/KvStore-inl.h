@@ -2298,6 +2298,10 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
   uint32_t numThriftPeersInSync =
       getPeersByState(thrift::KvStorePeerState::SYNCING).size();
 
+  // Lazily build KeyDumpParams only when needed (i.e., when there's a peer to
+  // sync). Once built, reuse for all peers.
+  std::optional<thrift::KeyDumpParams> params;
+
   // Scan over thriftPeers to promote IDLE peers to SYNCING
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     auto& peerSpec = thriftPeer.peerSpec; // thrift::PeerSpec
@@ -2330,16 +2334,6 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
     // mark peer from IDLE -> SYNCING
     numThriftPeersInSync += 1;
 
-    // build KeyDumpParam
-    thrift::KeyDumpParams params;
-    KvStoreFilters kvFilters(
-        std::vector<std::string>{}, /* keyPrefix list */
-        std::set<std::string>{} /* originatorId list */);
-    // ATTN: dump hashes instead of full key-val pairs with values
-    auto thriftPub = dumpHashWithFilters(area_, kvStore_, kvFilters);
-    params.keyValHashes() = *thriftPub.keyVals();
-    params.senderId() = kvParams_.nodeId;
-
     // record telemetry for initial full-sync
     fb303::fbData->addStatValue(
         "kvstore.thrift.num_full_sync", 1, fb303::COUNT);
@@ -2349,9 +2343,21 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
                       "[Thrift Sync] Initiating full-sync request for peer: {}",
                       peerName);
 
+    // Lazily build KeyDumpParams on first peer that needs syncing
+    if (!params.has_value()) {
+      params.emplace();
+      KvStoreFilters kvFilters(
+          std::vector<std::string>{}, /* keyPrefix list */
+          std::set<std::string>{} /* originatorId list */);
+      // ATTN: dump hashes instead of full key-val pairs with values
+      auto thriftPub = dumpHashWithFilters(area_, kvStore_, kvFilters);
+      params->keyValHashes() = *thriftPub.keyVals();
+      params->senderId() = kvParams_.nodeId;
+    }
+
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.getKvStoreKeyValsFilteredAreaWrapper(params, area_);
+    auto sf = thriftPeer.getKvStoreKeyValsFilteredAreaWrapper(*params, area_);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue(
