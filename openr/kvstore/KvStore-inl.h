@@ -3082,16 +3082,19 @@ KvStoreDb<ClientType>::floodPublication(
     return;
   }
 
-  // Key collection to be flooded
-  auto keysToUpdate = folly::gen::from(*publication.keyVals()) |
-      folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
-
-  XLOG(DBG2) << AreaTag()
-             << fmt::format(
-                    "Flood publication from: {} to peers with: {} key-vals. ",
-                    kvParams_.nodeId,
-                    keysToUpdate.size())
-             << fmt::format("Updated keys: {}", folly::join(",", keysToUpdate));
+  // Log keys being flooded only if DBG2 is enabled to avoid expensive
+  // computation when logging is disabled
+  if (XLOG_IS_ON(DBG2)) {
+    auto keysToUpdate = folly::gen::from(*publication.keyVals()) |
+        folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
+    XLOG(DBG2)
+        << AreaTag()
+        << fmt::format(
+               "Flood publication from: {} to peers with: {} key-vals. ",
+               kvParams_.nodeId,
+               keysToUpdate.size())
+        << fmt::format("Updated keys: {}", folly::join(",", keysToUpdate));
+  }
 
   // prepare thrift structure for flooding purpose
   thrift::KeySetParams params;
