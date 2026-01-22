@@ -317,6 +317,8 @@ bool isValidVersion(
  * @param kvStore - existing key-value map
  * @param sender - the sender who sends the value
  * @param KvStoreMergeResult - record all the result and stats of this operation
+ * @param curValue - optional pointer to current value in kvStore (avoids
+ *                   redundant lookup if caller already has it)
  *
  * @return: MergeType - enum of the merging type
  */
@@ -325,7 +327,8 @@ MergeType getMergeType(
     const thrift::Value& value,
     const thrift::KeyVals& kvStore,
     std::optional<std::string> const& sender,
-    thrift::KvStoreMergeResult& result);
+    thrift::KvStoreMergeResult& result,
+    const thrift::Value* curValue = nullptr);
 
 std::string getAreaTypeByAreaName(const std::string& area);
 } // namespace openr

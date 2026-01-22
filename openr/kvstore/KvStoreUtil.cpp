@@ -131,21 +131,16 @@ isTtlUpdate(const thrift::Value& value) {
  */
 bool
 isResyncNeeded(
-    const thrift::KeyVals& kvStore,
     const std::string& key,
-    const thrift::Value& value) {
+    const thrift::Value& value,
+    const thrift::Value* curValue) {
   /*
    * ATTENTION: DO NOT CHANGE THE IF-ELSE CONDITION ORDER SINCE THE
    * TIE-BREAKING PROCEDURE HAS PRIORITY.
    */
   bool inconsistencyDetected{false};
-  int64_t myVersion{openr::Constants::kUndefinedVersion};
-  auto kvStoreIt = kvStore.find(key);
-  if (kvStoreIt != kvStore.end()) {
-    myVersion = *kvStoreIt->second.version();
-  }
 
-  if (kvStoreIt == kvStore.end()) {
+  if (curValue == nullptr) {
     /*
      * Case 1: received ttl update with a missing k-v pair
      */
@@ -158,7 +153,7 @@ isResyncNeeded(
                      *value.ttlVersion());
 
     inconsistencyDetected = true;
-  } else if (*value.version() != myVersion) {
+  } else if (*value.version() != *curValue->version()) {
     /*
      * Case 2: received ttl update with a different version
      */
@@ -169,10 +164,10 @@ isResyncNeeded(
                key,
                *value.version(),
                *value.originatorId(),
-               myVersion);
+               *curValue->version());
 
     inconsistencyDetected = true;
-  } else if (*value.originatorId() != *kvStoreIt->second.originatorId()) {
+  } else if (*value.originatorId() != *curValue->originatorId()) {
     /*
      * Case 3: received ttl update with a different originatorId
      */
@@ -183,7 +178,7 @@ isResyncNeeded(
                key,
                *value.version(),
                *value.originatorId(),
-               *kvStoreIt->second.originatorId());
+               *curValue->originatorId());
 
     inconsistencyDetected = true;
   }
@@ -255,9 +250,18 @@ getMergeType(
     const thrift::Value& value,
     const thrift::KeyVals& kvStore,
     std::optional<std::string> const& sender,
-    thrift::KvStoreMergeResult& stats) {
-  int64_t myVersion = util::getExistingVersion(key, kvStore);
-  auto kvStoreIt = kvStore.find(key);
+    thrift::KvStoreMergeResult& stats,
+    const thrift::Value* curValue) {
+  // Use provided current value if available, otherwise do lookup
+  if (curValue == nullptr) {
+    auto kvStoreIt = kvStore.find(key);
+    if (kvStoreIt != kvStore.end()) {
+      curValue = &(kvStoreIt->second);
+    }
+  }
+
+  int64_t myVersion =
+      curValue ? *curValue->version() : openr::Constants::kUndefinedVersion;
 
   if (util::isTtlUpdate(value)) {
     /*
@@ -267,20 +271,22 @@ getMergeType(
      * NOTE: kvStore will try to detect possible inconsistencies and force a
      * full-sync if it is adjacency peer.
      */
-    if (util::isResyncNeeded(kvStore, key, value)) {
+    if (util::isResyncNeeded(key, value, curValue)) {
       auto senderId = sender.value_or("");
       if (senderId == *value.originatorId()) {
         return MergeType::RESYNC_NEEDED;
       }
-    } else if (*value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+    } else if (curValue && *value.ttlVersion() > *curValue->ttlVersion()) {
       /*
        * Case 4: key exists, same version, same originatorId.
        */
-      XLOG(DBG4) << fmt::format(
-          "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
-          key,
-          *value.ttlVersion(),
-          *kvStoreIt->second.ttlVersion());
+      if (XLOG_IS_ON(DBG4)) {
+        XLOG(DBG4) << fmt::format(
+            "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
+            key,
+            *value.ttlVersion(),
+            *curValue->ttlVersion());
+      }
 
       return MergeType::UPDATE_TTL_NEEDED;
     }
@@ -310,7 +316,7 @@ getMergeType(
           myVersion);
 
       return MergeType::UPDATE_ALL_NEEDED;
-    } else if (*value.originatorId() > *kvStoreIt->second.originatorId()) {
+    } else if (curValue && *value.originatorId() > *curValue->originatorId()) {
       /*
        * [2nd tie-breaker] originatorId - prefer higher
        */
@@ -318,10 +324,10 @@ getMergeType(
           "(mergeKeyValues) Update key: {} with higher originatorId: {}, old one: {}",
           key,
           *value.originatorId(),
-          *kvStoreIt->second.originatorId());
+          *curValue->originatorId());
 
       return MergeType::UPDATE_ALL_NEEDED;
-    } else if (*value.originatorId() == *kvStoreIt->second.originatorId()) {
+    } else if (curValue && *value.originatorId() == *curValue->originatorId()) {
       /*
        * [3rd tie-breaker] value - prefer higher
        *
@@ -335,9 +341,8 @@ getMergeType(
       // Note: We assume local store should always have a value. If not, it is
       // an invalid case and is ok to crash kvstore. For non-ttl update, the
       // incoming keys should always have a value associated
-      auto rc =
-          (apache::thrift::can_throw(*value.value()))
-              .compare(apache::thrift::can_throw(*kvStoreIt->second.value()));
+      auto rc = (apache::thrift::can_throw(*value.value()))
+                    .compare(apache::thrift::can_throw(*curValue->value()));
 
       if (rc > 0) {
         // versions and orginatorIds are same but value is higher
@@ -349,12 +354,12 @@ getMergeType(
         /*
          * [4th tie-breaker] ttlVersion - prefer higher
          */
-        if (*value.ttlVersion() > *kvStoreIt->second.ttlVersion()) {
+        if (*value.ttlVersion() > *curValue->ttlVersion()) {
           XLOG(DBG4) << fmt::format(
               "(mergeKeyValues) Update key: {} with higher ttlVersion: {}, old one: {}",
               key,
               *value.ttlVersion(),
-              *kvStoreIt->second.ttlVersion());
+              *curValue->ttlVersion());
 
           return MergeType::UPDATE_TTL_NEEDED;
         }
@@ -367,7 +372,7 @@ getMergeType(
       }
     } else {
       /*
-       * regarding to value.originatorId < kvStoreIt->second.originatorId
+       * regarding to value.originatorId < curValue->originatorId
        * case, value in local store wins the tie-breaking and no update is
        * generated.
        */
@@ -408,8 +413,13 @@ mergeKeyValues(
       continue;
     }
 
+    // Do the lookup once and reuse for getMergeType and update
+    auto kvStoreIt = kvStore.find(key);
+    const thrift::Value* curValue =
+        (kvStoreIt != kvStore.end()) ? &kvStoreIt->second : nullptr;
+
     const MergeType mergeType =
-        getMergeType(key, value, kvStore, sender, result);
+        getMergeType(key, value, kvStore, sender, result, curValue);
 
     if (util::noNeedUpdateAndLog(mergeType, key, result)) {
       continue;
@@ -419,28 +429,24 @@ mergeKeyValues(
       continue;
     }
 
-    auto kvStoreIt = kvStore.find(key);
-    auto localVersion = -1;
-    std::string localOriginatorId = "null";
-    auto localTtl = -1;
-    auto localTtlVersion = -1;
-    if (kvStoreIt != kvStore.end()) {
-      localVersion = *kvStoreIt->second.version();
-      localTtl = *kvStoreIt->second.ttl();
-      localTtlVersion = *kvStoreIt->second.ttlVersion();
-      localOriginatorId = *kvStoreIt->second.originatorId();
+    if (XLOG_IS_ON(DBG3)) {
+      auto localVersion = curValue ? *curValue->version() : -1;
+      auto localTtl = curValue ? *curValue->ttl() : -1;
+      auto localTtlVersion = curValue ? *curValue->ttlVersion() : -1;
+      std::string localOriginatorId =
+          curValue ? *curValue->originatorId() : "null";
+      XLOG(DBG3) << fmt::format(
+          "Updating key: {}\n  Version: {} -> {}\n  Originator: {} -> {}\n  TtlVersion: {} -> {}\n  Ttl: {} -> {}",
+          key,
+          localVersion,
+          *value.version(),
+          localOriginatorId,
+          *value.originatorId(),
+          localTtlVersion,
+          *value.ttlVersion(),
+          localTtl,
+          *value.ttl());
     }
-    XLOG(DBG3) << fmt::format(
-        "Updating key: {}\n  Version: {} -> {}\n  Originator: {} -> {}\n  TtlVersion: {} -> {}\n  Ttl: {} -> {}",
-        key,
-        localVersion,
-        *value.version(),
-        localOriginatorId,
-        *value.originatorId(),
-        localTtlVersion,
-        *value.ttlVersion(),
-        localTtl,
-        *value.ttl());
 
     if (mergeType == MergeType::UPDATE_ALL_NEEDED) {
       nValUpdate++;
