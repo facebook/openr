@@ -712,11 +712,11 @@ Spark::parsePacket(
     return false;
   }
 
-  // Copy buffer into string object and parse it into helloPacket.
+  // Parse buffer into helloPacket.
   try {
     // assign value to pkt and pass it back via argument list
-    std::string readBuf(reinterpret_cast<const char*>(&buf[0]), bytesRead);
-    pkt = readThriftObjStr<thrift::SparkHelloPacket>(readBuf, serializer_);
+    auto ioBuf = folly::IOBuf::wrapBuffer(buf, bytesRead);
+    pkt = readThriftObj<thrift::SparkHelloPacket>(*ioBuf, serializer_);
   } catch (std::out_of_range const& err) {
     XLOG(ERR) << "Malformed Thrift packet: " << folly::exceptionStr(err);
     return false;
