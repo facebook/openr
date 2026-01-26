@@ -408,15 +408,17 @@ template <class ClientType>
 std::unique_ptr<std::vector<thrift::Publication>>
 KvStore<ClientType>::dumpKvStoreKeysImpl(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
-  const auto areaStr =
-      (selectAreas.empty()
-           ? "default areas."
-           : fmt::format("areas: {}", folly::join(", ", selectAreas)));
-  const auto senderStr =
-      (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                            : "");
-  XLOG(DBG3) << fmt::format(
-      "Dump all keys requested for {}, by sender: {}", areaStr, senderStr);
+  if (XLOG_IS_ON(DBG3)) {
+    const auto areaStr =
+        (selectAreas.empty()
+             ? "default areas."
+             : fmt::format("areas: {}", folly::join(", ", selectAreas)));
+    const auto senderStr =
+        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                              : "");
+    XLOG(DBG3) << fmt::format(
+        "Dump all keys requested for {}, by sender: {}", areaStr, senderStr);
+  }
 
   auto result = std::make_unique<std::vector<thrift::Publication>>();
   for (auto& area : selectAreas) {
@@ -527,11 +529,15 @@ template <class ClientType>
 thrift::Publication
 KvStore<ClientType>::dumpKvStoreHashesImpl(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
-  const auto senderStr =
-      (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                            : "");
-  XLOG(DBG3) << fmt::format(
-      "Dump all hashes requested for AREA: {}, by sender: {}", area, senderStr);
+  if (XLOG_IS_ON(DBG3)) {
+    const auto senderStr =
+        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                              : "");
+    XLOG(DBG3) << fmt::format(
+        "Dump all hashes requested for AREA: {}, by sender: {}",
+        area,
+        senderStr);
+  }
   auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreHashesImpl");
   fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
   std::set<std::string> originatorIdList{};
