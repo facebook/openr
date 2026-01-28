@@ -86,6 +86,8 @@ class PrefixManager final : public OpenrEventBase {
   // disable copying
   PrefixManager(PrefixManager const&) = delete;
   PrefixManager& operator=(PrefixManager const&) = delete;
+  PrefixManager(PrefixManager&&) = delete;
+  PrefixManager& operator=(PrefixManager&&) = delete;
 
   /*
    * Public API for PrefixManager operations:
