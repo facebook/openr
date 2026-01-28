@@ -872,8 +872,9 @@ Spark::updateNeighborRtt(
   }
 
   // for Spark stepDetector usage
-  if (sparkNeighbors_.find(ifName) != sparkNeighbors_.end()) {
-    auto& sparkIfNeighbors = sparkNeighbors_.at(ifName);
+  auto neighborsIt = sparkNeighbors_.find(ifName);
+  if (neighborsIt != sparkNeighbors_.end()) {
+    auto& sparkIfNeighbors = neighborsIt->second;
     auto sparkNeighborIt = sparkIfNeighbors.find(neighborName);
     if (sparkNeighborIt != sparkIfNeighbors.end()) {
       auto& sparkNeighbor = sparkNeighborIt->second;
@@ -1184,9 +1185,9 @@ Spark::addToActiveNeighbors(
  */
 void
 Spark::remFromActiveNeighbors(
-    std::string const& ifName, std::string const& neighborName) {
-  uint8_t erasedCount = ifNameToActiveNeighbors_.at(ifName).erase(neighborName);
-  numActiveNeighbors_ -= erasedCount;
+    std::unordered_set<std::string>& activeNeighbors,
+    std::string const& neighborName) {
+  numActiveNeighbors_ -= activeNeighbors.erase(neighborName);
 }
 
 void
@@ -1283,14 +1284,15 @@ Spark::neighborDownWrapper(
     std::string const& ifName,
     std::string const& neighborName) {
   // Remove neighborship on this interface.
-  if (ifNameToActiveNeighbors_.find(ifName) == ifNameToActiveNeighbors_.end()) {
+  auto it = ifNameToActiveNeighbors_.find(ifName);
+  if (it == ifNameToActiveNeighbors_.end()) {
     XLOG(WARNING) << "Ignore " << ifName << " as there is NO active neighbors.";
     return;
   }
 
-  remFromActiveNeighbors(ifName, neighborName);
+  remFromActiveNeighbors(it->second, neighborName);
 
-  if (ifNameToActiveNeighbors_.at(ifName).empty()) {
+  if (it->second.empty()) {
     ifNameToActiveNeighbors_.erase(ifName);
   }
 
@@ -1506,8 +1508,9 @@ Spark::updateKeepAliveTimer(
       });
 
   // update the heartbeat timer
-  ifNameToHeartbeatTimers_.insert_or_assign(ifName, std::move(heartbeatTimer));
-  ifNameToHeartbeatTimers_.at(ifName)->scheduleTimeout(
+  auto [it, _] = ifNameToHeartbeatTimers_.insert_or_assign(
+      ifName, std::move(heartbeatTimer));
+  it->second->scheduleTimeout(
       addJitter<std::chrono::milliseconds>(updatedHoldTime / 3));
 }
 
