@@ -509,7 +509,7 @@ class Spark final : public OpenrEventBase {
   // Map of interface entries keyed by ifName
   std::unordered_map<std::string, Interface> interfaceDb_{};
 
-  // Maping of interface index to interface name for faster interface lookup
+  // Mapping of interface index to interface name for faster interface lookup
   std::unordered_map<int64_t, std::string> ifIndexToName_{};
 
   // Container storing all the known Spark neighbors, keyed by interface name.

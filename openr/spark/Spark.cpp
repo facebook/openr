@@ -2301,12 +2301,13 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
     sparkNeighbors_.erase(ifName);
     ifNameToHeartbeatTimers_.erase(ifName);
 
+    auto ifIndex = interfaceDb_.at(ifName).ifIndex;
     // unsubscribe the socket from mcast group on this interface
     // On error, log and continue
     if (!toggleMcastGroup(
             mcastFd_,
             folly::IPAddress(Constants::kSparkMcastAddr.toString()),
-            interfaceDb_.at(ifName).ifIndex,
+            ifIndex,
             false /* leave */,
             ioProvider_.get())) {
       XLOG(ERR) << fmt::format(
@@ -2314,6 +2315,7 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
     }
     // cleanup for this interface
     ifNameToHelloTimers_.erase(ifName);
+    ifIndexToName_.erase(ifIndex);
     interfaceDb_.erase(ifName);
   }
 }
@@ -2346,7 +2348,7 @@ Spark::addInterface(
       auto result = interfaceDb_.emplace(ifName, newInterface);
       CHECK(result.second);
     }
-
+    ifIndexToName_.emplace(ifIndex, ifName);
     {
       // create place-holders for newly added interface
       auto result = sparkNeighbors_.emplace(
@@ -2408,6 +2410,8 @@ Spark::updateInterface(
             fmt::format(
                 "Failed joining multicast group: {}", folly::errnoStr(errno)));
       }
+      ifIndexToName_.erase(interface.ifIndex);
+      ifIndexToName_.emplace(newInterface.ifIndex, ifName);
     }
     XLOG(INFO) << "Updating iface " << ifName << " in spark tracking from "
                << "(ifindex " << interface.ifIndex << ", addrs "
@@ -2437,10 +2441,9 @@ Spark::updateInterface(
 
 std::optional<std::string>
 Spark::findInterfaceFromIfindex(int ifIndex) {
-  for (const auto& [ifName, interface] : interfaceDb_) {
-    if (interface.ifIndex == ifIndex) {
-      return ifName;
-    }
+  auto it = ifIndexToName_.find(ifIndex);
+  if (it != ifIndexToName_.end()) {
+    return it->second;
   }
   return std::nullopt;
 }

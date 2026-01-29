@@ -969,6 +969,9 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
     auto& eventUp2 = eventsUp2.value().back();
     EXPECT_EQ(iface2, eventUp2.localIfName);
     EXPECT_EQ(nodeName1_, eventUp2.remoteNodeName);
+
+    EXPECT_EQ(node1_->getInterfaceDbSize(), node1_->getIfIndexToNameSize());
+    EXPECT_EQ(node2_->getInterfaceDbSize(), node2_->getIfIndexToNameSize());
   }
 }
 
@@ -1028,6 +1031,10 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
     ASSERT_TRUE(node2_->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2_->getActiveNeighborCount() == 0);
+
+    EXPECT_EQ(node1_->getInterfaceDbSize(), node1_->getIfIndexToNameSize());
+    EXPECT_EQ(node2_->getInterfaceDbSize(), node2_->getIfIndexToNameSize());
+    EXPECT_EQ(node1_->getInterfaceDbSize(), 0);
   }
 
   // Resume interface connection
@@ -1060,6 +1067,10 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
         "{} reported adjacency UP towards {}", nodeName2_, nodeName1_);
     ASSERT_TRUE(node2_->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node2_->getActiveNeighborCount() == 1);
+
+    EXPECT_EQ(node1_->getInterfaceDbSize(), node1_->getIfIndexToNameSize());
+    EXPECT_EQ(node2_->getInterfaceDbSize(), node2_->getIfIndexToNameSize());
+    EXPECT_EQ(node1_->getInterfaceDbSize(), 1);
   }
 }
 

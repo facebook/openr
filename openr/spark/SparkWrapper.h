@@ -101,6 +101,12 @@ class SparkWrapper {
   // Get the count of all active neighbors to Spark.
   uint64_t getActiveNeighborCount();
 
+  // Get the count of tracked interfaces.
+  size_t getInterfaceDbSize();
+
+  // Get the size of ifIndex to name reverse lookup map.
+  size_t getIfIndexToNameSize();
+
  private:
   std::string myNodeName_;
   std::shared_ptr<const Config> config_{nullptr};

@@ -260,4 +260,14 @@ SparkWrapper::processPacket() {
   spark_->processPacket();
 }
 
+size_t
+SparkWrapper::getInterfaceDbSize() {
+  return spark_->interfaceDb_.size();
+}
+
+size_t
+SparkWrapper::getIfIndexToNameSize() {
+  return spark_->ifIndexToName_.size();
+}
+
 } // namespace openr
