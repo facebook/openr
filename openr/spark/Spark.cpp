@@ -930,22 +930,28 @@ Spark::sendHandshakeMsg(
   thrift::SparkHelloPacket pkt;
   pkt.handshakeMsg() = std::move(handshakeMsg);
 
-  auto packet = writeThriftObjStr(pkt, serializer_);
+  packetBuffer_.clear();
+  serializer_.serialize(pkt, &packetBuffer_);
 
-  // send the pkt
-  folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
-      neighborDiscoveryPort_);
-
-  if (kMinIpv6Mtu < packet.size()) {
+  if (kMinIpv6Mtu < packetBuffer_.size()) {
     XLOG(ERR) << "[SparkHandshakeMsg] Handshake msg is too big. Abort sending.";
     return;
   }
 
-  auto bytesSent = IoProvider::sendMessage(
-      mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
+  folly::SocketAddress dstAddr(
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      neighborDiscoveryPort_);
 
-  if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
+  auto bytesSent = IoProvider::sendMessage(
+      mcastFd_,
+      ifIndex,
+      v6Addr.asV6(),
+      dstAddr,
+      packetBuffer_,
+      ioProvider_.get());
+
+  if ((bytesSent < 0) ||
+      (static_cast<size_t>(bytesSent) != packetBuffer_.size())) {
     XLOG(ERR) << fmt::format(
         "[SparkHandshakeMsg] Failed sending pkt towards: {} over: {} due to error: {}",
         dstAddr.getAddressStr(),
@@ -960,7 +966,7 @@ Spark::sendHandshakeMsg(
   neighbor.lastHandshakeMsgSentAt = getCurrentTime<std::chrono::milliseconds>();
 
   fb303::fbData->addStatValue(
-      "spark.handshake.bytes_sent", packet.size(), fb303::SUM);
+      "spark.handshake.bytes_sent", packetBuffer_.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.handshake.packet_sent", 1, fb303::SUM);
 
   XLOG(DBG2) << fmt::format(
@@ -1012,22 +1018,28 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   thrift::SparkHelloPacket pkt;
   pkt.heartbeatMsg() = std::move(heartbeatMsg);
 
-  auto packet = writeThriftObjStr(pkt, serializer_);
+  packetBuffer_.clear();
+  serializer_.serialize(pkt, &packetBuffer_);
 
-  // send the pkt
-  folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
-      neighborDiscoveryPort_);
-
-  if (kMinIpv6Mtu < packet.size()) {
+  if (kMinIpv6Mtu < packetBuffer_.size()) {
     XLOG(ERR) << "[SparkHeartbeatMsg] Heartbeat pkt is too big. Abort sending.";
     return;
   }
 
-  auto bytesSent = IoProvider::sendMessage(
-      mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
+  folly::SocketAddress dstAddr(
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      neighborDiscoveryPort_);
 
-  if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
+  auto bytesSent = IoProvider::sendMessage(
+      mcastFd_,
+      ifIndex,
+      v6Addr.asV6(),
+      dstAddr,
+      packetBuffer_,
+      ioProvider_.get());
+
+  if ((bytesSent < 0) ||
+      (static_cast<size_t>(bytesSent) != packetBuffer_.size())) {
     XLOG(ERR) << fmt::format(
         "[SparkHeartbeatMsg] Failed sending pkt towards: {} over: {} due to error: {}",
         dstAddr.getAddressStr(),
@@ -1043,7 +1055,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   }
 
   fb303::fbData->addStatValue(
-      "spark.heartbeat.bytes_sent", packet.size(), fb303::SUM);
+      "spark.heartbeat.bytes_sent", packetBuffer_.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.heartbeat.packet_sent", 1, fb303::SUM);
 
   XLOG(DBG2) << "[SparkHeartbeatMsg] Successfully sent " << bytesSent
@@ -2071,21 +2083,28 @@ Spark::sendHelloMsg(
   thrift::SparkHelloPacket helloPacket;
   helloPacket.helloMsg() = std::move(helloMsg);
 
-  // send the payload
-  auto packet = writeThriftObjStr(helloPacket, serializer_);
-  folly::SocketAddress dstAddr(
-      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
-      neighborDiscoveryPort_);
+  packetBuffer_.clear();
+  serializer_.serialize(helloPacket, &packetBuffer_);
 
-  if (kMinIpv6Mtu < packet.size()) {
+  if (kMinIpv6Mtu < packetBuffer_.size()) {
     XLOG(ERR) << "[SparkHelloMsg] Hello msg is too big. Abort sending.";
     return;
   }
 
-  auto bytesSent = IoProvider::sendMessage(
-      mcastFd_, ifIndex, v6Addr.asV6(), dstAddr, packet, ioProvider_.get());
+  folly::SocketAddress dstAddr(
+      folly::IPAddress(Constants::kSparkMcastAddr.toString()),
+      neighborDiscoveryPort_);
 
-  if ((bytesSent < 0) || (static_cast<size_t>(bytesSent) != packet.size())) {
+  auto bytesSent = IoProvider::sendMessage(
+      mcastFd_,
+      ifIndex,
+      v6Addr.asV6(),
+      dstAddr,
+      packetBuffer_,
+      ioProvider_.get());
+
+  if ((bytesSent < 0) ||
+      (static_cast<size_t>(bytesSent) != packetBuffer_.size())) {
     XLOG(ERR) << fmt::format(
         "[SparkHelloMsg] Failed sending pkt towards: {} over: {} due to error: {}",
         dstAddr.getAddressStr(),
@@ -2096,7 +2115,7 @@ Spark::sendHelloMsg(
 
   // update telemetry for SparkHelloMsg
   fb303::fbData->addStatValue(
-      "spark.hello.bytes_sent", packet.size(), fb303::SUM);
+      "spark.hello.bytes_sent", packetBuffer_.size(), fb303::SUM);
   fb303::fbData->addStatValue("spark.hello.packet_sent", 1, fb303::SUM);
 
   XLOG(DBG2) << "[SparkHelloMsg] Successfully sent " << bytesSent

@@ -546,6 +546,10 @@ class Spark final : public OpenrEventBase {
   // ser/deser messages over sockets
   apache::thrift::CompactSerializer serializer_;
 
+  // reusable buffer for serializing outgoing packets
+  // helps avoid repeated allocations
+  std::string packetBuffer_;
+
   // The IO primitives provider; this is used for mocking
   // the IO during unit-tests. This could be shared with other
   // instances, hence the shared_ptr

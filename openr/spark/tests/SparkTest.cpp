@@ -2777,3 +2777,73 @@ main(int argc, char* argv[]) {
   // Run the tests
   return RUN_ALL_TESTS();
 }
+
+//
+// Verify that consecutive handshake messages serialize correctly when using
+// the same buffer (packetBuffer_) by performing multiple interface flaps and
+// verifying successful neighbor re-establishment each time.
+//
+TEST_F(SimpleSparkFixture, ConsecutiveHandshakeMsgBufferReuseTest) {
+  // create Spark instances and establish connections
+  createAndConnect();
+
+  // Verify nodes are in ESTABLISHED state before triggering handshakes
+  ASSERT_EQ(node1_->getSparkNeighState(iface1, nodeName2_), ESTABLISHED);
+  ASSERT_EQ(node2_->getSparkNeighState(iface2, nodeName1_), ESTABLISHED);
+
+  // Perform multiple interface flaps to trigger consecutive handshake messages
+  // Each flap causes: hello msgs -> handshake msgs -> heartbeat msgs
+  // All using the same packetBuffer_, testing buffer reuse correctness
+  constexpr int kNumFlaps = 3;
+
+  for (int i = 0; i < kNumFlaps; ++i) {
+    {
+      // trigger neighbor down
+      node1_->updateInterfaceDb({InterfaceInfo(
+          iface1 /* ifName */,
+          false /* isUp */,
+          ifIndex1 /* ifIndex */,
+          {ip1V4, ip1V6} /* networks */)});
+    }
+
+    {
+      auto events = node2_->waitForEvents(NB_DOWN);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
+      ASSERT_EQ(node1_->getTotalNeighborCount(), 0);
+      ASSERT_EQ(node2_->getTotalNeighborCount(), 0);
+    }
+
+    // trigger neighbor up and handshake sequence
+    {
+      node1_->updateInterfaceDb({InterfaceInfo(
+          iface1 /* ifName */,
+          true /* isUp */,
+          ifIndex1 /* ifIndex */,
+          {ip1V4, ip1V6} /* networks */)});
+    }
+
+    // Wait for both neighbors to come back up (handshakes must succeed)
+    {
+      auto events = node1_->waitForEvents(NB_UP);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
+      auto& event = events.value().back();
+      EXPECT_EQ(iface1, event.localIfName);
+      EXPECT_EQ(nodeName2_, event.remoteNodeName);
+    }
+    {
+      auto events = node2_->waitForEvents(NB_UP);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
+      auto& event = events.value().back();
+      EXPECT_EQ(iface2, event.localIfName);
+      EXPECT_EQ(nodeName1_, event.remoteNodeName);
+    }
+
+    // Verify neighbors are back in ESTABLISHED state after each flap
+    // If buffer reuse caused corruption, handshake would fail and
+    // neighbors wouldn't reach ESTABLISHED state
+    ASSERT_EQ(node1_->getSparkNeighState(iface1, nodeName2_), ESTABLISHED);
+    ASSERT_EQ(node2_->getSparkNeighState(iface2, nodeName1_), ESTABLISHED);
+    ASSERT_EQ(node1_->getTotalNeighborCount(), 1);
+    ASSERT_EQ(node2_->getTotalNeighborCount(), 1);
+  }
+}
