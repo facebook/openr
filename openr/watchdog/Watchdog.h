@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/Utility.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/io/async/AsyncTimeout.h>
@@ -17,13 +18,10 @@
 
 namespace openr {
 
-class Watchdog final : public OpenrEventBase {
+class Watchdog final : public OpenrEventBase,
+                       private folly::NonCopyableNonMovable {
  public:
   explicit Watchdog(std::shared_ptr<const Config> config);
-
-  // non-copyable
-  Watchdog(Watchdog const&) = delete;
-  Watchdog& operator=(Watchdog const&) = delete;
 
   void addEvb(OpenrEventBase* evb);
 
