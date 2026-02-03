@@ -103,9 +103,9 @@ const auto adj43 =
     createAdjacency("3", "4/3", "3/4", "fe80::3", "192.168.0.3", 1, 0);
 
 using NextHop = pair<string /* ifname */, folly::IPAddress /* nexthop ip */>;
-// Note: use unordered_set bcoz paths in a route can be in arbitrary order
+// Note: use folly::F14FastSet bcoz paths in a route can be in arbitrary order
 using NextHopsWithMetric =
-    unordered_set<pair<NextHop /* nexthop */, int32_t /* path metric */>>;
+    folly::F14FastSet<pair<NextHop /* nexthop */, int32_t /* path metric */>>;
 using RouteMap = unordered_map<
     pair<string /* node name */, string /* ip prefix */>,
     NextHopsWithMetric>;

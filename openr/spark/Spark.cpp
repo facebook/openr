@@ -1197,7 +1197,7 @@ Spark::addToActiveNeighbors(
  */
 void
 Spark::remFromActiveNeighbors(
-    std::unordered_set<std::string>& activeNeighbors,
+    folly::F14FastSet<std::string>& activeNeighbors,
     std::string const& neighborName) {
   numActiveNeighbors_ -= activeNeighbors.erase(neighborName);
 }

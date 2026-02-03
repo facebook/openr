@@ -418,7 +418,7 @@ class Spark final : public OpenrEventBase {
 
   // Remove a neighbor as an active neighbor on an interface.
   void remFromActiveNeighbors(
-      std::unordered_set<std::string>& activeNeighbors,
+      folly::F14FastSet<std::string>& activeNeighbors,
       std::string const& neighborName);
 
   // Find out if all known neighbors are Established.
@@ -537,7 +537,7 @@ class Spark final : public OpenrEventBase {
   // neighbors including ESTABLISHED and restarting neighbors.
   std::unordered_map<
       std::string /* ifName */,
-      std::unordered_set<std::string> /* neighbors */>
+      folly::F14FastSet<std::string> /* neighbors */>
       ifNameToActiveNeighbors_{};
 
   // Count of active neighbors tracked by Spark.

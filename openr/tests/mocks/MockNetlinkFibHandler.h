@@ -17,7 +17,7 @@
 namespace openr {
 
 // nextHop => local interface and nextHop IP.
-using NextHops = std::unordered_set<std::pair<std::string, folly::IPAddress>>;
+using NextHops = folly::F14FastSet<std::pair<std::string, folly::IPAddress>>;
 
 // Route => prefix and its possible nextHops
 using UnicastRoutes = std::unordered_map<folly::CIDRNetwork, NextHops>;
@@ -147,8 +147,8 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
       mplsRouteDb_;
 
   // Dirty prefixes & labels in HW, and also won't be accepted from clients
-  folly::Synchronized<std::unordered_set<folly::CIDRNetwork>> dirtyPrefixes_;
-  folly::Synchronized<std::unordered_set<int32_t>> dirtyLabels_;
+  folly::Synchronized<folly::F14FastSet<folly::CIDRNetwork>> dirtyPrefixes_;
+  folly::Synchronized<folly::F14FastSet<int32_t>> dirtyLabels_;
 
   // Stats
   std::atomic<size_t> fibSyncCount_{0};

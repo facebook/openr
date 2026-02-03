@@ -62,7 +62,7 @@ MockNetlinkFibHandler::addUnicastRoutes(
                              nh.address()->ifName().value_or("none"),
                              toIPAddress(*nh.address()));
                        }) |
-        as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
+        as<folly::F14FastSet<std::pair<std::string, folly::IPAddress>>>();
     unicastRouteDb->emplace(prefix, newNextHops);
   }
   addRoutesCount_ += routes->size() - failedPrefixes.size();
@@ -123,7 +123,7 @@ MockNetlinkFibHandler::syncFib(
                              nh.address()->ifName().value_or("none"),
                              toIPAddress(*nh.address()));
                        }) |
-        as<std::unordered_set<std::pair<std::string, folly::IPAddress>>>();
+        as<folly::F14FastSet<std::pair<std::string, folly::IPAddress>>>();
 
     unicastRouteDb->emplace(prefix, newNextHops);
   }

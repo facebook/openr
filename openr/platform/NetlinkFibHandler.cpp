@@ -231,7 +231,7 @@ NetlinkFibHandler::semifuture_syncFib(
   }
 
   // Go over the new routes. Add or update
-  std::unordered_set<folly::CIDRNetwork> newPrefixes;
+  folly::F14FastSet<folly::CIDRNetwork> newPrefixes;
   for (auto& route : *unicastRoutes) {
     const auto network = toIPNetwork(*route.dest());
     newPrefixes.insert(network);
@@ -298,7 +298,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   }
 
   // Go over the new routes. Add or update
-  std::unordered_set<uint32_t> newLabels;
+  folly::F14FastSet<uint32_t> newLabels;
   for (auto& route : *mplsRoutes) {
     const auto label = *route.topLabel();
     newLabels.insert(label);
