@@ -642,8 +642,7 @@ LinkMonitor::updateKvStorePeerNeighborUp(
   auto areaPeers = peers_.find(area);
   if (areaPeers == peers_.end()) {
     areaPeers =
-        peers_
-            .emplace(area, std::unordered_map<std::string, KvStorePeerValue>())
+        peers_.emplace(area, folly::F14FastMap<std::string, KvStorePeerValue>())
             .first;
   }
 
@@ -861,7 +860,7 @@ LinkMonitor::advertiseInterfaces() {
 void
 LinkMonitor::advertiseRedistAddrs() {
   std::map<folly::CIDRNetwork, std::vector<std::string>> prefixesToAdvertise;
-  std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixMap;
+  folly::F14FastMap<folly::CIDRNetwork, thrift::PrefixEntry> prefixMap;
 
   // Add redistribute addresses
   for (auto& [_, interface] : interfaces_) {
@@ -1860,7 +1859,7 @@ LinkMonitor::semifuture_getAllLinks() {
               folly::Try<folly::Expected<std::vector<fbnl::Link>, int>>,
               folly::Try<folly::Expected<std::vector<fbnl::IfAddress>, int>>>&&
                  res) {
-            std::unordered_map<int64_t, InterfaceInfo> links;
+            folly::F14FastMap<int64_t, InterfaceInfo> links;
             // Create links
             auto nlLinks = std::get<0>(res).value();
             if (nlLinks.hasError()) {

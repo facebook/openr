@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <glog/logging.h>
@@ -344,7 +345,7 @@ class LinkMonitor final : public OpenrEventBase {
    * link monitor configuration.
    */
   bool enableInitOptimization_{false};
-  std::unordered_map<std::string, AreaConfiguration> const areas_;
+  folly::F14FastMap<std::string, AreaConfiguration> const areas_;
 
   //
   // Mutable state
@@ -368,7 +369,7 @@ class LinkMonitor final : public OpenrEventBase {
   // Queue to publish the event log
   messaging::ReplicateQueue<LogSample>& logSampleQueue_;
 
-  // Queue to send key-value udpate requests to KvStore
+  // Queue to send key-value update requests to KvStore
   messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // ser/deser binary data for transmission
@@ -379,20 +380,20 @@ class LinkMonitor final : public OpenrEventBase {
   // area.
   // There can be multiple interfaces to a remote node, but at most 1 interface
   // (we use the "min" interface) for tcp connection.
-  std::unordered_map<
+  folly::F14FastMap<
       std::string /* area */,
-      std::unordered_map<AdjacencyKey, AdjacencyEntry>>
+      folly::F14FastMap<AdjacencyKey, AdjacencyEntry>>
       adjacencies_;
 
   // Previously announced KvStore peers
-  std::unordered_map<
+  folly::F14FastMap<
       std::string /* area */,
-      std::unordered_map<std::string /* node name */, KvStorePeerValue>>
+      folly::F14FastMap<std::string /* node name */, KvStorePeerValue>>
       peers_;
 
   // all interfaces states, including DOWN one
   // Keyed by interface Name
-  std::unordered_map<std::string /* interface name */, InterfaceEntry>
+  folly::F14NodeMap<std::string /* interface name */, InterfaceEntry>
       interfaces_;
 
   // all links with their status and timestamp at when they change status
@@ -403,14 +404,14 @@ class LinkMonitor final : public OpenrEventBase {
 
   // Cache of interface index to name. Used for resolving ifIndex
   // on address events
-  std::unordered_map<int64_t, std::string> ifIndexToName_;
+  folly::F14FastMap<int64_t, std::string> ifIndexToName_;
 
   // Throttled versions of "advertise<>" functions. It batches
   // up multiple calls and send them in one go!
 
   // Advertise Adj needs per area throttle as KvStore calls can interrupt
   // and cause race conditions, some batched call may otherwise be lost
-  std::unordered_map<std::string /* area */, std::unique_ptr<AsyncThrottle>>
+  folly::F14FastMap<std::string /* area */, std::unique_ptr<AsyncThrottle>>
       advertiseAdjacenciesThrottledPerArea_;
   std::unique_ptr<AsyncThrottle> advertiseIfaceAddrThrottled_;
 

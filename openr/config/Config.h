@@ -10,6 +10,7 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/io/async/SSLContext.h>
 #include <openr/common/FileUtil.h>
@@ -151,7 +152,7 @@ class Config {
   void checkNodeSegmentLabelConfig(
       const openr::thrift::AreaConfig& areaConf) const;
 
-  const std::unordered_map<std::string, AreaConfiguration>&
+  const folly::F14FastMap<std::string, AreaConfiguration>&
   getAreas() const {
     return areaConfigs_;
   }
@@ -517,7 +518,7 @@ class Config {
   thrift::OpenrConfig config_;
 
   // areaId -> neighbor regex and interface regex mapped
-  std::unordered_map<std::string /* areaId */, AreaConfiguration> areaConfigs_;
+  folly::F14FastMap<std::string /* areaId */, AreaConfiguration> areaConfigs_;
 
 // per class placeholder for test code
 // only need to be setup once here

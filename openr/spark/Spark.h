@@ -9,6 +9,7 @@
 
 #include <fmt/format.h>
 #include <folly/SocketAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/stats/BucketedTimeSeries.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -180,12 +181,12 @@ class Spark final : public OpenrEventBase {
   // util function to add interface in spark
   void addInterface(
       const std::vector<std::string>& toAdd,
-      const std::unordered_map<std::string, Interface>& newInterfaceDb);
+      const folly::F14FastMap<std::string, Interface>& newInterfaceDb);
 
   // util function to update interface in spark
   void updateInterface(
       const std::vector<std::string>& toUpdate,
-      const std::unordered_map<std::string, Interface>& newInterfaceDb);
+      const folly::F14FastMap<std::string, Interface>& newInterfaceDb);
 
   // TODO: standardize Spark inline documentation
   // find an interface name in the interfaceDb given an ifIndex
@@ -218,7 +219,7 @@ class Spark final : public OpenrEventBase {
   static std::optional<std::string> getNeighborArea(
       const std::string& peerNodeName,
       const std::string& ifName,
-      const std::unordered_map<std::string /* areaId */, AreaConfiguration>&
+      const folly::F14FastMap<std::string /* areaId */, AreaConfiguration>&
           areaConfigs);
 
   // function to receive and parse received pkt
@@ -409,7 +410,7 @@ class Spark final : public OpenrEventBase {
 
   // Remove the neighbor from being tracked.
   void eraseSparkNeighbor(
-      std::unordered_map<std::string, SparkNeighbor>& ifNeigbhors,
+      folly::F14NodeMap<std::string, SparkNeighbor>& ifNeigbhors,
       std::string const& neighborName);
 
   // Add a neighbor as an active neighbor on an interface.
@@ -507,35 +508,33 @@ class Spark final : public OpenrEventBase {
   const thrift::OpenrVersions kVersion_;
 
   // Map of interface entries keyed by ifName
-  std::unordered_map<std::string, Interface> interfaceDb_{};
+  folly::F14FastMap<std::string, Interface> interfaceDb_{};
 
   // Mapping of interface index to interface name for faster interface lookup
-  std::unordered_map<int64_t, std::string> ifIndexToName_{};
+  folly::F14FastMap<int64_t, std::string> ifIndexToName_{};
 
   // Container storing all the known Spark neighbors, keyed by interface name.
-  std::unordered_map<
+  folly::F14FastMap<
       std::string /* ifName */,
-      std::unordered_map<std::string /* neighborName */, SparkNeighbor>>
+      folly::F14NodeMap<std::string /* neighborName */, SparkNeighbor>>
       sparkNeighbors_{};
 
   // Total # of neighbors tracked by Spark.
   uint64_t numTotalNeighbors_{0};
 
   // Hello packet send timers for each interface
-  std::unordered_map<
-      std::string /* ifName */,
-      std::unique_ptr<folly::AsyncTimeout>>
-      ifNameToHelloTimers_{};
+  folly::
+      F14FastMap<std::string /* ifName */, std::unique_ptr<folly::AsyncTimeout>>
+          ifNameToHelloTimers_{};
 
   // heartbeat packet send timers for each interface
-  std::unordered_map<
-      std::string /* ifName */,
-      std::unique_ptr<folly::AsyncTimeout>>
-      ifNameToHeartbeatTimers_{};
+  folly::
+      F14FastMap<std::string /* ifName */, std::unique_ptr<folly::AsyncTimeout>>
+          ifNameToHeartbeatTimers_{};
 
   // Container storing active neighbors for each interface. Active
   // neighbors including ESTABLISHED and restarting neighbors.
-  std::unordered_map<
+  folly::F14FastMap<
       std::string /* ifName */,
       folly::F14FastSet<std::string> /* neighbors */>
       ifNameToActiveNeighbors_{};

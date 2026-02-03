@@ -16,7 +16,6 @@
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
 #include <openr/config/Config.h>
-#include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -458,7 +457,7 @@ TEST(ConfigTest, GeneralGetter) {
 
     // getAreaIds
     EXPECT_EQ(1, config.getAreas().size());
-    EXPECT_TRUE(config.getAreas().contains(kTestingAreaName));
+    EXPECT_TRUE(config.getAreas().contains(kTestingAreaName.t));
 
     // enable_v4
     EXPECT_TRUE(config.isV4Enabled());

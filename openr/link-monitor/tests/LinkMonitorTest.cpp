@@ -6,6 +6,7 @@
  */
 
 #include <folly/Subprocess.h>
+#include <folly/container/F14Map.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
@@ -567,10 +568,10 @@ class LinkMonitorTestFixture : public testing::Test {
     EXPECT_EQ(*peers.at(nodeName).ctrlPort(), *peerSpec.ctrlPort());
   }
 
-  std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry>
+  folly::F14FastMap<folly::CIDRNetwork, thrift::PrefixEntry>
   getNextPrefixDb(
       std::string const& originatorId, AreaId const& area = kTestingAreaName) {
-    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixes;
+    folly::F14FastMap<folly::CIDRNetwork, thrift::PrefixEntry> prefixes;
 
     // Leverage KvStoreFilter to get `prefix:*` change
     std::optional<KvStoreFilters> kvFilters{KvStoreFilters(
@@ -2202,7 +2203,7 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
   LOG(INFO) << "Testing address advertisements";
 
   {
-    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
+    folly::F14FastMap<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1_);
@@ -2254,7 +2255,7 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
 
   LOG(INFO) << "Testing address withdraws";
   {
-    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
+    folly::F14FastMap<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1_);
@@ -2290,7 +2291,7 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
 
   // Verify all addresses are withdrawn on link down event
   {
-    std::unordered_map<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
+    folly::F14FastMap<folly::CIDRNetwork, thrift::PrefixEntry> prefixesArea1,
         prefixesArea2;
     do {
       prefixesArea1 = getNextPrefixDb(nodeName, area1_);

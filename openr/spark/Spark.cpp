@@ -1267,7 +1267,7 @@ Spark::neighborUpWrapper(
 // clang-format off
 /**
  * Determine if the initialization process related neighbor discovery is
- * complete. The status of intial discovery is as follows -
+ * complete. The status of initial discovery is as follows -
  *  -----------------------------------------------------------------------------
  * |         State                                   |        Discovery status   |
  *  -----------------------------------------------------------------------------
@@ -1479,7 +1479,7 @@ Spark::processGRMsg(
  */
 void
 Spark::eraseSparkNeighbor(
-    std::unordered_map<std::string, SparkNeighbor>& ifNeighbors,
+    folly::F14NodeMap<std::string, SparkNeighbor>& ifNeighbors,
     std::string const& neighborName) {
   uint8_t erasedNeighborCount = ifNeighbors.erase(neighborName);
   numTotalNeighbors_ -= erasedNeighborCount;
@@ -2342,7 +2342,7 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
 void
 Spark::addInterface(
     const std::vector<std::string>& toAdd,
-    const std::unordered_map<std::string, Interface>& newInterfaceDb) {
+    const folly::F14FastMap<std::string, Interface>& newInterfaceDb) {
   for (const auto& ifName : toAdd) {
     auto newInterface = newInterfaceDb.at(ifName);
     auto ifIndex = newInterface.ifIndex;
@@ -2371,7 +2371,7 @@ Spark::addInterface(
     {
       // create place-holders for newly added interface
       auto result = sparkNeighbors_.emplace(
-          ifName, std::unordered_map<std::string, SparkNeighbor>{});
+          ifName, folly::F14NodeMap<std::string, SparkNeighbor>{});
       CHECK(result.second);
 
       // heartbeatTimers will start as soon as intf is in UP state
@@ -2396,7 +2396,7 @@ Spark::addInterface(
 void
 Spark::updateInterface(
     const std::vector<std::string>& toUpdate,
-    const std::unordered_map<std::string, Interface>& newInterfaceDb) {
+    const folly::F14FastMap<std::string, Interface>& newInterfaceDb) {
   std::vector<std::string> addressChangedInterfaces{};
   for (const auto& ifName : toUpdate) {
     auto& interface = interfaceDb_.at(ifName);
@@ -2504,7 +2504,7 @@ std::optional<std::string>
 Spark::getNeighborArea(
     const std::string& peerNodeName,
     const std::string& localIfName,
-    const std::unordered_map<std::string /* areaId */, AreaConfiguration>&
+    const folly::F14FastMap<std::string /* areaId */, AreaConfiguration>&
         areaConfigs) {
   // IMPT: ordered set. Function yeilds lowest areaId in case of multiple
   // candidate areas
