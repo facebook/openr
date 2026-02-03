@@ -319,10 +319,10 @@ class LinkMonitorTestFixture : public testing::Test {
    *  3) etc.
    */
   std::vector<thrift::AreaConfig>
-  populateAreaConfigs(std::unordered_set<std::string> areas) {
+  populateAreaConfigs(folly::F14FastSet<std::string> areas) {
     // Use kTestingAreaName by default
     if (areas.empty()) {
-      areas.insert(kTestingAreaName);
+      areas.insert(kTestingAreaName.t);
     }
 
     std::vector<openr::thrift::AreaConfig> areaConfig;
@@ -2145,7 +2145,7 @@ class TwoAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>
   createAreaConfigs() override {
-    return populateAreaConfigs({area1_, area2_});
+    return populateAreaConfigs({area1_.t, area2_.t});
   }
 
  protected:
@@ -2525,7 +2525,7 @@ class MultiAreaTestFixture : public LinkMonitorTestFixture {
  public:
   std::vector<thrift::AreaConfig>
   createAreaConfigs() override {
-    return populateAreaConfigs({kTestingAreaName, podArea_, planeArea_});
+    return populateAreaConfigs({kTestingAreaName.t, podArea_, planeArea_});
   }
 
  protected:

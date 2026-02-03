@@ -77,7 +77,7 @@ class InterfaceEntry final {
   }
 
   // returns const references for optimization
-  const std::unordered_set<folly::CIDRNetwork>&
+  const folly::F14FastSet<folly::CIDRNetwork>&
   getNetworks() const {
     return info_.networks;
   }

@@ -19,9 +19,9 @@
 
 namespace openr {
 
-std::unordered_set<folly::CIDRNetwork>
+folly::F14FastSet<folly::CIDRNetwork>
 toCIDRNetworkSet(std::vector<folly::CIDRNetwork> const& prefixes) {
-  return std::unordered_set<folly::CIDRNetwork>{
+  return folly::F14FastSet<folly::CIDRNetwork>{
       prefixes.begin(), prefixes.end()};
 }
 
@@ -55,7 +55,7 @@ TEST(InterfaceEntry, GetSetTest) {
   throttle.cancel();
 
   // Add and validate addresses
-  std::unordered_set<folly::CIDRNetwork> addresses = {
+  folly::F14FastSet<folly::CIDRNetwork> addresses = {
       folly::IPAddress::createNetwork(
           "169.254.0.1/16", -1, false), // link-local
       folly::IPAddress::createNetwork("1.2.3.4/24", -1, false),
@@ -89,10 +89,10 @@ TEST(InterfaceEntry, GetSetTest) {
 
   // Validate redistriubte prefixes (link-local and multicast addrs will
   // be ignored)
-  std::unordered_set<folly::CIDRNetwork> redistAddrsAll = {
+  folly::F14FastSet<folly::CIDRNetwork> redistAddrsAll = {
       folly::IPAddress::createNetwork("1.2.3.4/24"),
       folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")};
-  std::unordered_set<folly::CIDRNetwork> redistAddrsV6 = {
+  folly::F14FastSet<folly::CIDRNetwork> redistAddrsV6 = {
       folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")};
   EXPECT_EQ(
       redistAddrsAll,

@@ -367,7 +367,7 @@ struct InterfaceInfo {
   /**
    * List of networks associated with this interface
    */
-  std::unordered_set<folly::CIDRNetwork> networks{};
+  folly::F14FastSet<folly::CIDRNetwork> networks{};
 
   InterfaceInfo() {}
 
@@ -375,7 +375,7 @@ struct InterfaceInfo {
       const std::string& ifName,
       const bool isUp,
       const int64_t ifIndex,
-      const std::unordered_set<folly::CIDRNetwork>& networks)
+      const folly::F14FastSet<folly::CIDRNetwork>& networks)
       : ifName(ifName), isUp(isUp), ifIndex(ifIndex), networks(networks) {}
 
   inline bool

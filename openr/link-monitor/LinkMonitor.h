@@ -43,11 +43,11 @@ struct KvStorePeerValue {
   // An adjancency remains UP when remote spark neighbor performs a graceful
   // restart(GR). However, neighbor is not in ESTABLISHED state during GR. Here
   // we only track spark neighbors in ESTABLISHED state.
-  std::unordered_set<AdjacencyKey> establishedSparkNeighbors;
+  folly::F14FastSet<AdjacencyKey> establishedSparkNeighbors;
 
   KvStorePeerValue(
       thrift::PeerSpec tPeerSpec,
-      std::unordered_set<AdjacencyKey> establishedSparkNeighbors)
+      folly::F14FastSet<AdjacencyKey> establishedSparkNeighbors)
       : tPeerSpec(std::move(tPeerSpec)),
         establishedSparkNeighbors(std::move(establishedSparkNeighbors)) {}
 };
