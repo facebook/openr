@@ -118,7 +118,7 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   // Iterate over all next-hops. NOTE that we iterate over rvalue
   CHECK(action_.set_weight().has_value());
   auto const& weightAction = action_.set_weight().value();
-  std::unordered_set<thrift::NextHopThrift> newNexthops;
+  folly::F14FastSet<thrift::NextHopThrift> newNexthops;
   for (auto& nh : route.nexthops) {
     // Next-hop inherits a RibPolicy weight with the following precedence
     // 1. Neighbor weight

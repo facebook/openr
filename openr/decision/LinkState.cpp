@@ -473,8 +473,8 @@ LinkState::updateAdjacencyDatabase(
   auto newLinks = getOrderedLinkSet(newAdjacencyDb);
 
   // fill these sets with the appropriate links
-  std::unordered_set<Link> linksUp;
-  std::unordered_set<Link> linksDown;
+  folly::F14FastSet<Link> linksUp;
+  folly::F14FastSet<Link> linksDown;
 
   // topology changed if a node is overloaded / un-overloaded
   change.topologyChanged |=

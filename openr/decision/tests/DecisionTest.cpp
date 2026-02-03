@@ -241,7 +241,7 @@ class DecisionTestFixture : public ::testing::Test {
   sendStaticRoutesUpdate(const thrift::RouteDatabaseDelta& publication) {
     DecisionRouteUpdate routeUpdate;
     for (const auto& unicastRoute : *publication.unicastRoutesToUpdate()) {
-      auto nhs = std::unordered_set<thrift::NextHopThrift>(
+      auto nhs = folly::F14FastSet<thrift::NextHopThrift>(
           unicastRoute.nextHops()->begin(), unicastRoute.nextHops()->end());
       routeUpdate.addRouteToUpdate(
           RibUnicastEntry(toIPNetwork(*unicastRoute.dest()), std::move(nhs)));
@@ -250,7 +250,7 @@ class DecisionTestFixture : public ::testing::Test {
       routeUpdate.unicastRoutesToDelete.push_back(toIPNetwork(prefix));
     }
     for (const auto& mplsRoute : *publication.mplsRoutesToUpdate()) {
-      auto nhs = std::unordered_set<thrift::NextHopThrift>(
+      auto nhs = folly::F14FastSet<thrift::NextHopThrift>(
           mplsRoute.nextHops()->begin(), mplsRoute.nextHops()->end());
       routeUpdate.addMplsRouteToUpdate(
           RibMplsEntry(*mplsRoute.topLabel(), std::move(nhs)));

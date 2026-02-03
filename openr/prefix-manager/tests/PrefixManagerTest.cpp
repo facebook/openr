@@ -963,7 +963,7 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
   // other one
   PrefixEntry cPrefixEntry(
       std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
-  std::unordered_set<thrift::NextHopThrift> nexthops;
+  folly::F14FastSet<thrift::NextHopThrift> nexthops;
   nexthops.insert(createNextHop(toBinaryAddress("::1")));
   nexthops.insert(createNextHop(toBinaryAddress("::2")));
   cPrefixEntry.nexthops = nexthops;
@@ -2928,7 +2928,7 @@ TEST_F(
 
   PrefixEntry vipPrefixEntry(
       std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
-  std::unordered_set<thrift::NextHopThrift> nexthops;
+  folly::F14FastSet<thrift::NextHopThrift> nexthops;
   nexthops.insert(createNextHop(toBinaryAddress("::1")));
   nexthops.insert(createNextHop(toBinaryAddress("::2")));
   vipPrefixEntry.nexthops = nexthops;

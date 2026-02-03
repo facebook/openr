@@ -242,7 +242,7 @@ SpfSolver::createRouteForPrefix(
 
   // TODO: What if there are multiple best areas populating for the single
   // prefix?
-  std::unordered_set<std::string> areaWithBestRoutes;
+  folly::F14FastSet<std::string> areaWithBestRoutes;
   for (const auto& [areaId, _] : areaLinkStates) {
     if (hasBestRoutesInArea(
             areaId, prefixEntries, routeSelectionResult.allNodeAreas)) {
@@ -259,7 +259,7 @@ SpfSolver::createRouteForPrefix(
    *   - Only use the next-hop set if it has the shortest metric;
    *   - Combine shortest metric next-hops from all areas;
    */
-  std::unordered_set<thrift::NextHopThrift> totalNextHops;
+  folly::F14FastSet<thrift::NextHopThrift> totalNextHops;
   Metric shortestMetric = std::numeric_limits<Metric>::max();
   for (const auto& area : areaWithBestRoutes) {
     const auto& linkState = areaLinkStates.find(area);
@@ -395,11 +395,11 @@ SpfSolver::getMinNextHopThreshold(
   return maxMinNexthopForPrefix;
 }
 
-std::unordered_set<NodeAndArea>
+folly::F14FastSet<NodeAndArea>
 SpfSolver::getSoftDrainedNodes(
     PrefixEntries& prefixes,
     std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
-  std::unordered_set<NodeAndArea> softDrainedNodes;
+  folly::F14FastSet<NodeAndArea> softDrainedNodes;
   for (auto& [nodeArea, metricsWrapper] : prefixes) {
     const auto& [node, area] = nodeArea;
     int softDrainValue = areaLinkStates.at(area).getNodeMetricIncrement(node);
@@ -484,7 +484,7 @@ SpfSolver::addBestPaths(
     const folly::CIDRNetwork& prefix,
     const RouteSelectionResult& routeSelectionResult,
     const PrefixEntries& prefixEntries,
-    std::unordered_set<thrift::NextHopThrift>&& nextHops,
+    folly::F14FastSet<thrift::NextHopThrift>&& nextHops,
     const Metric shortestMetric,
     const bool localPrefixConsidered) {
   // Check if next-hop list is empty
@@ -546,7 +546,7 @@ SpfSolver::getNextHopsWithMetric(
   auto const& spfResult = linkState.getSpfResult(myNodeName);
 
   // find the set of the closest nodes to our destination
-  std::unordered_set<std::string> minCostNodes;
+  folly::F14FastSet<std::string> minCostNodes;
   for (const auto& [dstNode, _] : dstNodeAreas) {
     auto it = spfResult.find(dstNode);
     if (it == spfResult.end()) {
@@ -573,7 +573,7 @@ SpfSolver::getNextHopsWithMetric(
   return std::make_pair(shortestMetric, nextHopNodes);
 }
 
-std::unordered_set<thrift::NextHopThrift>
+folly::F14FastSet<thrift::NextHopThrift>
 SpfSolver::getNextHopsThrift(
     const std::string& myNodeName,
     const std::set<NodeAndArea>& dstNodeAreas,
@@ -586,7 +586,7 @@ SpfSolver::getNextHopsThrift(
   const auto& minMetric = bestNextHopMetrics.first;
   CHECK(!nextHopNodes.empty());
 
-  std::unordered_set<thrift::NextHopThrift> nextHops;
+  folly::F14FastSet<thrift::NextHopThrift> nextHops;
   for (const auto& link : linkState.linksFromNode(myNodeName)) {
     const auto neighborNode = link->getOtherNodeName(myNodeName);
     const auto search = nextHopNodes.find(neighborNode);

@@ -10,13 +10,14 @@
 #include <unordered_map>
 #include <vector>
 
+#include <folly/container/F14Set.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/SpfSolver.h>
 
 namespace openr {
 
-// Note: use unordered_set bcoz paths in a route can be in arbitrary order
-using NextHops = std::unordered_set<thrift::NextHopThrift>;
+// Note: use F14FastSet for efficient set operations on paths
+using NextHops = folly::F14FastSet<thrift::NextHopThrift>;
 using RouteMap = std::unordered_map<
     std::pair<std::string /* node name */, std::string /* prefix or label */>,
     NextHops>;

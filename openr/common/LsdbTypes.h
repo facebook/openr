@@ -10,6 +10,7 @@
 #include <variant>
 
 #include <boost/serialization/strong_typedef.hpp>
+#include <folly/container/F14Set.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/NetworkUtil.h>
@@ -229,7 +230,7 @@ struct PrefixEntry {
    * - Null would indicate no programming
    * - An empty list could indicate a NULL route programming
    */
-  std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops;
+  std::optional<folly::F14FastSet<thrift::NextHopThrift>> nexthops;
   /**
    * Optional data applied in area policy actions when advertising the prefix to
    * KvStore.
@@ -260,7 +261,7 @@ struct PrefixEntry {
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
       std::unordered_set<std::string>&& dstAreas,
-      std::optional<std::unordered_set<thrift::NextHopThrift>> nexthops)
+      std::optional<folly::F14FastSet<thrift::NextHopThrift>> nexthops)
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
         network(toIPNetwork(*tPrefixEntry->prefix())),

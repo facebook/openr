@@ -8,7 +8,6 @@
 #pragma once
 
 #include <unordered_map>
-#include <unordered_set>
 #include <vector>
 #include "openr/if/gen-cpp2/Network_types.h"
 
@@ -21,14 +20,14 @@ namespace openr {
 
 struct RibEntry {
   // TODO: should this be map<area, nexthops>?
-  std::unordered_set<thrift::NextHopThrift> nexthops;
+  folly::F14FastSet<thrift::NextHopThrift> nexthops;
 
   // igp cost of all routes (ecmp) or of lowest cost route (if ucmp)
   unsigned int igpCost;
 
   // constructor
   explicit RibEntry(
-      std::unordered_set<thrift::NextHopThrift> nexthops,
+      folly::F14FastSet<thrift::NextHopThrift> nexthops,
       unsigned int igpCost = 0)
       : nexthops(std::move(nexthops)), igpCost(igpCost) {}
 
@@ -57,12 +56,12 @@ struct RibUnicastEntry : RibEntry {
 
   RibUnicastEntry(
       const folly::CIDRNetwork& prefix,
-      std::unordered_set<thrift::NextHopThrift> nexthops)
+      folly::F14FastSet<thrift::NextHopThrift> nexthops)
       : RibEntry(std::move(nexthops)), prefix(prefix) {}
 
   RibUnicastEntry(
       const folly::CIDRNetwork& prefix,
-      std::unordered_set<thrift::NextHopThrift> nexthops,
+      folly::F14FastSet<thrift::NextHopThrift> nexthops,
       thrift::PrefixEntry bestPrefixEntryThrift,
       const std::string& bestArea,
       bool doNotInstall = false,
@@ -119,15 +118,14 @@ struct RibMplsEntry : RibEntry {
 
   // constructor
   explicit RibMplsEntry() = default;
-  RibMplsEntry(
-      int32_t label, std::unordered_set<thrift::NextHopThrift> nexthops)
+  RibMplsEntry(int32_t label, folly::F14FastSet<thrift::NextHopThrift> nexthops)
       : RibEntry(std::move(nexthops)), label(label) {}
 
   static RibMplsEntry
   fromThrift(const thrift::MplsRoute& tMpls) {
     return RibMplsEntry(
         *tMpls.topLabel(),
-        std::unordered_set<thrift::NextHopThrift>(
+        folly::F14FastSet<thrift::NextHopThrift>(
             tMpls.nextHops()->begin(), tMpls.nextHops()->end()));
   }
 

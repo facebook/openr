@@ -173,7 +173,7 @@ BM_FibAddUnicastRoute(
         auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
             kNumOfNexthops, kVethNameY);
         auto nhsSet =
-            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+            folly::F14FastSet<thrift::NextHopThrift>(nhs.begin(), nhs.end());
         routeUpdate.unicastRoutesToUpdate.emplace(
             toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
       }
@@ -197,7 +197,7 @@ BM_FibAddUnicastRoute(
         auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
             kNumOfNexthops, kVethNameY);
         auto nhsSet =
-            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+            folly::F14FastSet<thrift::NextHopThrift>(nhs.begin(), nhs.end());
         routeUpdate.unicastRoutesToUpdate.emplace(
             toIPNetwork(prefixes[index]),
             RibUnicastEntry(toIPNetwork(prefixes[index]), nhsSet));
@@ -249,7 +249,7 @@ BM_FibDeleteUnicastRoute(
         auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
             kNumOfNexthops, kVethNameY);
         auto nhsSet =
-            std::unordered_set<thrift::NextHopThrift>(nhs.begin(), nhs.end());
+            folly::F14FastSet<thrift::NextHopThrift>(nhs.begin(), nhs.end());
         routeUpdate.unicastRoutesToUpdate.emplace(
             toIPNetwork(prefix), RibUnicastEntry(toIPNetwork(prefix), nhsSet));
       }

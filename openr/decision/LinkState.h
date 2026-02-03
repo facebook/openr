@@ -277,7 +277,7 @@ class Link {
   };
 
   using LinkSet =
-      std::unordered_set<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
+      folly::F14FastSet<std::shared_ptr<Link>, LinkPtrHash, LinkPtrEqual>;
 }; // class Link
 
 class LinkState {
@@ -312,7 +312,7 @@ class LinkState {
     pathLinks() const {
       return pathLinks_;
     }
-    std::unordered_set<std::string> const&
+    folly::F14FastSet<std::string> const&
     nextHops() const {
       return nextHops_;
     }
@@ -328,7 +328,7 @@ class LinkState {
     }
 
     void
-    addNextHops(std::unordered_set<std::string> const& toInsert) {
+    addNextHops(folly::F14FastSet<std::string> const& toInsert) {
       nextHops_.insert(toInsert.begin(), toInsert.end());
     }
 
@@ -340,7 +340,7 @@ class LinkState {
    private:
     LinkStateMetric metric_{std::numeric_limits<LinkStateMetric>::max()};
     std::vector<PathLink> pathLinks_;
-    std::unordered_set<std::string> nextHops_;
+    folly::F14FastSet<std::string> nextHops_;
   };
 
   using SpfResult =

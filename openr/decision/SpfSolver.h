@@ -9,7 +9,6 @@
 
 #include <string>
 #include <unordered_map>
-#include <unordered_set>
 
 #include <openr/decision/LinkState.h>
 #include <openr/decision/PrefixState.h>
@@ -158,7 +157,7 @@ class SpfSolver {
     // metric of the shortest path within the area
     LinkStateMetric bestMetric{0};
     // selected next-hops within the area
-    std::unordered_set<thrift::NextHopThrift> nextHops;
+    folly::F14FastSet<thrift::NextHopThrift> nextHops;
   };
 
   /*
@@ -198,7 +197,7 @@ class SpfSolver {
       const folly::CIDRNetwork& prefix,
       const RouteSelectionResult& routeSelectionResult,
       const PrefixEntries& prefixEntries,
-      std::unordered_set<thrift::NextHopThrift>&& nextHops,
+      folly::F14FastSet<thrift::NextHopThrift>&& nextHops,
       const openr::LinkStateMetric shortestMetric,
       const bool localPrefixConsidered);
 
@@ -223,7 +222,7 @@ class SpfSolver {
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 
   // [soft-drain]
-  std::unordered_set<NodeAndArea> getSoftDrainedNodes(
+  folly::F14FastSet<NodeAndArea> getSoftDrainedNodes(
       PrefixEntries& prefixes,
       std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
 
@@ -242,7 +241,7 @@ class SpfSolver {
    * This function converts best nexthop nodes to best nexthop adjacencies
    * which can then be passed to FIB for programming.
    */
-  std::unordered_set<thrift::NextHopThrift> getNextHopsThrift(
+  folly::F14FastSet<thrift::NextHopThrift> getNextHopsThrift(
       const std::string& myNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
       bool isV4,

@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <folly/container/F14Set.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/decision/RibEntry.h>
 
@@ -63,7 +64,7 @@ TEST(RibEntryTest, RibMplsEntry_filterNexthopsToUniqueAction) {
   ribEntry.filterNexthopsToUniqueAction();
   EXPECT_EQ(
       ribEntry.nexthops,
-      std::unordered_set<thrift::NextHopThrift>({path1_2_2_pop}));
+      folly::F14FastSet<thrift::NextHopThrift>({path1_2_2_pop}));
 
   // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
   // Metric is ignored
@@ -72,8 +73,7 @@ TEST(RibEntryTest, RibMplsEntry_filterNexthopsToUniqueAction) {
   ribEntry.filterNexthopsToUniqueAction();
   EXPECT_EQ(
       ribEntry.nexthops,
-      std::unordered_set<thrift::NextHopThrift>(
-          {path1_2_2_php, path1_2_2_php}));
+      folly::F14FastSet<thrift::NextHopThrift>({path1_2_2_php, path1_2_2_php}));
 
   // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
   // Metric is ignored
@@ -82,15 +82,14 @@ TEST(RibEntryTest, RibMplsEntry_filterNexthopsToUniqueAction) {
   ribEntry.filterNexthopsToUniqueAction();
   EXPECT_EQ(
       ribEntry.nexthops,
-      std::unordered_set<thrift::NextHopThrift>(
-          {path1_2_1_php, path1_3_1_php}));
+      folly::F14FastSet<thrift::NextHopThrift>({path1_2_1_php, path1_3_1_php}));
 
   // Prefer PHP over SWAP for metric tie
   ribEntry.nexthops = {path1_2_1_swap, path1_3_1_php};
   ribEntry.filterNexthopsToUniqueAction();
   EXPECT_EQ(
       ribEntry.nexthops,
-      std::unordered_set<thrift::NextHopThrift>({path1_3_1_php}));
+      folly::F14FastSet<thrift::NextHopThrift>({path1_3_1_php}));
 }
 
 } // namespace openr

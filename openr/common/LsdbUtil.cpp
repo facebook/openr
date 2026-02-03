@@ -765,7 +765,7 @@ std::set<NodeAndArea>
 selectRoutes(
     const PrefixEntries& prefixEntries,
     thrift::RouteSelectionAlgorithm algorithm,
-    const std::unordered_set<NodeAndArea>& drainedNodes) {
+    const folly::F14FastSet<NodeAndArea>& drainedNodes) {
   /*
    * [Best Route Selection] Part 1/2:
    *

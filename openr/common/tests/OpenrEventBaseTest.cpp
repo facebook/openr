@@ -6,6 +6,7 @@
  */
 
 #include <sys/eventfd.h>
+#include <unistd.h>
 
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
@@ -166,10 +167,11 @@ TEST_F(OpenrEventBaseTestFixture, SocketFdPollTest) {
     evb.addSocketFd(
         testFd, folly::EventHandler::READ, [&](uint32_t revents) noexcept {
           EXPECT_TRUE(revents & folly::EventHandler::READ);
-          waitBaton.post();
           uint64_t buf;
           EXPECT_EQ(
               sizeof(buf), read(testFd, static_cast<void*>(&buf), sizeof(buf)));
+          // Post baton AFTER reading from testFd to avoid use-after-return
+          waitBaton.post();
         });
   });
 
@@ -177,7 +179,11 @@ TEST_F(OpenrEventBaseTestFixture, SocketFdPollTest) {
   uint64_t buf{1};
   EXPECT_EQ(sizeof(buf), write(testFd, static_cast<void*>(&buf), sizeof(buf)));
   waitBaton.wait();
-  EXPECT_TRUE(true);
+
+  // Clean up: remove socket handler and close fd
+  evb.getEvb()->runInEventBaseThreadAndWait(
+      [&]() { evb.removeSocketFd(testFd); });
+  close(testFd);
 }
 
 int
