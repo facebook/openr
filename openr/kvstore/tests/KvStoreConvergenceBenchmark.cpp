@@ -24,7 +24,7 @@ FOLLY_INIT_LOGGING_CONFIG(
     ";default:async=true,sync_level=WARNING");
 
 namespace {
-const std::unordered_set<std::string> areaIds{kTestingAreaName};
+const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 } // namespace
 
 void

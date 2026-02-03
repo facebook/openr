@@ -32,7 +32,7 @@ class KvStoreWrapper {
  public:
   KvStoreWrapper(
       // areaId collection
-      const std::unordered_set<std::string>& areaIds,
+      const folly::F14FastSet<std::string>& areaIds,
       // KvStoreConfig to drive the instance
       const thrift::KvStoreConfig& kvStoreConfig,
       // Queue for receiving peer updates
@@ -235,7 +235,7 @@ class KvStoreWrapper {
     return this->nodeId_;
   }
 
-  std::unordered_set<std::string>
+  folly::F14FastSet<std::string>
   getAreaIds() {
     return areaIds_;
   }
@@ -254,7 +254,7 @@ class KvStoreWrapper {
   const std::string nodeId_;
 
   // AreaId collection to indicate # of KvStoreDb spawn for different areas
-  const std::unordered_set<std::string> areaIds_;
+  const folly::F14FastSet<std::string> areaIds_;
 
   // thrift::KvStoreConfig to feed to the KvStore instance
   const thrift::KvStoreConfig kvStoreConfig_;

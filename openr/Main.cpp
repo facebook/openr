@@ -11,6 +11,7 @@ namespace fs = std::filesystem;
 #include <fstream>
 #include <stdexcept>
 
+#include <folly/container/F14Set.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
 #include <folly/system/ThreadName.h>
@@ -396,7 +397,7 @@ main(int argc, char** argv) {
   // Setup the SSL policy
   std::shared_ptr<wangle::SSLContextConfig> sslContext;
   // Acceptable SSL peer names
-  std::unordered_set<std::string> acceptableNamesSet; // empty set by default
+  folly::F14FastSet<std::string> acceptableNamesSet; // empty set by default
 
   if (config->isSecureThriftServerEnabled()) {
     sslContext = std::make_shared<wangle::SSLContextConfig>();

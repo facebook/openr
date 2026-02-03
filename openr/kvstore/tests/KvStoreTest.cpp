@@ -73,7 +73,7 @@ class KvStoreTestFixture : public ::testing::Test {
   KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*
   createKvStore(
       thrift::KvStoreConfig kvStoreConf,
-      const std::unordered_set<std::string>& areaIds = {kTestingAreaName},
+      const folly::F14FastSet<std::string>& areaIds = {kTestingAreaName.t},
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt,
       std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue =
@@ -2101,7 +2101,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // key-value updates from each store over PUB socket.
   LOG(INFO) << "Waiting for full sync to complete.";
   for (auto& store : stores_) {
-    std::unordered_set<std::string> keys;
+    folly::F14FastSet<std::string> keys;
     VLOG(3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
@@ -2149,7 +2149,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "waiting for another full sync to complete...";
   // Receive 16 updates from each store
   for (auto& store : stores_) {
-    std::unordered_set<std::string> keys;
+    folly::F14FastSet<std::string> keys;
     VLOG(3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
@@ -2434,7 +2434,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   {
     VLOG(3) << "Store " << myStore->getNodeId() << " received keys.";
 
-    std::unordered_set<std::string> keys;
+    folly::F14FastSet<std::string> keys;
     while (keys.size() < kNumStores) {
       auto publication = myStore->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {

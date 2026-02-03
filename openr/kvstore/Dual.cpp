@@ -122,7 +122,7 @@ Dual::routeAffected() {
     return false;
   }
 
-  std::unordered_set<std::string> nexthops;
+  folly::F14FastSet<std::string> nexthops;
   for (const auto& [neighbor, ld] : localDistances_) {
     const auto& rd = info_.neighborInfos[neighbor].reportDistance;
     int64_t d = addDistances(ld, rd);
@@ -345,7 +345,7 @@ Dual::removeChild(const std::string& child) noexcept {
   children_.erase(child);
 }
 
-std::unordered_set<std::string>
+folly::F14FastSet<std::string>
 Dual::children() const noexcept {
   return children_;
 }
@@ -371,7 +371,7 @@ Dual::hasValidRoute() const noexcept {
       info_.nexthop.has_value());
 }
 
-std::unordered_set<std::string>
+folly::F14FastSet<std::string>
 Dual::sptPeers() const noexcept {
   if (!hasValidRoute()) {
     // route not ready
@@ -752,7 +752,7 @@ DualNode::getSptRootId() const noexcept {
   return std::nullopt;
 }
 
-std::unordered_set<std::string>
+folly::F14FastSet<std::string>
 DualNode::getSptPeers(const std::optional<std::string>& rootId) const noexcept {
   if (!rootId.has_value()) {
     // none rootId, return empty peers

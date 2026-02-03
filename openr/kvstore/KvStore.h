@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/TokenBucket.h>
+#include <folly/container/F14Set.h>
 #include <folly/gen/Base.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -274,7 +275,7 @@ class KvStoreDb {
    *    2) it has outdated version of keys;
    */
   void finalizeFullSync(
-      const std::unordered_set<std::string>& keys, const std::string& senderId);
+      const folly::F14FastSet<std::string>& keys, const std::string& senderId);
 
   /*
    * [Version Inconsistency Mitigation]
@@ -300,7 +301,7 @@ class KvStoreDb {
    *
    * util method to get flooding peers for a given spt-root-id.
    */
-  std::unordered_set<std::string> getFloodPeers();
+  folly::F14FastSet<std::string> getFloodPeers();
 
   /*
    * [Incremental flooding]
@@ -461,7 +462,7 @@ class KvStoreDb {
     // Stores set of keys that may have changed during initialization of this
     // peer. Will flood to them in finalizeFullSync(), the last step of
     // initial sync.
-    std::unordered_set<std::string> pendingKeysDuringInitialization{};
+    folly::F14FastSet<std::string> pendingKeysDuringInitialization{};
 
     // Number of occured Thrift API errors in the process of syncing with
     // peer.
@@ -524,7 +525,7 @@ class KvStoreDb {
   std::unordered_map<std::string /* key */, thrift::Value> keysToUnset_{};
 
   // Set of local keys to be re-advertised.
-  std::unordered_set<std::string /* key */> keysToAdvertise_{};
+  folly::F14FastSet<std::string /* key */> keysToAdvertise_{};
 
   // Throttle advertisement of self-originated persisted keys.
   // Calls `advertiseSelfOriginatedKeys()`.
@@ -540,9 +541,8 @@ class KvStoreDb {
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>
-  std::
-      unordered_map<std::optional<std::string>, std::unordered_set<std::string>>
-          publicationBuffer_{};
+  std::unordered_map<std::optional<std::string>, folly::F14FastSet<std::string>>
+      publicationBuffer_{};
 
   // Callback function to signal KvStore that KvStoreDb sync with all peers
   // are completed.
@@ -589,7 +589,7 @@ class KvStore final : public OpenrEventBase {
       // Queue for publishing the event log
       messaging::ReplicateQueue<LogSample>& logSampleQueue,
       // AreaId collection
-      const std::unordered_set<std::string>& areaIds,
+      const folly::F14FastSet<std::string>& areaIds,
       // KvStoreConfig to drive the instance
       const thrift::KvStoreConfig& kvStoreConfig);
 

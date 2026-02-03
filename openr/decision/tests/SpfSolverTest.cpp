@@ -56,7 +56,7 @@ updatePrefixDatabase(
     std::string const& area = kTestingAreaName) {
   auto const& nodeName = *prefixDb.thisNodeName();
 
-  std::unordered_set<PrefixKey> oldKeys, newKeys;
+  folly::F14FastSet<PrefixKey> oldKeys, newKeys;
   auto oldDb = getPrefixDbForNode(state, prefixDb.thisNodeName().value(), area);
   for (auto const& entry : *oldDb.prefixEntries()) {
     oldKeys.emplace(nodeName, toIPNetwork(*entry.prefix()), area);

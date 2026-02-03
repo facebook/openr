@@ -126,7 +126,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     // initialize OpenrCtrlHandler for testing usage
     handler_ = std::make_shared<OpenrCtrlHandler>(
         nodeName_,
-        std::unordered_set<std::string>{},
+        folly::F14FastSet<std::string>{},
         &ctrlEvb_,
         decision.get(),
         fib.get(),
@@ -541,7 +541,7 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
   //
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
-    std::unordered_set<std::string> areas;
+    folly::F14FastSet<std::string> areas;
     for (auto const& area : *config->areas()) {
       areas.insert(*area.area_id());
     }
@@ -649,7 +649,7 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
   //
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
-    std::unordered_set<std::string> areas;
+    folly::F14FastSet<std::string> areas;
     for (auto const& area : *config->areas()) {
       areas.insert(*area.area_id());
     }
@@ -967,7 +967,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   //
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
-    std::unordered_set<std::string> areas;
+    folly::F14FastSet<std::string> areas;
     for (auto const& area : *config->areas()) {
       areas.insert(*area.area_id());
     }

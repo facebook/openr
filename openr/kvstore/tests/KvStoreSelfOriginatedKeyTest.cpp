@@ -49,7 +49,7 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
       uint32_t selfAdjTimeout = 0) {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
-    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+    const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
     // Override ttl for kvstore self-originated keys
     kvStoreConfig.node_name() = nodeId;

@@ -25,7 +25,7 @@ namespace openr {
 
 OpenrCtrlHandler::OpenrCtrlHandler(
     const std::string& nodeName,
-    const std::unordered_set<std::string>& acceptablePeerCommonNames,
+    const folly::F14FastSet<std::string>& acceptablePeerCommonNames,
     OpenrEventBase* ctrlEvb,
     Decision* decision,
     Fib* fib,

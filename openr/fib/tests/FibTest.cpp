@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Set.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -237,9 +238,9 @@ checkEqualDecisionRouteUpdate(
   }
 
   if (lhs.unicastRoutesToUpdate != rhs.unicastRoutesToUpdate ||
-      std::unordered_set(
+      folly::F14FastSet(
           lhs.unicastRoutesToDelete.begin(), lhs.unicastRoutesToDelete.end()) !=
-          std::unordered_set(
+          folly::F14FastSet(
               rhs.unicastRoutesToDelete.begin(),
               rhs.unicastRoutesToDelete.end())) {
     LOG(INFO) << "unicast/mpls update/delete not the same.";
@@ -287,7 +288,7 @@ class FibTestFixture : public ::testing::Test {
     // instantiate openrCtrlHandler to invoke fib API
     handler_ = std::make_shared<OpenrCtrlHandler>(
         "node-1",
-        std::unordered_set<std::string>{} /* acceptable peers */,
+        folly::F14FastSet<std::string>{} /* acceptable peers */,
         &evb_,
         nullptr /* decision */,
         fib_.get() /* fib */,

@@ -22,7 +22,7 @@ class LongPollFixture : public ::testing::Test {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
     kvStoreConfig.node_name() = nodeName_;
-    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+    const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
     // Create KvStore module
     kvStoreWrapper_ =
@@ -40,7 +40,7 @@ class LongPollFixture : public ::testing::Test {
     // initialize OpenrCtrlHandler for testing usage
     handler_ = std::make_shared<OpenrCtrlHandler>(
         nodeName_,
-        std::unordered_set<std::string>{},
+        folly::F14FastSet<std::string>{},
         &ctrlEvb_,
         nullptr, /* decision raw ptr */
         nullptr, /* fib raw ptr */

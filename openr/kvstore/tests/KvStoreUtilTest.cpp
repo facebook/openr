@@ -25,7 +25,7 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
       // create KvStoreConfig
       thrift::KvStoreConfig kvStoreConfig;
       kvStoreConfig.node_name() = nodeId;
-      const std::unordered_set<std::string> areaIds{kTestingAreaName};
+      const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
       return std::make_shared<
           KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(

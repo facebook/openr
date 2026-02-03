@@ -81,7 +81,7 @@ class KvStoreBenchmarkTestFixture {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
     kvStoreConfig.node_name() = nodeId_;
-    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+    const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
     // start kvstore
     kvStoreWrapper_ =
@@ -546,7 +546,7 @@ BM_KvStoreDumpAllWithFilters(
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
     thrift::KeyVals keyVals;
-    std::unordered_set<std::string> prefixSet;
+    folly::F14FastSet<std::string> prefixSet;
     std::vector<std::string> keyPrefixList;
     thrift::KeyDumpParams keyDumpParams;
 
@@ -620,7 +620,7 @@ BM_KvStoreDumpHashWithFilters(
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
 
     thrift::KeyVals keyVals;
-    std::unordered_set<std::string> prefixSet; // avoid replicate keys
+    folly::F14FastSet<std::string> prefixSet; // avoid replicate keys
     std::vector<std::string> keyPrefixList; // key set that's fed into filter
     thrift::KeyDumpParams keyDumpParams;
 

@@ -25,7 +25,7 @@ KvStore<ClientType>::KvStore(
     messaging::RQueue<PeerEvent> peerUpdatesQueue,
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
-    const std::unordered_set<std::string>& areaIds,
+    const folly::F14FastSet<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig)
     : kvParams_(kvStoreConfig, kvStoreUpdatesQueue, logSampleQueue) {
   // Schedule periodic timer for counters submission
@@ -2923,7 +2923,7 @@ KvStoreDb<ClientType>::floodBufferedUpdates() {
 template <class ClientType>
 void
 KvStoreDb<ClientType>::finalizeFullSync(
-    const std::unordered_set<std::string>& keys, const std::string& senderId) {
+    const folly::F14FastSet<std::string>& keys, const std::string& senderId) {
   // build keyval to be sent
   thrift::Publication updates;
   for (const auto& key : keys) {
@@ -3027,12 +3027,12 @@ KvStoreDb<ClientType>::finalizeFullSync(
 }
 
 template <class ClientType>
-std::unordered_set<std::string>
+folly::F14FastSet<std::string>
 KvStoreDb<ClientType>::getFloodPeers() {
   // flood-peers:
   //  1) SPT-peers;
   //  2) peers-who-does-not-support-DUAL;
-  std::unordered_set<std::string> floodPeers;
+  folly::F14FastSet<std::string> floodPeers;
   for (const auto& [peerName, peer] : thriftPeers_) {
     floodPeers.emplace(peerName);
   }
@@ -3314,7 +3314,7 @@ KvStoreDb<ClientType>::mergePublication(
    *     i) peer does NOT have this key
    *     ii) peer's version is lower.
    */
-  std::unordered_set<std::string> keysToSendBack{};
+  folly::F14FastSet<std::string> keysToSendBack{};
   if (senderId.has_value()) {
     XLOG(DBG3)
         << AreaTag()
@@ -3334,7 +3334,9 @@ KvStoreDb<ClientType>::mergePublication(
     // merge with pending keys due to peer NOT in INITIALIZED state
     auto peerIt = thriftPeers_.find(senderId.value());
     if (peerIt != thriftPeers_.end()) {
-      keysToSendBack.merge(peerIt->second.pendingKeysDuringInitialization);
+      keysToSendBack.insert(
+          peerIt->second.pendingKeysDuringInitialization.begin(),
+          peerIt->second.pendingKeysDuringInitialization.end());
       peerIt->second.pendingKeysDuringInitialization.clear();
     }
   }

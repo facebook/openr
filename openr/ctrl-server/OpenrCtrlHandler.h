@@ -50,7 +50,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    */
   OpenrCtrlHandler(
       const std::string& nodeName,
-      const std::unordered_set<std::string>& acceptablePeerCommonNames,
+      const folly::F14FastSet<std::string>& acceptablePeerCommonNames,
       OpenrEventBase* ctrlEvb,
       Decision* decision,
       Fib* fib,
@@ -615,7 +615,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   void closeFibPublishers();
 
   const std::string nodeName_;
-  const std::unordered_set<std::string> acceptablePeerCommonNames_;
+  const folly::F14FastSet<std::string> acceptablePeerCommonNames_;
 
   // Pointers to Open/R modules
   OpenrEventBase* ctrlEvb_{nullptr};

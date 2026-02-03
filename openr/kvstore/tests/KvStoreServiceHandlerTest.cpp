@@ -23,7 +23,7 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
   SetUp() override {
     thrift::KvStoreConfig kvStoreConfig;
     kvStoreConfig.node_name() = nodeName_;
-    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+    const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
     // Spawn kvStore instance with wrapper
     kvStoreWrapper_ =

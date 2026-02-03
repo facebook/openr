@@ -43,7 +43,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
     kvStoreConfig.node_name() = nodeId;
-    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+    const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
     // start kvstore
     stores_.emplace_back(
@@ -73,7 +73,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
    */
   void
   performKvStoreSyncTest(
-      const std::vector<std::unordered_set<int>>& adjacencyList,
+      const std::vector<folly::F14FastSet<int>>& adjacencyList,
       const std::string& kOriginBase,
       const unsigned int kNumStores = 16,
       const unsigned int kNumIter = 17,
@@ -267,7 +267,7 @@ TEST_P(KvStoreTestTtlFixture, Ring) {
   const int kNumStores = 16;
 
   // organize peering in a ring
-  std::vector<std::unordered_set<int>> adjacencyList;
+  std::vector<folly::F14FastSet<int>> adjacencyList;
   adjacencyList.push_back({kNumStores - 1, 0}); // Add a special case.
   for (int i = 1; i < kNumStores; ++i) {
     adjacencyList.push_back({(i - 1) % kNumStores, (i + 1) % kNumStores});
@@ -290,7 +290,7 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
   const unsigned int kNumStores = 9;
 
   // using set to avoid duplicate neighbors
-  std::vector<std::unordered_set<int>> adjacencyList = {
+  std::vector<folly::F14FastSet<int>> adjacencyList = {
       {3, 1},
       {0, 4, 2},
       {1, 5},
@@ -318,9 +318,9 @@ TEST_P(KvStoreTestTtlFixture, FullMesh) {
   const unsigned int kNumStores = 8;
 
   // organize peering in a full mesh
-  std::vector<std::unordered_set<int>> adjacencyList;
+  std::vector<folly::F14FastSet<int>> adjacencyList;
   for (unsigned int i = 0; i < kNumStores; ++i) {
-    std::unordered_set<int> neighbors;
+    folly::F14FastSet<int> neighbors;
     for (unsigned int j = 0; j < kNumStores; ++j) {
       if (i == j) {
         continue;

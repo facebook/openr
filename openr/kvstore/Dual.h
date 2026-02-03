@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/Format.h>
+#include <folly/container/F14Set.h>
 #include <stack>
 
 #include <openr/if/gen-cpp2/Dual_types.h>
@@ -202,11 +203,11 @@ class Dual {
   void removeChild(const std::string& child) noexcept;
 
   // get current spt children
-  std::unordered_set<std::string> children() const noexcept;
+  folly::F14FastSet<std::string> children() const noexcept;
 
   // get current spt peers (nexthop + children)
   // return empty-set if dual has no valid route
-  std::unordered_set<std::string> sptPeers() const noexcept;
+  folly::F14FastSet<std::string> sptPeers() const noexcept;
 
   // my node id
   const std::string nodeId;
@@ -278,7 +279,7 @@ class Dual {
       nexthopCb_{nullptr};
 
   // spt children
-  std::unordered_set<std::string> children_;
+  folly::F14FastSet<std::string> children_;
 };
 
 /**
@@ -343,7 +344,7 @@ class DualNode {
 
   // get SPT-peers for a given root-id
   // return empty-set if dual for root-id is not ready
-  std::unordered_set<std::string> getSptPeers(
+  folly::F14FastSet<std::string> getSptPeers(
       const std::optional<std::string>& rootId) const noexcept;
 
   // get route-info for a given root-id

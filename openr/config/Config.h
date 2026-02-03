@@ -10,6 +10,7 @@
 #include <filesystem>
 namespace fs = std::filesystem;
 #include <folly/IPAddress.h>
+#include <folly/container/F14Set.h>
 #include <folly/io/async/SSLContext.h>
 #include <openr/common/FileUtil.h>
 #include <openr/common/MplsUtil.h>
@@ -155,9 +156,9 @@ class Config {
     return areaConfigs_;
   }
 
-  std::unordered_set<std::string>
+  folly::F14FastSet<std::string>
   getAreaIds() const {
-    std::unordered_set<std::string> ids;
+    folly::F14FastSet<std::string> ids;
     for (auto const& [id, _] : areaConfigs_) {
       ids.insert(id);
     }

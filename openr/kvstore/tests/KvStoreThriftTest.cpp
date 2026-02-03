@@ -42,7 +42,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
     kvStoreConfig.node_name() = nodeId;
-    const std::unordered_set<std::string> areaIds{kTestingAreaName};
+    const folly::F14FastSet<std::string> areaIds{kTestingAreaName.t};
 
     stores_.emplace_back(
         std::make_shared<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
@@ -54,7 +54,7 @@ class KvStoreThriftTestFixture : public ::testing::Test {
     // create KvStoreConfig
     thrift::KvStoreConfig kvStoreConfig;
     kvStoreConfig.node_name() = nodeId;
-    const std::unordered_set<std::string> areaIds{areaId};
+    const folly::F14FastSet<std::string> areaIds{areaId};
 
     stores_.emplace_back(
         std::make_shared<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
@@ -162,7 +162,7 @@ class SimpleKvStoreThriftTestFixture : public KvStoreThriftTestFixture {
   }
 
   uint16_t
-  generateRandomDiffPort(const std::unordered_set<uint16_t>& ports) {
+  generateRandomDiffPort(const folly::F14FastSet<uint16_t>& ports) {
     while (true) {
       // generate port between 1 - 65535
       uint16_t randPort = folly::Random::rand32() % 65535 + 1;
@@ -342,7 +342,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   // create dummy port in purpose to mimick exception connecting thrift server
   // ATTN: explicitly make sure dummy port used will be different to thrift
   // server ports
-  std::unordered_set<uint16_t> usedPorts{
+  folly::F14FastSet<uint16_t> usedPorts{
       store1->getThriftPort(), store2->getThriftPort()};
   const uint16_t dummyPort1 = generateRandomDiffPort(usedPorts);
   const uint16_t dummyPort2 = generateRandomDiffPort(usedPorts);

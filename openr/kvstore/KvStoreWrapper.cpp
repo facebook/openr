@@ -14,7 +14,7 @@ namespace openr {
 
 template <class ClientType>
 KvStoreWrapper<ClientType>::KvStoreWrapper(
-    const std::unordered_set<std::string>& areaIds,
+    const folly::F14FastSet<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig,
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
     std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
