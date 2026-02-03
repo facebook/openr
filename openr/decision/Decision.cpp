@@ -46,9 +46,9 @@ DecisionPendingUpdates::applyLinkStateChange(
 
 void
 DecisionPendingUpdates::applyPrefixStateChange(
-    std::unordered_set<folly::CIDRNetwork>&& change,
+    folly::F14FastSet<folly::CIDRNetwork>&& change,
     apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents) {
-  updatedPrefixes_.merge(std::move(change));
+  updatedPrefixes_.insert(change.begin(), change.end());
   addUpdate(perfEvents);
 }
 
@@ -903,7 +903,7 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
       routeUpdate.unicastRoutesToUpdate, routeUpdate.unicastRoutesToDelete);
 
   // Create set of changed prefixes
-  std::unordered_set<folly::CIDRNetwork> changedPrefixes{
+  folly::F14FastSet<folly::CIDRNetwork> changedPrefixes{
       routeUpdate.unicastRoutesToDelete.cbegin(),
       routeUpdate.unicastRoutesToDelete.cend()};
   for (const auto& [prefix, ribUnicastEntry] :
@@ -1103,7 +1103,7 @@ Decision::updateCounters(
 void
 Decision::updateGlobalCounters() const {
   size_t numAdjacencies = 0, numPartialAdjacencies = 0;
-  std::unordered_set<std::string> nodeSet;
+  folly::F14FastSet<std::string> nodeSet;
   for (auto const& [_, linkState] : areaLinkStates_) {
     numAdjacencies += linkState.numLinks();
     auto const& mySpfResult = linkState.getSpfResult(myNodeName_);

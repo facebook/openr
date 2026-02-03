@@ -57,7 +57,7 @@ class DecisionPendingUpdates {
     return needsFullRebuild() || !updatedPrefixes_.empty();
   }
 
-  std::unordered_set<folly::CIDRNetwork> const&
+  folly::F14FastSet<folly::CIDRNetwork> const&
   updatedPrefixes() const {
     return updatedPrefixes_;
   }
@@ -68,7 +68,7 @@ class DecisionPendingUpdates {
       apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   void applyPrefixStateChange(
-      std::unordered_set<folly::CIDRNetwork>&& change,
+      folly::F14FastSet<folly::CIDRNetwork>&& change,
       apache::thrift::optional_field_ref<thrift::PerfEvents const&> perfEvents);
 
   void reset();
@@ -101,7 +101,7 @@ class DecisionPendingUpdates {
   bool needsFullRebuild_{false};
 
   // track prefixes that have changed in this batch
-  std::unordered_set<folly::CIDRNetwork> updatedPrefixes_;
+  folly::F14FastSet<folly::CIDRNetwork> updatedPrefixes_;
 
   // local node name to determine action on linkAttributes change
   std::string myNodeName_;
@@ -350,7 +350,7 @@ class Decision : public OpenrEventBase {
    */
   std::unordered_map<
       std::string,
-      std::unordered_set<std::pair<std::string, std::string>>>
+      folly::F14FastSet<std::pair<std::string, std::string>>>
       areaToPendingAdjacency_;
 
   /**
@@ -395,7 +395,7 @@ class Decision : public OpenrEventBase {
    * As we receive the first static routes from these types we remove them from
    * this set. Empty set indicates routes of all expected types are received.
    */
-  std::unordered_set<thrift::PrefixType> unreceivedRouteTypes_{};
+  folly::F14FastSet<thrift::PrefixType> unreceivedRouteTypes_{};
 };
 
 } // namespace openr

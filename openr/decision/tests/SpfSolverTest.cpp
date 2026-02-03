@@ -11,6 +11,7 @@
 #define SpfSolver_TEST_FRIENDS \
   FRIEND_TEST(SpfSolverUnitTest, GetReachablePrefixEntriesTest);
 
+#include <folly/container/F14Set.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/Util.h>
 #include <openr/decision/SpfSolver.h>
@@ -48,7 +49,7 @@ getPrefixDbForNode(
   return prefixDb;
 }
 
-std::unordered_set<folly::CIDRNetwork>
+folly::F14FastSet<folly::CIDRNetwork>
 updatePrefixDatabase(
     PrefixState& state,
     thrift::PrefixDatabase const& prefixDb,
@@ -60,17 +61,19 @@ updatePrefixDatabase(
   for (auto const& entry : *oldDb.prefixEntries()) {
     oldKeys.emplace(nodeName, toIPNetwork(*entry.prefix()), area);
   }
-  std::unordered_set<folly::CIDRNetwork> changed;
+  folly::F14FastSet<folly::CIDRNetwork> changed;
 
   for (auto const& entry : *prefixDb.prefixEntries()) {
     PrefixKey key(nodeName, toIPNetwork(*entry.prefix()), area);
-    changed.merge(state.updatePrefix(key, entry));
+    auto result = state.updatePrefix(key, entry);
+    changed.insert(result.begin(), result.end());
     newKeys.insert(std::move(key));
   }
 
   for (auto const& key : oldKeys) {
     if (!newKeys.count(key)) {
-      changed.merge(state.deletePrefix(key));
+      auto result = state.deletePrefix(key);
+      changed.insert(result.begin(), result.end());
     }
   }
 

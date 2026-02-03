@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Set.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/LsdbUtil.h>
@@ -12,10 +13,10 @@
 
 namespace openr {
 
-std::unordered_set<folly::CIDRNetwork>
+folly::F14FastSet<folly::CIDRNetwork>
 PrefixState::updatePrefix(
     PrefixKey const& key, thrift::PrefixEntry const& entry) {
-  std::unordered_set<folly::CIDRNetwork> changed;
+  folly::F14FastSet<folly::CIDRNetwork> changed;
 
   auto [it, inserted] = prefixes_[key.getCIDRNetwork()].emplace(
       key.getNodeAndArea(), std::make_shared<thrift::PrefixEntry>(entry));
@@ -36,9 +37,9 @@ PrefixState::updatePrefix(
   return changed;
 }
 
-std::unordered_set<folly::CIDRNetwork>
+folly::F14FastSet<folly::CIDRNetwork>
 PrefixState::deletePrefix(PrefixKey const& key) {
-  std::unordered_set<folly::CIDRNetwork> changed;
+  folly::F14FastSet<folly::CIDRNetwork> changed;
 
   auto search = prefixes_.find(key.getCIDRNetwork());
   if (search != prefixes_.end() && search->second.erase(key.getNodeAndArea())) {

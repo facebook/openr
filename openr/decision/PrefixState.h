@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/container/F14Set.h>
 #include <openr/common/LsdbTypes.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -24,12 +25,12 @@ class PrefixState {
 
   // returns set of changed prefixes (i.e. a node started advertising or any
   // attributes changed)
-  std::unordered_set<folly::CIDRNetwork> updatePrefix(
+  folly::F14FastSet<folly::CIDRNetwork> updatePrefix(
       PrefixKey const& key, thrift::PrefixEntry const& entry);
 
   // returns set of changed prefixes (i.e. a node withdrew a prefix) will be
   // empty if node/area did not previosuly advertise
-  std::unordered_set<folly::CIDRNetwork> deletePrefix(PrefixKey const& key);
+  folly::F14FastSet<folly::CIDRNetwork> deletePrefix(PrefixKey const& key);
 
   std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
       thrift::ReceivedRouteFilter const& filter) const;
