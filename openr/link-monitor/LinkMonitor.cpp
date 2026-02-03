@@ -948,7 +948,7 @@ LinkMonitor::advertiseRedistAddrs() {
         PrefixEventType::ADD_PREFIXES,
         thrift::PrefixType::LOOPBACK,
         std::move(prefixEntries),
-        std::unordered_set<std::string>(areas.begin(), areas.end()));
+        folly::F14FastSet<std::string>(areas.begin(), areas.end()));
     prefixUpdatesQueue_.push(std::move(event));
   }
 

@@ -119,7 +119,7 @@ PrefixManager::PrefixManager(
       auto& update = maybeUpdate.value();
 
       // if no specified dstination areas, apply to all areas
-      std::unordered_set<std::string> dstAreas;
+      folly::F14FastSet<std::string> dstAreas;
       if (update.dstAreas.empty()) {
         dstAreas = allAreaIds();
       } else {
@@ -346,7 +346,7 @@ PrefixManager::buildOriginatedPrefixes(
         OriginatedRoute(
             prefix,
             std::move(unicastEntry),
-            std::unordered_set<folly::CIDRNetwork>{}));
+            folly::F14FastSet<folly::CIDRNetwork>{}));
   }
   fb303::fbData->addStatValue(
       "prefix_manager.originated_routes",
@@ -454,12 +454,12 @@ PrefixManager::updatePrefixKeysInKvStore(
   advertiseStatus_[prefix].advertisedBestEntry = prefixEntry;
 }
 
-std::unordered_set<std::string>
+folly::F14FastSet<std::string>
 PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
-  std::unordered_set<std::string> areasToUpdate;
+  folly::F14FastSet<std::string> areasToUpdate;
   const auto& tPrefixEntry = entry.tPrefixEntry;
   const auto& type = *tPrefixEntry->type();
-  const std::unordered_set<std::string> areaStack{
+  const folly::F14FastSet<std::string> areaStack{
       tPrefixEntry->area_stack()->begin(), tPrefixEntry->area_stack()->end()};
 
   for (const auto& toArea : entry.dstAreas) {
@@ -547,7 +547,7 @@ PrefixManager::deletePrefixKeysInKvStore(
 void
 PrefixManager::deleteKvStoreKeyHelper(
     const folly::CIDRNetwork& prefix,
-    const std::unordered_set<std::string>& deletedArea) {
+    const folly::F14FastSet<std::string>& deletedArea) {
   for (const auto& area : deletedArea) {
     // Prepare thrift::PrefixDatabase object for deletion
     thrift::PrefixDatabase deletedPrefixDb;
@@ -1200,7 +1200,7 @@ PrefixManager::applyOriginationPolicy(
 bool
 PrefixManager::advertisePrefixesImpl(
     std::vector<thrift::PrefixEntry>&& tPrefixEntries,
-    const std::unordered_set<std::string>& dstAreas,
+    const folly::F14FastSet<std::string>& dstAreas,
     const std::optional<std::string>& policyName) {
   if (tPrefixEntries.empty()) {
     return false;
@@ -1218,7 +1218,7 @@ PrefixManager::advertisePrefixesImpl(
 bool
 PrefixManager::advertisePrefixesImpl(
     std::vector<PrefixEntry>&& prefixEntries,
-    const std::unordered_set<std::string>& dstAreas,
+    const folly::F14FastSet<std::string>& dstAreas,
     const std::optional<std::string>& policyName) {
   if (prefixEntries.empty()) {
     return false;
@@ -1354,13 +1354,13 @@ bool
 PrefixManager::syncPrefixesByTypeImpl(
     thrift::PrefixType type,
     const std::vector<thrift::PrefixEntry>& tPrefixEntries,
-    const std::unordered_set<std::string>& dstAreas,
+    const folly::F14FastSet<std::string>& dstAreas,
     const std::optional<std::string>& policyName) {
   XLOG(DBG1) << "Syncing prefixes of type " << toString(type);
   // building these lists so we can call add and remove and get detailed
   // logging
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
-  std::unordered_set<folly::CIDRNetwork> toRemoveSet;
+  folly::F14FastSet<folly::CIDRNetwork> toRemoveSet;
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
     if (typeToPrefixes.count(type)) {
       toRemoveSet.emplace(prefix);
@@ -1689,9 +1689,9 @@ PrefixManager::redistributePrefixesAcrossAreas(
   // ignore mpls updates
 }
 
-std::unordered_set<std::string>
+folly::F14FastSet<std::string>
 PrefixManager::allAreaIds() {
-  std::unordered_set<std::string> allAreaIds;
+  folly::F14FastSet<std::string> allAreaIds;
   for (const auto& [area, _] : areaToPolicy_) {
     allAreaIds.emplace(area);
   }

@@ -219,7 +219,7 @@ struct PrefixEntry {
    * Set of area IDs to which this prefix should be advertised. Leave empty to
    * advertise to all configured areas
    */
-  std::unordered_set<std::string> dstAreas;
+  folly::F14FastSet<std::string> dstAreas;
   /**
    * CIDR network of the prefix
    */
@@ -247,7 +247,7 @@ struct PrefixEntry {
   PrefixEntry() = default;
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
-      std::unordered_set<std::string>&& dstAreas,
+      folly::F14FastSet<std::string>&& dstAreas,
       std::optional<OpenrPolicyActionData> policyActionData = std::nullopt,
       OpenrPolicyMatchData policyMatchData = OpenrPolicyMatchData(),
       bool preferredForRedistribution = false)
@@ -260,7 +260,7 @@ struct PrefixEntry {
 
   PrefixEntry(
       std::shared_ptr<thrift::PrefixEntry>&& tPrefixEntryIn,
-      std::unordered_set<std::string>&& dstAreas,
+      folly::F14FastSet<std::string>&& dstAreas,
       std::optional<folly::F14FastSet<thrift::NextHopThrift>> nexthops)
       : tPrefixEntry(std::move(tPrefixEntryIn)),
         dstAreas(std::move(dstAreas)),
@@ -319,7 +319,7 @@ struct PrefixEvent {
    * Destination areas to inject prefixes to
    * ATTN: empty list = inject to all configured areas
    */
-  std::unordered_set<std::string> dstAreas{};
+  folly::F14FastSet<std::string> dstAreas{};
 
   /**
    * Origination policy to be ran before applying area policy
@@ -330,7 +330,7 @@ struct PrefixEvent {
       const PrefixEventType& eventType,
       const thrift::PrefixType type,
       std::vector<thrift::PrefixEntry> prefixes = {},
-      std::unordered_set<std::string> dstAreas = {},
+      folly::F14FastSet<std::string> dstAreas = {},
       const std::optional<std::string>& policyName = std::nullopt)
       : eventType(eventType),
         type(type),

@@ -1614,7 +1614,7 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
       std::unordered_map<
           std::pair<std::string /* prefixStr */, std::string /* areaStr */>,
           thrift::PrefixEntry>& exp,
-      std::unordered_set<std::pair<std::string, std::string>>& expDeleted) {
+      folly::F14FastSet<std::pair<std::string, std::string>>& expDeleted) {
     while (exp.size() || expDeleted.size()) {
       auto maybePub = reader.get().value();
       if (auto* pub = std::get_if<thrift::Publication>(&maybePub)) {
@@ -1799,7 +1799,7 @@ TEST_F(RouteOriginationOverrideFixture, ReadFromConfig) {
           {prefixKeyV6AreaB_, bestPrefixEntryV6_},
           {prefixKeyV6AreaC_, bestPrefixEntryV6_},
       });
-  std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+  folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
   // wait for condition to be met for KvStore publication
   waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
@@ -1897,7 +1897,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
               {prefixKeyV4AreaB_, bestPrefixEntryV4_},
               {prefixKeyV4AreaC_, bestPrefixEntryV4_},
           });
-      std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+      folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
       // wait for condition to be met for KvStore publication
       waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
@@ -2039,7 +2039,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
               {prefixKeyV6AreaB_, bestPrefixEntryV6_},
               {prefixKeyV6AreaC_, bestPrefixEntryV6_},
           });
-      std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+      folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
       // wait for condition to be met for KvStore publication
       waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
@@ -2107,7 +2107,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     //  Verify 2): PrefixManager -> KvStore update
     {
       // both v4Prefix_ + v6Prefix_ are withdrawn from ALL areas configured
-      std::unordered_set<std::pair<std::string, std::string>> expDeleted{
+      folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{
           prefixKeyV4AreaA_,
           prefixKeyV4AreaB_,
           prefixKeyV4AreaC_,
@@ -2577,7 +2577,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
         exp({
             {prefixKeyV4AreaA_, bestPrefixEntryV4_},
         });
-    std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+    folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
     // wait for condition to be met for KvStore publication
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
@@ -2628,7 +2628,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
         exp({
             {prefixKeyV6AreaA_, bestPrefixEntryV6_},
         });
-    std::unordered_set<std::pair<std::string, std::string>> expDeleted{};
+    folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
     // 2b. wait for condition to be met for KvStore publication
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
@@ -2684,7 +2684,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //  Verify 3b: PrefixManager -> KvStore update: both prefixes withdrawn
   {
     // both v4Prefix_ + v6Prefix_ are withdrawn from the single area configured
-    std::unordered_set<std::pair<std::string, std::string>> expDeleted{
+    folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{
         prefixKeyV4AreaA_,
         prefixKeyV6AreaA_,
     };

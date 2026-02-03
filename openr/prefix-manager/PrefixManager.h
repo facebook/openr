@@ -40,7 +40,7 @@ class PrefixManagerPendingUpdates {
     return changedPrefixes_.size();
   }
 
-  const std::unordered_set<folly::CIDRNetwork>&
+  const folly::F14FastSet<folly::CIDRNetwork>&
   getChangedPrefixes() {
     return changedPrefixes_;
   }
@@ -61,7 +61,7 @@ class PrefixManagerPendingUpdates {
   //  - newly added prefixes
   //  - updated prefixes
   //  - prefixes being withdrawn
-  std::unordered_set<folly::CIDRNetwork> changedPrefixes_{};
+  folly::F14FastSet<folly::CIDRNetwork> changedPrefixes_{};
 };
 
 } // namespace detail
@@ -218,11 +218,11 @@ class PrefixManager final : public OpenrEventBase {
    */
   bool advertisePrefixesImpl(
       std::vector<thrift::PrefixEntry>&& tPrefixEntries,
-      const std::unordered_set<std::string>& dstAreas,
+      const folly::F14FastSet<std::string>& dstAreas,
       const std::optional<std::string>& policyName = std::nullopt);
   bool advertisePrefixesImpl(
       std::vector<PrefixEntry>&& tPrefixEntries,
-      const std::unordered_set<std::string>& dstAreas,
+      const folly::F14FastSet<std::string>& dstAreas,
       const std::optional<std::string>& policyName = std::nullopt);
   bool advertisePrefixesImpl(
       const std::vector<PrefixEntry>& prefixEntries,
@@ -234,7 +234,7 @@ class PrefixManager final : public OpenrEventBase {
   bool syncPrefixesByTypeImpl(
       thrift::PrefixType type,
       const std::vector<thrift::PrefixEntry>& tPrefixEntries,
-      const std::unordered_set<std::string>& dstAreas,
+      const folly::F14FastSet<std::string>& dstAreas,
       const std::optional<std::string>& policyName = std::nullopt);
   std::vector<PrefixEntry> applyOriginationPolicy(
       const std::vector<PrefixEntry>& prefixEntries,
@@ -280,7 +280,7 @@ class PrefixManager final : public OpenrEventBase {
    * @param: prefix entry object containing prefix and destination areas
    * @return: set of the areas that this prefix will advertise to.
    */
-  std::unordered_set<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
+  folly::F14FastSet<std::string> addKvStoreKeyHelper(const PrefixEntry& entry);
 
   /*
    * [Util function]
@@ -292,7 +292,7 @@ class PrefixManager final : public OpenrEventBase {
    */
   void deleteKvStoreKeyHelper(
       const folly::CIDRNetwork& prefix,
-      const std::unordered_set<std::string>& deletedArea);
+      const folly::F14FastSet<std::string>& deletedArea);
 
   /*
    * Perform best entry selection among the given prefixTypeToEntry
@@ -368,7 +368,7 @@ class PrefixManager final : public OpenrEventBase {
   void redistributePrefixesAcrossAreas(DecisionRouteUpdate&& fibRouteUpdate);
 
   // get all areaIds
-  std::unordered_set<std::string> allAreaIds();
+  folly::F14FastSet<std::string> allAreaIds();
 
   // Record originated prefixes with origination policy name for to be exposed
   // by Cli for debugging purpose
@@ -443,7 +443,7 @@ class PrefixManager final : public OpenrEventBase {
    */
   struct AdvertiseStatus {
     // Set of areas the prefix was already advertised.
-    std::unordered_set<std::string> areas;
+    folly::F14FastSet<std::string> areas;
     // Unicast route published to Decision for programming.
     std::optional<RibUnicastEntry> publishedRoute;
     // Best entries published to KvStore for distribution
@@ -478,7 +478,7 @@ class PrefixManager final : public OpenrEventBase {
     RibUnicastEntry unicastEntry;
 
     // supporting routes for this originated prefix
-    std::unordered_set<folly::CIDRNetwork> supportingRoutes{};
+    folly::F14FastSet<folly::CIDRNetwork> supportingRoutes{};
 
     // flag indicates is local route has been originated
     bool isAdvertised{false};
@@ -486,7 +486,7 @@ class PrefixManager final : public OpenrEventBase {
     OriginatedRoute(
         const thrift::OriginatedPrefix& originatedPrefix,
         const RibUnicastEntry& unicastEntry,
-        const std::unordered_set<folly::CIDRNetwork>& supportingRoutes)
+        const folly::F14FastSet<folly::CIDRNetwork>& supportingRoutes)
         : originatedPrefix(originatedPrefix),
           unicastEntry(unicastEntry),
           supportingRoutes(supportingRoutes) {}
@@ -544,7 +544,7 @@ class PrefixManager final : public OpenrEventBase {
    * PrefixManager needs to make sure the associated unicast route is programmed
    * before advertisement.
    */
-  std::unordered_set<folly::CIDRNetwork> programmedPrefixes_;
+  folly::F14FastSet<folly::CIDRNetwork> programmedPrefixes_;
 
   /*
    * Set of prefix types for which PrefixManager awaits in OpenR initialization
@@ -561,7 +561,7 @@ class PrefixManager final : public OpenrEventBase {
    * Fib sends routes rather than prefixes to PrefixManager, here we leverage
    * the concept of `RIB` for simplicity).
    */
-  std::unordered_set<thrift::PrefixType> uninitializedPrefixTypes_{};
+  folly::F14FastSet<thrift::PrefixType> uninitializedPrefixTypes_{};
 }; // PrefixManager
 
 } // namespace openr
