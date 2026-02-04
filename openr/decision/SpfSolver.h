@@ -8,8 +8,8 @@
 #pragma once
 
 #include <string>
-#include <unordered_map>
 
+#include <folly/container/F14Map.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
@@ -18,11 +18,11 @@
 namespace openr {
 
 using StaticUnicastRoutes =
-    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>;
+    folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>;
 using Metric = openr::LinkStateMetric;
 using BestNextHopMetrics = std::pair<
     Metric /* minimum metric to destination */,
-    std::unordered_map<
+    folly::F14FastMap<
         std::string /* nextHopNodeName */,
         Metric /* the distance from the nexthop to the dest */>>;
 
@@ -71,7 +71,7 @@ struct RouteSelectionResult {
 
 class DecisionRouteDb {
  public:
-  std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
+  folly::F14FastMap<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutes;
 
   /*
@@ -119,7 +119,7 @@ class SpfSolver {
   // util function to update IP static route
   //
   void updateStaticUnicastRoutes(
-      const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+      const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutesToUpdate,
       const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
 
@@ -128,16 +128,16 @@ class SpfSolver {
   // Returns std::nullopt if myNodeName doesn't have any prefix database
   std::optional<DecisionRouteDb> buildRouteDb(
       const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState);
 
   std::optional<RibUnicastEntry> createRouteForPrefixOrGetStaticRoute(
       const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState,
       folly::CIDRNetwork const& prefix);
 
-  std::unordered_map<folly::CIDRNetwork, RouteSelectionResult> const&
+  folly::F14FastMap<folly::CIDRNetwork, RouteSelectionResult> const&
   getBestRoutesCache() const {
     return bestRoutesCache_;
   }
@@ -176,7 +176,7 @@ class SpfSolver {
       std::string const& myNodeName,
       folly::CIDRNetwork const& prefix,
       PrefixEntries& prefixEntries,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates);
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates);
 
   /*
    * [Route Calculation]: shortest path forwarding
@@ -203,12 +203,12 @@ class SpfSolver {
 
   std::pair<PrefixEntries, bool> getReachablePrefixEntries(
       const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
       const PrefixEntries& allPrefixEntries);
 
   std::optional<RibUnicastEntry> createRouteForPrefix(
       const std::string& myNodeName,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates,
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
       PrefixState const& prefixState,
       folly::CIDRNetwork const& prefix);
 
@@ -219,16 +219,16 @@ class SpfSolver {
   // [hard-drain]
   PrefixEntries filterHardDrainedNodes(
       PrefixEntries& prefixes,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const;
 
   // [soft-drain]
   folly::F14FastSet<NodeAndArea> getSoftDrainedNodes(
       PrefixEntries& prefixes,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const;
 
   bool isNodeDrained(
       const NodeAndArea& nodeArea,
-      std::unordered_map<std::string, LinkState> const& areaLinkStates) const;
+      folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const;
 
   // Give source node-name and dstNodeNames, this function returns the set of
   // nexthops towards these set of dstNodeNames
@@ -255,7 +255,7 @@ class SpfSolver {
   // Cache of best route selection.
   // - Cleared when topology changes
   // - Updated for the prefix whenever a route is created for it
-  std::unordered_map<folly::CIDRNetwork, RouteSelectionResult> bestRoutesCache_;
+  folly::F14FastMap<folly::CIDRNetwork, RouteSelectionResult> bestRoutesCache_;
 
   const std::string myNodeName_;
 

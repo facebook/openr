@@ -7,6 +7,7 @@
 
 #include <chrono>
 
+#include <folly/container/F14Map.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/decision/RibEntry.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -110,7 +111,7 @@ class RibPolicy {
    * @returns PolicyChange struct indicating unicastEntries that were modified.
    */
   PolicyChange applyPolicy(
-      std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>& unicastEntries)
+      folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>& unicastEntries)
       const;
 
  private:

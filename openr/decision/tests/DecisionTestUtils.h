@@ -7,9 +7,9 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/SpfSolver.h>
@@ -18,7 +18,7 @@ namespace openr {
 
 // Note: use F14FastSet for efficient set operations on paths
 using NextHops = folly::F14FastSet<thrift::NextHopThrift>;
-using RouteMap = std::unordered_map<
+using RouteMap = folly::F14FastMap<
     std::pair<std::string /* node name */, std::string /* prefix or label */>,
     NextHops>;
 
@@ -43,13 +43,13 @@ using RouteMap = std::unordered_map<
 //                              });
 //
 LinkState getLinkState(
-    std::unordered_map<
+    folly::F14FastMap<
         int /* node */,
         std::vector<std::pair<int /* adjNode */, int /* weight */>>> adjMap);
 
 // overload without providing link weight
 LinkState getLinkState(
-    std::unordered_map<int /* node */, std::vector<int /* adjNode */>> adjMap);
+    folly::F14FastMap<int /* node */, std::vector<int /* adjNode */>> adjMap);
 
 thrift::NextHopThrift createNextHopFromAdj(
     thrift::Adjacency adj,

@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <folly/container/F14Map.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/decision/PrefixState.h>
@@ -25,7 +26,7 @@ class PrefixStateTestFixture : public ::testing::Test {
   }
 
   PrefixState state_;
-  std::unordered_map<folly::CIDRNetwork, PrefixEntries> initialEntries_;
+  folly::F14FastMap<folly::CIDRNetwork, PrefixEntries> initialEntries_;
 
   void
   SetUp() override {
@@ -58,8 +59,8 @@ class PrefixStateTestFixture : public ::testing::Test {
 
   void
   comparePrefixMaps(
-      const std::unordered_map<folly::CIDRNetwork, PrefixEntries>& map1,
-      const std::unordered_map<folly::CIDRNetwork, PrefixEntries>& map2) {
+      const folly::F14FastMap<folly::CIDRNetwork, PrefixEntries>& map1,
+      const folly::F14FastMap<folly::CIDRNetwork, PrefixEntries>& map2) {
     EXPECT_EQ(map1.size(), map2.size());
     for (const auto& [key, innerMap1] : map1) {
       const auto& iter = map2.find(key);

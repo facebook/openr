@@ -51,8 +51,8 @@ void
 sendRecvInitialUpdate(
     std::shared_ptr<DecisionWrapper> const& decisionWrapper,
     const std::string& nodeName,
-    std::unordered_map<std::string, thrift::AdjacencyDatabase>&& adjDbs,
-    std::unordered_map<std::string, thrift::PrefixDatabase>&& prefixDbs) {
+    folly::F14FastMap<std::string, thrift::AdjacencyDatabase>&& adjDbs,
+    folly::F14FastMap<std::string, thrift::PrefixDatabase>&& prefixDbs) {
   thrift::PerfEvents perfEvents;
   addPerfEvent(perfEvents, nodeName, "DECISION_INIT_UPDATE");
 
@@ -250,13 +250,13 @@ createGridAdjacencys(const int row, const int col, const uint32_t n) {
 
 // Create a grid topology
 std::pair<
-    std::unordered_map<std::string, thrift::AdjacencyDatabase>,
-    std::unordered_map<std::string, thrift::PrefixDatabase>>
+    folly::F14FastMap<std::string, thrift::AdjacencyDatabase>,
+    folly::F14FastMap<std::string, thrift::PrefixDatabase>>
 createGrid(const int n, const int numPrefixes) {
   LOG(INFO) << "grid: " << n << " by " << n;
   LOG(INFO) << " number of prefixes " << numPrefixes;
-  std::unordered_map<std::string, thrift::AdjacencyDatabase> adjDbs;
-  std::unordered_map<std::string, thrift::PrefixDatabase> prefixDbs;
+  folly::F14FastMap<std::string, thrift::AdjacencyDatabase> adjDbs;
+  folly::F14FastMap<std::string, thrift::PrefixDatabase> prefixDbs;
   PrefixGenerator prefixGenerator;
 
   // Grid topology
@@ -304,8 +304,7 @@ createSswsAdjacencies(
     const int numOfPods,
     const int numOfPlanes,
     const int numOfSswsPerPlane,
-    std::unordered_map<std::string, std::vector<std::string>>&
-        listOfNodenames) {
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames) {
   std::vector<std::string> nodeNames;
   for (int planeId = 0; planeId < numOfPlanes; planeId++) {
     for (int sswIdInPlane = 0; sswIdInPlane < numOfSswsPerPlane;
@@ -345,8 +344,7 @@ createFswsAdjacencies(
     const int numOfFswsPerPod,
     const int numOfSswsPerPlane,
     const int numOfRswsPerPod,
-    std::unordered_map<std::string, std::vector<std::string>>&
-        listOfNodenames) {
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames) {
   std::vector<std::string> nodeNames;
   for (int podId = 0; podId < numOfPods; podId++) {
     for (int swIdInPod = 0; swIdInPod < numOfFswsPerPod; swIdInPod++) {
@@ -391,8 +389,7 @@ createRswsAdjacencies(
     const int numOfPods,
     const int numOfFswsPerPod,
     const int numOfRswsPerPod,
-    std::unordered_map<std::string, std::vector<std::string>>&
-        listOfNodenames) {
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames) {
   std::vector<std::string> nodeNames;
   for (int podId = 0; podId < numOfPods; podId++) {
     for (int swIdInPod = 0; swIdInPod < numOfRswsPerPod; swIdInPod++) {
@@ -426,8 +423,7 @@ createFabric(
     const int numOfSswsPerPlane,
     const int numOfFswsPerPod,
     const int numOfRswsPerPod,
-    std::unordered_map<std::string, std::vector<std::string>>&
-        listOfNodenames) {
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames) {
   LOG(INFO) << "Pods number: " << numOfPods;
   thrift::Publication initialPub;
   initialPub.area() = kTestingAreaName;
@@ -589,7 +585,7 @@ updateRandomGridPrefixes(
 void
 generatePrefixUpdatePublication(
     const uint32_t& numOfPrefixes,
-    const std::unordered_map<std::string, std::vector<std::string>>&
+    const folly::F14FastMap<std::string, std::vector<std::string>>&
         listOfNodenames,
     thrift::Publication& initialPub) {
   PrefixGenerator prefixGenerator;
@@ -749,7 +745,7 @@ BM_DecisionFabricInitialUpdate(
   const std::string nodeName = getNodeName(kFswMarker, 0, 0);
   for (uint32_t i = 0; i < iters; i++) {
     auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
-    std::unordered_map<std::string, std::vector<std::string>> listOfNodenames;
+    folly::F14FastMap<std::string, std::vector<std::string>> listOfNodenames;
 
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
@@ -810,7 +806,7 @@ BM_DecisionFabricPrefixUpdates(
   const std::string nodeName = getNodeName(kFswMarker, 0, 0);
   for (uint32_t i = 0; i < iters; i++) {
     auto decisionWrapper = std::make_shared<DecisionWrapper>(nodeName);
-    std::unordered_map<std::string, std::vector<std::string>> listOfNodenames;
+    folly::F14FastMap<std::string, std::vector<std::string>> listOfNodenames;
 
     auto initialPub = createFabric(
         decisionWrapper,

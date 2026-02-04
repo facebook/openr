@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
@@ -87,9 +88,9 @@ checkEqualUnicastRoutes(
   if (lhs.size() != rhs.size()) {
     return false;
   }
-  std::unordered_map<folly::CIDRNetwork, std::set<thrift::NextHopThrift>>
+  folly::F14FastMap<folly::CIDRNetwork, std::set<thrift::NextHopThrift>>
       lhsRoutes;
-  std::unordered_map<folly::CIDRNetwork, std::set<thrift::NextHopThrift>>
+  folly::F14FastMap<folly::CIDRNetwork, std::set<thrift::NextHopThrift>>
       rhsRoutes;
   for (auto const& route : lhs) {
     lhsRoutes.emplace(
@@ -1107,7 +1108,7 @@ TEST_F(FibTestFixture, getUnicastRoutesFilteredTest) {
 }
 
 TEST_F(FibTestFixture, longestPrefixMatchTest) {
-  std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
+  folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
   const auto& defaultRoute = toIpPrefix("::/0");
   const auto& dbPrefix1 = toIpPrefix("192.168.0.0/16");
   const auto& dbPrefix2 = toIpPrefix("192.168.0.0/20");

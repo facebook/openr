@@ -10,6 +10,7 @@
 #include <sstream>
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
@@ -38,12 +39,12 @@ struct DecisionRouteUpdate {
   Type type{INCREMENTAL}; // Incremental route update is default behavior
 
   // Unicast routes
-  std::unordered_map<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
+  folly::F14FastMap<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutesToUpdate;
   std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
 
   // MPLS routes
-  std::unordered_map<int32_t, RibMplsEntry> mplsRoutesToUpdate;
+  folly::F14FastMap<int32_t, RibMplsEntry> mplsRoutesToUpdate;
   std::vector<int32_t> mplsRoutesToDelete;
 
   // Optional prefix type whose unicast/label routes are included in the struct.

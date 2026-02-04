@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <openr/common/LsdbTypes.h>
 #include <openr/common/NetworkUtil.h>
@@ -18,7 +19,7 @@ namespace openr {
 
 class PrefixState {
  public:
-  std::unordered_map<folly::CIDRNetwork, PrefixEntries> const&
+  folly::F14FastMap<folly::CIDRNetwork, PrefixEntries> const&
   prefixes() const {
     return prefixes_;
   }
@@ -53,6 +54,6 @@ class PrefixState {
 
   // Data structure to maintain mapping from:
   //  IpPrefix -> collection of originator(i.e. [node, area] combination)
-  std::unordered_map<folly::CIDRNetwork, PrefixEntries> prefixes_;
+  folly::F14FastMap<folly::CIDRNetwork, PrefixEntries> prefixes_;
 };
 } // namespace openr

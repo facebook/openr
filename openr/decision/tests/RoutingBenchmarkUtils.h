@@ -12,6 +12,7 @@
 #include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 #include <folly/Random.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
 
@@ -195,9 +196,9 @@ class DecisionWrapper {
   // private member methods
   //
 
-  std::unordered_map<std::string, thrift::RouteDatabase>
+  folly::F14FastMap<std::string, thrift::RouteDatabase>
   dumpRouteDb(const std::vector<std::string>& allNodes) {
-    std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
+    folly::F14FastMap<std::string, thrift::RouteDatabase> routeMap;
 
     for (std::string const& node : allNodes) {
       auto resp = decision->getDecisionRouteDb(node).get();
@@ -251,8 +252,8 @@ void sendRecvUpdate(
 void sendRecvInitialUpdate(
     std::shared_ptr<DecisionWrapper> const& decisionWrapper,
     const std::string& nodeName,
-    std::unordered_map<std::string, thrift::AdjacencyDatabase>&& adjs,
-    std::unordered_map<std::string, thrift::PrefixDatabase>&& prefixes);
+    folly::F14FastMap<std::string, thrift::AdjacencyDatabase>&& adjs,
+    folly::F14FastMap<std::string, thrift::PrefixDatabase>&& prefixes);
 
 // Send kvstore update for a given node's adjacency DB
 void sendRecvAdjUpdate(
@@ -306,8 +307,8 @@ inline std::vector<thrift::Adjacency> createGridAdjacencys(
 
 // Create a grid topology
 std::pair<
-    std::unordered_map<std::string, thrift::AdjacencyDatabase>,
-    std::unordered_map<std::string, thrift::PrefixDatabase>>
+    folly::F14FastMap<std::string, thrift::AdjacencyDatabase>,
+    folly::F14FastMap<std::string, thrift::PrefixDatabase>>
 createGrid(const int n, const int numPrefixes);
 
 /**
@@ -323,7 +324,7 @@ void createSswsAdjacencies(
     const int numOfPods,
     const int numOfPlanes,
     const int numOfSswsPerPlane,
-    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames);
 
 /**
  * Create Adjacencies for fabric switches.
@@ -339,7 +340,7 @@ void createFswsAdjacencies(
     const int numOfFswsPerPod,
     const int numOfSswsPerPlane,
     const int numOfRswsPerPod,
-    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames);
 
 /**
  * Create Adjacencies for rack switches.
@@ -353,7 +354,7 @@ void createRswsAdjacencies(
     const int numOfPods,
     const int numOfFswsPerPod,
     const int numOfRswsPerPod,
-    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames);
 
 //
 // Create a fabric topology
@@ -365,7 +366,7 @@ thrift::Publication createFabric(
     const int numOfSswsPerPlane,
     const int numOfFswsPerPod,
     const int numOfRswsPerPod,
-    std::unordered_map<std::string, std::vector<std::string>>& listOfNodenames);
+    folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames);
 
 //
 // Randomly choose one rsw from a random pod,
@@ -400,7 +401,7 @@ void updateRandomGridAdjs(
 // Generate prefix updates for nodes and add into thrift::Publication
 void generatePrefixUpdatePublication(
     const uint32_t& numOfPrefixes,
-    const std::unordered_map<std::string, std::vector<std::string>>&
+    const folly::F14FastMap<std::string, std::vector<std::string>>&
         listOfNodenames,
     thrift::Publication& initialPub);
 

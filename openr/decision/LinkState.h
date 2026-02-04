@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
@@ -41,7 +42,7 @@ adjUsable(const thrift::Adjacency& adj, const std::string& nodeName) {
 
 /*
  * Why define Link and LinkState? Isn't link state fully captured by something
- * like std::unordered_map<std::string, thrift::AdjacencyDatabase>?
+ * like folly::F14FastMap<std::string, thrift::AdjacencyDatabase>?
  *
  * The answer is YES, but these classes provide a few major benefits over that
  * simple structure:
@@ -344,7 +345,7 @@ class LinkState {
   };
 
   using SpfResult =
-      std::unordered_map<std::string /* otherNodeName */, NodeSpfResult>;
+      folly::F14FastMap<std::string /* otherNodeName */, NodeSpfResult>;
 
   using Path = std::vector<std::shared_ptr<Link>>;
 
@@ -366,7 +367,7 @@ class LinkState {
   const std::string myNodeName_;
 
   // memoization structure for getSpfResult()
-  mutable std::unordered_map<
+  mutable folly::F14FastMap<
       std::pair<std::string /* nodeName */, bool /* useLinkMetric */>,
       SpfResult>
       spfResults_;
@@ -385,7 +386,7 @@ class LinkState {
 
  private:
   // memoization structure for getKthPaths()
-  mutable std::unordered_map<
+  mutable folly::F14FastMap<
       std::tuple<std::string /* src */, std::string /* dest */, size_t /* k */>,
       std::vector<LinkState::Path>>
       kthPathResults_;
@@ -473,10 +474,9 @@ class LinkState {
   }
 
   // get adjacency databases
-  std::unordered_map<
-      std::string /* nodeName */,
-      thrift::AdjacencyDatabase> const&
-  getAdjacencyDatabases() const {
+  folly::
+      F14FastMap<std::string /* nodeName */, thrift::AdjacencyDatabase> const&
+      getAdjacencyDatabases() const {
     return adjacencyDatabases_;
   }
 
@@ -562,23 +562,22 @@ class LinkState {
       const std::string& nodeName) const;
 
   // this stores the same link object accessible from either nodeName
-  std::unordered_map<std::string /* nodeName */, Link::LinkSet> linkMap_;
+  folly::F14FastMap<std::string /* nodeName */, Link::LinkSet> linkMap_;
 
   // useful for iterating over all the links
   Link::LinkSet allLinks_;
 
   // [hard-drain]
-  std::unordered_map<std::string /* nodeName */, bool> nodeOverloads_;
+  folly::F14FastMap<std::string /* nodeName */, bool> nodeOverloads_;
 
   // [soft-drain]
   // track nodeMetricInc per node, 0 means not softdrained. Higher the value,
   // less it is preferred
-  std::unordered_map<std::string /* nodeName */, uint64_t>
+  folly::F14FastMap<std::string /* nodeName */, uint64_t>
       nodeMetricIncrementVals_;
 
   // the latest AdjacencyDatabase we've received from each node
-  std::unordered_map<std::string, thrift::AdjacencyDatabase>
-      adjacencyDatabases_;
+  folly::F14FastMap<std::string, thrift::AdjacencyDatabase> adjacencyDatabases_;
 
 }; // class LinkState
 
@@ -613,7 +612,7 @@ template <class T>
 class DijkstraQ {
  private:
   std::vector<std::shared_ptr<T>> heap_;
-  std::unordered_map<std::string, std::shared_ptr<T>> nameToNode_;
+  folly::F14FastMap<std::string, std::shared_ptr<T>> nameToNode_;
 
   struct {
     bool

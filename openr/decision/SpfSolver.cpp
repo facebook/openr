@@ -77,7 +77,7 @@ SpfSolver::~SpfSolver() = default;
 
 void
 SpfSolver::updateStaticUnicastRoutes(
-    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+    const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
@@ -108,7 +108,7 @@ SpfSolver::updateStaticUnicastRoutes(
 std::optional<RibUnicastEntry>
 SpfSolver::createRouteForPrefixOrGetStaticRoute(
     const std::string& myNodeName,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
     folly::CIDRNetwork const& prefix) {
   // route output from `PrefixState` has higher priority over
@@ -129,7 +129,7 @@ SpfSolver::createRouteForPrefixOrGetStaticRoute(
 std::pair<PrefixEntries, bool>
 SpfSolver::getReachablePrefixEntries(
     const std::string& myNodeName,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     const PrefixEntries& allPrefixEntries) {
   //
   // Create list of prefix-entries from reachable nodes only
@@ -169,7 +169,7 @@ SpfSolver::getReachablePrefixEntries(
 std::optional<RibUnicastEntry>
 SpfSolver::createRouteForPrefix(
     const std::string& myNodeName,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
     folly::CIDRNetwork const& prefix) {
   fb303::fbData->addStatValue("decision.get_route_for_prefix", 1, fb303::COUNT);
@@ -296,7 +296,7 @@ SpfSolver::createRouteForPrefix(
 std::optional<DecisionRouteDb>
 SpfSolver::buildRouteDb(
     const std::string& myNodeName,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState) {
   bool nodeExist{false};
   for (const auto& [_, linkState] : areaLinkStates) {
@@ -344,7 +344,7 @@ SpfSolver::selectBestRoutes(
     std::string const& myNodeName,
     folly::CIDRNetwork const& prefix,
     PrefixEntries& prefixEntries,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) {
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates) {
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   RouteSelectionResult ret;
 
@@ -398,7 +398,7 @@ SpfSolver::getMinNextHopThreshold(
 folly::F14FastSet<NodeAndArea>
 SpfSolver::getSoftDrainedNodes(
     PrefixEntries& prefixes,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const {
   folly::F14FastSet<NodeAndArea> softDrainedNodes;
   for (auto& [nodeArea, metricsWrapper] : prefixes) {
     const auto& [node, area] = nodeArea;
@@ -413,7 +413,7 @@ SpfSolver::getSoftDrainedNodes(
 PrefixEntries
 SpfSolver::filterHardDrainedNodes(
     PrefixEntries& prefixes,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const {
   PrefixEntries filtered = folly::copy(prefixes);
   for (auto iter = filtered.cbegin(); iter != filtered.cend();) {
     const auto& [node, area] = iter->first;
@@ -430,7 +430,7 @@ SpfSolver::filterHardDrainedNodes(
 bool
 SpfSolver::isNodeDrained(
     const NodeAndArea& nodeArea,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates) const {
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const {
   const auto& [node, area] = nodeArea;
   const auto& linkState = areaLinkStates.at(area);
   return linkState.isNodeOverloaded(node) ||
@@ -537,7 +537,7 @@ SpfSolver::getNextHopsWithMetric(
     const std::set<NodeAndArea>& dstNodeAreas,
     const LinkState& linkState) {
   // build up next hop nodes that are along a shortest path to the prefix
-  std::unordered_map<
+  folly::F14FastMap<
       std::string /* nextHopNodeName */,
       Metric /* the distance from the nexthop to the dest */>
       nextHopNodes;

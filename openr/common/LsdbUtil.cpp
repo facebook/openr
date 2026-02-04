@@ -671,7 +671,7 @@ createMplsRoute(int32_t topLabel, std::vector<thrift::NextHopThrift> nextHops) {
 
 std::vector<thrift::UnicastRoute>
 createUnicastRoutesFromMap(
-    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+    const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes) {
   std::vector<thrift::UnicastRoute> newRoutes;
   for (auto const& [_, route] : unicastRoutes) {
@@ -682,7 +682,7 @@ createUnicastRoutesFromMap(
 
 std::vector<thrift::MplsRoute>
 createMplsRoutesFromMap(
-    const std::unordered_map<int32_t, RibMplsEntry>& mplsRoutes) {
+    const folly::F14FastMap<int32_t, RibMplsEntry>& mplsRoutes) {
   std::vector<thrift::MplsRoute> newRoutes;
   for (auto const& [_, route] : mplsRoutes) {
     newRoutes.emplace_back(route.toThrift());

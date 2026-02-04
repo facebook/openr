@@ -14,13 +14,13 @@
 
 namespace openr {
 LinkState
-getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
+getLinkState(folly::F14FastMap<int, std::vector<std::pair<int, int>>> adjMap) {
   using fmt::format;
   LinkState linkState{kTestingAreaName, kTestingNodeName};
   for (auto const& [node, adjList] : adjMap) {
     CHECK_LT(node, 0x1 << 16);
     std::vector<thrift::Adjacency> adjs;
-    std::unordered_map<int, int> numParallel;
+    folly::F14FastMap<int, int> numParallel;
     for (auto const& [adj, metric] : adjList) {
       CHECK_LT(adj, 0x1 << 16);
       auto adjNum = numParallel[adj]++;
@@ -43,8 +43,8 @@ getLinkState(std::unordered_map<int, std::vector<std::pair<int, int>>> adjMap) {
 }
 
 LinkState
-getLinkState(std::unordered_map<int, std::vector<int>> adjMap) {
-  std::unordered_map<int, std::vector<std::pair<int, int>>> weightedAdjMap;
+getLinkState(folly::F14FastMap<int, std::vector<int>> adjMap) {
+  folly::F14FastMap<int, std::vector<std::pair<int, int>>> weightedAdjMap;
   for (auto const& [node, adjs] : adjMap) {
     auto& entry = weightedAdjMap[node];
     for (auto const& adj : adjs) {

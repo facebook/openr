@@ -158,7 +158,7 @@ Fib::stop() {
 std::optional<folly::CIDRNetwork>
 Fib::longestPrefixMatch(
     const folly::CIDRNetwork& inputPrefix,
-    const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+    const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes) {
   std::optional<folly::CIDRNetwork> matchedPrefix;
   int maxMask = -1;

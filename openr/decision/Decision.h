@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -305,7 +306,7 @@ class Decision : public OpenrEventBase {
   std::unique_ptr<SpfSolver> spfSolver_;
 
   // Per area link states
-  std::unordered_map<std::string, LinkState> areaLinkStates_;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates_;
 
   // Global prefix state
   PrefixState prefixState_;
@@ -348,7 +349,7 @@ class Decision : public OpenrEventBase {
    * val: set of unreceived unidirectional adjacency (A->B). For one live peer,
    * both peer->theNode and theNode->peer adj are expected to be received.
    */
-  std::unordered_map<
+  folly::F14FastMap<
       std::string,
       folly::F14FastSet<std::pair<std::string, std::string>>>
       areaToPendingAdjacency_;

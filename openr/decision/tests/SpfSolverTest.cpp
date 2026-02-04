@@ -11,6 +11,7 @@
 #define SpfSolver_TEST_FRIENDS \
   FRIEND_TEST(SpfSolverUnitTest, GetReachablePrefixEntriesTest);
 
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/Util.h>
@@ -84,7 +85,7 @@ RouteMap
 getRouteMap(
     SpfSolver& spfSolver,
     const vector<string>& nodes,
-    std::unordered_map<std::string, LinkState> const& areaLinkStates,
+    folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState) {
   RouteMap routeMap;
 
@@ -121,10 +122,10 @@ TEST(ShortestPathTest, UnreachableNodes) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
@@ -160,10 +161,10 @@ TEST(SpfSolver, DrainedNodeLeastPreferred) {
   SpfSolver spfSolver(
       nodeName, false /* disable v4 */, true /* enableBestRouteSelection */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
@@ -276,10 +277,10 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1's AdjDb and all prefixes, but do not
@@ -313,10 +314,10 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1's AdjDb and all prefixes, but do not
@@ -352,9 +353,9 @@ TEST(ShortestPathTest, UnknownNode) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
   PrefixState prefixState;
 
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
@@ -384,10 +385,10 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
@@ -515,10 +516,10 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
@@ -623,10 +624,10 @@ TEST(SpfSolver, AdjacencyUpdate) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
   //
   // Feed SPF solver with R1 and R2's adjacency + prefix dbs
@@ -730,10 +731,10 @@ TEST(BGPRedistribution, IgpMetric) {
   SpfSolver spfSolver(
       nodeName, false /* enableV4 */, true /* enableBestRouteSelection */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   //
@@ -875,7 +876,7 @@ TEST(Decision, IgpCost) {
   SpfSolver spfSolver(
       nodeName, false /* enableV4 */, true /* enableBestRouteSelection */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 
   // Test topology: spine
@@ -890,8 +891,8 @@ TEST(Decision, IgpCost) {
   auto adjacencyDb3 = createAdjDb("3", {adj31, adj34}, 3);
   auto adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName)
@@ -935,7 +936,7 @@ TEST(Decision, BestRouteSelection) {
   SpfSolver spfSolver(
       nodeName, false /* enableV4 */, true /* enableBestRouteSelection */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 
   //
@@ -946,8 +947,8 @@ TEST(Decision, BestRouteSelection) {
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 3);
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName)
@@ -1062,10 +1063,10 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
   std::string nodeName("1");
   SpfSolver spfSolver(nodeName, false /* disable v4 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   EXPECT_EQ(
@@ -1110,10 +1111,10 @@ TEST(ConnectivityTest, NodeHardDrainTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(nodeName, false /* disable v4 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   // Add all adjacency DBs
@@ -1188,9 +1189,9 @@ TEST(ConnectivityTest, InterfaceSoftDrainTest) {
   SpfSolver spfSolver(nodeName, false /* disable v4 */);
 
   // Initialize link-state and prefix-state obj
-  std::unordered_map<std::string, LinkState> areaLinkStates = {
-      {kTestingAreaName, LinkState(kTestingAreaName, nodeName)}};
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  folly::F14FastMap<std::string, LinkState> areaLinkStates = {
+      {kTestingAreaName.t, LinkState(kTestingAreaName, nodeName)}};
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   /*
@@ -1323,8 +1324,8 @@ class SimpleRingMeshTopologyFixture
     adjacencyDb4 = createAdjDb("4", {adj41, adj42, adj43}, 4);
 
     areaLinkStates.emplace(
-        kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-    auto& linkState = areaLinkStates.at(kTestingAreaName);
+        kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName.t);
 
     EXPECT_EQ(
         LinkState::LinkStateChange(false, false, true),
@@ -1361,7 +1362,7 @@ class SimpleRingMeshTopologyFixture
   bool v4Enabled{false};
 
   std::unique_ptr<SpfSolver> spfSolver;
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 };
 
@@ -1392,8 +1393,8 @@ class SimpleRingTopologyFixture
     adjacencyDb4 = createAdjDb("4", {adj42, adj43}, 4);
 
     areaLinkStates.emplace(
-        kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-    auto& linkState = areaLinkStates.at(kTestingAreaName);
+        kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName.t);
 
     EXPECT_EQ(
         LinkState::LinkStateChange(false, false, true),
@@ -1430,7 +1431,7 @@ class SimpleRingTopologyFixture
   bool v4Enabled{false};
 
   std::unique_ptr<SpfSolver> spfSolver;
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 
   void
@@ -1642,7 +1643,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
   CustomSetUp();
   adjacencyDb2.isOverloaded() = true;
   adjacencyDb3.isOverloaded() = true;
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb2, kTestingAreaName)
                   .topologyChanged);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
@@ -1701,7 +1702,7 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
 TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
   CustomSetUp();
   adjacencyDb3.adjacencies()[0].isOverloaded() = true; // make adj31 overloaded
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
                   .topologyChanged);
 
@@ -1872,8 +1873,8 @@ class ParallelAdjRingTopologyFixture
 
     // Adjacency db's
     areaLinkStates.emplace(
-        kTestingAreaName, LinkState(kTestingAreaName, nodeName));
-    auto& linkState = areaLinkStates.at(kTestingAreaName);
+        kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName.t);
     EXPECT_FALSE(
         linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
             .topologyChanged);
@@ -1901,7 +1902,7 @@ class ParallelAdjRingTopologyFixture
       adjacencyDb4;
 
   std::unique_ptr<SpfSolver> spfSolver;
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 };
 
@@ -2128,8 +2129,8 @@ class GridTopologyFixture : public ::testing::TestWithParam<int> {
   SetUp() override {
     n = GetParam();
     areaLinkStates.emplace(
-        kTestingAreaName, LinkState(kTestingAreaName, kTestingNodeName));
-    auto& linkState = areaLinkStates.at(kTestingAreaName);
+        kTestingAreaName.t, LinkState(kTestingAreaName, kTestingNodeName));
+    auto& linkState = areaLinkStates.at(kTestingAreaName.t);
     createGrid(linkState, prefixState, n);
   }
 
@@ -2138,7 +2139,7 @@ class GridTopologyFixture : public ::testing::TestWithParam<int> {
   std::string nodeName{"1"};
   SpfSolver spfSolver;
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 };
 
@@ -2207,10 +2208,10 @@ TEST(GridTopology, StressTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(nodeName, false, true /* enable best route selection */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, kTestingNodeName));
-  auto& linkState = areaLinkStates.at(kTestingAreaName);
+      kTestingAreaName.t, LinkState(kTestingAreaName, kTestingNodeName));
+  auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
   createGrid(linkState, prefixState, 99);
@@ -2228,9 +2229,9 @@ TEST(SpfSolverUnitTest, GetReachablePrefixEntriesTest) {
       true /* enable best route selection */,
       false /* disable v4_over_v6 */);
 
-  std::unordered_map<std::string, LinkState> areaLinkStates;
+  folly::F14FastMap<std::string, LinkState> areaLinkStates;
   areaLinkStates.emplace(
-      kTestingAreaName, LinkState(kTestingAreaName, nodeName));
+      kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
 
   PrefixEntries allPrefixEntries;
 

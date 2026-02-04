@@ -13,6 +13,7 @@
 #include <folly/IPAddressV6.h>
 #include <folly/Optional.h>
 #include <folly/Random.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
 #include <gflags/gflags.h>
@@ -182,9 +183,9 @@ class DecisionTestFixture : public ::testing::Test {
     }
   }
 
-  std::unordered_map<std::string, thrift::RouteDatabase>
+  folly::F14FastMap<std::string, thrift::RouteDatabase>
   dumpRouteDb(const vector<string>& allNodes) {
-    std::unordered_map<std::string, thrift::RouteDatabase> routeMap;
+    folly::F14FastMap<std::string, thrift::RouteDatabase> routeMap;
 
     for (string const& node : allNodes) {
       auto resp = decision->getDecisionRouteDb(node).get();

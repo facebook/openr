@@ -7,11 +7,11 @@
 
 #pragma once
 
-#include <unordered_map>
 #include <vector>
 #include "openr/if/gen-cpp2/Network_types.h"
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/OpenrCtrl.h>
 #include <openr/if/gen-cpp2/Types_types.h>

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
 #include <folly/fibers/Semaphore.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
@@ -66,7 +67,7 @@ class Fib final : public OpenrEventBase {
    */
   static std::optional<folly::CIDRNetwork> longestPrefixMatch(
       const folly::CIDRNetwork& inputPrefix,
-      const std::unordered_map<folly::CIDRNetwork, RibUnicastEntry>&
+      const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutes);
 
   /**
@@ -207,8 +208,8 @@ class Fib final : public OpenrEventBase {
    */
   struct RouteState {
     // Non modified copy of Unicast and MPLS routes received from Decision
-    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
-    std::unordered_map<int32_t, RibMplsEntry> mplsRoutes;
+    folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry> unicastRoutes;
+    folly::F14FastMap<int32_t, RibMplsEntry> mplsRoutes;
 
     /**
      * Set of route keys (prefixes & labels) that needs to be updated in HW. Two
@@ -219,14 +220,13 @@ class Fib final : public OpenrEventBase {
      * Along with prefixes and labels, we also store timestamp when routes are
      * received or updated.
      */
-    std::unordered_map<
+    folly::F14FastMap<
         folly::CIDRNetwork,
         std::chrono::time_point<std::chrono::steady_clock>>
         dirtyPrefixes;
-    std::unordered_map<
-        uint32_t,
-        std::chrono::time_point<std::chrono::steady_clock>>
-        dirtyLabels;
+    folly::
+        F14FastMap<uint32_t, std::chrono::time_point<std::chrono::steady_clock>>
+            dirtyLabels;
 
     /**
      * Enumeration depicting the route event that may arrive and affect `State`

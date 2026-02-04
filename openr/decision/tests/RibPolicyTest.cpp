@@ -7,6 +7,7 @@
 
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -350,7 +351,7 @@ TEST(RibPolicy, ApplyPolicy) {
   RibUnicastEntry const entry2(
       folly::IPAddress::createNetwork("fc02::/64"), {nh2});
   {
-    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> entries;
+    folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry> entries;
     entries.emplace(entry1.prefix, entry1);
     entries.emplace(entry2.prefix, entry2);
 
@@ -384,7 +385,7 @@ TEST(RibPolicy, ApplyPolicy) {
   std::this_thread::sleep_for(std::chrono::seconds(1));
   EXPECT_FALSE(policy.isActive());
   {
-    std::unordered_map<folly::CIDRNetwork, RibUnicastEntry> entries;
+    folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry> entries;
     entries.emplace(entry1.prefix, entry1);
     entries.emplace(entry2.prefix, entry2);
     auto const change = policy.applyPolicy(entries);
