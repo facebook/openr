@@ -9,6 +9,7 @@
 
 #include <csignal>
 
+#include <folly/container/F14Map.h>
 #include <folly/fibers/FiberManager.h>
 #include <folly/io/async/AsyncSignalHandler.h>
 #include <folly/io/async/EventHandler.h>
@@ -161,6 +162,7 @@ class OpenrEventBase {
   std::vector<folly::Future<folly::Unit>> fiberTaskFutures_;
 
   // Data structure to hold fd and their handlers
+  // Note: Using unordered_map because OpenrEventHandler is not moveable
   std::unordered_map<int /* fd */, OpenrEventHandler> fdHandlers_;
 
   // Timestamp

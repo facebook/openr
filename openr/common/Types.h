@@ -13,6 +13,7 @@
 
 #include <boost/heap/d_ary_heap.hpp>
 #include <boost/serialization/strong_typedef.hpp>
+#include <folly/container/F14Map.h>
 
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -94,7 +95,7 @@ struct AreaPeerEvent {
 /**
  * Define peer update event in all areas.
  */
-using PeerEvent = std::unordered_map<std::string, AreaPeerEvent>;
+using PeerEvent = folly::F14FastMap<std::string, AreaPeerEvent>;
 
 /**
  * Advertise the key-value into consumer with specified version.

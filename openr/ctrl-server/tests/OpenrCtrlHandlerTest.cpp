@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <folly/container/F14Map.h>
 #include <folly/coro/BlockingWait.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/coro/Sleep.h>
@@ -1599,7 +1600,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     filter.originatorIds() = {"node1", "node2", "node3", "node33"};
     filter.oper() = thrift::FilterOperator::OR;
 
-    std::unordered_map<std::string, std::string> keyvals;
+    folly::F14FastMap<std::string, std::string> keyvals;
     keyvals["key33"] = "value33";
     keyvals["key333"] = "value333";
 
@@ -1673,7 +1674,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     std::atomic<int> received{0};
     const std::string key{"test-key"};
     std::vector<std::string> keys = {"key1", key, "key3"};
-    std::unordered_map<std::string, std::string> keyvals;
+    folly::F14FastMap<std::string, std::string> keyvals;
     keyvals["key1"] = "value1";
     keyvals["key3"] = "value3";
     keyvals[key] = "value1";
@@ -1768,7 +1769,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     filter.originatorIds() = {"node1", "node2", "node3", "node33"};
     filter.oper() = thrift::FilterOperator::OR;
 
-    std::unordered_map<std::string, std::string> keyvals;
+    folly::F14FastMap<std::string, std::string> keyvals;
     keyvals["key1"] = "value1";
     keyvals["key3"] = "value3";
     keyvals[key] = "value1";
@@ -1918,7 +1919,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     filter.originatorIds()->insert("node10");
     filter.oper() = thrift::FilterOperator::OR;
 
-    std::unordered_map<std::string, std::string> keyvals;
+    folly::F14FastMap<std::string, std::string> keyvals;
     keyvals["key1"] = "value1";
     keyvals["key2"] = "value2";
     keyvals["key3"] = "value3";
@@ -2022,7 +2023,7 @@ TEST_F(
   // Client should receive publication associated with TTL update
   {
     const std::string key{"key1"};
-    const std::unordered_map<std::string, std::string> keyvals{{key, "value1"}};
+    const folly::F14FastMap<std::string, std::string> keyvals{{key, "value1"}};
     thrift::KeyDumpParams filter;
     filter.keys() = {key};
     filter.ignoreTtl() = false;
@@ -2126,7 +2127,7 @@ TEST_F(
     filter.ignoreTtl() = true;
     filter.originatorIds()->insert("node3");
     filter.originatorIds()->insert("node33");
-    std::unordered_map<std::string, std::string> keyvals;
+    folly::F14FastMap<std::string, std::string> keyvals;
     keyvals[key] = "value3";
     filter.oper() = thrift::FilterOperator::AND;
 

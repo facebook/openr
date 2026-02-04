@@ -6,6 +6,7 @@
  */
 
 #include <folly/String.h>
+#include <folly/container/F14Map.h>
 #include <openr/common/Constants.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/MplsUtil.h>
@@ -744,7 +745,7 @@ selectShortestDistancePerArea(
     const PrefixEntries& prefixEntries,
     const std::set<NodeAndArea>& nodeAreaSet) {
   // Split nodeAreaSet based on area.
-  std::unordered_map<std::string /*area*/, std::set<NodeAndArea>> areaMap;
+  folly::F14FastMap<std::string /*area*/, std::set<NodeAndArea>> areaMap;
   for (const auto& nodeArea : nodeAreaSet) {
     areaMap[nodeArea.second].emplace(nodeArea);
   }

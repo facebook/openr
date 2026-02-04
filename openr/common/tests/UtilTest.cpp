@@ -361,7 +361,7 @@ TEST(UtilTest, PrefixKeyTest) {
 */
 
 TEST(UtilTest, GetNodeNameFromKeyTest) {
-  const std::unordered_map<std::string, std::string> expectedIo = {
+  const folly::F14FastMap<std::string, std::string> expectedIo = {
       {"prefix:node1", "node1"},
       {"prefix:nodename.0.0:10:[0.0.0.0/0]", "nodename.0.0"},
       {"", ""},

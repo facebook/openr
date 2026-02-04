@@ -8,6 +8,7 @@
 #pragma once
 
 #include <fb303/BaseService.h>
+#include <folly/container/F14Map.h>
 #include <openr/common/Types.h>
 #include <openr/config-store/PersistentStore.h>
 #include <openr/config/Config.h>
@@ -635,25 +636,25 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   // Active kvstore snoop publishers
   folly::Synchronized<
-      std::unordered_map<int64_t, std::unique_ptr<KvStorePublisher>>>
+      folly::F14FastMap<int64_t, std::unique_ptr<KvStorePublisher>>>
       kvStorePublishers_;
 
   // Active Fib streaming publishers
-  folly::Synchronized<std::unordered_map<
+  folly::Synchronized<folly::F14FastMap<
       int64_t,
       apache::thrift::ServerStreamPublisher<thrift::RouteDatabaseDelta>>>
       fibPublishers_;
 
   // Active Fib Detail streaming publishers
-  folly::Synchronized<std::unordered_map<int64_t, FibStreamSubscriber>>
+  folly::Synchronized<folly::F14FastMap<int64_t, FibStreamSubscriber>>
       fibDetailSubscribers_;
 
   // pending longPoll requests from clients, which consists of
   // 1). promise; 2). timestamp when req received on server
   std::atomic<int64_t> pendingRequestId_{0};
-  folly::ImplicitSynchronized<std::unordered_map<
+  folly::ImplicitSynchronized<folly::F14FastMap<
       std::string /* area */,
-      std::unordered_map<int64_t, std::pair<folly::Promise<bool>, int64_t>>>>
+      folly::F14FastMap<int64_t, std::pair<folly::Promise<bool>, int64_t>>>>
       longPollReqs_;
 
   // fiber task future hold for kvStore update, fib update reader's

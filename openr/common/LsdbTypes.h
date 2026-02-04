@@ -10,6 +10,7 @@
 #include <variant>
 
 #include <boost/serialization/strong_typedef.hpp>
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 
 #include <openr/common/Constants.h>
@@ -31,7 +32,7 @@ using AdjacencyKey = std::
     pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;
 using NodeAndArea = std::pair<std::string, std::string>;
 using PrefixEntries =
-    std::unordered_map<NodeAndArea, std::shared_ptr<thrift::PrefixEntry>>;
+    folly::F14FastMap<NodeAndArea, std::shared_ptr<thrift::PrefixEntry>>;
 
 // markers for some of KvStore keys
 BOOST_STRONG_TYPEDEF(std::string, AdjacencyDbMarker);
