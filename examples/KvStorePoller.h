@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/SocketAddress.h>
+#include <folly/container/F14Map.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
 namespace openr {
@@ -19,12 +20,12 @@ class KvStorePoller {
   ~KvStorePoller() = default;
 
   std::pair<
-      std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
+      std::optional<folly::F14FastMap<std::string, thrift::AdjacencyDatabase>>,
       std::vector<folly::SocketAddress> /* unreachable url */>
   getAdjacencyDatabases(std::chrono::milliseconds pollTimeout);
 
   std::pair<
-      std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
+      std::optional<folly::F14FastMap<std::string, thrift::PrefixDatabase>>,
       std::vector<folly::SocketAddress> /* unreachable url */>
   getPrefixDatabases(std::chrono::milliseconds pollTimeout);
 

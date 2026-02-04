@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/Format.h>
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <stack>
 
@@ -68,7 +69,7 @@ class Dual {
   Dual(
       const std::string& nodeId,
       const std::string& rootId,
-      const std::unordered_map<std::string, int64_t>& localDistance,
+      const folly::F14FastMap<std::string, int64_t>& localDistance,
       std::function<void(
           const std::optional<std::string>& oldNh,
           const std::optional<std::string>& newNh)> nexthopChangeCb);
@@ -79,14 +80,14 @@ class Dual {
   void peerUp(
       const std::string& neighbor,
       int64_t cost,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // peer down event
   // input: (neighbor-id)
   // output: map<neighbor-id: dual-messages-to-send>
   void peerDown(
       const std::string& neighbor,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // process a DUAL update message
   // input: (neighbor-id, a update dual-message)
@@ -94,7 +95,7 @@ class Dual {
   void processUpdate(
       const std::string& neighbor,
       const thrift::DualMessage& update,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // process a DUAL query message
   // input: (neighbor-id, a query dual-message)
@@ -102,7 +103,7 @@ class Dual {
   void processQuery(
       const std::string& neighbor,
       const thrift::DualMessage& query,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // process a DUAL reply message
   // input: (neighbor-id, a reply dual-message)
@@ -110,7 +111,7 @@ class Dual {
   void processReply(
       const std::string& neighbor,
       const thrift::DualMessage& reply,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // Neighbor information per destination
   struct NeighborInfo {
@@ -138,7 +139,7 @@ class Dual {
     // state machine
     DualStateMachine sm;
     // neighbor exchanged information <report-distance, expect-reply-flag>
-    std::unordered_map<std::string, NeighborInfo> neighborInfos;
+    folly::F14FastMap<std::string, NeighborInfo> neighborInfos;
     // diffusing: track received query
     std::stack<std::string> cornet{};
 
@@ -231,31 +232,31 @@ class Dual {
 
   // flood updates to all my neighbor
   void floodUpdates(
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // perform a local computation
   void localComputation(
       const std::string& newNexthop,
       int64_t newDistance,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // start diffuing computation (when not meet feasible condition)
   bool diffusingComputation(
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // perform local or diffusing computation depends on if FC is met
   // if needReply: send reply back
   void tryLocalOrDiffusing(
       const DualEvent& event,
       bool needReply,
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // helper to add two distances
   static int64_t addDistances(int64_t d1, int64_t d2);
 
   // send a reply back
   void sendReply(
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // check if a neighbor is up or not
   bool neighborUp(const std::string& neighbor);
@@ -267,7 +268,7 @@ class Dual {
   RouteInfo info_;
 
   // local neighbor distances
-  std::unordered_map<std::string, int64_t> localDistances_;
+  folly::F14FastMap<std::string, int64_t> localDistances_;
 
   // dual messages counters map<neighbor: dual-counters>
   std::map<std::string, thrift::DualPerRootCounters> counters_;
@@ -353,14 +354,14 @@ class DualNode {
       const std::string& rootId) const noexcept;
 
   // get all route-infos for all discovered roots
-  std::unordered_map<std::string, Dual::RouteInfo> getInfos() const noexcept;
+  folly::F14FastMap<std::string, Dual::RouteInfo> getInfos() const noexcept;
 
   // get status as string for a given root-id
   std::string getStatusString(const std::string& rootId) const noexcept;
 
   // get status for all discovered roots
   // return pair<this-node-level-status, map<root-id: root-level-status>>
-  std::pair<std::string, std::unordered_map<std::string, std::string>>
+  std::pair<std::string, folly::F14FastMap<std::string, std::string>>
   getStatusStrings() const noexcept;
 
   // check if a neighbor is up or not
@@ -378,7 +379,7 @@ class DualNode {
  private:
   // send out dual messages for a given <neighbor: dual-messages>
   void sendAllDualMessages(
-      std::unordered_map<std::string, thrift::DualMessages>& msgsToSend);
+      folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
   // add Dual for a given root-id if not exist yet
   void addDual(const std::string& rootId);
@@ -387,7 +388,7 @@ class DualNode {
   void clearCounters(const std::string& neighbor) noexcept;
 
   // local distances map<neighbor: distance>
-  std::unordered_map<std::string, int64_t> localDistances_;
+  folly::F14FastMap<std::string, int64_t> localDistances_;
 
   // map<root-id: Dual-object>
   std::map<std::string, Dual> duals_;

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -128,20 +129,20 @@ class KvStoreWrapper {
 
   void pushToKvStoreUpdatesQueue(
       const AreaId& area,
-      const std::unordered_map<std::string /* key */, thrift::Value>& keyVals);
+      const folly::F14FastMap<std::string /* key */, thrift::Value>& keyVals);
 
   /**
    * API to get dump from KvStore.
    * if we pass a prefix, only return keys that match it
    */
-  std::unordered_map<std::string /* key */, thrift::Value> dumpAll(
+  folly::F14FastMap<std::string /* key */, thrift::Value> dumpAll(
       AreaId const& area, std::optional<KvStoreFilters> filters = std::nullopt);
 
   /**
    * API to get dump hashes from KvStore.
    * if we pass a prefix, only return keys that match it
    */
-  std::unordered_map<std::string /* key */, thrift::Value> dumpHashes(
+  folly::F14FastMap<std::string /* key */, thrift::Value> dumpHashes(
       AreaId const& area, std::string const& prefix = "");
 
   /**
@@ -152,7 +153,7 @@ class KvStoreWrapper {
   /**
    * API to get key vals on which hash differs from provided keyValHashes.
    */
-  std::unordered_map<std::string /* key */, thrift::Value> syncKeyVals(
+  folly::F14FastMap<std::string /* key */, thrift::Value> syncKeyVals(
       AreaId const& area, thrift::KeyVals const& keyValHashes);
 
   /**
@@ -190,7 +191,7 @@ class KvStoreWrapper {
   /**
    * APIs to get existing peers of a KvStore.
    */
-  std::unordered_map<std::string /* peerName */, thrift::PeerSpec> getPeers(
+  folly::F14FastMap<std::string /* peerName */, thrift::PeerSpec> getPeers(
       AreaId const& area);
 
   /**

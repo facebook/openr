@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/TokenBucket.h>
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/gen/Base.h>
 #include <folly/io/async/AsyncTimeout.h>
@@ -145,7 +146,7 @@ class KvStoreDb {
    *    3) dumpPeers(Thrift)
    */
   void addThriftPeers(
-      std::unordered_map<std::string, thrift::PeerSpec> const& peers);
+      folly::F14FastMap<std::string, thrift::PeerSpec> const& peers);
   void delThriftPeers(std::vector<std::string> const& peers);
   thrift::PeersMap dumpPeers();
 
@@ -473,7 +474,7 @@ class KvStoreDb {
   };
 
   // Set of peers with all info over thrift channel
-  std::unordered_map<std::string, KvStorePeer> thriftPeers_{};
+  folly::F14FastMap<std::string, KvStorePeer> thriftPeers_{};
 
   // Boolean flag indicating whether initial KvStoreDb sync with all peers
   // completed in OpenR initialization procedure.
@@ -517,12 +518,12 @@ class KvStoreDb {
 
   // all self originated key-vals and their backoffs
   // persistKey and setKey will add, clearKey will remove
-  std::unordered_map<std::string /* key */, SelfOriginatedValue>
+  folly::F14FastMap<std::string /* key */, SelfOriginatedValue>
       selfOriginatedKeyVals_{};
 
   // Map of keys to unset to new values to set. Used for batch processing of
   // unset ClearKeyValueRequests.
-  std::unordered_map<std::string /* key */, thrift::Value> keysToUnset_{};
+  folly::F14FastMap<std::string /* key */, thrift::Value> keysToUnset_{};
 
   // Set of local keys to be re-advertised.
   folly::F14FastSet<std::string /* key */> keysToAdvertise_{};
@@ -541,7 +542,7 @@ class KvStoreDb {
 
   // pending keys to flood publication
   // map<flood-root-id: set<keys>>
-  std::unordered_map<std::optional<std::string>, folly::F14FastSet<std::string>>
+  folly::F14FastMap<std::optional<std::string>, folly::F14FastSet<std::string>>
       publicationBuffer_{};
 
   // Callback function to signal KvStore that KvStoreDb sync with all peers

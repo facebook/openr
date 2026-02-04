@@ -28,9 +28,9 @@ parseThriftValue(thrift::Value const& value) {
 
 // static
 template <typename ThriftType>
-std::unordered_map<std::string, ThriftType>
+folly::F14FastMap<std::string, ThriftType>
 parseThriftValues(thrift::KeyVals const& keyVals) {
-  std::unordered_map<std::string, ThriftType> result;
+  folly::F14FastMap<std::string, ThriftType> result;
   for (auto const& [key, val] : keyVals) {
     result.emplace(key, parseThriftValue<ThriftType>(val));
   }
@@ -40,7 +40,7 @@ parseThriftValues(thrift::KeyVals const& keyVals) {
 // static
 template <typename ThriftType, typename ClientType>
 std::pair<
-    std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
+    std::optional<folly::F14FastMap<std::string /* key */, ThriftType>>,
     std::vector<folly::SocketAddress> /* unreached url */>
 dumpAllWithPrefixMultipleAndParse(
     std::optional<AreaId> area,
@@ -70,7 +70,7 @@ dumpAllWithPrefixMultipleAndParse(
 
 // static
 template <typename ThriftType, typename ClientType>
-std::unordered_map<std::string /* key */, ThriftType>
+folly::F14FastMap<std::string /* key */, ThriftType>
 dumpAllWithPrefixMultipleAndParse(
     folly::EventBase& evb,
     const AreaId& area,

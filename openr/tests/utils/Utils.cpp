@@ -467,7 +467,7 @@ generateTopo(
 #if FOLLY_HAS_COROUTINES
 folly::coro::Task<void>
 co_validateNodeKey(
-    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     ::openr::KvStoreWrapper<apache::thrift::Client<thrift::KvStoreService>>*
         node,
     int timeoutSec) {
@@ -490,7 +490,7 @@ co_validateNodeKey(
 
 folly::coro::Task<void>
 co_waitForConvergence(
-    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
         apache::thrift::Client<thrift::KvStoreService>>>>& stores) {
   co_await folly::coro::collectAllWindowed(

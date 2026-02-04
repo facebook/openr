@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/container/F14Map.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
@@ -1196,7 +1197,7 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
       ComparisonResult::TIED, openr::compareValues(thriftVal, recVal.value()));
 
   // check only this key exists in kvstore
-  thrift::KeyVals expectedKeyVals;
+  folly::F14FastMap<std::string, thrift::Value> expectedKeyVals;
   expectedKeyVals[key] = thriftVal;
   auto allKeyVals = kvStore->dumpAll(kTestingAreaName);
   EXPECT_EQ(1, allKeyVals.size());
@@ -1920,7 +1921,7 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   // map of peers we expect and dump peers to expect the results.
   auto store0NodeId = store0->getNodeId();
   auto peerSpec0 = store0->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
-  std::unordered_map<std::string, thrift::PeerSpec> expectedPeers = {
+  folly::F14FastMap<std::string, thrift::PeerSpec> expectedPeers = {
       {store0NodeId, peerSpec0},
   };
 
@@ -2050,7 +2051,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   }
 
   // Submit initial value set into all peerStores
-  thrift::KeyVals expectedKeyVals;
+  folly::F14FastMap<std::string, thrift::Value> expectedKeyVals;
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
   for (auto& store : peerStores) {
     auto key = fmt::format("test-key-{}", store->getNodeId());
@@ -2389,7 +2390,7 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // Submit initial value set into all peerStores
   LOG(INFO) << "Submitting initial key-value pairs into peer stores.";
 
-  thrift::KeyVals expectedKeyVals;
+  folly::F14FastMap<std::string, thrift::Value> expectedKeyVals;
   int index = 0;
   for (auto& store : peerStores) {
     auto key = fmt::format("{}-test-key-{}", index % 2, store->getNodeId());
@@ -2462,10 +2463,10 @@ TEST_F(KvStoreTestFixture, DumpDifference) {
   auto myStore = createKvStore(getTestKvConf("test-node"));
   myStore->run();
 
-  thrift::KeyVals expectedKeyVals;
+  folly::F14FastMap<std::string, thrift::Value> expectedKeyVals;
   thrift::KeyVals peerKeyVals;
-  thrift::KeyVals diffKeyVals;
-  const thrift::KeyVals emptyKeyVals;
+  folly::F14FastMap<std::string, thrift::Value> diffKeyVals;
+  const folly::F14FastMap<std::string, thrift::Value> emptyKeyVals;
   for (int i = 0; i < 3; ++i) {
     const auto key = fmt::format("test-key-{}", i);
     auto thriftVal = createThriftValue(
@@ -3010,8 +3011,8 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
       getTestKvConf("storeB"), {*pod.area_id(), *plane.area_id()});
   auto storeC = createKvStore(getTestKvConf("storeC"), {*plane.area_id()});
 
-  thrift::KeyVals expectedKeyValsPod{};
-  thrift::KeyVals expectedKeyValsPlane{};
+  folly::F14FastMap<std::string, thrift::Value> expectedKeyValsPod{};
+  folly::F14FastMap<std::string, thrift::Value> expectedKeyValsPlane{};
 
   size_t keyVal0Size, keyVal1Size, keyVal2Size, keyVal3Size;
 
@@ -3083,14 +3084,14 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     auto storeANodeId = storeA->getNodeId();
     auto podPeerSpec =
         storeA->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
-    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPod = {
+    folly::F14FastMap<std::string, thrift::PeerSpec> expectedPeersPod = {
         {storeANodeId, podPeerSpec},
     };
 
     auto storeCNodeId = storeC->getNodeId();
     auto planePeerSpec =
         storeC->getPeerSpec(thrift::KvStorePeerState::INITIALIZED);
-    std::unordered_map<std::string, thrift::PeerSpec> expectedPeersPlane = {
+    folly::F14FastMap<std::string, thrift::PeerSpec> expectedPeersPlane = {
         {storeCNodeId, planePeerSpec},
     };
 

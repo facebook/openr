@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <folly/Random.h>
+#include <folly/container/F14Map.h>
 #include <folly/gen/Base.h>
 #include <folly/io/async/EventBase.h>
 #include <openr/kvstore/Dual.h>
@@ -57,7 +58,7 @@ using DistanceMap =
     boost::iterator_property_map<Weight*, IndexMap, Weight, Weight&>;
 
 using StatusStrings =
-    std::pair<std::string, std::unordered_map<std::string, std::string>>;
+    std::pair<std::string, folly::F14FastMap<std::string, std::string>>;
 
 // handy funtion to return a random delay in ms
 uint32_t
@@ -439,7 +440,7 @@ class DualBaseFixture : public ::testing::Test {
   // print all nodes status according to given root
   static void
   printStatus(
-      const std::unordered_map<std::string, StatusStrings>& status,
+      const folly::F14FastMap<std::string, StatusStrings>& status,
       std::optional<std::string> rootId = std::nullopt) {
     for (const auto& kv : status) {
       const auto& node = kv.first;
@@ -472,9 +473,9 @@ class DualBaseFixture : public ::testing::Test {
   // if this case, we expect everynode reports a empty route-info map
   bool
   validateNoRoot(
-      const std::unordered_map<
+      const folly::F14FastMap<
           std::string,
-          std::unordered_map<std::string, Dual::RouteInfo>>& results) {
+          folly::F14FastMap<std::string, Dual::RouteInfo>>& results) {
     for (const auto& kv : results) {
       const auto& node = kv.first;
       const auto& infos = kv.second;
@@ -494,12 +495,12 @@ class DualBaseFixture : public ::testing::Test {
   bool
   validateOnRoot(
       const std::string& rootId,
-      const std::unordered_map<
+      const folly::F14FastMap<
           std::string,
-          std::unordered_map<std::string, Dual::RouteInfo>>& results) {
+          folly::F14FastMap<std::string, Dual::RouteInfo>>& results) {
     // construct flooding topology from results
     Graph floodTopo;
-    std::unordered_map<std::string, VertexDescriptor> floodDescriptors;
+    folly::F14FastMap<std::string, VertexDescriptor> floodDescriptors;
     for (const auto& kv : results) {
       const auto& node = kv.first;
       if (kv.second.count(rootId) == 0) {
@@ -553,7 +554,7 @@ class DualBaseFixture : public ::testing::Test {
 
     // construct physical topology from vertices and edges
     Graph physicalTopo;
-    std::unordered_map<std::string, VertexDescriptor> physicalDescriptors;
+    folly::F14FastMap<std::string, VertexDescriptor> physicalDescriptors;
     // add node
     for (const auto& vertex : vertices) {
       auto d = boost::add_vertex(vertex, physicalTopo);
@@ -623,11 +624,10 @@ class DualBaseFixture : public ::testing::Test {
   bool
   validate() {
     // get all-infos and stauts-strings
-    std::unordered_map<
-        std::string,
-        std::unordered_map<std::string, Dual::RouteInfo>>
-        infos;
-    std::unordered_map<std::string, StatusStrings> status;
+    folly::
+        F14FastMap<std::string, folly::F14FastMap<std::string, Dual::RouteInfo>>
+            infos;
+    folly::F14FastMap<std::string, StatusStrings> status;
     getResults(infos, status);
 
     if (rootIds.empty()) {
@@ -821,10 +821,10 @@ class DualBaseFixture : public ::testing::Test {
   // output: map<node-id: <root-id: status-string>>
   void
   getResults(
-      std::unordered_map<
+      folly::F14FastMap<
           std::string,
-          std::unordered_map<std::string, Dual::RouteInfo>>& infos,
-      std::unordered_map<std::string, StatusStrings>& status) {
+          folly::F14FastMap<std::string, Dual::RouteInfo>>& infos,
+      folly::F14FastMap<std::string, StatusStrings>& status) {
     CHECK(infos.empty());
     CHECK(status.empty());
 

@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/container/F14Map.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
@@ -57,7 +58,7 @@ struct SelfOriginatedValue {
 };
 
 using SelfOriginatedKeyVals =
-    std::unordered_map<std::string, SelfOriginatedValue>;
+    folly::F14FastMap<std::string, SelfOriginatedValue>;
 
 class KvStoreFilters {
  public:
@@ -113,7 +114,7 @@ static ThriftType parseThriftValue(thrift::Value const& value);
  * while retaining the versioning information
  */
 template <typename ThriftType>
-static std::unordered_map<std::string, ThriftType> parseThriftValues(
+static folly::F14FastMap<std::string, ThriftType> parseThriftValues(
     const thrift::KeyVals& keyVals);
 
 /**
@@ -139,7 +140,7 @@ static std::unordered_map<std::string, ThriftType> parseThriftValues(
  */
 template <typename ThriftType, typename ClientType>
 static std::pair<
-    std::optional<std::unordered_map<std::string /* key */, ThriftType>>,
+    std::optional<folly::F14FastMap<std::string /* key */, ThriftType>>,
     std::vector<folly::SocketAddress> /* unreachable url */>
 dumpAllWithPrefixMultipleAndParse(
     std::optional<AreaId> area,
@@ -152,7 +153,7 @@ dumpAllWithPrefixMultipleAndParse(
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
 template <typename ThriftType, typename ClientType>
-static std::unordered_map<std::string /* key */, ThriftType>
+static folly::F14FastMap<std::string /* key */, ThriftType>
 dumpAllWithPrefixMultipleAndParse(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,

@@ -912,7 +912,9 @@ KvStore<ClientType>::semifuture_addUpdateKvStorePeers(
                 "Empty peerNames from peer-add request, ignoring"));
       } else {
         fb303::fbData->addStatValue("kvstore.cmd_peer_add", 1, fb303::COUNT);
-        kvStoreDb.addThriftPeers(peersToAdd);
+        folly::F14FastMap<std::string, thrift::PeerSpec> peersToAddF14(
+            peersToAdd.begin(), peersToAdd.end());
+        kvStoreDb.addThriftPeers(peersToAddF14);
         p.setValue();
       }
     } catch (thrift::KvStoreError const& e) {
@@ -2652,7 +2654,7 @@ KvStoreDb<ClientType>::disconnectPeer(
 template <class ClientType>
 void
 KvStoreDb<ClientType>::addThriftPeers(
-    std::unordered_map<std::string, thrift::PeerSpec> const& peers) {
+    folly::F14FastMap<std::string, thrift::PeerSpec> const& peers) {
   // kvstore external sync over thrift port of knob enabled
   for (auto const& [peerName, newPeerSpec] : peers) {
     auto const& peerAddr = *newPeerSpec.peerAddr();

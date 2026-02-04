@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
@@ -156,10 +157,10 @@ template <class ClientType>
 void
 KvStoreWrapper<ClientType>::pushToKvStoreUpdatesQueue(
     const AreaId& area,
-    const std::unordered_map<std::string /* key */, thrift::Value>& keyVals) {
+    const folly::F14FastMap<std::string /* key */, thrift::Value>& keyVals) {
   thrift::Publication pub;
   pub.area() = area;
-  pub.keyVals() = keyVals;
+  pub.keyVals()->insert(keyVals.begin(), keyVals.end());
   kvStoreUpdatesQueue_.push(std::move(pub));
 }
 
@@ -198,7 +199,7 @@ KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string key) {
 }
 
 template <class ClientType>
-std::unordered_map<std::string /* key */, thrift::Value>
+folly::F14FastMap<std::string /* key */, thrift::Value>
 KvStoreWrapper<ClientType>::dumpAll(
     AreaId const& area, std::optional<KvStoreFilters> filters) {
   // Prepare KeyDumpParams
@@ -212,11 +213,12 @@ KvStoreWrapper<ClientType>::dumpAll(
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()
                   ->begin();
-  return *pub.keyVals();
+  const auto& kvs = *pub.keyVals();
+  return folly::F14FastMap<std::string, thrift::Value>(kvs.begin(), kvs.end());
 }
 
 template <class ClientType>
-std::unordered_map<std::string /* key */, thrift::Value>
+folly::F14FastMap<std::string /* key */, thrift::Value>
 KvStoreWrapper<ClientType>::dumpHashes(
     AreaId const& area, std::string const& prefix) {
   // Prepare KeyDumpParams
@@ -226,7 +228,8 @@ KvStoreWrapper<ClientType>::dumpHashes(
 
   auto pub =
       *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
-  return *pub.keyVals();
+  const auto& kvs = *pub.keyVals();
+  return folly::F14FastMap<std::string, thrift::Value>(kvs.begin(), kvs.end());
 }
 
 template <class ClientType>
@@ -238,7 +241,7 @@ KvStoreWrapper<ClientType>::dumpAllSelfOriginated(AreaId const& area) {
 }
 
 template <class ClientType>
-std::unordered_map<std::string /* key */, thrift::Value>
+folly::F14FastMap<std::string /* key */, thrift::Value>
 KvStoreWrapper<ClientType>::syncKeyVals(
     AreaId const& area, thrift::KeyVals const& keyValHashes) {
   // Prepare KeyDumpParams
@@ -249,7 +252,8 @@ KvStoreWrapper<ClientType>::syncKeyVals(
   auto pub = *kvStore_->semifuture_dumpKvStoreKeys(std::move(params), {area})
                   .get()
                   ->begin();
-  return *pub.keyVals();
+  const auto& kvs = *pub.keyVals();
+  return folly::F14FastMap<std::string, thrift::Value>(kvs.begin(), kvs.end());
 }
 
 template <class ClientType>
@@ -400,10 +404,11 @@ KvStoreWrapper<ClientType>::getPeerFlaps(
 }
 
 template <class ClientType>
-std::unordered_map<std::string /* peerName */, thrift::PeerSpec>
+folly::F14FastMap<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper<ClientType>::getPeers(AreaId const& area) {
   auto peers = *(kvStore_->semifuture_getKvStorePeers(area).get());
-  return peers;
+  return folly::F14FastMap<std::string, thrift::PeerSpec>(
+      peers.begin(), peers.end());
 }
 
 template <class ClientType>

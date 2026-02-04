@@ -10,6 +10,7 @@
 #include <algorithm>
 
 #include <folly/Conv.h>
+#include <folly/container/F14Map.h>
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 
@@ -213,7 +214,7 @@ checkUntilTimeout(
  * Util function to validate if the given node has received all events
  */
 folly::coro::Task<void> co_validateNodeKey(
-    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     ::openr::KvStoreWrapper<
         apache::thrift::Client<::openr::thrift::KvStoreService>>* node,
     int timeoutSec = 30);
@@ -222,7 +223,7 @@ folly::coro::Task<void> co_validateNodeKey(
  * Util function to validate if all nodes have received all events
  */
 folly::coro::Task<void> co_waitForConvergence(
-    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
         apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores);
 #endif

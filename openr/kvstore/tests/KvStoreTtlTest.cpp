@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
 
@@ -105,7 +106,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     }
 
     // Expected global Key-Value database
-    thrift::KeyVals expectedGlobalKeyVals;
+    folly::F14FastMap<std::string, thrift::Value> expectedGlobalKeyVals;
 
     // For each `key`, generate a `value` and submit it to the first
     // store. After submission of all keys, make sure all KvStore are in

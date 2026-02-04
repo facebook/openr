@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -230,10 +231,10 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     peerSpec2.state() = thrift::KvStorePeerState::INITIALIZED;
 
     auto store2NodeId = store2->getNodeId();
-    std::unordered_map<std::string, thrift::PeerSpec> expPeer1_1 = {
+    folly::F14FastMap<std::string, thrift::PeerSpec> expPeer1_1 = {
         {store2NodeId, peerSpec2}};
     auto store1NodeId = store1->getNodeId();
-    std::unordered_map<std::string, thrift::PeerSpec> expPeer2_1 = {
+    folly::F14FastMap<std::string, thrift::PeerSpec> expPeer2_1 = {
         {store1NodeId, peerSpec1}};
 
     auto cmpPeer = store1->getPeers(kTestingAreaName);
@@ -291,7 +292,7 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
 
     newPeerSpec.state() = thrift::KvStorePeerState::INITIALIZED;
     store2NodeId = store2->getNodeId();
-    std::unordered_map<std::string, thrift::PeerSpec> newExpPeer = {
+    folly::F14FastMap<std::string, thrift::PeerSpec> newExpPeer = {
         {store2NodeId, newPeerSpec}};
 
     cmpPeer = store1->getPeers(kTestingAreaName);

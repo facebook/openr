@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
+
 #include <openr/kvstore/tests/utils/TestUtil.h>
 
 namespace openr {
@@ -99,7 +101,7 @@ generateTopo(
 
 folly::coro::Task<void>
 co_validateNodeKey(
-    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     ::openr::KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>* node) {
   while (events.size() != node->dumpAll(kTestingAreaName).size()) {
     // yield to avoid hogging the process
@@ -110,7 +112,7 @@ co_validateNodeKey(
 
 folly::coro::Task<void>
 co_waitForConvergence(
-    const std::unordered_map<std::string, ::openr::thrift::Value>& events,
+    const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     const std::vector<std::unique_ptr<
         ::openr::KvStoreWrapper<::openr::thrift::KvStoreServiceAsyncClient>>>&
         stores) {

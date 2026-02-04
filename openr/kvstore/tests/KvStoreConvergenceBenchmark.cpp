@@ -6,6 +6,7 @@
  */
 
 #include <folly/Benchmark.h>
+#include <folly/container/F14Map.h>
 
 #if FOLLY_HAS_COROUTINES
 #include <folly/coro/BlockingWait.h>
@@ -40,7 +41,7 @@ runExperiment(
   std::vector<std::unique_ptr<
       KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>>>
       kvStoreWrappers_;
-  thrift::KeyVals events_;
+  folly::F14FastMap<std::string, thrift::Value> events_;
   std::vector<std::pair<std::string, thrift::Value>> keyVals;
 
   BENCHMARK_SUSPEND {

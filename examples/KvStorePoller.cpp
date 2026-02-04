@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
 #include <openr/common/Constants.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
 #include <openr/kvstore/KvStoreUtil.h>
@@ -16,7 +17,7 @@ KvStorePoller::KvStorePoller(std::vector<folly::SocketAddress>& sockAddrs)
     : sockAddrs_(sockAddrs) {}
 
 std::pair<
-    std::optional<std::unordered_map<std::string, thrift::AdjacencyDatabase>>,
+    std::optional<folly::F14FastMap<std::string, thrift::AdjacencyDatabase>>,
     std::vector<folly::SocketAddress> /* unreached url */>
 KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<
@@ -30,7 +31,7 @@ KvStorePoller::getAdjacencyDatabases(std::chrono::milliseconds pollTimeout) {
 }
 
 std::pair<
-    std::optional<std::unordered_map<std::string, thrift::PrefixDatabase>>,
+    std::optional<folly::F14FastMap<std::string, thrift::PrefixDatabase>>,
     std::vector<folly::SocketAddress> /* unreached url */>
 KvStorePoller::getPrefixDatabases(std::chrono::milliseconds pollTimeout) {
   return openr::dumpAllWithPrefixMultipleAndParse<
