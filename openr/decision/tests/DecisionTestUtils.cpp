@@ -6,6 +6,7 @@
  */
 
 #include <folly/Format.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/common/Util.h>
 #include <openr/decision/tests/DecisionTestUtils.h>
@@ -82,8 +83,8 @@ fillRouteMap(
   for (auto const& [_, entry] : routeDb.unicastRoutes) {
     auto prefix = folly::IPAddress::networkToString(entry.prefix);
     for (const auto& nextHop : entry.nexthops) {
-      VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << toString(nextHop);
+      XLOG(DBG4) << "node: " << node << " prefix: " << prefix << " -> "
+                 << toString(nextHop);
 
       routeMap[make_pair(node, prefix)].emplace(nextHop);
     }
@@ -98,8 +99,8 @@ fillRouteMap(
   for (auto const& route : *routeDb.unicastRoutes()) {
     auto prefix = toString(*route.dest());
     for (const auto& nextHop : *route.nextHops()) {
-      VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << toString(nextHop);
+      XLOG(DBG4) << "node: " << node << " prefix: " << prefix << " -> "
+                 << toString(nextHop);
 
       routeMap[make_pair(node, prefix)].emplace(nextHop);
     }

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/logging/xlog.h>
 #include <openr/tests/OpenrWrapper.h>
 #include <openr/tests/utils/Utils.h>
 
@@ -79,9 +80,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create and start config-store thread
   configStore_ = std::make_unique<PersistentStore>(config_);
   std::thread configStoreThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " ConfigStore running.";
+    XLOG(DBG1) << nodeId_ << " ConfigStore running.";
     configStore_->run();
-    VLOG(1) << nodeId_ << " ConfigStore stopped.";
+    XLOG(DBG1) << nodeId_ << " ConfigStore stopped.";
   });
   configStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(configStoreThread));
@@ -95,9 +96,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       config_->getAreaIds(),
       config_->toThriftKvStoreConfig());
   std::thread kvStoreThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " KvStore running.";
+    XLOG(DBG1) << nodeId_ << " KvStore running.";
     kvStore_->run();
-    VLOG(1) << nodeId_ << " KvStore stopped.";
+    XLOG(DBG1) << nodeId_ << " KvStore stopped.";
   });
   kvStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(kvStoreThread));
@@ -184,73 +185,73 @@ OpenrWrapper<Serializer>::run() {
 
   // start monitor thread
   std::thread monitorThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " Monitor running.";
+    XLOG(DBG1) << nodeId_ << " Monitor running.";
     monitor_->run();
-    VLOG(1) << nodeId_ << " Monitor stopped.";
+    XLOG(DBG1) << nodeId_ << " Monitor stopped.";
   });
   monitor_->waitUntilRunning();
   allThreads_.emplace_back(std::move(monitorThread));
 
   // Spawn a PrefixManager thread
   std::thread prefixManagerThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " PrefixManager running.";
+    XLOG(DBG1) << nodeId_ << " PrefixManager running.";
     prefixManager_->run();
-    VLOG(1) << nodeId_ << " PrefixManager stopped.";
+    XLOG(DBG1) << nodeId_ << " PrefixManager stopped.";
   });
   prefixManager_->waitUntilRunning();
   allThreads_.emplace_back(std::move(prefixManagerThread));
 
   // start spark thread
   std::thread sparkThread([this]() {
-    VLOG(1) << nodeId_ << " Spark running.";
+    XLOG(DBG1) << nodeId_ << " Spark running.";
     spark_->run();
-    VLOG(1) << nodeId_ << " Spark stopped.";
+    XLOG(DBG1) << nodeId_ << " Spark stopped.";
   });
   spark_->waitUntilRunning();
   allThreads_.emplace_back(std::move(sparkThread));
 
   // start link monitor
   std::thread linkMonitorThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " LinkMonitor running.";
+    XLOG(DBG1) << nodeId_ << " LinkMonitor running.";
     linkMonitor_->setAsMockMode();
     linkMonitor_->run();
-    VLOG(1) << nodeId_ << " LinkMonitor stopped.";
+    XLOG(DBG1) << nodeId_ << " LinkMonitor stopped.";
   });
   linkMonitor_->waitUntilRunning();
   allThreads_.emplace_back(std::move(linkMonitorThread));
 
   // start decision
   std::thread decisionThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " Decision running.";
+    XLOG(DBG1) << nodeId_ << " Decision running.";
     decision_->run();
-    VLOG(1) << nodeId_ << " Decision stopped.";
+    XLOG(DBG1) << nodeId_ << " Decision stopped.";
   });
   decision_->waitUntilRunning();
   allThreads_.emplace_back(std::move(decisionThread));
 
   // start fib
   std::thread fibThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " FIB running.";
+    XLOG(DBG1) << nodeId_ << " FIB running.";
     fib_->run();
-    VLOG(1) << nodeId_ << " FIB stopped.";
+    XLOG(DBG1) << nodeId_ << " FIB stopped.";
   });
   fib_->waitUntilRunning();
   allThreads_.emplace_back(std::move(fibThread));
 
   // start watchdog
   std::thread watchdogThread([this]() noexcept {
-    VLOG(1) << nodeId_ << " watchdog running.";
+    XLOG(DBG1) << nodeId_ << " watchdog running.";
     watchdog->run();
-    VLOG(1) << nodeId_ << " watchdog stopped.";
+    XLOG(DBG1) << nodeId_ << " watchdog stopped.";
   });
   watchdog->waitUntilRunning();
   allThreads_.emplace_back(std::move(watchdogThread));
 
   // start eventBase_
   allThreads_.emplace_back([&]() {
-    VLOG(1) << nodeId_ << " Starting eventBase_";
+    XLOG(DBG1) << nodeId_ << " Starting eventBase_";
     eventBase_.run();
-    VLOG(1) << nodeId_ << " Stopping eventBase_";
+    XLOG(DBG1) << nodeId_ << " Stopping eventBase_";
   });
 }
 

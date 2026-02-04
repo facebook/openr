@@ -9,6 +9,7 @@
 #include <folly/container/F14Map.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/logging/xlog.h>
 #include <folly/system/Shell.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -480,9 +481,9 @@ class LinkMonitorTestFixture : public testing::Test {
       return std::nullopt;
     }
 
-    VLOG(1) << "Received publication with keys in area " << *pub.area();
+    XLOG(DBG1) << "Received publication with keys in area " << *pub.area();
     for (auto const& kv : *pub.keyVals()) {
-      VLOG(1) << "  " << kv.first;
+      XLOG(DBG1) << "  " << kv.first;
     }
 
     auto kv = pub.keyVals()->find(key);
@@ -1726,10 +1727,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
     }
   }
 
-  VLOG(2) << "*** start link flaps ***";
+  XLOG(DBG2) << "*** start link flaps ***";
 
   // Bringing up the interface
-  VLOG(2) << "*** bring up 2 interfaces ***";
+  XLOG(DBG2) << "*** bring up 2 interfaces ***";
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
@@ -1748,7 +1749,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
         links->interfaceDetails()->at(ifName).linkFlapBackOffMs().has_value());
   }
 
-  VLOG(2) << "*** bring down 2 interfaces ***";
+  XLOG(DBG2) << "*** bring down 2 interfaces ***";
   auto linkDownTs = std::chrono::steady_clock::now();
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
@@ -1781,7 +1782,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
     }
   }
 
-  VLOG(2) << "*** bring up 2 interfaces ***";
+  XLOG(DBG2) << "*** bring up 2 interfaces ***";
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
@@ -1821,10 +1822,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
     }
   }
-  VLOG(2) << "*** end link flaps ***";
+  XLOG(DBG2) << "*** end link flaps ***";
 
   // Bringing down the interfaces
-  VLOG(2) << "*** bring down 2 interfaces ***";
+  XLOG(DBG2) << "*** bring down 2 interfaces ***";
   linkDownTs = std::chrono::steady_clock::now();
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
@@ -1863,7 +1864,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
   }
 
   // Bringing up the interfaces
-  VLOG(2) << "*** bring up 2 interfaces ***";
+  XLOG(DBG2) << "*** bring up 2 interfaces ***";
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,

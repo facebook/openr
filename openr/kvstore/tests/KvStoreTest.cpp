@@ -9,6 +9,7 @@
 #include <folly/container/F14Map.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
+#include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -2103,11 +2104,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Waiting for full sync to complete.";
   for (auto& store : stores_) {
     folly::F14FastSet<std::string> keys;
-    VLOG(3) << "Store " << store->getNodeId() << " received keys.";
+    XLOG(DBG3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {
-        VLOG(3) << "\tkey: " << key << ", value: " << val.value().value();
+        XLOG(DBG3) << "\tkey: " << key << ", value: " << val.value().value();
         keys.insert(key);
       }
     }
@@ -2151,11 +2152,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Receive 16 updates from each store
   for (auto& store : stores_) {
     folly::F14FastSet<std::string> keys;
-    VLOG(3) << "Store " << store->getNodeId() << " received keys.";
+    XLOG(DBG3) << "Store " << store->getNodeId() << " received keys.";
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {
-        VLOG(3) << "\tkey: " << key << ", value: " << val.value().value();
+        XLOG(DBG3) << "\tkey: " << key << ", value: " << val.value().value();
         keys.insert(key);
       }
     }
@@ -2202,7 +2203,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Receive publication from each store as one update is atleast expected
   {
     for (auto& store : stores_) {
-      VLOG(2) << "Receiving publication from " << store->getNodeId();
+      XLOG(DBG2) << "Receiving publication from " << store->getNodeId();
       store->recvPublication();
     }
   }
@@ -2433,13 +2434,13 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // key-value updates from each store over PUB socket.
   LOG(INFO) << "Waiting for full sync to complete.";
   {
-    VLOG(3) << "Store " << myStore->getNodeId() << " received keys.";
+    XLOG(DBG3) << "Store " << myStore->getNodeId() << " received keys.";
 
     folly::F14FastSet<std::string> keys;
     while (keys.size() < kNumStores) {
       auto publication = myStore->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {
-        VLOG(3) << "\tkey: " << key << ", value: " << val.value().value();
+        XLOG(DBG3) << "\tkey: " << key << ", value: " << val.value().value();
         keys.insert(key);
       }
     }

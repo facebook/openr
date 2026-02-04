@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <folly/logging/xlog.h>
 #include <folly/stats/BucketedTimeSeries.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
@@ -80,8 +81,8 @@ class StepDetector {
       if (diff <= loThreshold_) {
         // falling edge
         inTransit_ = false;
-        VLOG(4) << "Step detected at time: " << now.count()
-                << ", new mean: " << fastAvg;
+        XLOG(DBG4) << "Step detected at time: " << now.count()
+                   << ", new mean: " << fastAvg;
         // report fast average since slow average may not have caught up with
         // new mean yet
         stepCb_(fastAvg);
@@ -100,8 +101,8 @@ class StepDetector {
     // only check when time series is stable, e.g., slow and fast mean are close
     if (diff <= loThreshold_ && lastAvgInit_ &&
         std::abs(slowAvg - lastAvg_) >= absThreshold_) {
-      VLOG(4) << "Step detected at time: " << now.count()
-              << ", new mean: " << slowAvg;
+      XLOG(DBG4) << "Step detected at time: " << now.count()
+                 << ", new mean: " << slowAvg;
       // report slow average because it's more accurate
       stepCb_(slowAvg);
       lastAvg_ = slowAvg;

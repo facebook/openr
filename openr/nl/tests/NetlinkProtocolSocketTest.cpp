@@ -11,6 +11,7 @@
 #include <folly/Subprocess.h>
 #include <folly/container/F14Map.h>
 #include <folly/io/async/EventBase.h>
+#include <folly/logging/xlog.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
 #include <gflags/gflags.h>
@@ -209,7 +210,7 @@ class NlMessageFixture : public ::testing::Test {
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
-    VLOG(1) << fmt::format(
+    XLOG(DBG1) << fmt::format(
         "Adding IPV6 neighbor entry for ip address: {}, mac address: {}",
         nextHopIp.str(),
         linkAddr.toString());
@@ -224,7 +225,7 @@ class NlMessageFixture : public ::testing::Test {
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
-    VLOG(1) << fmt::format(
+    XLOG(DBG1) << fmt::format(
         "Deleting IPV6 neighbor entry for ip address: {}, mac address: {}",
         nextHopIp.str(),
         linkAddr.toString());
@@ -239,7 +240,7 @@ class NlMessageFixture : public ::testing::Test {
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
-    VLOG(1) << fmt::format(
+    XLOG(DBG1) << fmt::format(
         "Adding ARP entry for ip address: {}, mac address: {}",
         nextHopIp.str(),
         linkAddr.toString());
@@ -254,7 +255,7 @@ class NlMessageFixture : public ::testing::Test {
       const std::string& ifName,
       const folly::IPAddress& nextHopIp,
       const folly::MacAddress& linkAddr) {
-    VLOG(1) << fmt::format(
+    XLOG(DBG1) << fmt::format(
         "Deleting ARP entry for ip address: {}, mac address: {}",
         nextHopIp.str(),
         linkAddr.toString());
@@ -735,8 +736,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
       };
 
   {
-    VLOG(1) << "Bring link DOWN for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY);
+    XLOG(DBG1) << "Bring link DOWN for interfaces: "
+               << fmt::format("{}, {}", kVethNameX, kVethNameY);
     // bring DOWN link to trigger link DOWN event
     bringDownIntf(kVethNameX);
     bringDownIntf(kVethNameY);
@@ -748,8 +749,8 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
   }
 
   {
-    VLOG(1) << "Bring link UP for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY);
+    XLOG(DBG1) << "Bring link UP for interfaces: "
+               << fmt::format("{}, {}", kVethNameX, kVethNameY);
     // bring UP link to trigger link UP event
     bringUpIntf(kVethNameX);
     bringUpIntf(kVethNameY);
@@ -819,9 +820,9 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   // Test add/delete address via Linux system call
   //
   {
-    VLOG(1) << "Adding address for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY)
-            << " via system call";
+    XLOG(DBG1) << "Adding address for interfaces: "
+               << fmt::format("{}, {}", kVethNameX, kVethNameY)
+               << " via system call";
     addAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
     addAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
 
@@ -830,9 +831,9 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   }
 
   {
-    VLOG(1) << "Removing address for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY)
-            << " via system call";
+    XLOG(DBG1) << "Removing address for interfaces: "
+               << fmt::format("{}, {}", kVethNameX, kVethNameY)
+               << " via system call";
     deleteAddress(kVethNameX, ipAddrX.first.str(), ipAddrX.second);
     deleteAddress(kVethNameY, ipAddrY.first.str(), ipAddrY.second);
 
@@ -845,9 +846,9 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   //
   std::vector<IfAddress> ifAddresses;
   {
-    VLOG(1) << "Adding address for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY)
-            << " via NetlinkProtocolSocket API";
+    XLOG(DBG1) << "Adding address for interfaces: "
+               << fmt::format("{}, {}", kVethNameX, kVethNameY)
+               << " via NetlinkProtocolSocket API";
 
     IfAddressBuilder builder1;
     auto ifAddr1 = builder1.setPrefix(ipAddrX)
@@ -876,9 +877,9 @@ TEST_F(NlMessageFixture, AddressEventPublication) {
   }
 
   {
-    VLOG(1) << "Removing address for interfaces: "
-            << fmt::format("{}, {}", kVethNameX, kVethNameY)
-            << " via NetlinkProtocolSocket API";
+    XLOG(DBG1) << "Removing address for interfaces: "
+               << fmt::format("{}, {}", kVethNameX, kVethNameY)
+               << " via NetlinkProtocolSocket API";
 
     IfAddressBuilder builder1;
     auto ifAddr1 = builder1.setPrefix(ipAddrX)
@@ -1899,7 +1900,7 @@ TEST_F(NlMessageFixture, LinkFlapScaleTest) {
             endTime - startTime)
             .count();
 
-    VLOG(1) << "Took: " << elapsedTime << "ms to receive all link events";
+    XLOG(DBG1) << "Took: " << elapsedTime << "ms to receive all link events";
   };
 
   // Create link paris to stress testing link-flapping
