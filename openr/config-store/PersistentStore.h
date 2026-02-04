@@ -133,6 +133,7 @@ class PersistentStore : public OpenrEventBase {
   bool savePersistentObjectToDisk() noexcept;
 
   // Write IoBuf ro local disk
+  // NOLINTNEXTLINE(clang-diagnostic-unused-member-function)
   folly::Expected<folly::Unit, std::string> writeIoBufToDisk(
       const std::unique_ptr<folly::IOBuf>& ioBuf, WriteType writeType) noexcept;
 
