@@ -361,7 +361,7 @@ PrefixManager::buildOriginatedPrefixes(
 
 std::pair<thrift::PrefixType, const PrefixEntry>
 PrefixManager::getBestPrefixEntry(
-    const std::unordered_map<thrift::PrefixType, PrefixEntry>&
+    const folly::F14FastMap<thrift::PrefixType, PrefixEntry>&
         prefixTypeToEntry) {
   // If decision calculation has already considered local routes, then we should
   // use the best entry provided by decision instead of calculating here again.
@@ -925,7 +925,7 @@ void
 PrefixManager::filterAndAddOriginatedRoute(
     std::vector<thrift::AdvertisedRoute>& routes,
     const thrift::RouteFilterType& routeFilterType,
-    std::unordered_map<
+    folly::F14FastMap<
         thrift::PrefixType,
         std::pair<PrefixEntry, std::string>> const& prefixEntries,
     apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter) {
@@ -1057,7 +1057,7 @@ PrefixManager::filterAndAddAdvertisedRoute(
     std::vector<thrift::AdvertisedRouteDetail>& routes,
     apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
     folly::CIDRNetwork const& prefix,
-    std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries) {
+    folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {
     return;
@@ -1095,7 +1095,7 @@ PrefixManager::filterAndAddAreaRoute(
     std::vector<thrift::AdvertisedRoute>& routes,
     const std::string& area,
     const thrift::RouteFilterType& routeFilterType,
-    std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries,
+    folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries,
     apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {

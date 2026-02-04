@@ -6,6 +6,7 @@
  */
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
@@ -1185,7 +1186,7 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
  */
 TEST(PrefixManager, FilterAdvertisedRoutes) {
   std::vector<thrift::AdvertisedRouteDetail> routes;
-  std::unordered_map<thrift::PrefixType, PrefixEntry> entries;
+  folly::F14FastMap<thrift::PrefixType, PrefixEntry> entries;
   thrift::AdvertisedRouteFilter filter;
   PrefixManager::filterAndAddAdvertisedRoute(
       routes, filter.prefixType(), folly::CIDRNetwork(), entries);
@@ -1589,9 +1590,9 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
     return tConfig;
   }
 
-  std::unordered_map<std::string, thrift::OriginatedPrefixEntry>
+  folly::F14FastMap<std::string, thrift::OriginatedPrefixEntry>
   getOriginatedPrefixDb() {
-    std::unordered_map<std::string, thrift::OriginatedPrefixEntry> mp;
+    folly::F14FastMap<std::string, thrift::OriginatedPrefixEntry> mp;
     while (mp.size() < 2) {
       auto prefixEntries = *prefixManager->getOriginatedPrefixes().get();
       for (auto const& prefixEntry : prefixEntries) {
@@ -1611,7 +1612,7 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
   void
   waitForKvStorePublication(
       messaging::RQueue<KvStorePublication>& reader,
-      std::unordered_map<
+      folly::F14FastMap<
           std::pair<std::string /* prefixStr */, std::string /* areaStr */>,
           thrift::PrefixEntry>& exp,
       folly::F14FastSet<std::pair<std::string, std::string>>& expDeleted) {
@@ -1790,7 +1791,7 @@ TEST_F(RouteOriginationOverrideFixture, ReadFromConfig) {
       createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
 
   // v4Prefix_ is advertised to ALL areas configured
-  std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+  folly::F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
       exp({
           {prefixKeyV4AreaA_, bestPrefixEntryV4_},
           {prefixKeyV4AreaB_, bestPrefixEntryV4_},
@@ -1889,14 +1890,13 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     //  Verify 1): PrefixManager -> KvStore update
     {
       // v4Prefix_ is advertised to ALL areas configured
-      std::unordered_map<
-          std::pair<std::string, std::string>,
-          thrift::PrefixEntry>
-          exp({
-              {prefixKeyV4AreaA_, bestPrefixEntryV4_},
-              {prefixKeyV4AreaB_, bestPrefixEntryV4_},
-              {prefixKeyV4AreaC_, bestPrefixEntryV4_},
-          });
+      folly::
+          F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
+              exp({
+                  {prefixKeyV4AreaA_, bestPrefixEntryV4_},
+                  {prefixKeyV4AreaB_, bestPrefixEntryV4_},
+                  {prefixKeyV4AreaC_, bestPrefixEntryV4_},
+              });
       folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
       // wait for condition to be met for KvStore publication
@@ -2031,14 +2031,13 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     // Verify 2): PrefixManager -> KvStore update
     {
       // v6Prefix_ is advertised to ALL areas configured
-      std::unordered_map<
-          std::pair<std::string, std::string>,
-          thrift::PrefixEntry>
-          exp({
-              {prefixKeyV6AreaA_, bestPrefixEntryV6_},
-              {prefixKeyV6AreaB_, bestPrefixEntryV6_},
-              {prefixKeyV6AreaC_, bestPrefixEntryV6_},
-          });
+      folly::
+          F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
+              exp({
+                  {prefixKeyV6AreaA_, bestPrefixEntryV6_},
+                  {prefixKeyV6AreaB_, bestPrefixEntryV6_},
+                  {prefixKeyV6AreaC_, bestPrefixEntryV6_},
+              });
       folly::F14FastSet<std::pair<std::string, std::string>> expDeleted{};
 
       // wait for condition to be met for KvStore publication
@@ -2114,10 +2113,9 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
           prefixKeyV6AreaA_,
           prefixKeyV6AreaB_,
           prefixKeyV6AreaC_};
-      std::unordered_map<
-          std::pair<std::string, std::string>,
-          thrift::PrefixEntry>
-          exp{};
+      folly::
+          F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
+              exp{};
 
       // wait for condition to be met for KvStore publication
       waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
@@ -2573,7 +2571,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //  Verify 1e and 1f: PrefixManager -> KvStore update
   {
     // v4Prefix_ is advertised to ALL areas configured, while v6Prefix_ is NOT
-    std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+    folly::F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
         exp({
             {prefixKeyV4AreaA_, bestPrefixEntryV4_},
         });
@@ -2624,7 +2622,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   //  Verify 2b: PrefixManager -> KvStore update
   {
     // v6Prefix_ is advertised to the SINGLE area configured
-    std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+    folly::F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
         exp({
             {prefixKeyV6AreaA_, bestPrefixEntryV6_},
         });
@@ -2688,7 +2686,7 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
         prefixKeyV4AreaA_,
         prefixKeyV6AreaA_,
     };
-    std::unordered_map<std::pair<std::string, std::string>, thrift::PrefixEntry>
+    folly::F14FastMap<std::pair<std::string, std::string>, thrift::PrefixEntry>
         exp{};
 
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);

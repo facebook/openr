@@ -273,7 +273,7 @@ std::string getNodeNameFromKey(const std::string& key);
 template <typename Key, typename MetricsWrapper>
 std::set<Key>
 selectBestPrefixMetrics(
-    std::unordered_map<Key, MetricsWrapper> const& prefixes) {
+    folly::F14FastMap<Key, MetricsWrapper> const& prefixes) {
   // Leveraging tuple for ease of comparision
   std::tuple<int32_t, int32_t, int32_t> bestMetricsTuple{
       std::numeric_limits<int32_t>::min(),

@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
 
@@ -135,7 +136,7 @@ class PrefixManager final : public OpenrEventBase {
       std::vector<thrift::AdvertisedRoute>& routes,
       const std::string& area,
       const thrift::RouteFilterType& routeFilterType,
-      std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries,
+      folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries,
       apache::thrift::optional_field_ref<thrift::PrefixType&> const&
           typeFilter);
   /**
@@ -167,7 +168,7 @@ class PrefixManager final : public OpenrEventBase {
       std::vector<thrift::AdvertisedRouteDetail>& routes,
       apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
       folly::CIDRNetwork const& prefix,
-      std::unordered_map<thrift::PrefixType, PrefixEntry> const& prefixEntries);
+      folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries);
 
   /*
    * Dump routes from prefixEvent that are subject to origination policy.
@@ -193,7 +194,7 @@ class PrefixManager final : public OpenrEventBase {
   void filterAndAddOriginatedRoute(
       std::vector<thrift::AdvertisedRoute>& routes,
       const thrift::RouteFilterType& routeFilterType,
-      std::unordered_map<
+      folly::F14FastMap<
           thrift::PrefixType,
           std::pair<PrefixEntry, std::string>> const& prefixEntries,
       apache::thrift::optional_field_ref<thrift::PrefixType&> const&
@@ -298,7 +299,7 @@ class PrefixManager final : public OpenrEventBase {
    * Perform best entry selection among the given prefixTypeToEntry
    */
   std::pair<thrift::PrefixType, const PrefixEntry> getBestPrefixEntry(
-      const std::unordered_map<thrift::PrefixType, PrefixEntry>&
+      const folly::F14FastMap<thrift::PrefixType, PrefixEntry>&
           prefixTypeToEntry);
 
   /*
@@ -391,7 +392,7 @@ class PrefixManager final : public OpenrEventBase {
   std::shared_ptr<const Config> config_;
 
   // map from area id to area policy
-  std::unordered_map<std::string, std::optional<std::string>> areaToPolicy_;
+  folly::F14FastMap<std::string, std::optional<std::string>> areaToPolicy_;
 
   // queue to publish originated route updates to decision
   messaging::ReplicateQueue<DecisionRouteUpdate>& staticRouteUpdatesQueue_;
@@ -412,19 +413,18 @@ class PrefixManager final : public OpenrEventBase {
   // exists for a given prefix, best-route-selection process would select the
   // ones with the best metric. Lowest prefix-type is used as a tie-breaker for
   // advertising the best selected routes to KvStore.
-  std::unordered_map<
+  folly::F14FastMap<
       folly::CIDRNetwork,
-      std::unordered_map<thrift::PrefixType, PrefixEntry>>
+      folly::F14FastMap<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
 
   // For prefixes came from PrefixEvent with an origination policy,
   // store the pre-policy version in originatedPrefixMap_.
   // Used in thrift request getAdvertisedRoutesWithOriginationPolicy().
-  std::unordered_map<
+  folly::F14FastMap<
       folly::CIDRNetwork,
-      std::unordered_map<
-          thrift::PrefixType,
-          std::pair<PrefixEntry, std::string>>>
+      folly::
+          F14FastMap<thrift::PrefixType, std::pair<PrefixEntry, std::string>>>
       originatedPrefixMap_;
 
   // the serializer/deserializer helper we'll be using
@@ -449,7 +449,7 @@ class PrefixManager final : public OpenrEventBase {
     // Best entries published to KvStore for distribution
     PrefixEntry advertisedBestEntry;
   };
-  std::unordered_map<folly::CIDRNetwork, AdvertiseStatus> advertiseStatus_{};
+  folly::F14FastMap<folly::CIDRNetwork, AdvertiseStatus> advertiseStatus_{};
 
   // store pending updates from advertise/withdraw operation
   detail::PrefixManagerPendingUpdates pendingUpdates_;
@@ -527,7 +527,7 @@ class PrefixManager final : public OpenrEventBase {
    *
    *  OriginatedPrefix -> set of FIB prefixEntry(i.e. supporting routes)
    */
-  std::unordered_map<folly::CIDRNetwork, OriginatedRoute> originatedPrefixDb_;
+  folly::F14FastMap<folly::CIDRNetwork, OriginatedRoute> originatedPrefixDb_;
 
   /*
    * prefixes received from OpenR/Fib.
@@ -536,7 +536,7 @@ class PrefixManager final : public OpenrEventBase {
    *
    *  FIB prefixEntry -> vector of OriginatedPrefix(i.e. supported routes)
    */
-  std::unordered_map<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
+  folly::F14FastMap<folly::CIDRNetwork, std::vector<folly::CIDRNetwork>>
       ribPrefixDb_;
 
   /*

@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/container/F14Map.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -745,7 +746,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // No entry. Returns empty set
   //
   {
-    std::unordered_map<std::string, thrift::PrefixEntry> prefixes;
+    folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes;
     EXPECT_EQ(0, selectBestPrefixMetrics(prefixes).size());
   }
 
@@ -753,7 +754,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // Single entry. Returns the entry itself
   //
   {
-    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+    folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(0, 0, 0)}};
     const auto bestKeys = selectBestPrefixMetrics(prefixes);
     EXPECT_EQ(1, bestKeys.size());
@@ -764,7 +765,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // Multiple entries. Single best route, tie on path-preference (prefer higher)
   //
   {
-    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+    folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 0, 0)},
         {"KEY2", createPrefixEntry(200, 0, 0)},
         {"KEY3", createPrefixEntry(300, 0, 0)}};
@@ -778,7 +779,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // higher)
   //
   {
-    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+    folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 10, 0)},
         {"KEY2", createPrefixEntry(100, 200, 0)},
         {"KEY3", createPrefixEntry(100, 30, 0)}};
@@ -791,7 +792,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // Multiple entries. Single best route, tie on distance (prefer lower)
   //
   {
-    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+    folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 10, 1)},
         {"KEY2", createPrefixEntry(100, 10, 2)},
         {"KEY3", createPrefixEntry(100, 10, 3)}};
@@ -804,7 +805,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // Multiple entries. Multiple best routes
   //
   {
-    std::unordered_map<std::string, thrift::PrefixEntry> prefixes = {
+    folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 10, 1)},
         {"KEY2", createPrefixEntry(100, 10, 2)},
         {"KEY3", createPrefixEntry(100, 10, 1)},
@@ -823,7 +824,7 @@ TEST(UtilTest, BestMetricsSelection) {
   // (based on std::map key hash)
   //
   {
-    std::unordered_map<NodeAndArea, thrift::PrefixEntry> prefixes = {
+    folly::F14FastMap<NodeAndArea, thrift::PrefixEntry> prefixes = {
         {{"node1", "area1"}, createPrefixEntry(100, 10, 1)},
         {{"node1", "area2"}, createPrefixEntry(100, 10, 1)},
         {{"node2", "area1"}, createPrefixEntry(100, 10, 1)}};
