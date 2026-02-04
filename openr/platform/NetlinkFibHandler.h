@@ -9,6 +9,7 @@
 
 #include <fb303/BaseService.h>
 #include <folly/Expected.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncSocket.h>
 
@@ -114,7 +115,7 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
    */
   struct ThreadLocalListener {
     folly::EventBase* eventBase;
-    std::unordered_map<
+    folly::F14FastMap<
         const apache::thrift::server::TConnectionContext*,
         std::shared_ptr<thrift::NeighborListenerClientForFibagentAsyncClient>>
         clients;
@@ -195,8 +196,8 @@ class NetlinkFibHandler : public virtual thrift::FibServiceSvIf,
   void initializeInterfaceCache() noexcept;
 
   // Cache for interface index <-> name mapping
-  folly::Synchronized<std::unordered_map<std::string, int>> ifNameToIndex_;
-  folly::Synchronized<std::unordered_map<int, std::string>> ifIndexToName_;
+  folly::Synchronized<folly::F14FastMap<std::string, int>> ifNameToIndex_;
+  folly::Synchronized<folly::F14FastMap<int, std::string>> ifIndexToName_;
 
   // Loopback interface index cache. Initialized to negative number
   std::atomic<int> loopbackIfIndex_{-1};

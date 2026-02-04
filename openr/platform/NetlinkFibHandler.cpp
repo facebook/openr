@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/container/F14Map.h>
 #include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>
 
@@ -207,7 +208,7 @@ NetlinkFibHandler::semifuture_syncFib(
   // NOTE: Synchronous call to retrieve all the routes. We first make both
   // requests to retrieve IPv4 and IPv6 routes. Subsequently we wait on them
   // to complete and prepare the map of existing routes
-  std::unordered_map<folly::CIDRNetwork, fbnl::Route> existingRoutes;
+  folly::F14FastMap<folly::CIDRNetwork, fbnl::Route> existingRoutes;
   {
     auto v4Routes = nlSock_->getIPv4Routes(protocol.value(), routeTable_).get();
     auto v6Routes = nlSock_->getIPv6Routes(protocol.value(), routeTable_).get();
@@ -287,7 +288,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
 
   // Create set of existing route
   // NOTE: Synchronous call to retrieve all the routes
-  std::unordered_map<int32_t, fbnl::Route> existingRoutes;
+  folly::F14FastMap<int32_t, fbnl::Route> existingRoutes;
   auto nlRoutes = nlSock_->getMplsRoutes(protocol.value(), routeTable_).get();
   if (nlRoutes.hasError()) {
     throw fbnl::NlException("Failed fetching IPv6 routes", nlRoutes.error());

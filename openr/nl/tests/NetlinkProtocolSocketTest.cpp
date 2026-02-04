@@ -9,6 +9,7 @@
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Subprocess.h>
+#include <folly/container/F14Map.h>
 #include <folly/io/async/EventBase.h>
 #include <folly/system/Shell.h>
 #include <folly/test/TestUtils.h>
@@ -282,9 +283,8 @@ class NlMessageFixture : public ::testing::Test {
       const std::vector<Route>& kernelRoutes,
       const std::vector<Route>& routes) {
     LOG_FN_EXECUTION_TIME;
-    std::unordered_map<std::tuple<uint8_t, uint8_t, uint32_t>, Route>
-        mplsRoutes;
-    std::unordered_map<std::tuple<uint8_t, uint8_t, folly::CIDRNetwork>, Route>
+    folly::F14FastMap<std::tuple<uint8_t, uint8_t, uint32_t>, Route> mplsRoutes;
+    folly::F14FastMap<std::tuple<uint8_t, uint8_t, folly::CIDRNetwork>, Route>
         unicastRoutes;
 
     // Build map for efficient search
@@ -773,7 +773,7 @@ TEST_F(NlMessageFixture, LinkEventPublication) {
 TEST_F(NlMessageFixture, AddressEventPublication) {
   // Spawn RQueue to receive platformUpdate request for addr event
   auto netlinkEventsReader = netlinkEventsQ.getReader();
-  std::unordered_map<int64_t, std::string> ifIndexToName;
+  folly::F14FastMap<int64_t, std::string> ifIndexToName;
 
   // Create CIDRNetwork addresses
   const folly::CIDRNetwork ipAddrX{folly::IPAddress("face:b00c::1"), 128};
@@ -2052,7 +2052,7 @@ TEST_F(NlMessageFixture, MplsUcmpError) {
 TEST_F(NlMessageFixture, LinkAddDelete) {
   auto getLinkMap = [&]() {
     auto links = nlSock->getAllLinks().get().value();
-    std::unordered_map<std::string, openr::fbnl::Link> nameToLink;
+    folly::F14FastMap<std::string, openr::fbnl::Link> nameToLink;
     for (const auto& link : links) {
       nameToLink[link.getLinkName()] = link;
     }

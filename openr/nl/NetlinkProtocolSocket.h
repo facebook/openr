@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <folly/io/async/EventBase.h>
@@ -321,8 +322,7 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // sent to kernel, is assigned a unique sequence-number and stored in this
   // map. On receipt of ack from kernel (either success or error) we clear the
   // corresponding entry from this map.
-  std::unordered_map<uint32_t, std::shared_ptr<NetlinkMessageBase>>
-      nlSeqNumMap_;
+  folly::F14FastMap<uint32_t, std::shared_ptr<NetlinkMessageBase>> nlSeqNumMap_;
 
   // Timer to help keep track of timeout of messages sent to kernel. It also
   // ensures the aliveness of the netlink socket-fd. Timer is
