@@ -528,7 +528,7 @@ class FibSnoopCmd(FibCmdBase):
 
             # Await for an update
             if not awaited_updates:
-                awaited_updates = [updates.__anext__()]
+                awaited_updates = [asyncio.ensure_future(updates.__anext__())]
             done, awaited_updates = await asyncio.wait(awaited_updates, timeout=1)
             if not done:
                 continue
