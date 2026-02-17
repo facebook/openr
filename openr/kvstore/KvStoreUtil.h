@@ -104,25 +104,39 @@ class KvStoreFilters {
   thrift::FilterOperator filterOperator_;
 };
 
-// helper for deserialization
+namespace detail {
 template <typename ThriftType>
-static ThriftType parseThriftValue(thrift::Value const& value);
+ThriftType parseThriftValue(thrift::Value const& value);
 
-/**
- * Given map of thrift::Value object parse them into map of ThriftType
- * objects,
- * while retaining the versioning information
- */
 template <typename ThriftType>
-static folly::F14FastMap<std::string, ThriftType> parseThriftValues(
+folly::F14FastMap<std::string, ThriftType> parseThriftValues(
     const thrift::KeyVals& keyVals);
 
+// positive int/infinity marker (current also a positive int)
+bool isValidTtl(int64_t val);
+
+// version >= existing
+bool isValidVersion(
+    const int64_t existingVersion, const thrift::Value& incomingVal);
+
+MergeType getMergeType(
+    const std::string& key,
+    const thrift::Value& value,
+    const thrift::KeyVals& kvStore,
+    std::optional<std::string> const& sender,
+    thrift::KvStoreMergeResult& result,
+    // Optional - will read from kvStore if not provided
+    const thrift::Value* curValue = nullptr);
+
+void printKeyValInArea(
+    const std::string& logStr,
+    const std::string& areaTag,
+    const std::string& key,
+    const thrift::Value& val);
+} // namespace detail
+
 /**
- * Similar to the above but parses the values according to the ThriftType
- * passed. This will hide the version/originator & other details
- *
- * @template param ThriftType - decode values as this thrift type.
- *  This is handy when you dump keys with the same prefix (which we do)
+ * Dump and decode keys from multiple clients, indicating any we couldn't reach
  *
  * @param sockAddrs - (address, port) to connect OpenR instance to
  * @param prefix - the key prefix used for key dumping. Dump all if empty
@@ -138,9 +152,9 @@ static folly::F14FastMap<std::string, ThriftType> parseThriftValues(
  *    from ALL stores. If at least one store responds this will be non-empty.
  *  - Second member of the pair is a list of unreachable addresses
  */
-template <typename ThriftType, typename ClientType>
-static std::pair<
-    std::optional<folly::F14FastMap<std::string /* key */, ThriftType>>,
+template <typename ThriftDecodeType, typename ClientType>
+std::pair<
+    std::optional<folly::F14FastMap<std::string /* key */, ThriftDecodeType>>,
     std::vector<folly::SocketAddress> /* unreachable url */>
 dumpAllWithPrefixMultipleAndParse(
     std::optional<AreaId> area,
@@ -152,17 +166,15 @@ dumpAllWithPrefixMultipleAndParse(
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
-template <typename ThriftType, typename ClientType>
-static folly::F14FastMap<std::string /* key */, ThriftType>
+template <typename ThriftDecodeType, typename ClientType>
+folly::F14FastMap<std::string /* key */, ThriftDecodeType>
 dumpAllWithPrefixMultipleAndParse(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& prefix);
 
-/*
- * This will be a static method to do a full-dump of KvStore key-val to
- * multiple KvStore instances. It will fetch values from different KvStore
- * instances and merge them together to finally return thrift::Value
+/* Fetch values from different KvStore
+ * instances and merge them together
  *
  * @param sockAddrs - (address, port) to connect OpenR instance to
  * @param prefix - the key prefix used for key dumping. Dump all if empty
@@ -179,7 +191,7 @@ dumpAllWithPrefixMultipleAndParse(
  *  - Second member of the pair is a list of unreachable addresses
  */
 template <typename ClientType>
-static std::pair<
+std::pair<
     std::optional<thrift::KeyVals>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
@@ -193,26 +205,10 @@ dumpAllWithThriftClientFromMultiple(
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
 template <typename ClientType>
-static thrift::KeyVals dumpAllWithThriftClientFromMultiple(
+thrift::KeyVals dumpAllWithThriftClientFromMultiple(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& prefix);
-
-/*
- * Static method to retrieve loggable key-value information.
- *
- * @param logLevel - VLOG logging level
- * @param logStr - prefix to aid in logging
- * @param area - area with the key-val
- * @param key - key of key-val
- * @param val - thrift Value to log version, originator, ttl
- */
-static void printKeyValInArea(
-    int logLevel,
-    const std::string& logStr,
-    const std::string& areaTag,
-    const std::string& key,
-    const thrift::Value& val);
 
 /*
  * This is the util method to merge the key-values publication to the existing
@@ -286,50 +282,6 @@ void updatePublicationTtl(
     const std::chrono::milliseconds ttlDecr,
     thrift::Publication& thriftPub,
     const bool removeAboutToExpire = true);
-
-/*
- * Check if TTL is valid.
- * Criteria: It must be infinite or positive number
- *
- * @param val - ttl value to check
- *
- * @return: true if satisfies the criteria, else false
- */
-bool isValidTtl(int64_t val);
-
-/*
- * Check if incoming value has valid version
- * Criteria: version must be equal or greater than existing version
- *
- * @param existingVersion - existing thrift::Value's version
- * @param incomingVal - incoming thrift::Value
- *
- * @return: true if satisfies the criteria, else false
- */
-bool isValidVersion(
-    const int64_t existingVersion, const thrift::Value& incomingVal);
-
-/*
- * Check if what kind of merge type are we going to perform
- * check `MergeType` to see what types there are
- *
- * @param key - key to be merged
- * @param value - incoming thrift::Value
- * @param kvStore - existing key-value map
- * @param sender - the sender who sends the value
- * @param KvStoreMergeResult - record all the result and stats of this operation
- * @param curValue - optional pointer to current value in kvStore (avoids
- *                   redundant lookup if caller already has it)
- *
- * @return: MergeType - enum of the merging type
- */
-MergeType getMergeType(
-    const std::string& key,
-    const thrift::Value& value,
-    const thrift::KeyVals& kvStore,
-    std::optional<std::string> const& sender,
-    thrift::KvStoreMergeResult& result,
-    const thrift::Value* curValue = nullptr);
 
 std::string getAreaTypeByAreaName(const std::string& area);
 } // namespace openr

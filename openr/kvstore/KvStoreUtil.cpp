@@ -12,14 +12,14 @@
 #include <openr/kvstore/KvStoreUtil.h>
 
 namespace openr {
-namespace util {
+namespace {
 
 bool
 isValidTtlAndLog(
     const std::string& key,
     const thrift::Value& value,
     thrift::KvStoreMergeResult& stats) {
-  bool result = isValidTtl(*value.ttl());
+  bool result = detail::isValidTtl(*value.ttl());
   if (!result) {
     XLOG(DBG4) << fmt::format(
         "(mergeKeyValues) key: {} has invalid ttl: {}", key, *value.ttl());
@@ -67,7 +67,7 @@ isValidVersionAndLog(
     const std::string& key,
     const thrift::Value& value,
     thrift::KvStoreMergeResult& stats) {
-  bool result = isValidVersion(myVersion, value);
+  bool result = detail::isValidVersion(myVersion, value);
   if (!result) {
     XLOG(DBG4) << fmt::format(
         "(mergeKeyValues) key: {} has invalid/old version: {}, local version: {}",
@@ -185,15 +185,6 @@ isResyncNeeded(
   return inconsistencyDetected;
 }
 
-int64_t
-getExistingVersion(const std::string& key, const thrift::KeyVals& kvStore) {
-  auto kvStoreIt = kvStore.find(key);
-  if (kvStoreIt != kvStore.end()) {
-    return *kvStoreIt->second.version();
-  }
-  return openr::Constants::kUndefinedVersion;
-}
-
 void
 updateKvStoreValue(
     thrift::KeyVals& kvStore,
@@ -242,7 +233,19 @@ updateKvStoreTtl(
   kvStoreIt->second.ttlVersion() = *value.ttlVersion();
 }
 
-} // namespace util
+} // namespace
+
+namespace detail {
+
+bool
+isValidTtl(int64_t val) {
+  return val == Constants::kTtlInfinity || val > 0;
+}
+
+bool
+isValidVersion(const int64_t myVersion, const thrift::Value& incomingVal) {
+  return (incomingVal.version() > 0) && (incomingVal.version() >= myVersion);
+}
 
 MergeType
 getMergeType(
@@ -263,7 +266,7 @@ getMergeType(
   int64_t myVersion =
       curValue ? *curValue->version() : openr::Constants::kUndefinedVersion;
 
-  if (util::isTtlUpdate(value)) {
+  if (isTtlUpdate(value)) {
     /*
      * No value field. This is ttl refreshing coming from local store(aka,
      * self-originated key) or ttl updates coming from remote node.
@@ -271,7 +274,7 @@ getMergeType(
      * NOTE: kvStore will try to detect possible inconsistencies and force a
      * full-sync if it is adjacency peer.
      */
-    if (util::isResyncNeeded(key, value, curValue)) {
+    if (isResyncNeeded(key, value, curValue)) {
       auto senderId = sender.value_or("");
       if (senderId == *value.originatorId()) {
         return MergeType::RESYNC_NEEDED;
@@ -291,7 +294,7 @@ getMergeType(
       return MergeType::UPDATE_TTL_NEEDED;
     }
   } else {
-    if (!util::isValidVersionAndLog(myVersion, key, value, stats)) {
+    if (!isValidVersionAndLog(myVersion, key, value, stats)) {
       /*
        * skip if the version is invalid or old
        *
@@ -382,15 +385,24 @@ getMergeType(
   return MergeType::NO_UPDATE_NEEDED;
 }
 
-bool
-isValidTtl(int64_t val) {
-  return val == Constants::kTtlInfinity || val > 0;
+void
+printKeyValInArea(
+    const std::string& logStr,
+    const std::string& areaTag,
+    const std::string& key,
+    const thrift::Value& val) {
+  XLOG(DBG1) << fmt::format(
+      "{}{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, ttl: {}]",
+      areaTag,
+      logStr,
+      key,
+      *val.version(),
+      *val.originatorId(),
+      *val.ttlVersion(),
+      *val.ttl());
 }
 
-bool
-isValidVersion(const int64_t myVersion, const thrift::Value& incomingVal) {
-  return (incomingVal.version() > 0) && (incomingVal.version() >= myVersion);
-}
+} // namespace detail
 
 thrift::KvStoreMergeResult
 mergeKeyValues(
@@ -403,12 +415,12 @@ mergeKeyValues(
   size_t nTtlUpdate{0};
 
   for (const auto& [key, value] : keyVals) {
-    if (!util::isKeyMatchAndLog(filters, key, value, result)) {
+    if (!isKeyMatchAndLog(filters, key, value, result)) {
       // skip if the filter is set and key does NOT match the filter
       continue;
     }
 
-    if (!util::isValidTtlAndLog(key, value, result)) {
+    if (!isValidTtlAndLog(key, value, result)) {
       // skip if the ttl is invalid
       continue;
     }
@@ -419,13 +431,13 @@ mergeKeyValues(
         (kvStoreIt != kvStore.end()) ? &kvStoreIt->second : nullptr;
 
     const MergeType mergeType =
-        getMergeType(key, value, kvStore, sender, result, curValue);
+        detail::getMergeType(key, value, kvStore, sender, result, curValue);
 
-    if (util::noNeedUpdateAndLog(mergeType, key, result)) {
+    if (noNeedUpdateAndLog(mergeType, key, result)) {
       continue;
     }
 
-    if (util::isInconsistentAndLog(mergeType, key, result)) {
+    if (isInconsistentAndLog(mergeType, key, result)) {
       continue;
     }
 
@@ -450,10 +462,10 @@ mergeKeyValues(
 
     if (mergeType == MergeType::UPDATE_ALL_NEEDED) {
       nValUpdate++;
-      util::updateKvStoreValue(kvStore, key, value);
+      updateKvStoreValue(kvStore, key, value);
     } else if (mergeType == MergeType::UPDATE_TTL_NEEDED) {
       nTtlUpdate++;
-      util::updateKvStoreTtl(kvStore, key, value);
+      updateKvStoreTtl(kvStore, key, value);
     }
     // announce the update
     result.keyVals()->emplace(key, value);
@@ -760,4 +772,4 @@ getAreaTypeByAreaName(const std::string& area) {
   // default
   return "UNKNOWN";
 }
-}; // namespace openr
+} // namespace openr

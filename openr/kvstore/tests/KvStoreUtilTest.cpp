@@ -469,11 +469,11 @@ TEST(KvStoreUtil, KvStoreFiltersTest) {
 }
 
 TEST(KvStoreUtil, IsValidTtlTest) {
-  EXPECT_TRUE(isValidTtl(1));
-  EXPECT_TRUE(isValidTtl(Constants::kTtlInfinity));
-  EXPECT_TRUE(isValidTtl(100));
-  EXPECT_FALSE(isValidTtl(0));
-  EXPECT_FALSE(isValidTtl(-100));
+  EXPECT_TRUE(detail::isValidTtl(1));
+  EXPECT_TRUE(detail::isValidTtl(Constants::kTtlInfinity));
+  EXPECT_TRUE(detail::isValidTtl(100));
+  EXPECT_FALSE(detail::isValidTtl(0));
+  EXPECT_FALSE(detail::isValidTtl(-100));
 }
 
 TEST(KvStoreUtil, IsValidVersionTest) {
@@ -482,22 +482,22 @@ TEST(KvStoreUtil, IsValidVersionTest) {
   {
     incomingVal.version() = 5;
     existingVersion = 5;
-    EXPECT_TRUE(isValidVersion(existingVersion, incomingVal));
+    EXPECT_TRUE(detail::isValidVersion(existingVersion, incomingVal));
   }
   {
     incomingVal.version() = 0;
     existingVersion = 0;
-    EXPECT_FALSE(isValidVersion(existingVersion, incomingVal));
+    EXPECT_FALSE(detail::isValidVersion(existingVersion, incomingVal));
   }
   {
     incomingVal.version() = 4;
     existingVersion = 1;
-    EXPECT_TRUE(isValidVersion(existingVersion, incomingVal));
+    EXPECT_TRUE(detail::isValidVersion(existingVersion, incomingVal));
   }
   {
     incomingVal.version() = 1;
     existingVersion = 4;
-    EXPECT_FALSE(isValidVersion(existingVersion, incomingVal));
+    EXPECT_FALSE(detail::isValidVersion(existingVersion, incomingVal));
   }
 }
 
@@ -512,7 +512,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     std::optional<std::string> sender = "senderA";
     EXPECT_EQ(
         MergeType::RESYNC_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // ttl only and ttl version is greater
   {
@@ -526,7 +526,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.ttlVersion() = 4;
     EXPECT_EQ(
         MergeType::UPDATE_TTL_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // version is lower -> no update needed
   {
@@ -541,7 +541,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.version() = 1;
     EXPECT_EQ(
         MergeType::NO_UPDATE_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // version is valid for update
   {
@@ -556,7 +556,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.version() = 4;
     EXPECT_EQ(
         MergeType::UPDATE_ALL_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // 2nd tie breaking
   {
@@ -572,7 +572,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.originatorId() = "senderB";
     EXPECT_EQ(
         MergeType::UPDATE_ALL_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // 2nd tie breaking
   {
@@ -588,7 +588,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.originatorId() = "senderA";
     EXPECT_EQ(
         MergeType::NO_UPDATE_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // 3rd tie breaking
   {
@@ -605,7 +605,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.value() = "valueA";
     EXPECT_EQ(
         MergeType::UPDATE_ALL_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // 3rd tie breaking
   {
@@ -623,7 +623,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.ttlVersion() = 2;
     EXPECT_EQ(
         MergeType::UPDATE_TTL_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // 3rd tie breaking
   {
@@ -641,7 +641,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.ttlVersion() = 1;
     EXPECT_EQ(
         MergeType::NO_UPDATE_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
   // 3rd tie breaking
   {
@@ -658,7 +658,7 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
     value.value() = "value";
     EXPECT_EQ(
         MergeType::NO_UPDATE_NEEDED,
-        getMergeType(key, value, kvStore, sender, stats));
+        detail::getMergeType(key, value, kvStore, sender, stats));
   }
 }
 

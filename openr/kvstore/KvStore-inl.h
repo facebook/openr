@@ -1980,8 +1980,8 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
     backoff.reportError();
     timeout = std::min(timeout, backoff.getTimeRemainingUntilRetry());
 
-    printKeyValInArea(
-        1 /*logLevel*/, "Advertising key update", AreaTag(), key, thriftValue);
+    detail::printKeyValInArea(
+        "Advertising key update", AreaTag(), key, thriftValue);
     // Set in keyVals which is going to be advertise to the kvStore.
     DCHECK(thriftValue.value());
     keyVals.emplace(key, thriftValue);
@@ -2073,7 +2073,7 @@ KvStoreDb<ClientType>::unsetPendingSelfOriginatedKeys() {
     auto it = selfOriginatedKeyVals_.find(key);
     if (it == selfOriginatedKeyVals_.end()) {
       // Case 1:  X is not persisted. Set new value.
-      printKeyValInArea(1 /*logLevel*/, "Unsetting", AreaTag(), key, thriftVal);
+      detail::printKeyValInArea("Unsetting", AreaTag(), key, thriftVal);
       keyVals.emplace(key, thriftVal);
       localKeysToUnset.emplace_back(key);
     } else {
@@ -2154,12 +2154,8 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
 
     // Set in keyVals which will be advertised to the kvStore
     DCHECK(!advertiseValue.value());
-    printKeyValInArea(
-        1 /* logLevel */,
-        "Advertising ttl update",
-        AreaTag(),
-        key,
-        advertiseValue);
+    detail::printKeyValInArea(
+        "Advertising ttl update", AreaTag(), key, advertiseValue);
     keyVals.emplace(key, advertiseValue);
   }
 

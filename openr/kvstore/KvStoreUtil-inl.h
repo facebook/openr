@@ -13,8 +13,8 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 namespace openr {
+namespace detail {
 
-// static
 template <typename ThriftType>
 ThriftType
 parseThriftValue(thrift::Value const& value) {
@@ -27,7 +27,6 @@ parseThriftValue(thrift::Value const& value) {
   return readThriftObj<ThriftType>(buf, serializer);
 }
 
-// static
 template <typename ThriftType>
 folly::F14FastMap<std::string, ThriftType>
 parseThriftValues(thrift::KeyVals const& keyVals) {
@@ -37,6 +36,8 @@ parseThriftValues(thrift::KeyVals const& keyVals) {
   }
   return result;
 }
+
+} // namespace detail
 
 // static
 template <typename ThriftType, typename ClientType>
@@ -63,13 +64,13 @@ dumpAllWithPrefixMultipleAndParse(
           sslContext,
           maybeIpTos,
           bindAddr);
-  if (not res) {
+  if (!res) {
     return std::make_pair(std::nullopt, unreachableAddrs);
   }
-  return std::make_pair(parseThriftValues<ThriftType>(*res), unreachableAddrs);
+  return std::make_pair(
+      detail::parseThriftValues<ThriftType>(*res), unreachableAddrs);
 }
 
-// static
 template <typename ThriftType, typename ClientType>
 folly::F14FastMap<std::string /* key */, ThriftType>
 dumpAllWithPrefixMultipleAndParse(
@@ -77,30 +78,11 @@ dumpAllWithPrefixMultipleAndParse(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& keyPrefix) {
-  return parseThriftValues<ThriftType>(
+  return detail::parseThriftValues<ThriftType>(
       dumpAllWithThriftClientFromMultiple<ClientType>(
           evb, area, clients, keyPrefix));
 }
 
-void
-printKeyValInArea(
-    int logLevel,
-    const std::string& logStr,
-    const std::string& areaTag,
-    const std::string& key,
-    const thrift::Value& val) {
-  XLOG(DBG1) << fmt::format(
-      "{}{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, ttl: {}]",
-      areaTag,
-      logStr,
-      key,
-      *val.version(),
-      *val.originatorId(),
-      *val.ttlVersion(),
-      *val.ttl());
-}
-
-// static method to dump KvStore key-val over multiple instances
 template <typename ClientType>
 std::pair<
     std::optional<thrift::KeyVals>,
@@ -121,7 +103,7 @@ dumpAllWithThriftClientFromMultiple(
   std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
-  if (not keyPrefix.empty()) {
+  if (!keyPrefix.empty()) {
     params.keys() = {keyPrefix};
   }
 
@@ -250,7 +232,7 @@ dumpAllWithThriftClientFromMultiple(
   thrift::KeyVals merged;
 
   thrift::KeyDumpParams params;
-  if (not keyPrefix.empty()) {
+  if (!keyPrefix.empty()) {
     params.keys() = {keyPrefix};
   }
 
