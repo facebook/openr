@@ -7,6 +7,10 @@
 
 #pragma once
 
+#include <concepts>
+#include <ranges>
+#include <string>
+
 #include <folly/container/F14Map.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
@@ -18,6 +22,10 @@
 #include <folly/ssl/SSLSessionManager.h>
 
 namespace openr {
+
+template <typename R>
+concept StringRange = std::ranges::input_range<R> &&
+    std::same_as<std::ranges::range_value_t<R>, std::string>;
 
 enum class MergeType {
   UPDATE_ALL_NEEDED = 0,
@@ -190,25 +198,26 @@ dumpAllWithPrefixMultipleAndParse(
  *    from ALL stores. If at least one store responds this will be non-empty.
  *  - Second member of the pair is a list of unreachable addresses
  */
-template <typename ClientType>
+template <typename ClientType, StringRange KeyPrefixes>
 std::pair<
     std::optional<thrift::KeyVals>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
-    const std::string& prefix,
+    const KeyPrefixes& keyPrefixes,
     std::chrono::milliseconds connectTimeout = Constants::kServiceConnTimeout,
     std::chrono::milliseconds processTimeout = Constants::kServiceProcTimeout,
     const std::shared_ptr<folly::SSLContext> sslContext = nullptr,
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
-template <typename ClientType>
+template <typename ClientType, StringRange KeyPrefixes>
 thrift::KeyVals dumpAllWithThriftClientFromMultiple(
+    folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
-    const std::string& prefix);
+    const KeyPrefixes& keyPrefixes);
 
 /*
  * This is the util method to merge the key-values publication to the existing

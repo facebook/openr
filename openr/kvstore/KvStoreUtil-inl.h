@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <span>
+
 #include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>
 #include <openr/common/OpenrClient.h>
@@ -54,11 +56,14 @@ dumpAllWithPrefixMultipleAndParse(
     std::optional<int> maybeIpTos /* std::nullopt */,
     const folly::SocketAddress&
         bindAddr /* folly::AsyncSocket::anyAddress()*/) {
+  auto prefixSpan = keyPrefix.empty()
+      ? std::span<const std::string>{}
+      : std::span<const std::string>{&keyPrefix, 1};
   const auto [res, unreachableAddrs] =
       dumpAllWithThriftClientFromMultiple<ClientType>(
           area,
           sockAddrs,
-          keyPrefix,
+          prefixSpan,
           connectTimeout,
           processTimeout,
           sslContext,
@@ -78,19 +83,22 @@ dumpAllWithPrefixMultipleAndParse(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& keyPrefix) {
+  auto prefixSpan = keyPrefix.empty()
+      ? std::span<const std::string>{}
+      : std::span<const std::string>{&keyPrefix, 1};
   return detail::parseThriftValues<ThriftType>(
       dumpAllWithThriftClientFromMultiple<ClientType>(
-          evb, area, clients, keyPrefix));
+          evb, area, clients, prefixSpan));
 }
 
-template <typename ClientType>
+template <typename ClientType, StringRange KeyPrefixes>
 std::pair<
     std::optional<thrift::KeyVals>,
     std::vector<folly::SocketAddress> /* unreachable addresses */>
 dumpAllWithThriftClientFromMultiple(
     std::optional<AreaId> area,
     const std::vector<folly::SocketAddress>& sockAddrs,
-    const std::string& keyPrefix,
+    const KeyPrefixes& keyPrefixes,
     std::chrono::milliseconds connectTimeout,
     std::chrono::milliseconds processTimeout,
     const std::shared_ptr<folly::SSLContext> sslContext,
@@ -103,8 +111,8 @@ dumpAllWithThriftClientFromMultiple(
   std::vector<folly::SocketAddress> unreachableAddrs;
 
   thrift::KeyDumpParams params;
-  if (!keyPrefix.empty()) {
-    params.keys() = {keyPrefix};
+  if (!keyPrefixes.empty()) {
+    params.keys() = {keyPrefixes.begin(), keyPrefixes.end()};
   }
 
   if (XLOG_IS_ON(DBG2)) {
@@ -220,20 +228,20 @@ dumpAllWithThriftClientFromMultiple(
   return std::make_pair(merged, unreachableAddrs);
 }
 
-// static method to dump KvStore key-val over multiple instances
-template <typename ClientType>
+// dump KvStore key-val over multiple instances
+template <typename ClientType, StringRange KeyPrefixes>
 thrift::KeyVals
 dumpAllWithThriftClientFromMultiple(
     folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
-    const std::string& keyPrefix) {
+    const KeyPrefixes& keyPrefixes) {
   std::vector<folly::SemiFuture<thrift::Publication>> calls;
   thrift::KeyVals merged;
 
   thrift::KeyDumpParams params;
-  if (!keyPrefix.empty()) {
-    params.keys() = {keyPrefix};
+  if (!keyPrefixes.empty()) {
+    params.keys() = {keyPrefixes.begin(), keyPrefixes.end()};
   }
 
   auto startTime = std::chrono::steady_clock::now();

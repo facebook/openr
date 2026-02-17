@@ -321,7 +321,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   {
     const auto [db, _] =
         dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
-            kTestingAreaName, sockAddrs, "");
+            kTestingAreaName, sockAddrs, std::vector<std::string>{});
     ASSERT_TRUE(db.has_value());
     auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
@@ -341,10 +341,45 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
 
     const auto [db, _] =
         dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
-            kTestingAreaName, sockAddrs, "");
+            kTestingAreaName, sockAddrs, std::vector<std::string>{});
     ASSERT_TRUE(db.has_value());
     ASSERT_TRUE(db.value().empty());
   }
+}
+
+//
+// Test dumpAllWithThriftClient API with multiple key prefixes
+//
+TEST_F(MultipleKvStoreTestFixture, dumpAllWithMultipleKeysTest) {
+  const std::string key1{"testprefix1_key1"};
+  const std::string key2{"testprefix1_key2"};
+  const std::string key3{"testprefix2_key3"};
+  const std::string key4{"testprefix3_key3"};
+  const uint16_t port1 = kvStoreWrapper1_->getThriftPort();
+  const uint16_t port2 = kvStoreWrapper2_->getThriftPort();
+
+  std::vector<folly::SocketAddress> sockAddrs;
+  sockAddrs.emplace_back(Constants::kPlatformHost.toString(), port1);
+  sockAddrs.emplace_back(Constants::kPlatformHost.toString(), port2);
+
+  thrift::Value val = createThriftValue(1, nodeId1_, "whatever");
+  kvStoreWrapper1_->setKey(kTestingAreaName, key1, val);
+  kvStoreWrapper2_->setKey(kTestingAreaName, key2, val);
+  kvStoreWrapper1_->setKey(kTestingAreaName, key3, val);
+  kvStoreWrapper1_->setKey(kTestingAreaName, key4, val);
+
+  // Filters applied correctly
+  const auto [db, _] =
+      dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
+          kTestingAreaName,
+          sockAddrs,
+          std::vector<std::string>{"testprefix1", "testprefix2"});
+  ASSERT_TRUE(db.has_value());
+  auto pub = db.value();
+  EXPECT_EQ(pub.size(), 3);
+  EXPECT_TRUE(pub.contains(key1));
+  EXPECT_TRUE(pub.contains(key2));
+  EXPECT_TRUE(pub.contains(key3));
 }
 
 //
@@ -379,7 +414,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
   // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
   {
     const auto& pub = dumpAllWithThriftClientFromMultiple(
-        *evb, kTestingAreaName, clients, "");
+        *evb, kTestingAreaName, clients, std::vector<std::string>{});
     EXPECT_TRUE(pub.size() == 2);
     EXPECT_TRUE(pub.count(key1));
     EXPECT_TRUE(pub.count(key2));
@@ -396,7 +431,7 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
     kvStoreWrapper2_->stopThriftServer();
 
     const auto& pub = dumpAllWithThriftClientFromMultiple(
-        *evb, kTestingAreaName, clients, "");
+        *evb, kTestingAreaName, clients, std::vector<std::string>{});
     ASSERT_TRUE(pub.empty());
   }
 }
