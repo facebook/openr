@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <ranges>
 #include <span>
 
 #include <folly/gen/Base.h>
@@ -29,17 +30,20 @@ parseThriftValue(thrift::Value const& value) {
   return readThriftObj<ThriftType>(buf, serializer);
 }
 
-template <typename ThriftType>
+} // namespace detail
+
+template <
+    typename ThriftType,
+    SizedKeyValueRange<std::string, thrift::Value> PairRange>
 folly::F14FastMap<std::string, ThriftType>
-parseThriftValues(thrift::KeyVals const& keyVals) {
+parseThriftValues(PairRange const& keyVals) {
   folly::F14FastMap<std::string, ThriftType> result;
+  result.reserve(std::ranges::size(keyVals));
   for (auto const& [key, val] : keyVals) {
-    result.emplace(key, parseThriftValue<ThriftType>(val));
+    result.emplace(key, detail::parseThriftValue<ThriftType>(val));
   }
   return result;
 }
-
-} // namespace detail
 
 // static
 template <typename ThriftType, typename ClientType>
@@ -72,8 +76,7 @@ dumpAllWithPrefixMultipleAndParse(
   if (!res) {
     return std::make_pair(std::nullopt, unreachableAddrs);
   }
-  return std::make_pair(
-      detail::parseThriftValues<ThriftType>(*res), unreachableAddrs);
+  return std::make_pair(parseThriftValues<ThriftType>(*res), unreachableAddrs);
 }
 
 template <typename ThriftType, typename ClientType>
@@ -86,7 +89,7 @@ dumpAllWithPrefixMultipleAndParse(
   auto prefixSpan = keyPrefix.empty()
       ? std::span<const std::string>{}
       : std::span<const std::string>{&keyPrefix, 1};
-  return detail::parseThriftValues<ThriftType>(
+  return parseThriftValues<ThriftType>(
       dumpAllWithThriftClientFromMultiple<ClientType>(
           evb, area, clients, prefixSpan));
 }

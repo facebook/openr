@@ -27,6 +27,13 @@ template <typename R>
 concept StringRange = std::ranges::input_range<R> &&
     std::same_as<std::ranges::range_value_t<R>, std::string>;
 
+template <typename Range, typename Key, typename Value>
+concept SizedKeyValueRange = std::ranges::sized_range<Range> &&
+    requires(std::ranges::range_reference_t<Range> pair) {
+      { get<0>(pair) } -> std::convertible_to<Key const&>;
+      { get<1>(pair) } -> std::convertible_to<Value const&>;
+    };
+
 enum class MergeType {
   UPDATE_ALL_NEEDED = 0,
   UPDATE_TTL_NEEDED = 1,
@@ -116,10 +123,6 @@ namespace detail {
 template <typename ThriftType>
 ThriftType parseThriftValue(thrift::Value const& value);
 
-template <typename ThriftType>
-folly::F14FastMap<std::string, ThriftType> parseThriftValues(
-    const thrift::KeyVals& keyVals);
-
 // positive int/infinity marker (current also a positive int)
 bool isValidTtl(int64_t val);
 
@@ -142,6 +145,12 @@ void printKeyValInArea(
     const std::string& key,
     const thrift::Value& val);
 } // namespace detail
+
+template <
+    typename ThriftType,
+    SizedKeyValueRange<std::string, thrift::Value> PairRange>
+folly::F14FastMap<std::string, ThriftType> parseThriftValues(
+    PairRange const& keyVals);
 
 /**
  * Dump and decode keys from multiple clients, indicating any we couldn't reach
