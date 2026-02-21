@@ -101,11 +101,11 @@ MockIoProvider::recvmsg(int sockFd, struct msghdr* msg, int /* flags */) {
   it->second.pop_front();
 
   // deliver the address
-  sockaddr_storage addrStorage;
+  sockaddr_storage addrStorage{};
   folly::SocketAddress sockAddr(srcAddr, kMockedUdpPort);
   sockAddr.getAddress(&addrStorage);
 
-  CHECK(msg->msg_namelen >= sizeof(sockaddr_storage));
+  CHECK_GE(msg->msg_namelen, sizeof(sockaddr_storage));
 
   ::memcpy(msg->msg_name, &addrStorage, sizeof(sockaddr_storage));
   msg->msg_namelen = sizeof(sockaddr_storage);
@@ -161,7 +161,7 @@ MockIoProvider::recvmsg(int sockFd, struct msghdr* msg, int /* flags */) {
   auto ns = std::chrono::duration_cast<std::chrono::nanoseconds>(
       std::chrono::system_clock::now().time_since_epoch());
   auto sec = std::chrono::duration_cast<std::chrono::seconds>(ns);
-  struct timespec curTime;
+  struct timespec curTime{};
   curTime.tv_sec = sec.count();
   curTime.tv_nsec = (ns - sec).count();
 
@@ -181,74 +181,91 @@ MockIoProvider::sendmsg(int sockFd, const struct msghdr* msg, int /* flags */) {
     LOG(ERROR) << "MockIoProvider::sendmsg failed";
   };
 
-  std::lock_guard<std::mutex> lock(mutex_);
+  // copy the data from iov (do this once, before the lock)
+  std::string packet(
+      reinterpret_cast<const char*>(msg->msg_iov->iov_base),
+      msg->msg_iov->iov_len);
 
-  CHECK(pipeFds_.contains(sockFd));
-
-  struct cmsghdr* cmsg{nullptr};
-  int srcIfIndex{-1};
+  // Collect callbacks to invoke (outside lock to avoid deadlock)
+  std::vector<std::pair<std::string, PacketCallback>> callbacksToInvoke;
+  std::string srcIfName;
   folly::IPAddress srcAddr;
-
-  for (cmsg = CMSG_FIRSTHDR(const_cast<struct msghdr*>(msg)); cmsg;
-       cmsg = CMSG_NXTHDR(const_cast<struct msghdr*>(msg), cmsg)) {
-    if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
-      struct in6_pktinfo pktinfo;
-      memcpy(static_cast<void*>(&pktinfo), CMSG_DATA(cmsg), sizeof(pktinfo));
-      srcIfIndex = pktinfo.ipi6_ifindex;
-      srcAddr = folly::IPAddress(pktinfo.ipi6_addr);
-      break;
-    }
-  }
-
-  CHECK(srcIfIndex != -1);
-
-  auto srcIfName = ifIndexToIfName_.at(srcIfIndex);
-
-  VLOG(4) << "MockIoProvider::sendmsg sending message from iface " << srcIfName;
-
-  // walk over all connected interfaces
   bool sent = false;
-  for (auto const& dstIfNameLatency : connectedIfPairs_[srcIfName]) {
-    auto& dstIfName = dstIfNameLatency.first;
-    auto& latency = dstIfNameLatency.second;
 
-    int otherFd{-1};
-    int dstIfIndex{0};
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
 
-    try {
-      dstIfIndex = ifNameToIfIndex_.at(dstIfName);
-    } catch (std::exception const&) {
-      VLOG(1) << "ifname " << dstIfName << " is not bound to an ifIndex";
-      continue;
+    CHECK(pipeFds_.contains(sockFd));
+
+    struct cmsghdr* cmsg{nullptr};
+    int srcIfIndex{-1};
+
+    for (cmsg = CMSG_FIRSTHDR(const_cast<struct msghdr*>(msg)); cmsg;
+         cmsg = CMSG_NXTHDR(const_cast<struct msghdr*>(msg), cmsg)) {
+      if (cmsg->cmsg_level == IPPROTO_IPV6 && cmsg->cmsg_type == IPV6_PKTINFO) {
+        struct in6_pktinfo pktinfo{};
+        memcpy(static_cast<void*>(&pktinfo), CMSG_DATA(cmsg), sizeof(pktinfo));
+        srcIfIndex = pktinfo.ipi6_ifindex;
+        srcAddr = folly::IPAddress(pktinfo.ipi6_addr);
+        break;
+      }
     }
 
-    try {
-      otherFd = ifIndexToFd_.at(dstIfIndex);
-    } catch (std::out_of_range const&) {
-      LOG(ERROR) << "No sockets bound to " << dstIfName;
-      continue;
+    CHECK_NE(srcIfIndex, -1);
+
+    srcIfName = ifIndexToIfName_.at(srcIfIndex);
+
+    VLOG(4) << "MockIoProvider::sendmsg sending message from iface "
+            << srcIfName;
+
+    // walk over all connected interfaces
+    for (auto const& dstIfNameLatency : connectedIfPairs_[srcIfName]) {
+      auto& dstIfName = dstIfNameLatency.first;
+      auto& latency = dstIfNameLatency.second;
+
+      // Check if there's a callback registered for this destination
+      auto callbackIt = packetCallbacks_.find(dstIfName);
+      if (callbackIt != packetCallbacks_.end()) {
+        callbacksToInvoke.emplace_back(dstIfName, callbackIt->second);
+        sent = true;
+        continue;
+      }
+
+      int otherFd{-1};
+      int dstIfIndex{0};
+
+      try {
+        dstIfIndex = ifNameToIfIndex_.at(dstIfName);
+      } catch (std::exception const&) {
+        VLOG(1) << "ifname " << dstIfName << " is not bound to an ifIndex";
+        continue;
+      }
+
+      try {
+        otherFd = ifIndexToFd_.at(dstIfIndex);
+      } catch (std::out_of_range const&) {
+        LOG(ERROR) << "No sockets bound to " << dstIfName;
+        continue;
+      }
+
+      // ATTN: In UT env, we explicitly allow pkt to send to itself to
+      //       mimick case that pkt looped back to its own intf.
+      if (otherFd == sockFd) {
+        LOG(WARNING) << "Src and dst fd is the same. Pkt looped";
+      }
+
+      auto& msgQueue = mailboxes_[otherFd];
+
+      msgQueue.emplace_back(
+          dstIfIndex, srcAddr, packet, std::chrono::milliseconds(latency));
+
+      sent = true;
     }
+  } // release lock
 
-    // ATTN: In UT env, we explicitly allow pkt to send to itself to
-    //       mimick case that pkt looped back to its own intf.
-    if (otherFd == sockFd) {
-      LOG(WARNING) << "Src and dst fd is the same. Pkt looped";
-    }
-
-    auto& msgQueue = mailboxes_[otherFd];
-
-    // copy the data from iov
-    std::string packet(
-        reinterpret_cast<const char*>(msg->msg_iov->iov_base),
-        msg->msg_iov->iov_len);
-
-    msgQueue.emplace_back(
-        dstIfIndex,
-        srcAddr,
-        std::move(packet),
-        std::chrono::milliseconds(latency));
-
-    sent = true;
+  // Invoke callbacks outside the lock
+  for (const auto& [dstIfName, callback] : callbacksToInvoke) {
+    callback(srcIfName, dstIfName, srcAddr, packet);
   }
 
   // return the length of single vector sent
@@ -297,7 +314,7 @@ MockIoProvider::setsockopt(
 void
 MockIoProvider::addIfNameIfIndex(const IfNameAndifIndex& entries) {
   for (const auto& entry : entries) {
-    const auto ifName = entry.first;
+    const auto& ifName = entry.first;
     const auto ifIndex = entry.second;
     VLOG(4) << "MockIoProvider::addIfNameIfIndex called for " << ifName << " ("
             << ifIndex << ")";
@@ -309,6 +326,43 @@ MockIoProvider::addIfNameIfIndex(const IfNameAndifIndex& entries) {
     ifIndexToIfName_[ifIndex] = ifName;
     ifNameToIfIndex_[ifName] = ifIndex;
   }
+}
+
+void
+MockIoProvider::injectPacket(
+    int dstIfIndex,
+    const folly::IPAddress& srcAddr,
+    const std::string& packet,
+    std::chrono::milliseconds latency) {
+  std::lock_guard<std::mutex> lock(mutex_);
+
+  /*
+   * Find the fd that is listening on dstIfIndex
+   */
+  auto fdIt = ifIndexToFd_.find(dstIfIndex);
+  if (fdIt == ifIndexToFd_.end()) {
+    VLOG(1) << "injectPacket: No socket bound to ifIndex " << dstIfIndex;
+    return;
+  }
+
+  int dstFd = fdIt->second;
+
+  /*
+   * Add message to the destination's mailbox
+   */
+  auto& msgQueue = mailboxes_[dstFd];
+  msgQueue.emplace_back(dstIfIndex, srcAddr, packet, latency);
+
+  VLOG(4) << "injectPacket: Injected " << packet.size() << " bytes to ifIndex "
+          << dstIfIndex << " from " << srcAddr.str();
+}
+
+void
+MockIoProvider::registerPacketCallback(
+    const std::string& dstIfName, PacketCallback callback) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  packetCallbacks_[dstIfName] = std::move(callback);
+  VLOG(4) << "Registered packet callback for interface: " << dstIfName;
 }
 
 //

@@ -9,6 +9,7 @@
 
 #include <folly/IPAddress.h>
 #include <openr/spark/IoProvider.h>
+#include <functional>
 #include <list>
 #include <mutex>
 #include <thread>
@@ -109,6 +110,48 @@ class MockIoProvider final : public IoProvider {
   //
   void addIfNameIfIndex(const IfNameAndifIndex& entries);
 
+  /*
+   * Inject a packet directly into a destination interface's mailbox.
+   *
+   * This allows external code (e.g., SparkFaker) to send fake Spark packets
+   * to a DUT without going through a real Spark instance.
+   *
+   * @param dstIfIndex Interface index to deliver packet to
+   * @param srcAddr Source IP address (will appear in recvmsg)
+   * @param packet Raw packet data (serialized SparkHelloPacket)
+   * @param latency Optional delay before delivery (default: immediate)
+   */
+  void injectPacket(
+      int dstIfIndex,
+      const folly::IPAddress& srcAddr,
+      const std::string& packet,
+      std::chrono::milliseconds latency = std::chrono::milliseconds(0));
+
+  /*
+   * Packet callback type for intercepting outgoing packets.
+   * Called when sendmsg() routes a packet to an interface.
+   *
+   * @param srcIfName Source interface name
+   * @param dstIfName Destination interface name
+   * @param srcAddr Source IP address
+   * @param packet Raw packet data
+   */
+  using PacketCallback = std::function<void(
+      const std::string& srcIfName,
+      const std::string& dstIfName,
+      const folly::IPAddress& srcAddr,
+      const std::string& packet)>;
+
+  /*
+   * Register a callback to intercept packets sent to a specific interface.
+   * This allows SparkFaker to receive DUT's outgoing packets.
+   *
+   * @param dstIfName Interface name to intercept packets for
+   * @param callback Function to call when packet arrives
+   */
+  void registerPacketCallback(
+      const std::string& dstIfName, PacketCallback callback);
+
  private:
   // Boolean to keep track of running-state of MockIoProvider
   std::atomic<bool> isRunning_{false};
@@ -170,5 +213,8 @@ class MockIoProvider final : public IoProvider {
 
   // the list of messages pending per fd
   std::map<int /* fd */, std::list<IoMessage>> mailboxes_{};
+
+  // callbacks for intercepting packets sent to specific interfaces
+  std::map<std::string /* dstIfName */, PacketCallback> packetCallbacks_{};
 };
 } // namespace openr
