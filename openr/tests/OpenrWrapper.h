@@ -92,6 +92,15 @@ class OpenrWrapper {
   std::map<std::string, int64_t> getCounters();
 
   /*
+   * Get KvStore updates queue for topology injection.
+   * Used by KvStoreBulkInjector for scale testing.
+   */
+  messaging::ReplicateQueue<KvStorePublication>&
+  getKvStoreUpdatesQueue() {
+    return kvStoreUpdatesQueue_;
+  }
+
+  /*
    * watchdog thread (used for checking memory limit exceeded)
    */
   std::unique_ptr<Watchdog> watchdog;
