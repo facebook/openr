@@ -91,7 +91,8 @@ dumpAllWithPrefixMultipleAndParse(
       : std::span<const std::string>{&keyPrefix, 1};
   return parseThriftValues<ThriftType>(
       dumpAllWithThriftClientFromMultiple<ClientType>(
-          evb, area, clients, prefixSpan));
+          evb, area, clients, prefixSpan)
+          .keyVals);
 }
 
 template <typename ClientType, StringRange KeyPrefixes>
@@ -233,7 +234,7 @@ dumpAllWithThriftClientFromMultiple(
 
 // dump KvStore key-val over multiple instances
 template <typename ClientType, StringRange KeyPrefixes>
-thrift::KeyVals
+KvStoreDumpWithConnectionMeta
 dumpAllWithThriftClientFromMultiple(
     folly::EventBase& evb,
     const AreaId& area,
@@ -253,11 +254,13 @@ dumpAllWithThriftClientFromMultiple(
         client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
   }
 
+  uint32_t failures = 0;
   // loop semifuture collection to merge all values
   for (const auto& result : folly::collectAll(calls).via(&evb).getVia(&evb)) {
     // folly::Try will contain either value or exception
     if (result.hasException()) {
       LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
+      failures++;
     } else if (result.hasValue()) {
       auto keyVals = *result.value().keyVals();
       const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
@@ -276,7 +279,7 @@ dumpAllWithThriftClientFromMultiple(
 
   XLOG(DBG1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
-  return merged;
+  return {merged, failures};
 }
 
 } // namespace openr

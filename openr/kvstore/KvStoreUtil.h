@@ -221,8 +221,13 @@ dumpAllWithThriftClientFromMultiple(
     std::optional<int> maybeIpTos = std::nullopt,
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress());
 
+struct KvStoreDumpWithConnectionMeta {
+  thrift::KeyVals keyVals;
+  uint32_t failureCount = 0;
+};
+
 template <typename ClientType, StringRange KeyPrefixes>
-thrift::KeyVals dumpAllWithThriftClientFromMultiple(
+KvStoreDumpWithConnectionMeta dumpAllWithThriftClientFromMultiple(
     folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,

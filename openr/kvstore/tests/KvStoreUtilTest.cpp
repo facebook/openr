@@ -413,8 +413,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
 
   // Step2: verify fetch + aggregate 2 keys from different kvStores with prefix
   {
-    const auto& pub = dumpAllWithThriftClientFromMultiple(
-        *evb, kTestingAreaName, clients, std::vector<std::string>{});
+    const auto& pub =
+        dumpAllWithThriftClientFromMultiple(
+            *evb, kTestingAreaName, clients, std::vector<std::string>{})
+            .keyVals;
     EXPECT_TRUE(pub.size() == 2);
     EXPECT_TRUE(pub.count(key1));
     EXPECT_TRUE(pub.count(key2));
@@ -430,8 +432,10 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
     kvStoreWrapper1_->stopThriftServer();
     kvStoreWrapper2_->stopThriftServer();
 
-    const auto& pub = dumpAllWithThriftClientFromMultiple(
-        *evb, kTestingAreaName, clients, std::vector<std::string>{});
+    const auto& pub =
+        dumpAllWithThriftClientFromMultiple(
+            *evb, kTestingAreaName, clients, std::vector<std::string>{})
+            .keyVals;
     ASSERT_TRUE(pub.empty());
   }
 }
