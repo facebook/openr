@@ -1,5 +1,0 @@
-publish(
-    wiki_root_path = "Network_Routing_Control/Routing_Protocol/Open-R",
-    folder = "./",
-    oncall = "routing_protocol",
-)
