@@ -665,6 +665,7 @@ struct LinkMonitorState {
    * Custom metric override for an adjacency
    */
   @hack.SkipCodegen{reason = "Invalid key type"}
+  @thrift.AllowUnsafeNonSealedKeyType
   5: map<AdjKey, i32> adjMetricOverrides;
 
   /**
