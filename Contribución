@@ -1,0 +1,30 @@
+Contribuyendo a OpenR
+Queremos que contribuir a este proyecto sea lo más fácil y transparente posible.
+
+Solicitudes de extracción
+Damos la bienvenida activamente a sus solicitudes de extracción.
+
+Bifurque el repositorio y cree su rama desde master.
+Si ha agregado código que debería probarse, agregue pruebas.
+Si ha cambiado de API, actualice la documentación.
+Asegúrese de que la suite de pruebas pase.
+Asegúrese de que su código lints.
+Si aún no lo ha hecho, complete el Acuerdo de licencia de colaborador ("CLA").
+Acuerdo de licencia de colaborador ("CLA")
+Para aceptar su solicitud de extracción, necesitamos que envíe un CLA. Solo necesita hacer esto una vez para trabajar en cualquiera de los proyectos de código abierto de Facebook.
+
+Complete su CLA aquí: https://code.facebook.com/cla
+
+Cuestiones
+Usamos problemas de GitHub para rastrear errores públicos. Asegúrese de que su descripción sea clara y tenga suficientes instrucciones para poder reproducir el problema.
+
+Facebook tiene un programa de recompensas para la divulgación segura de errores de seguridad. En esos casos, siga el proceso descrito en esa página y no presente un problema público.
+
+Estilo de codificación
+Formatee con clang-format. Una configuración de estilo ligeramente personalizada se encuentra en el directorio de nivel superior con el nombre.clang-format
+
+Pruebas
+Asegúrese de cubrir los cambios de su código con nuevas pruebas unitarias o actualice las existentes. Además, asegúrese de que sus cambios sean compatibles con versiones anteriores. Pronto proporcionaremos una herramienta de emulación para probar los cambios de OpenR en una red virtual.
+
+Licencia
+Al contribuir a OpenR, acepta que sus contribuciones tendrán la licencia del archivo LICENCIA en el directorio raíz de este árbol de fuentes.
