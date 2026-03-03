@@ -17,9 +17,14 @@
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/if/gen-cpp2/Types_types.h>
-#include <openr/tests/mocks/MockIoProvider.h>
+#include <openr/tests/scale/SparkIoInterface.h>
 
 namespace openr {
+
+/*
+ * Forward declaration for backward compatibility
+ */
+class MockIoProvider;
 
 /*
  * SparkFaker - Fakes Spark neighbors for DUT testing
@@ -71,7 +76,15 @@ class SparkFaker {
   };
 
   /*
-   * Construct SparkFaker with MockIoProvider for packet injection
+   * Construct SparkFaker with SparkIoInterface for packet I/O
+   *
+   * Use MockSparkIo for in-process testing with MockIoProvider.
+   * Use RealSparkIo for testing against real DUTs over the network.
+   */
+  explicit SparkFaker(std::shared_ptr<SparkIoInterface> io);
+
+  /*
+   * Backward-compatible constructor that wraps MockIoProvider
    */
   explicit SparkFaker(std::shared_ptr<MockIoProvider> mockIo);
 
@@ -203,7 +216,7 @@ class SparkFaker {
    */
   void processNeighbor(FakeNeighbor& neighbor);
 
-  std::shared_ptr<MockIoProvider> mockIo_;
+  std::shared_ptr<SparkIoInterface> io_;
   std::vector<FakeNeighbor> neighbors_;
 
   std::atomic<bool> running_{false};
@@ -216,6 +229,42 @@ class SparkFaker {
 
   /* Serializer for thrift packets */
   apache::thrift::CompactSerializer serializer_;
+
+ public:
+  /*
+   * Stats counters for observability
+   */
+  struct Stats {
+    std::atomic<uint64_t> hellosSent{0};
+    std::atomic<uint64_t> hellosReceived{0};
+    std::atomic<uint64_t> handshakesSent{0};
+    std::atomic<uint64_t> handshakesReceived{0};
+    std::atomic<uint64_t> heartbeatsSent{0};
+    std::atomic<uint64_t> heartbeatsReceived{0};
+    std::atomic<uint64_t> parseErrors{0};
+    std::atomic<uint64_t> neighborsEstablished{0};
+  };
+
+  /*
+   * Get stats for monitoring
+   */
+  const Stats&
+  getStats() const {
+    return stats_;
+  }
+
+  /*
+   * Get detailed neighbor status as formatted string
+   */
+  std::string getNeighborStatusReport() const;
+
+  /*
+   * Get summary stats as formatted string
+   */
+  std::string getStatsReport() const;
+
+ private:
+  Stats stats_;
 };
 
 } // namespace openr
