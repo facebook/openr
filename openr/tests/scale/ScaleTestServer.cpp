@@ -30,6 +30,8 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <openr/tests/scale/FakeKvStoreManager.h>
+#include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 #include <openr/tests/scale/RealSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
@@ -72,6 +74,16 @@ DEFINE_int32(
     "Duration to run in seconds (0 = run until interrupted)");
 
 DEFINE_bool(verify_routes, true, "Verify routes are computed after injection");
+
+DEFINE_int32(
+    fake_kvstore_base_port,
+    3000,
+    "Base port for per-neighbor FakeKvStore Thrift servers");
+
+DEFINE_bool(
+    enable_fake_kvstore,
+    true,
+    "Enable per-neighbor FakeKvStore servers for KvStore sync");
 
 namespace {
 
@@ -146,6 +158,11 @@ main(int argc, char** argv) {
   LOG(INFO) << fmt::format(
       "  Verify routes:   {}", FLAGS_verify_routes ? "yes" : "no");
   LOG(INFO) << fmt::format(
+      "  FakeKvStore:     {}",
+      FLAGS_enable_fake_kvstore
+          ? fmt::format("yes (base port {})", FLAGS_fake_kvstore_base_port)
+          : "no");
+  LOG(INFO) << fmt::format(
       "  Run duration:    {} sec (0=infinite)", FLAGS_run_duration_sec);
   LOG(INFO) << "";
   LOG(INFO)
@@ -206,6 +223,50 @@ main(int argc, char** argv) {
   LOG(INFO) << "Connected to DUT: " << dutNodeName;
 
   /*
+   * Setup FakeKvStoreManager (per-neighbor KvStore Thrift servers)
+   */
+  std::unique_ptr<openr::FakeKvStoreManager> kvManager;
+  std::vector<std::string> neighborNames;
+
+  if (FLAGS_enable_fake_kvstore && FLAGS_simulate_neighbors) {
+    LOG(INFO) << "Setting up FakeKvStoreManager...";
+
+    kvManager = std::make_unique<openr::FakeKvStoreManager>(
+        FLAGS_fake_kvstore_base_port, 4);
+
+    /*
+     * Collect neighbor names
+     */
+    for (int i = 0; i < FLAGS_num_spines; ++i) {
+      neighborNames.push_back(fmt::format("spine-{}", i));
+    }
+
+    /*
+     * Build per-neighbor KV data from topology
+     */
+    LOG(INFO) << fmt::format(
+        "Building KV data for {} neighbors...", neighborNames.size());
+    auto neighborKvData = openr::KvStoreDataBuilder::buildForAllNeighbors(
+        neighborNames, topology);
+
+    /*
+     * Add each neighbor to the manager
+     */
+    for (const auto& name : neighborNames) {
+      auto it = neighborKvData.find(name);
+      if (it != neighborKvData.end()) {
+        kvManager->addNeighbor(name, it->second);
+      }
+    }
+
+    LOG(INFO) << fmt::format(
+        "FakeKvStoreManager configured with {} neighbors (ports {}-{})",
+        kvManager->getNeighborCount(),
+        FLAGS_fake_kvstore_base_port,
+        FLAGS_fake_kvstore_base_port + kvManager->getNeighborCount() - 1);
+  }
+
+  /*
    * Setup SparkFaker with real I/O (if simulating neighbors)
    */
   std::shared_ptr<openr::SparkFaker> faker;
@@ -237,7 +298,7 @@ main(int argc, char** argv) {
        * Add neighbors for this interface
        */
       int neighborsOnThisIf = (i == interfaces.size() - 1)
-          ? (FLAGS_num_spines - neighborIdx) /* Last interface gets remainder */
+          ? (FLAGS_num_spines - neighborIdx)
           : neighborsPerInterface;
 
       for (int j = 0; j < neighborsOnThisIf && neighborIdx < FLAGS_num_spines;
@@ -252,6 +313,16 @@ main(int argc, char** argv) {
 
         faker->addNeighbor(
             spineName, spineIfName, ifIndex, v6Addr, ifName, ifIndex);
+
+        /*
+         * Set the per-neighbor ctrl port for KvStore sync
+         */
+        if (kvManager) {
+          uint16_t ctrlPort = kvManager->getPort(spineName);
+          faker->setNeighborCtrlPort(spineName, ctrlPort);
+          VLOG(2)
+              << fmt::format("Set ctrlPort for {} to {}", spineName, ctrlPort);
+        }
 
         VLOG(1) << fmt::format(
             "Added fake neighbor {} on {} ({})", spineName, ifName, v6Addr);
@@ -286,6 +357,14 @@ main(int argc, char** argv) {
         keysInjected,
         durationMs,
         durationMs > 0 ? (keysInjected * 1000 / durationMs) : 0);
+  }
+
+  /*
+   * Start FakeKvStoreManager (BEFORE SparkFaker so DUT can connect to us)
+   */
+  if (kvManager) {
+    LOG(INFO) << "Starting FakeKvStoreManager...";
+    kvManager->start();
   }
 
   /*
@@ -362,6 +441,10 @@ main(int argc, char** argv) {
 
   if (faker) {
     faker->stop();
+  }
+
+  if (kvManager) {
+    kvManager->stop();
   }
 
   injector.disconnect();
