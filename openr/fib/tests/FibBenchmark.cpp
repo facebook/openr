@@ -22,34 +22,6 @@
 #include <openr/tests/mocks/PrefixGenerator.h>
 #include <openr/tests/utils/Utils.h>
 
-/**
- * Defines a benchmark that allows users to record customized counter during
- * benchmarking and passes a parameter to another one. This is common for
- * benchmarks that need a "problem size" in addition to "number of iterations".
- */
-#define BENCHMARK_COUNTERS_PARAM(name, counters, existing, update) \
-  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
-      name,                                                        \
-      counters,                                                    \
-      FB_CONCATENATE(existing, FB_CONCATENATE(_, update)),         \
-      existing,                                                    \
-      update)
-
-/*
- * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
- * each parameter, rather than using the parameter value.
- */
-#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
-  BENCHMARK_IMPL_COUNTERS(                                             \
-      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
-      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
-      counters,                                                        \
-      iters,                                                           \
-      unsigned,                                                        \
-      iters) {                                                         \
-    name(counters, iters, ##__VA_ARGS__);                              \
-  }
-
 namespace {
 // Virtual interface
 const std::string kVethNameY("vethTestY");
@@ -298,30 +270,39 @@ BM_FibDeleteUnicastRoute(
  * @params first integer: num of existing routes
  * @params second integer: num of updating routes
  */
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 1000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibAddUnicastRoute, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibAddUnicastRoute, 100_100, 100, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibAddUnicastRoute, 1000_1000, 1000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibAddUnicastRoute, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibAddUnicastRoute, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibAddUnicastRoute, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibAddUnicastRoute, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibAddUnicastRoute, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibAddUnicastRoute, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibAddUnicastRoute, 100000_100000, 100000, 100000);
 
 /*
  * @params counters: reserved counter for customized profile
  * @params first integer: num of existing routes
  * @params second integer: num of deleting routes
  */
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 1000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_FibDeleteUnicastRoute, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibDeleteUnicastRoute, 100_100, 100, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibDeleteUnicastRoute, 1000_1000, 1000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibDeleteUnicastRoute, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibDeleteUnicastRoute, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_FibDeleteUnicastRoute, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibDeleteUnicastRoute, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibDeleteUnicastRoute, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibDeleteUnicastRoute, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_FibDeleteUnicastRoute, 100000_100000, 100000, 100000);
 
 } // namespace openr
 

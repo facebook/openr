@@ -13,34 +13,6 @@
 #include <openr/monitor/SystemMetrics.h>
 #include <openr/prefix-manager/PrefixManager.h>
 
-/**
- * Defines a benchmark that allows users to record customized counter during
- * benchmarking and passes a parameter to another one. This is common for
- * benchmarks that need a "problem size" in addition to "number of iterations".
- */
-#define BENCHMARK_COUNTERS_PARAM(name, counters, existing, update) \
-  BENCHMARK_COUNTERS_NAME_PARAM(                                   \
-      name,                                                        \
-      counters,                                                    \
-      FB_CONCATENATE(existing, FB_CONCATENATE(_, update)),         \
-      existing,                                                    \
-      update)
-
-/*
- * Like BENCHMARK_COUNTERS_PARAM(), but allows a custom name to be specified for
- * each parameter, rather than using the parameter value.
- */
-#define BENCHMARK_COUNTERS_NAME_PARAM(name, counters, param_name, ...) \
-  BENCHMARK_IMPL_COUNTERS(                                             \
-      FB_CONCATENATE(name, FB_CONCATENATE(_, param_name)),             \
-      FOLLY_PP_STRINGIZE(name) "(" FOLLY_PP_STRINGIZE(param_name) ")", \
-      counters,                                                        \
-      iters,                                                           \
-      unsigned,                                                        \
-      iters) {                                                         \
-    name(counters, iters, ##__VA_ARGS__);                              \
-  }
-
 namespace openr {
 
 class PrefixManagerBenchmarkTestFixture {
@@ -480,84 +452,117 @@ BM_RedistributeFibDeleteRoute(
  * @second integer: number of prefixes to advertise
  */
 
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100, 1);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 1000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 10000, 1000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_AdvertiseWithKvRequestQueue, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_AdvertiseWithKvRequestQueue, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(
-    BM_AdvertiseWithKvRequestQueue, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_AdvertiseWithKvRequestQueue, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_AdvertiseWithKvRequestQueue, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 100_1, 100, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_AdvertiseWithKvRequestQueue, 1000_1, 1000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 10000_1, 10000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_AdvertiseWithKvRequestQueue, 100000_100000, 100000, 100000);
 
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of prefixes to withdraw
  */
 
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100, 1);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 1000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_WithdrawWithKvRequestQueue, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_WithdrawWithKvRequestQueue, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_WithdrawWithKvRequestQueue, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 100_1, 100, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_WithdrawWithKvRequestQueue, 1000_1, 1000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 10000_1, 10000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_WithdrawWithKvRequestQueue, 100000_100000, 100000, 100000);
 
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of redistributed Fib add route
  */
 
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 1000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibAddRoute, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibAddRoute, 100_1, 100, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibAddRoute, 1000_1, 1000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_1, 10000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibAddRoute, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibAddRoute, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibAddRoute, 100000_100000, 100000, 100000);
 
 /*
  * @first integer: number of prefixes existing inside PrefixManager
  * @second integer: number of redistributed Fib delete route
  */
 
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 1000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 1000);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 10000, 10000);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 1);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 10);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 100);
-BENCHMARK_COUNTERS_PARAM(BM_RedistributeFibDeleteRoute, counters, 100000, 1000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_RedistributeFibDeleteRoute, counters, 100000, 10000);
-BENCHMARK_COUNTERS_PARAM(
-    BM_RedistributeFibDeleteRoute, counters, 100000, 100000);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 100_1, 100, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(BM_RedistributeFibDeleteRoute, 1000_1, 1000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 10000_1, 10000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 10000_10, 10000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 10000_100, 10000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 10000_1000, 10000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 10000_10000, 10000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 100000_1, 100000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 100000_10, 100000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 100000_100, 100000, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 100000_1000, 100000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 100000_10000, 100000, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_RedistributeFibDeleteRoute, 100000_100000, 100000, 100000);
 } // namespace openr
 
 int

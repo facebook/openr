@@ -17,21 +17,21 @@ namespace openr {
  */
 
 // scale up topology, keeping prefix scale constant
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 10, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 100, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 1000, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 10000, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 10_SP_ECMP_1, 10, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 100_SP_ECMP_1, 100, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 1000_SP_ECMP_1, 1000, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 10000_SP_ECMP_1, 10000, SP_ECMP, 1);
 // scale up prefixes per node keeping topology size constant
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 100, SP_ECMP, 10);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 100, SP_ECMP, 100);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridInitialUpdate, counters, 100, SP_ECMP, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 100_SP_ECMP_10, 100, SP_ECMP, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 100_SP_ECMP_100, 100, SP_ECMP, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridInitialUpdate, 100_SP_ECMP_1000, 100, SP_ECMP, 1000);
 
 /*
  * BM_DecisionGridAdjUpdates:
@@ -40,11 +40,14 @@ BENCHMARK_COUNTERS_PARAM(
  * recalulate all routes
  */
 
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGridAdjUpdates, counters, 10, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGridAdjUpdates, counters, 100, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(BM_DecisionGridAdjUpdates, counters, 1000, SP_ECMP, 1);
-BENCHMARK_COUNTERS_PARAM(
-    BM_DecisionGridAdjUpdates, counters, 10000, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridAdjUpdates, 10_SP_ECMP_1, 10, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridAdjUpdates, 100_SP_ECMP_1, 100, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridAdjUpdates, 1000_SP_ECMP_1, 1000, SP_ECMP, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridAdjUpdates, 10000_SP_ECMP_1, 10000, SP_ECMP, 1);
 
 /*
  * BM_DecisionGridPrefixUpdates:
@@ -57,73 +60,39 @@ BENCHMARK_COUNTERS_PARAM(
  * i.e. How long does it take to update a number of routes after
  * advertisemnet
  */
-BENCHMARK_COUNTERS_PARAM2(
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_10_10, 100, SP_ECMP, 10, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_100_100, 100, SP_ECMP, 100, 100);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_1k_1k, 100, SP_ECMP, 1000, 1000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_10k_1, 100, SP_ECMP, 10000, 1);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionGridPrefixUpdates, SP_ECMP_100_10k_10, 100, SP_ECMP, 10000, 10);
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionGridPrefixUpdates,
-    counters,
-    SP_ECMP_100_10_10,
-    100,
-    SP_ECMP,
-    10,
-    10);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    SP_ECMP_100_100_100,
-    100,
-    SP_ECMP,
-    100,
-    100);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    SP_ECMP_100_1k_1k,
-    100,
-    SP_ECMP,
-    1000,
-    1000);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    SP_ECMP_100_10k_1,
-    100,
-    SP_ECMP,
-    10000,
-    1);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
-    SP_ECMP_100_10k_10,
-    100,
-    SP_ECMP,
-    10000,
-    10);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionGridPrefixUpdates,
-    counters,
     SP_ECMP_100_10k_100,
     100,
     SP_ECMP,
     10000,
     100);
-BENCHMARK_COUNTERS_PARAM2(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionGridPrefixUpdates,
-    counters,
     SP_ECMP_100_10k_1k,
     100,
     SP_ECMP,
     10000,
     1000);
-BENCHMARK_COUNTERS_PARAM2(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionGridPrefixUpdates,
-    counters,
     SP_ECMP_100_10k_10k,
     100,
     SP_ECMP,
     10000,
     10000);
-BENCHMARK_COUNTERS_PARAM2(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionGridPrefixUpdates,
-    counters,
     SP_ECMP_1000_1k_1k,
     1000,
     SP_ECMP,
@@ -141,70 +110,22 @@ BENCHMARK_COUNTERS_PARAM2(
  * i.e. How long does it take to estalish all routes given
  * `numberOfPrefixes` per node
  */
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_1_100_SP_ECMP,
-    1,
-    1,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_2_100_SP_ECMP,
-    1,
-    2,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_3_100_SP_ECMP,
-    1,
-    3,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_4_100_SP_ECMP,
-    1,
-    4,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_5_100_SP_ECMP,
-    1,
-    5,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_6_100_SP_ECMP,
-    1,
-    6,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_7_100_SP_ECMP,
-    1,
-    7,
-    100,
-    SP_ECMP);
-BENCHMARK_COUNTERS_PARAM2(
-    BM_DecisionFabricInitialUpdate,
-    counters,
-    1_8_100_SP_ECMP,
-    1,
-    8,
-    100,
-    SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_1_100_SP_ECMP, 1, 1, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_2_100_SP_ECMP, 1, 2, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_3_100_SP_ECMP, 1, 3, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_4_100_SP_ECMP, 1, 4, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_5_100_SP_ECMP, 1, 5, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_6_100_SP_ECMP, 1, 6, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_7_100_SP_ECMP, 1, 7, 100, SP_ECMP);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_DecisionFabricInitialUpdate, 1_8_100_SP_ECMP, 1, 8, 100, SP_ECMP);
 /*
  * BM_DecisionFabricPrefixUpdates:
  * @first param - integer: num of pods in a fabric topology
@@ -222,9 +143,8 @@ BENCHMARK_COUNTERS_PARAM2(
  * * numOfPlanes + 48 * kNumOfRswsPerPod
  */
 // total = 85
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_1_100_10_SP_ECMP,
     1,
     1,
@@ -232,9 +152,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 122
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_2_100_10_SP_ECMP,
     1,
     2,
@@ -242,9 +161,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 159
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_3_100_10_SP_ECMP,
     1,
     3,
@@ -252,9 +170,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 196
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_4_100_10_SP_ECMP,
     1,
     4,
@@ -262,9 +179,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 233
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_5_100_10_SP_ECMP,
     1,
     5,
@@ -272,9 +188,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 270
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_6_100_10_SP_ECMP,
     1,
     6,
@@ -282,9 +197,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 307
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_7_100_10_SP_ECMP,
     1,
     7,
@@ -292,9 +206,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 344
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     1_8_100_10_SP_ECMP,
     1,
     8,
@@ -302,9 +215,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 526
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_1_100_10_SP_ECMP,
     10,
     1,
@@ -312,9 +224,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 572
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_2_100_10_SP_ECMP,
     10,
     2,
@@ -322,9 +233,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 618
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_3_100_10_SP_ECMP,
     10,
     3,
@@ -332,9 +242,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 664
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_4_100_10_SP_ECMP,
     10,
     4,
@@ -342,9 +251,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 710
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_5_100_10_SP_ECMP,
     10,
     5,
@@ -352,9 +260,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 756
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_6_100_10_SP_ECMP,
     10,
     6,
@@ -362,9 +269,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 802
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_7_100_10_SP_ECMP,
     10,
     7,
@@ -372,9 +278,8 @@ BENCHMARK_COUNTERS_PARAM3(
     100,
     SP_ECMP);
 // total = 848
-BENCHMARK_COUNTERS_PARAM3(
+BENCHMARK_COUNTERS_NAMED_PARAM(
     BM_DecisionFabricPrefixUpdates,
-    counters,
     10_8_100_10_SP_ECMP,
     10,
     8,
