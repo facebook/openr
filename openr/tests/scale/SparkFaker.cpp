@@ -145,6 +145,19 @@ SparkFaker::getNeighborState(const std::string& nodeName) const {
   return std::nullopt;
 }
 
+bool
+SparkFaker::setNeighborCtrlPort(const std::string& nodeName, uint16_t port) {
+  for (auto& neighbor : neighbors_) {
+    if (neighbor.nodeName == nodeName) {
+      neighbor.ctrlPort = port;
+      VLOG(1) << "SparkFaker: Set ctrlPort for " << nodeName << " to " << port;
+      return true;
+    }
+  }
+  VLOG(1) << "SparkFaker: Neighbor " << nodeName << " not found";
+  return false;
+}
+
 thrift::SparkHelloMsg
 SparkFaker::buildHelloMsg(FakeNeighbor& neighbor) {
   thrift::SparkHelloMsg helloMsg;
@@ -199,7 +212,7 @@ SparkFaker::buildHandshakeMsg(
   handshakeMsg.gracefulRestartTime() = holdTime_.count(); /* same as holdTime */
   handshakeMsg.transportAddressV6() = toBinaryAddress(neighbor.v6Addr);
   handshakeMsg.transportAddressV4() = toBinaryAddress(neighbor.v4Addr);
-  handshakeMsg.openrCtrlThriftPort() = 2018; /* default OpenR thrift port */
+  handshakeMsg.openrCtrlThriftPort() = neighbor.ctrlPort;
   handshakeMsg.area() = "0"; /* default area */
   handshakeMsg.neighborNodeName() = dutNodeName;
 

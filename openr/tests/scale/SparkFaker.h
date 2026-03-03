@@ -54,6 +54,9 @@ class SparkFaker {
     folly::IPAddressV6 v6Addr; /* IPv6 address of fake node */
     folly::IPAddressV4 v4Addr; /* IPv4 address of fake node */
 
+    /* OpenR ctrl thrift port for KvStore sync (default 2018, per-neighbor) */
+    uint16_t ctrlPort{2018};
+
     /* Spark state machine */
     thrift::SparkNeighState state{thrift::SparkNeighState::IDLE};
     uint64_t seqNum{1};
@@ -150,6 +153,17 @@ class SparkFaker {
    */
   std::optional<thrift::SparkNeighState> getNeighborState(
       const std::string& nodeName) const;
+
+  /*
+   * Set the ctrl thrift port for a specific neighbor.
+   * This port is advertised in the Spark handshake so the DUT's KvStore
+   * connects to the right FakeKvStoreHandler for this neighbor.
+   *
+   * @param nodeName Name of the neighbor
+   * @param port Port number for the FakeKvStoreHandler
+   * @return true if neighbor was found and updated
+   */
+  bool setNeighborCtrlPort(const std::string& nodeName, uint16_t port);
 
   /*
    * Handle packet from DUT (for testing)
