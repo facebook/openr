@@ -140,32 +140,36 @@ class KvStoreThriftInjector {
    */
   std::string getDutNodeName();
 
- private:
   /*
    * Build thrift::KeyVals for a topology.
+   * Public for use by KvStoreDataBuilder.
    */
-  thrift::KeyVals buildKeyVals(const Topology& topology);
+  static thrift::KeyVals buildKeyVals(const Topology& topology);
 
   /*
    * Build thrift::AdjacencyDatabase from VirtualRouter.
+   * Public for use by KvStoreDataBuilder.
    */
-  thrift::AdjacencyDatabase buildAdjacencyDatabase(
+  static thrift::AdjacencyDatabase buildAdjacencyDatabase(
       const VirtualRouter& router, const Topology& topology);
 
   /*
    * Create a KvStore key-value pair for an adjacency database.
+   * Public for use by KvStoreDataBuilder.
    */
-  std::pair<std::string, thrift::Value> createAdjKeyValue(
+  static std::pair<std::string, thrift::Value> createAdjKeyValue(
       const VirtualRouter& router,
       const Topology& topology,
       int64_t version = 1);
 
   /*
    * Create KvStore key-value pairs for prefix databases.
+   * Public for use by KvStoreDataBuilder.
    */
-  std::vector<std::pair<std::string, thrift::Value>> createPrefixKeyValues(
-      const VirtualRouter& router, int64_t version = 1);
+  static std::vector<std::pair<std::string, thrift::Value>>
+  createPrefixKeyValues(const VirtualRouter& router, int64_t version = 1);
 
+ private:
   /*
    * DUT connection info
    */
