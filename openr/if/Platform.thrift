@@ -119,6 +119,15 @@ exception PlatformFibUpdateError {
   4: list<i32> failedDeleteMplsLabels;
 }
 
+struct BatchedSyncFibRequest {
+  1: i16 clientId;
+  2: list<Network.UnicastRoute> routes;
+  3: bool isStart;
+  4: bool isEnd;
+}
+
+struct BatchedSyncFibResponse {}
+
 // static mapping of clientId => protocolId, priority same of admin distance
 // For Open/R.
 //    ClientId: 786 => ProtocolId: 99, Priority: 10
@@ -169,6 +178,10 @@ service FibService extends fb303_core.BaseService {
     1: PlatformError error,
     2: PlatformFibUpdateError fibError,
   );
+
+  BatchedSyncFibResponse batchedSyncFib(
+    1: BatchedSyncFibRequest request,
+  ) throws (1: PlatformError error, 2: PlatformFibUpdateError fibError);
 
   // Retrieve list of unicast routes per client
   list<Network.UnicastRoute> getRouteTableByClient(1: i16 clientId) throws (
