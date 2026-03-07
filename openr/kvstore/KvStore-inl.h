@@ -8,6 +8,7 @@
 #include <fb303/ServiceData.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/logging/xlog.h>
+#include <thrift/lib/cpp2/GeneratedCodeHelper.h>
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
@@ -15,6 +16,32 @@
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace fb303 = facebook::fb303;
+
+namespace openr::detail {
+// Callback for pre-serialized flood RPCs. Resolves a Promise<Unit> on
+// response/error and self-deletes (standard thrift callback pattern).
+class FloodResponseCallback final
+    : public apache::thrift::RequestClientCallback {
+ public:
+  explicit FloodResponseCallback(folly::Promise<folly::Unit>&& promise)
+      : promise_(std::move(promise)) {}
+
+  void
+  onResponse(apache::thrift::ClientReceiveState&& /*state*/) noexcept override {
+    promise_.setValue(folly::Unit{});
+    delete this;
+  }
+
+  void
+  onResponseError(folly::exception_wrapper ew) noexcept override {
+    promise_.setException(std::move(ew));
+    delete this;
+  }
+
+ private:
+  folly::Promise<folly::Unit> promise_;
+};
+} // namespace openr::detail
 
 namespace openr {
 
@@ -1416,6 +1443,58 @@ KvStoreDb<ClientType>::KvStorePeer::setKvStoreKeyValsWrapper(
         1,
         fb303::COUNT);
     return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
+  }
+}
+
+template <class ClientType>
+folly::SemiFuture<folly::Unit>
+KvStoreDb<ClientType>::KvStorePeer::sendPreSerializedSetKvStoreKeyVals(
+    const folly::IOBuf& serializedBuf, uint16_t protocolId) {
+  // Lambda to send a pre-serialized request via a specific client's channel
+  auto sendVia = [&](ClientType* client) -> folly::SemiFuture<folly::Unit> {
+    if (!client || !client->getChannel()) {
+      return folly::makeSemiFuture<folly::Unit>(
+          folly::make_exception_wrapper<std::runtime_error>(
+              "client or channel is null"));
+    }
+    auto [promise, future] = folly::makePromiseContract<folly::Unit>();
+    auto* channel = client->getChannel();
+
+    auto header = std::make_shared<apache::thrift::transport::THeader>();
+    header->setProtocolId(protocolId);
+
+    // Static method metadata — allocated once, never freed (intentional).
+    static auto* methodData /* library-local */ =
+        new apache::thrift::MethodMetadata::Data(
+            "setKvStoreKeyVals",
+            apache::thrift::FunctionQualifier::Unspecified,
+            "KvStoreService");
+
+    channel->sendRequestResponse(
+        apache::thrift::RpcOptions{},
+        apache::thrift::MethodMetadata::from_static(methodData),
+        apache::thrift::SerializedRequest(serializedBuf.clone()),
+        std::move(header),
+        apache::thrift::RequestClientCallback::Ptr(
+            new detail::FloodResponseCallback(std::move(promise))),
+        nullptr);
+
+    return std::move(future);
+  };
+
+  // Mirror secure/plaintext fallback from setKvStoreKeyValsWrapper
+  if (!kvParams_.enable_secure_thrift_client) {
+    return sendVia(plainTextClient.get());
+  }
+  try {
+    return sendVia(secureClient.get());
+  } catch (const folly::AsyncSocketException& ex) {
+    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
+    fb303::fbData->addStatValue(
+        "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
+        1,
+        fb303::COUNT);
+    return sendVia(plainTextClient.get());
   }
 }
 
@@ -3107,6 +3186,55 @@ KvStoreDb<ClientType>::floodPublication(
   params.timestamp_ms() = getUnixTimeStampMs();
   params.senderId() = kvParams_.nodeId;
 
+  // Pre-serialize the setKvStoreKeyVals RPC args lazily on the first
+  // INITIALIZED peer, then reuse the same zero-copy IOBuf for the rest.
+  std::optional<apache::thrift::SerializedRequest> serializedRequest;
+  uint16_t serializedProtocolId = apache::thrift::protocol::T_COMPACT_PROTOCOL;
+
+  auto serializeOnce =
+      [&](const auto& peer) -> const apache::thrift::SerializedRequest& {
+    if (!serializedRequest.has_value()) {
+      auto* client = peer.kvParams_.enable_secure_thrift_client
+          ? peer.secureClient.get()
+          : peer.plainTextClient.get();
+      if (client && client->getChannel()) {
+        serializedProtocolId = client->getChannel()->getProtocolId();
+      }
+
+      using SetKvStoreKeyVals_PArgs = apache::thrift::ThriftPresult<
+          false,
+          apache::thrift::FieldData<
+              1,
+              apache::thrift::type_class::structure,
+              openr::thrift::KeySetParams*>,
+          apache::thrift::
+              FieldData<2, apache::thrift::type_class::string, std::string*>>;
+
+      std::string areaCopy = area_;
+      serializedRequest = apache::thrift::detail::ac::withProtocolWriter(
+          serializedProtocolId,
+          [&](auto&& prot) -> apache::thrift::SerializedRequest {
+            using PW = std::decay_t<decltype(prot)>;
+            SetKvStoreKeyVals_PArgs args;
+            args.template get<0>().value = &params;
+            args.template get<1>().value = &areaCopy;
+            const auto sizer = [&](PW* p) { return args.serializedSizeZC(p); };
+            const auto writer = [&](PW* p) { args.write(p); };
+            apache::thrift::transport::THeader header;
+            return apache::thrift::preprocessSendT<PW>(
+                &prot,
+                apache::thrift::RpcOptions{},
+                nullptr,
+                header,
+                "setKvStoreKeyVals",
+                writer,
+                sizer,
+                0);
+          });
+    }
+    return *serializedRequest;
+  };
+
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     if (senderId.has_value() && senderId.value() == peerName) {
       // Do not flood towards senderId from whom we received this
@@ -3133,7 +3261,8 @@ KvStoreDb<ClientType>::floodPublication(
         fb303::SUM);
 
     auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.setKvStoreKeyValsWrapper(area_, params);
+    auto sf = thriftPeer.sendPreSerializedSetKvStoreKeyVals(
+        *serializeOnce(thriftPeer).buffer, serializedProtocolId);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([startTime](folly::Unit&&) {
