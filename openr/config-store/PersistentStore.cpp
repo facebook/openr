@@ -325,18 +325,19 @@ PersistentStore::encodePersistentObject(
   folly::io::Appender appender(buf.get(), 0);
   try {
     // Append 'pObject.type' to buf
-    appender.writeBE(static_cast<uint8_t>(pObject.type));
+    appender.writeBE<uint8_t>(static_cast<uint8_t>(pObject.type));
     // Append key length and key to buf
-    appender.writeBE<uint32_t>(pObject.key.size());
+    appender.writeBE<uint32_t>(static_cast<uint32_t>(pObject.key.size()));
     appender.push(folly::StringPiece(pObject.key));
 
     // If 'pObject.data' has value, append the length and the data to buf
     // Otherwise, append 0 to buf
     if (pObject.data.has_value()) {
-      appender.writeBE<uint32_t>(pObject.data.value().size());
+      appender.writeBE<uint32_t>(
+          static_cast<uint32_t>(pObject.data.value().size()));
       appender.push(folly::StringPiece(pObject.data.value()));
     } else {
-      appender.writeBE<uint32_t>(0);
+      appender.writeBE<uint32_t>(static_cast<uint32_t>(0));
     }
     return buf;
   } catch (const exception& e) {
