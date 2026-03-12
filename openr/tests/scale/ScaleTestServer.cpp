@@ -461,7 +461,14 @@ main(int argc, char** argv) {
             "process\\.cpu\\.peak_pct|process\\.cpu\\.pct|"
             "process\\.memory\\.rss|"
             "kvstore\\.received_key_vals\\.sum|"
-            "kvstore\\.updated_key_vals\\.sum");
+            "kvstore\\.updated_key_vals\\.sum|"
+            "kvstore\\.thrift\\.num_flood_pub_success\\.count|"
+            "kvstore\\.thrift\\.flood_pub_duration_ms\\.avg|"
+            "kvstore\\.thrift\\.finalized_sync_duration_ms\\.avg|"
+            "initialization\\.KVSTORE_SYNCED\\.duration_ms|"
+            "initialization\\.INITIALIZED\\.duration_ms|"
+            "decision\\.linkstate\\.up\\.propagation_time_ms|"
+            "decision\\.linkstate\\.down\\.propagation_time_ms");
         if (!counters.empty()) {
           std::string report = "\n=== DUT OpenR Counters ===\n";
           for (const auto& [name, value] : counters) {
