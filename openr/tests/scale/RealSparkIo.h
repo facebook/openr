@@ -11,6 +11,7 @@
 #include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 
@@ -76,8 +77,9 @@ class RealSparkIo : public SparkIoInterface {
 
   /*
    * Receive thread function for an interface.
+   * Dispatches to all callbacks registered for ifNames sharing this ifIndex.
    */
-  void receiveLoop(const std::string& ifName, int sockFd);
+  void receiveLoop(int ifIndex, int sockFd);
 
   /*
    * Mutex for thread safety
@@ -91,6 +93,11 @@ class RealSparkIo : public SparkIoInterface {
   std::map<int, std::string> ifIndexToName_;
 
   /*
+   * Reverse mapping: ifIndex -> all registered ifNames (for multi-dispatch)
+   */
+  std::map<int, std::set<std::string>> ifIndexToNames_;
+
+  /*
    * Sockets per interface
    */
   std::map<int, int> ifIndexToSockFd_; /* ifIndex -> socket fd */
@@ -101,9 +108,9 @@ class RealSparkIo : public SparkIoInterface {
   std::map<std::string, PacketCallback> callbacks_;
 
   /*
-   * Receive threads per interface
+   * Receive threads per physical interface (keyed by ifIndex)
    */
-  std::map<std::string, std::unique_ptr<std::thread>> receiveThreads_;
+  std::map<int, std::unique_ptr<std::thread>> receiveThreads_;
 
   /*
    * Running flag

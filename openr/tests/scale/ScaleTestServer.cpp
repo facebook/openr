@@ -311,8 +311,26 @@ main(int argc, char** argv) {
          */
         std::string v6Addr = fmt::format("fe80::{:x}", 0x1000 + neighborIdx);
 
+        /*
+         * Generate IPv4 address matching setup_vlans.sh scheme:
+         * test server = 10.0.<vlan>.1, DUT = 10.0.<vlan>.2
+         * Extract VLAN ID from interface name (e.g., "et4_15_1.3" -> 3)
+         */
+        std::string v4Addr = "0.0.0.0";
+        auto dotPos = ifName.rfind('.');
+        if (dotPos != std::string::npos) {
+          try {
+            int vlanId = std::stoi(ifName.substr(dotPos + 1));
+            int v4o2 = vlanId / 256;
+            int v4o3 = vlanId % 256;
+            v4Addr = fmt::format("10.{}.{}.1", v4o2, v4o3);
+          } catch (const std::exception&) {
+            /* not a numeric VLAN suffix, keep 0.0.0.0 */
+          }
+        }
+
         faker->addNeighbor(
-            spineName, spineIfName, ifIndex, v6Addr, ifName, ifIndex);
+            spineName, spineIfName, ifIndex, v6Addr, ifName, ifIndex, v4Addr);
 
         /*
          * Set the per-neighbor ctrl port for KvStore sync

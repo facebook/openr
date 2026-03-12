@@ -36,6 +36,7 @@ RealSparkIo::addInterface(const std::string& ifName, int ifIndex) {
 
   ifNameToIndex_[ifName] = ifIndex;
   ifIndexToName_[ifIndex] = ifName;
+  ifIndexToNames_[ifIndex].insert(ifName);
 
   LOG(INFO) << fmt::format(
       "[REAL-SPARK-IO] Added interface {} (ifIndex={})", ifName, ifIndex);
@@ -50,6 +51,35 @@ RealSparkIo::setMulticastAddress(
 
 int
 RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
+  /*
+   * Resolve the real Linux interface name from ifIndex.
+   * The passed ifName may be a virtual/fake name (e.g., "spine-0-to-dut")
+   * that doesn't exist as a Linux interface. SO_BINDTODEVICE requires
+   * a real Linux interface name.
+   */
+  char realIfName[IF_NAMESIZE];
+  const char* bindName = ifName.c_str();
+  size_t bindNameLen = ifName.size();
+
+  if (if_indextoname(ifIndex, realIfName) != nullptr) {
+    bindName = realIfName;
+    bindNameLen = strlen(realIfName);
+    if (ifName != realIfName) {
+      LOG(INFO) << fmt::format(
+          "[REAL-SPARK-IO] Resolved ifIndex {} to real interface '{}' "
+          "(registered as '{}')",
+          ifIndex,
+          realIfName,
+          ifName);
+    }
+  } else {
+    LOG(WARNING) << fmt::format(
+        "[REAL-SPARK-IO] WARN: Could not resolve ifIndex {} to real name, "
+        "using '{}' (may fail)",
+        ifIndex,
+        ifName);
+  }
+
   /*
    * Create UDP IPv6 socket
    */
@@ -74,16 +104,16 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
     return -1;
   }
 
-  /* Bind to specific interface */
+  /* Bind to specific interface using the resolved real name */
   if (setsockopt(
           sockFd,
           SOL_SOCKET,
           SO_BINDTODEVICE,
-          ifName.c_str(),
-          static_cast<socklen_t>(ifName.size())) < 0) {
+          bindName,
+          static_cast<socklen_t>(bindNameLen)) < 0) {
     LOG(ERROR) << fmt::format(
         "[REAL-SPARK-IO] ERROR: Failed to bind to {}: {} (need CAP_NET_RAW?)",
-        ifName,
+        bindName,
         strerror(errno));
     close(sockFd);
     return -1;
@@ -98,8 +128,17 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
     return -1;
   }
 
-  /* Set hop limit for multicast */
-  int hopLimit = 1;
+  /* Disable multicast loopback — we don't want to receive our own packets */
+  int off = 0;
+  if (setsockopt(sockFd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &off, sizeof(off)) <
+      0) {
+    LOG(WARNING) << fmt::format(
+        "[REAL-SPARK-IO] WARN: Failed to disable IPV6_MULTICAST_LOOP: {}",
+        strerror(errno));
+  }
+
+  /* Set hop limit for multicast — Spark requires 255 (link-local only) */
+  int hopLimit = 255;
   if (setsockopt(
           sockFd,
           IPPROTO_IPV6,
@@ -168,14 +207,29 @@ RealSparkIo::startReceiving() {
 
   std::lock_guard<std::mutex> lock(mutex_);
 
+  /*
+   * Collect unique ifIndexes. Multiple registered ifNames may map to the
+   * same physical interface (ifIndex). We only need one socket per physical
+   * interface.
+   */
+  std::set<int> uniqueIfIndexes;
+  for (const auto& [ifName, ifIndex] : ifNameToIndex_) {
+    uniqueIfIndexes.insert(ifIndex);
+  }
+
   LOG(INFO) << fmt::format(
-      "[REAL-SPARK-IO] Starting receivers for {} interfaces",
+      "[REAL-SPARK-IO] Starting receivers for {} physical interfaces "
+      "({} registered names)",
+      uniqueIfIndexes.size(),
       ifNameToIndex_.size());
 
   /*
-   * Create sockets and start receive threads for each interface
+   * Create one socket and one receive thread per physical interface
    */
-  for (const auto& [ifName, ifIndex] : ifNameToIndex_) {
+  for (int ifIndex : uniqueIfIndexes) {
+    auto nameIt = ifIndexToName_.find(ifIndex);
+    std::string ifName = nameIt != ifIndexToName_.end() ? nameIt->second : "";
+
     int sockFd = createSocket(ifName, ifIndex);
     if (sockFd < 0) {
       continue;
@@ -184,13 +238,15 @@ RealSparkIo::startReceiving() {
     ifIndexToSockFd_[ifIndex] = sockFd;
 
     /*
-     * Start receive thread
+     * Start receive thread keyed by ifIndex
      */
-    receiveThreads_[ifName] = std::make_unique<std::thread>(
-        [this, ifName, sockFd]() { receiveLoop(ifName, sockFd); });
+    receiveThreads_[ifIndex] = std::make_unique<std::thread>(
+        [this, ifIndex, sockFd]() { receiveLoop(ifIndex, sockFd); });
 
-    LOG(INFO)
-        << fmt::format("[REAL-SPARK-IO] Started receive thread for {}", ifName);
+    LOG(INFO) << fmt::format(
+        "[REAL-SPARK-IO] Started receive thread for ifIndex {} ({} names)",
+        ifIndex,
+        ifIndexToNames_.count(ifIndex) ? ifIndexToNames_[ifIndex].size() : 0);
   }
 }
 
@@ -214,7 +270,7 @@ RealSparkIo::stopReceiving() {
   /*
    * Join all receive threads
    */
-  for (auto& [ifName, thread] : receiveThreads_) {
+  for (auto& [ifIndex, thread] : receiveThreads_) {
     if (thread && thread->joinable()) {
       thread->join();
     }
@@ -225,9 +281,25 @@ RealSparkIo::stopReceiving() {
 }
 
 void
-RealSparkIo::receiveLoop(const std::string& ifName, int sockFd) {
-  LOG(INFO)
-      << fmt::format("[REAL-SPARK-IO] Receive loop started for {}", ifName);
+RealSparkIo::receiveLoop(int ifIndex, int sockFd) {
+  /*
+   * Resolve a display name for logging
+   */
+  std::string displayName;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    auto it = ifIndexToName_.find(ifIndex);
+    if (it != ifIndexToName_.end()) {
+      displayName = it->second;
+    } else {
+      displayName = fmt::format("ifIndex={}", ifIndex);
+    }
+  }
+
+  LOG(INFO) << fmt::format(
+      "[REAL-SPARK-IO] Receive loop started for {} (ifIndex={})",
+      displayName,
+      ifIndex);
 
   constexpr size_t kMaxPacketSize = 65536;
   std::vector<uint8_t> buf(kMaxPacketSize);
@@ -257,7 +329,7 @@ RealSparkIo::receiveLoop(const std::string& ifName, int sockFd) {
     ssize_t bytesRead = recvmsg(sockFd, &msg, 0);
     if (bytesRead < 0) {
       if (running_.load() && VLOG_IS_ON(2)) {
-        VLOG(2) << "[REAL-SPARK-IO] recvmsg error on " << ifName << ": "
+        VLOG(2) << "[REAL-SPARK-IO] recvmsg error on " << displayName << ": "
                 << strerror(errno);
       }
       continue;
@@ -291,33 +363,42 @@ RealSparkIo::receiveLoop(const std::string& ifName, int sockFd) {
     std::string packet(reinterpret_cast<char*>(buf.data()), bytesRead);
 
     if (VLOG_IS_ON(2)) {
-      VLOG(2) << "[REAL-SPARK-IO] RECV: " << bytesRead << " bytes on " << ifName
-              << " from " << srcIp.str() << " (total: " << packetsReceived
-              << " pkts, " << bytesReceived << " bytes)";
+      VLOG(2) << "[REAL-SPARK-IO] RECV: " << bytesRead << " bytes on "
+              << displayName << " from " << srcIp.str()
+              << " (total: " << packetsReceived << " pkts, " << bytesReceived
+              << " bytes)";
     }
 
     /*
-     * Call callback if registered
+     * Dispatch to ALL callbacks registered for ifNames sharing this ifIndex.
+     * Multiple fake neighbors may share a physical interface; each needs
+     * to receive the packet via its own callback with its own dstIfName.
      */
-    PacketCallback callback;
+    std::vector<std::pair<std::string, PacketCallback>> matchingCallbacks;
     {
       std::lock_guard<std::mutex> lock(mutex_);
-      auto it = callbacks_.find(ifName);
-      if (it != callbacks_.end()) {
-        callback = it->second;
+      auto namesIt = ifIndexToNames_.find(ifIndex);
+      if (namesIt != ifIndexToNames_.end()) {
+        for (const auto& name : namesIt->second) {
+          auto cbIt = callbacks_.find(name);
+          if (cbIt != callbacks_.end()) {
+            matchingCallbacks.emplace_back(name, cbIt->second);
+          }
+        }
       }
     }
 
-    if (callback) {
+    for (const auto& [dstIfName, callback] : matchingCallbacks) {
       try {
         /*
-         * srcIfName is the DUT's interface (we don't know it, use "dut")
-         * dstIfName is our interface
+         * srcIfName is the DUT's interface (unknown for real network)
+         * dstIfName is the registered interface name for this callback
          */
-        callback("dut", ifName, folly::IPAddress(srcIp), packet);
+        callback("dut", dstIfName, folly::IPAddress(srcIp), packet);
       } catch (const std::exception& e) {
         if (VLOG_IS_ON(2)) {
-          VLOG(2) << "[REAL-SPARK-IO] Callback exception: " << e.what();
+          VLOG(2) << "[REAL-SPARK-IO] Callback exception for " << dstIfName
+                  << ": " << e.what();
         }
       }
     }
@@ -325,7 +406,7 @@ RealSparkIo::receiveLoop(const std::string& ifName, int sockFd) {
 
   LOG(INFO) << fmt::format(
       "[REAL-SPARK-IO] Receive loop stopped for {} (received {} packets, {} bytes)",
-      ifName,
+      displayName,
       packetsReceived,
       bytesReceived);
 }
@@ -364,42 +445,21 @@ RealSparkIo::sendPacket(
   dstAddr.sin6_scope_id = dstIfIndex;
 
   /*
-   * Send packet via sendmsg with pktinfo to set source address
+   * Send packet via sendto. The socket is already bound to the correct
+   * interface via SO_BINDTODEVICE, so we don't need pktinfo control
+   * messages. The destination scope_id routes the multicast correctly.
    */
   struct iovec iov{};
   iov.iov_base = const_cast<char*>(packet.data());
   iov.iov_len = packet.size();
 
-  /*
-   * Build control message for pktinfo (set source address and interface)
-   */
-  char ctrlBuf[CMSG_SPACE(sizeof(struct in6_pktinfo))];
-  memset(ctrlBuf, 0, sizeof(ctrlBuf));
-
-  struct msghdr msg{};
-  msg.msg_name = &dstAddr;
-  msg.msg_namelen = sizeof(dstAddr);
-  msg.msg_iov = &iov;
-  msg.msg_iovlen = 1;
-  msg.msg_control = ctrlBuf;
-  msg.msg_controllen = sizeof(ctrlBuf);
-
-  struct cmsghdr* cmsg = CMSG_FIRSTHDR(&msg);
-  cmsg->cmsg_level = IPPROTO_IPV6;
-  cmsg->cmsg_type = IPV6_PKTINFO;
-  cmsg->cmsg_len = CMSG_LEN(sizeof(struct in6_pktinfo));
-
-  auto* pktinfo = reinterpret_cast<struct in6_pktinfo*>(CMSG_DATA(cmsg));
-  pktinfo->ipi6_ifindex = dstIfIndex;
-
-  /*
-   * Set source address in pktinfo (if it's a v6 address)
-   */
-  if (srcAddr.isV6()) {
-    memcpy(&pktinfo->ipi6_addr, srcAddr.asV6().bytes(), 16);
-  }
-
-  ssize_t bytesSent = sendmsg(sockFd, &msg, 0);
+  ssize_t bytesSent = ::sendto(
+      sockFd,
+      packet.data(),
+      packet.size(),
+      0,
+      reinterpret_cast<const struct sockaddr*>(&dstAddr),
+      sizeof(dstAddr));
   if (bytesSent < 0) {
     if (VLOG_IS_ON(2)) {
       VLOG(2) << "[REAL-SPARK-IO] ERROR: sendmsg failed on " << ifName

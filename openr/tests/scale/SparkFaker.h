@@ -72,10 +72,16 @@ class SparkFaker {
 
     /* Timing */
     std::chrono::steady_clock::time_point lastHelloTime;
+    std::chrono::steady_clock::time_point lastHandshakeTime;
     std::chrono::steady_clock::time_point lastHeartbeatTime;
 
     /* Failure simulation - when true, neighbor stops sending packets */
     bool failed{false};
+
+    /* True once DUT confirms adjacency (handshake with isAdjEstablished=true
+     * or heartbeat received). Until then, keep fast-init hello rate so the
+     * DUT can complete its side of the negotiation. */
+    bool dutEstablished{false};
   };
 
   /*
@@ -109,7 +115,8 @@ class SparkFaker {
       int ifIndex,
       const std::string& v6Addr,
       const std::string& dutIfName,
-      int dutIfIndex);
+      int dutIfIndex,
+      const std::string& v4Addr = "0.0.0.0");
 
   /*
    * Start sending Spark packets
@@ -183,6 +190,12 @@ class SparkFaker {
       const std::string& packet);
 
   /*
+   * Process a DUT packet for a specific neighbor
+   */
+  void handleDutPacketForNeighbor(
+      FakeNeighbor& neighbor, const thrift::SparkHelloPacket& packet);
+
+  /*
    * Register callbacks with MockIoProvider for bidirectional communication
    * Called automatically in start() after neighbors are added
    */
@@ -236,10 +249,14 @@ class SparkFaker {
   std::atomic<bool> running_{false};
   std::unique_ptr<std::thread> thread_;
 
-  /* Timing parameters (matching Spark defaults) */
-  const std::chrono::milliseconds helloInterval_{100};
-  const std::chrono::milliseconds heartbeatInterval_{20};
-  const std::chrono::milliseconds holdTime_{10000};
+  /* Timing parameters (matching DUT production spark_config) */
+  const std::chrono::milliseconds fastInitHelloInterval_{
+      500}; /* fastinit_hello_time_ms
+             */
+  const std::chrono::milliseconds helloInterval_{20000}; /* hello_time_s */
+  const std::chrono::milliseconds heartbeatInterval_{10000}; /* hold_time_s / 3
+                                                              */
+  const std::chrono::milliseconds holdTime_{30000}; /* hold_time_s */
 
   /* Serializer for thrift packets */
   apache::thrift::CompactSerializer serializer_;

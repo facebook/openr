@@ -36,18 +36,20 @@ SparkFaker::addNeighbor(
     int ifIndex,
     const std::string& v6Addr,
     const std::string& dutIfName,
-    int dutIfIndex) {
+    int dutIfIndex,
+    const std::string& v4Addr) {
   FakeNeighbor neighbor;
   neighbor.nodeName = nodeName;
   neighbor.ifName = ifName;
   neighbor.ifIndex = ifIndex;
   neighbor.v6Addr = folly::IPAddressV6(v6Addr);
-  neighbor.v4Addr = folly::IPAddressV4("0.0.0.0");
+  neighbor.v4Addr = folly::IPAddressV4(v4Addr);
   neighbor.dutIfName = dutIfName;
   neighbor.dutIfIndex = dutIfIndex;
   neighbor.state = thrift::SparkNeighState::IDLE;
   neighbor.seqNum = 1;
   neighbor.lastHelloTime = std::chrono::steady_clock::now();
+  neighbor.lastHandshakeTime = std::chrono::steady_clock::now();
   neighbor.lastHeartbeatTime = std::chrono::steady_clock::now();
 
   neighbors_.push_back(std::move(neighbor));
@@ -279,6 +281,7 @@ SparkFaker::sendHandshake(FakeNeighbor& neighbor) {
       std::chrono::milliseconds(0));
 
   stats_.handshakesSent++;
+  neighbor.lastHandshakeTime = std::chrono::steady_clock::now();
 
   if (VLOG_IS_ON(2)) {
     VLOG(2) << "[SPARK-FAKER] HANDSHAKE SENT: " << neighbor.nodeName
@@ -315,63 +318,80 @@ void
 SparkFaker::handleDutPacket(
     const std::string& ifName, const thrift::SparkHelloPacket& packet) {
   /*
-   * Find the neighbor that corresponds to this DUT interface
+   * Dispatch to ALL neighbors whose ifName matches.
+   * For MockSparkIo: each neighbor has a unique ifName, so this finds one.
+   * For RealSparkIo: the receive loop calls each neighbor's callback
+   * separately, so ifName matches one specific neighbor per call.
    */
-  FakeNeighbor* neighbor = nullptr;
+  bool found = false;
   for (auto& n : neighbors_) {
-    if (n.dutIfName == ifName) {
-      neighbor = &n;
-      break;
+    if (n.ifName != ifName) {
+      continue;
     }
+    found = true;
+    handleDutPacketForNeighbor(n, packet);
   }
 
-  if (!neighbor) {
+  if (!found) {
     if (VLOG_IS_ON(2)) {
       VLOG(2) << "[SPARK-FAKER] WARN: Received packet on unknown interface "
               << ifName;
     }
-    return;
   }
+}
 
+void
+SparkFaker::handleDutPacketForNeighbor(
+    FakeNeighbor& neighbor, const thrift::SparkHelloPacket& packet) {
   /*
    * Process hello message from DUT
    */
   if (packet.helloMsg().has_value()) {
     const auto& hello = packet.helloMsg().value();
-    neighbor->dutNodeName = *hello.nodeName();
-    neighbor->dutSeqNum = *hello.seqNum();
-    neighbor->dutTimestamp = *hello.sentTsInUs();
+
+    /*
+     * Filter self-packets: if the hello's nodeName matches our own name,
+     * this is our own multicast being looped back. Drop it.
+     */
+    if (*hello.nodeName() == neighbor.nodeName) {
+      VLOG(3) << "[SPARK-FAKER] Dropping self-hello for " << neighbor.nodeName;
+      return;
+    }
+
+    neighbor.dutNodeName = *hello.nodeName();
+    neighbor.dutSeqNum = *hello.seqNum();
+    neighbor.dutTimestamp = *hello.sentTsInUs();
     stats_.hellosReceived++;
 
     if (VLOG_IS_ON(2)) {
       VLOG(2)
-          << "[SPARK-FAKER] HELLO RECV: DUT:" << neighbor->dutNodeName << " -> "
-          << neighbor->nodeName << " seqNum=" << neighbor->dutSeqNum.value()
-          << " state=" << apache::thrift::util::enumNameSafe(neighbor->state);
+          << "[SPARK-FAKER] HELLO RECV: DUT:" << neighbor.dutNodeName << " -> "
+          << neighbor.nodeName << " seqNum=" << neighbor.dutSeqNum.value()
+          << " state=" << apache::thrift::util::enumNameSafe(neighbor.state);
     }
 
     /*
      * State machine transition based on hello content
      */
-    if (neighbor->state == thrift::SparkNeighState::IDLE) {
-      neighbor->state = thrift::SparkNeighState::WARM;
+    if (neighbor.state == thrift::SparkNeighState::IDLE) {
+      neighbor.state = thrift::SparkNeighState::WARM;
       LOG(INFO) << fmt::format(
           "[SPARK-FAKER] STATE: {} IDLE -> WARM (discovered DUT:{})",
-          neighbor->nodeName,
-          neighbor->dutNodeName);
+          neighbor.nodeName,
+          neighbor.dutNodeName);
     }
 
     /*
      * Check if DUT sees us (our nodeName in their neighborInfos)
      */
-    auto it = hello.neighborInfos()->find(neighbor->nodeName);
+    auto it = hello.neighborInfos()->find(neighbor.nodeName);
     if (it != hello.neighborInfos()->end()) {
-      if (neighbor->state == thrift::SparkNeighState::WARM) {
-        neighbor->state = thrift::SparkNeighState::NEGOTIATE;
+      if (neighbor.state == thrift::SparkNeighState::WARM) {
+        neighbor.state = thrift::SparkNeighState::NEGOTIATE;
         LOG(INFO) << fmt::format(
             "[SPARK-FAKER] STATE: {} WARM -> NEGOTIATE (DUT sees us)",
-            neighbor->nodeName);
-        sendHandshake(*neighbor);
+            neighbor.nodeName);
+        sendHandshake(neighbor);
       }
     }
   }
@@ -381,11 +401,22 @@ SparkFaker::handleDutPacket(
    */
   if (packet.handshakeMsg().has_value()) {
     const auto& handshake = packet.handshakeMsg().value();
+
+    /*
+     * Filter self-packets: if the handshake's nodeName matches our own,
+     * this is our own multicast being looped back. Drop it.
+     */
+    if (*handshake.nodeName() == neighbor.nodeName) {
+      VLOG(3) << "[SPARK-FAKER] Dropping self-handshake for "
+              << neighbor.nodeName;
+      return;
+    }
+
     stats_.handshakesReceived++;
 
     if (VLOG_IS_ON(2)) {
       VLOG(2) << "[SPARK-FAKER] HANDSHAKE RECV: DUT:" << *handshake.nodeName()
-              << " -> " << neighbor->nodeName << " neighborNodeName="
+              << " -> " << neighbor.nodeName << " neighborNodeName="
               << handshake.neighborNodeName().value_or("none");
     }
 
@@ -393,19 +424,43 @@ SparkFaker::handleDutPacket(
      * Check if handshake is for us
      */
     if (handshake.neighborNodeName().has_value() &&
-        handshake.neighborNodeName().value() == neighbor->nodeName) {
-      if (neighbor->state == thrift::SparkNeighState::NEGOTIATE) {
-        neighbor->state = thrift::SparkNeighState::ESTABLISHED;
+        handshake.neighborNodeName().value() == neighbor.nodeName) {
+      if (neighbor.state == thrift::SparkNeighState::NEGOTIATE) {
+        /*
+         * Transition to ESTABLISHED. Matches the real Spark FSM which
+         * only allows NEGOTIATE + HANDSHAKE_RCVD -> ESTABLISHED.
+         * The WARM -> NEGOTIATE transition happens via hello (seeing
+         * ourselves in DUT's neighborInfos), driven by fast-init
+         * hello rate (500ms) so convergence is fast.
+         */
+        neighbor.state = thrift::SparkNeighState::ESTABLISHED;
         stats_.neighborsEstablished++;
         LOG(INFO) << fmt::format(
             "[SPARK-FAKER] STATE: {} NEGOTIATE -> ESTABLISHED (adjacency up!)",
-            neighbor->nodeName);
+            neighbor.nodeName);
+        sendHandshake(neighbor);
+      } else if (
+          neighbor.state == thrift::SparkNeighState::ESTABLISHED &&
+          !*handshake.isAdjEstablished()) {
+        /*
+         * DUT is still negotiating. Reply with isAdjEstablished=true
+         * so DUT can complete its transition. Matches real Spark behavior
+         * (processHandshakeMsg responds to !isAdjEstablished regardless
+         * of local state).
+         */
+        sendHandshake(neighbor);
+      } else if (
+          neighbor.state == thrift::SparkNeighState::ESTABLISHED &&
+          *handshake.isAdjEstablished() && !neighbor.dutEstablished) {
+        /*
+         * DUT confirms adjacency is established on its side too.
+         * Now we can switch to steady-state hello rate.
+         */
+        neighbor.dutEstablished = true;
+        LOG(INFO) << fmt::format(
+            "[SPARK-FAKER] DUT confirmed ESTABLISHED for {}",
+            neighbor.nodeName);
       }
-
-      /*
-       * Respond with handshake (isAdjEstablished=true)
-       */
-      sendHandshake(*neighbor);
     }
   }
 
@@ -414,8 +469,20 @@ SparkFaker::handleDutPacket(
    */
   if (packet.heartbeatMsg().has_value()) {
     stats_.heartbeatsReceived++;
+
+    /*
+     * Heartbeats only come from ESTABLISHED neighbors, so this
+     * confirms the DUT is established on its side.
+     */
+    if (!neighbor.dutEstablished) {
+      neighbor.dutEstablished = true;
+      LOG(INFO) << fmt::format(
+          "[SPARK-FAKER] DUT confirmed ESTABLISHED for {} (via heartbeat)",
+          neighbor.nodeName);
+    }
+
     if (VLOG_IS_ON(3)) {
-      VLOG(3) << "[SPARK-FAKER] HEARTBEAT RECV: DUT -> " << neighbor->nodeName;
+      VLOG(3) << "[SPARK-FAKER] HEARTBEAT RECV: DUT -> " << neighbor.nodeName;
     }
   }
 }
@@ -435,9 +502,9 @@ SparkFaker::processNeighbor(FakeNeighbor& neighbor) {
   case thrift::SparkNeighState::IDLE:
   case thrift::SparkNeighState::WARM: {
     /*
-     * Send hello periodically
+     * Send hello at fast-init rate for rapid discovery
      */
-    if (now - neighbor.lastHelloTime >= helloInterval_) {
+    if (now - neighbor.lastHelloTime >= fastInitHelloInterval_) {
       sendHello(neighbor);
     }
     break;
@@ -445,10 +512,14 @@ SparkFaker::processNeighbor(FakeNeighbor& neighbor) {
 
   case thrift::SparkNeighState::NEGOTIATE: {
     /*
-     * Send hello and handshake
+     * Send hello and handshake on SEPARATE timers to avoid burst
+     * rate limiting on the DUT. Real Spark uses independent timers
+     * for hello and handshake sends.
      */
-    if (now - neighbor.lastHelloTime >= helloInterval_) {
+    if (now - neighbor.lastHelloTime >= fastInitHelloInterval_) {
       sendHello(neighbor);
+    }
+    if (now - neighbor.lastHandshakeTime >= fastInitHelloInterval_) {
       sendHandshake(neighbor);
     }
     break;
@@ -456,9 +527,15 @@ SparkFaker::processNeighbor(FakeNeighbor& neighbor) {
 
   case thrift::SparkNeighState::ESTABLISHED: {
     /*
-     * Send hello periodically and heartbeat more frequently
+     * Use fast-init hello rate until DUT confirms ESTABLISHED.
+     * This ensures the DUT can complete its negotiation even if
+     * the first handshake exchange was lost. Once the DUT confirms
+     * (via handshake with isAdjEstablished=true or heartbeat),
+     * switch to steady-state 20s hello rate.
      */
-    if (now - neighbor.lastHelloTime >= helloInterval_) {
+    auto helloRate =
+        neighbor.dutEstablished ? helloInterval_ : fastInitHelloInterval_;
+    if (now - neighbor.lastHelloTime >= helloRate) {
       sendHello(neighbor);
     }
     if (now - neighbor.lastHeartbeatTime >= heartbeatInterval_) {
@@ -536,9 +613,10 @@ SparkFaker::handleRawDutPacket(
     auto pkt = readThriftObj<thrift::SparkHelloPacket>(*ioBuf, serializer_);
 
     /*
-     * Find which DUT interface this came from
+     * Use dstIfName (the real interface we received on) for dispatch,
+     * not srcIfName (which is "dut" / unknown for RealSparkIo).
      */
-    handleDutPacket(srcIfName, pkt);
+    handleDutPacket(dstIfName, pkt);
 
     if (VLOG_IS_ON(3)) {
       VLOG(3) << "[SPARK-FAKER] Processed packet from " << srcIfName << " to "

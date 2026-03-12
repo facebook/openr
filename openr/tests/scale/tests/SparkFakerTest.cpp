@@ -152,9 +152,10 @@ TEST_F(SparkFakerTest, HandleDutPacket) {
   pkt.helloMsg() = std::move(helloMsg);
 
   /*
-   * Inject packet - faker should process it and update state
+   * Inject packet - faker should process it and update state.
+   * Use the fake neighbor's ifName (receiving interface) for dispatch.
    */
-  faker_->handleDutPacket("dut-to-spine-0", pkt);
+  faker_->handleDutPacket("spine-0-to-dut", pkt);
 
   /*
    * Verify that neighbor state progressed (we can't easily check internal
