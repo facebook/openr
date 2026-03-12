@@ -57,6 +57,9 @@ DEFINE_int32(
 
 DEFINE_int32(num_pods, 8, "Number of pods in the topology");
 
+DEFINE_int32(
+    num_prefixes_per_node, 11, "Number of prefixes each router advertises");
+
 DEFINE_string(
     topology_type,
     "bbf-simple",
@@ -148,6 +151,8 @@ main(int argc, char** argv) {
   LOG(INFO) << fmt::format("  Leaves:          {}", FLAGS_num_leaves);
   LOG(INFO) << fmt::format("  Super-spines:    {}", FLAGS_num_super_spines);
   LOG(INFO) << fmt::format("  Pods:            {}", FLAGS_num_pods);
+  LOG(INFO)
+      << fmt::format("  Prefixes/node:   {}", FLAGS_num_prefixes_per_node);
   LOG(INFO) << fmt::format(
       "  Interfaces:      {}",
       FLAGS_interfaces.empty() ? "(none)" : FLAGS_interfaces);
@@ -191,13 +196,16 @@ main(int argc, char** argv) {
         FLAGS_num_spines,
         FLAGS_num_leaves,
         FLAGS_num_super_spines,
-        FLAGS_num_pods);
+        FLAGS_num_pods,
+        FLAGS_num_prefixes_per_node);
   } else if (FLAGS_topology_type == "bbf-full") {
     topology = openr::TopologyGenerator::createBbf(
         FLAGS_num_spines,
         FLAGS_num_leaves,
         FLAGS_num_super_spines,
-        FLAGS_num_pods);
+        FLAGS_num_pods,
+        openr::kDefaultBbfEcmpWidth,
+        FLAGS_num_prefixes_per_node);
   } else {
     LOG(ERROR) << "Unknown topology type: " << FLAGS_topology_type;
     return 1;
