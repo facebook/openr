@@ -7,7 +7,9 @@
 
 #pragma once
 
+#include <memory>
 #include <mutex>
+#include <optional>
 #include <string>
 
 #include <folly/futures/Future.h>
@@ -39,6 +41,19 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
    * @param kvStore Initial KV data for this neighbor's store
    */
   FakeKvStoreHandler(std::string neighborName, thrift::KeyVals kvStore);
+
+  /*
+   * Construct a handler sharing immutable KV data (COW path).
+   *
+   * Multiple handlers can share the same underlying data. On first write,
+   * the handler materializes a private copy (copy-on-write).
+   *
+   * @param neighborName The name of this fake neighbor
+   * @param sharedKvStore Shared immutable KV data
+   */
+  FakeKvStoreHandler(
+      std::string neighborName,
+      std::shared_ptr<const thrift::KeyVals> sharedKvStore);
 
   /*
    * 3-way sync step 1+2: DUT sends hashes, we return diff.
@@ -96,6 +111,14 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
   void removeKey(const std::string& key);
 
   /*
+   * Reset to shared immutable KV data (COW).
+   *
+   * Discards any local mutations and reverts to sharing the given data.
+   * Used by updateTopology to avoid per-handler deep copies.
+   */
+  void resetToShared(std::shared_ptr<const thrift::KeyVals> sharedKvStore);
+
+  /*
    * Get the neighbor name this handler represents.
    */
   const std::string&
@@ -109,8 +132,26 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
   thrift::KeyVals getKvStore() const;
 
  private:
+  /*
+   * Return a const reference to the active KV store.
+   * Must be called under mutex_.
+   */
+  const thrift::KeyVals& store() const;
+
+  /*
+   * Materialize a private copy if still sharing, then return mutable ref.
+   * Must be called under mutex_.
+   */
+  thrift::KeyVals& mutableStore();
+
   std::string neighborName_;
-  thrift::KeyVals kvStore_;
+
+  // COW storage: at most one of these is active at a time.
+  // sharedStore_ holds the immutable shared base (COW path).
+  // ownedStore_ holds a private mutable copy (materialized on first write).
+  std::shared_ptr<const thrift::KeyVals> sharedStore_;
+  std::optional<thrift::KeyVals> ownedStore_;
+
   mutable std::mutex mutex_;
 };
 

@@ -16,11 +16,39 @@ namespace openr {
 
 FakeKvStoreHandler::FakeKvStoreHandler(
     std::string neighborName, thrift::KeyVals kvStore)
-    : neighborName_(std::move(neighborName)), kvStore_(std::move(kvStore)) {
+    : neighborName_(std::move(neighborName)), ownedStore_(std::move(kvStore)) {
   LOG(INFO) << fmt::format(
       "[FAKE-KVSTORE] Handler created for neighbor '{}' with {} keys",
       neighborName_,
-      kvStore_.size());
+      ownedStore_->size());
+}
+
+FakeKvStoreHandler::FakeKvStoreHandler(
+    std::string neighborName,
+    std::shared_ptr<const thrift::KeyVals> sharedKvStore)
+    : neighborName_(std::move(neighborName)),
+      sharedStore_(std::move(sharedKvStore)) {
+  LOG(INFO) << fmt::format(
+      "[FAKE-KVSTORE] Handler created for neighbor '{}' with {} keys (shared/COW)",
+      neighborName_,
+      sharedStore_->size());
+}
+
+const thrift::KeyVals&
+FakeKvStoreHandler::store() const {
+  if (ownedStore_.has_value()) {
+    return *ownedStore_;
+  }
+  return *sharedStore_;
+}
+
+thrift::KeyVals&
+FakeKvStoreHandler::mutableStore() {
+  if (!ownedStore_.has_value()) {
+    ownedStore_ = *sharedStore_;
+    sharedStore_.reset();
+  }
+  return *ownedStore_;
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -38,7 +66,7 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsFilteredArea(
      *   - keyVals: keys we have that DUT doesn't, or have newer versions
      *   - tobeUpdatedKeys: keys DUT has that we want
      */
-    *pub = dumpDifference(*area, kvStore_, filter->keyValHashes().value());
+    *pub = dumpDifference(*area, store(), filter->keyValHashes().value());
     VLOG(2) << fmt::format(
         "[FAKE-KVSTORE] {} getKvStoreKeyValsFilteredArea: "
         "area={}, DUT sent {} hashes, returning {} keyVals, {} tobeUpdatedKeys",
@@ -53,14 +81,14 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsFilteredArea(
      * For simplicity, we return all keys (the filter is typically empty
      * or matches everything during initial sync).
      */
-    pub->keyVals() = kvStore_;
+    pub->keyVals() = store();
     pub->area() = *area;
     VLOG(2) << fmt::format(
         "[FAKE-KVSTORE] {} getKvStoreKeyValsFilteredArea: "
         "area={}, no hashes, returning all {} keys",
         neighborName_,
         *area,
-        kvStore_.size());
+        store().size());
   }
 
   return folly::makeSemiFuture(std::move(pub));
@@ -88,9 +116,9 @@ FakeKvStoreHandler::semifuture_setKvStoreKeyVals(
    * Merge incoming keys into our store (optional, but keeps stores in sync).
    */
   for (auto& [key, value] : *setParams->keyVals()) {
-    auto it = kvStore_.find(key);
-    if (it == kvStore_.end()) {
-      kvStore_.emplace(key, std::move(value));
+    auto it = mutableStore().find(key);
+    if (it == mutableStore().end()) {
+      mutableStore().emplace(key, std::move(value));
     } else {
       /*
        * Simple version comparison — higher version wins.
@@ -114,8 +142,8 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsArea(
   pub->area() = *area;
 
   for (const auto& key : *filterKeys) {
-    auto it = kvStore_.find(key);
-    if (it != kvStore_.end()) {
+    auto it = store().find(key);
+    if (it != store().end()) {
       pub->keyVals()->emplace(it->first, it->second);
     }
   }
@@ -144,7 +172,7 @@ FakeKvStoreHandler::semifuture_getKvStoreHashFilteredArea(
   auto pub = std::make_unique<thrift::Publication>();
   pub->area() = *area;
 
-  for (const auto& [key, value] : kvStore_) {
+  for (const auto& [key, value] : store()) {
     thrift::Value hashOnly;
     hashOnly.version() = *value.version();
     hashOnly.originatorId() = *value.originatorId();
@@ -167,28 +195,29 @@ FakeKvStoreHandler::semifuture_getKvStoreHashFilteredArea(
 void
 FakeKvStoreHandler::updateKvStore(thrift::KeyVals newKvStore) {
   std::lock_guard<std::mutex> lock(mutex_);
-  kvStore_ = std::move(newKvStore);
+  ownedStore_ = std::move(newKvStore);
+  sharedStore_.reset();
   VLOG(1) << fmt::format(
       "[FAKE-KVSTORE] {} KV store replaced with {} keys",
       neighborName_,
-      kvStore_.size());
+      ownedStore_->size());
 }
 
 void
 FakeKvStoreHandler::updateKey(const std::string& key, thrift::Value value) {
   std::lock_guard<std::mutex> lock(mutex_);
-  kvStore_[key] = std::move(value);
+  mutableStore()[key] = std::move(value);
   VLOG(2) << fmt::format(
       "[FAKE-KVSTORE] {} key '{}' updated (version={})",
       neighborName_,
       key,
-      *kvStore_[key].version());
+      *mutableStore()[key].version());
 }
 
 void
 FakeKvStoreHandler::removeKey(const std::string& key) {
   std::lock_guard<std::mutex> lock(mutex_);
-  auto erased = kvStore_.erase(key);
+  auto erased = mutableStore().erase(key);
   if (erased > 0) {
     VLOG(2) << fmt::format(
         "[FAKE-KVSTORE] {} key '{}' removed", neighborName_, key);
@@ -198,7 +227,19 @@ FakeKvStoreHandler::removeKey(const std::string& key) {
 thrift::KeyVals
 FakeKvStoreHandler::getKvStore() const {
   std::lock_guard<std::mutex> lock(mutex_);
-  return kvStore_;
+  return store();
+}
+
+void
+FakeKvStoreHandler::resetToShared(
+    std::shared_ptr<const thrift::KeyVals> sharedKvStore) {
+  std::lock_guard<std::mutex> lock(mutex_);
+  sharedStore_ = std::move(sharedKvStore);
+  ownedStore_.reset();
+  VLOG(1) << fmt::format(
+      "[FAKE-KVSTORE] {} KV store reset to shared ({} keys)",
+      neighborName_,
+      sharedStore_->size());
 }
 
 } // namespace openr

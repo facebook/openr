@@ -10,6 +10,8 @@
 #include <fmt/format.h>
 #include <glog/logging.h>
 
+#include <openr/tests/scale/KvStoreThriftInjector.h>
+
 namespace openr {
 
 FakeKvStoreManager::FakeKvStoreManager(uint16_t basePort, size_t ioThreads)
@@ -58,6 +60,43 @@ FakeKvStoreManager::addNeighbor(
 
   LOG(INFO) << fmt::format(
       "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {}", neighborName, port);
+
+  return port;
+}
+
+uint16_t
+FakeKvStoreManager::addNeighbor(
+    const std::string& neighborName,
+    std::shared_ptr<const thrift::KeyVals> sharedKvStore) {
+  if (running_) {
+    throw std::runtime_error("Cannot add neighbors after servers have started");
+  }
+
+  if (servers_.find(neighborName) != servers_.end()) {
+    throw std::runtime_error(
+        fmt::format("Neighbor '{}' already exists", neighborName));
+  }
+
+  uint16_t port = nextPort_++;
+
+  NeighborServer ns;
+  ns.neighborName = neighborName;
+  ns.port = port;
+  ns.handler = std::make_shared<FakeKvStoreHandler>(
+      neighborName, std::move(sharedKvStore));
+
+  ns.server = std::make_shared<apache::thrift::ThriftServer>();
+  ns.server->setInterface(ns.handler);
+  ns.server->setPort(port);
+  ns.server->setIOThreadPool(ioPool_);
+  ns.server->setNumCPUWorkerThreads(1);
+
+  servers_.emplace(neighborName, std::move(ns));
+
+  LOG(INFO) << fmt::format(
+      "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {} (shared/COW)",
+      neighborName,
+      port);
 
   return port;
 }
@@ -236,13 +275,13 @@ FakeKvStoreManager::updateTopology(
       "[FAKE-KVSTORE-MGR] Updating topology for {} neighbors",
       neighborNames.size());
 
-  auto allKvData =
-      KvStoreDataBuilder::buildForAllNeighbors(neighborNames, newTopology);
+  auto sharedKvStore = std::make_shared<const thrift::KeyVals>(
+      KvStoreThriftInjector::buildKeyVals(newTopology));
 
-  for (const auto& [name, kvData] : allKvData) {
+  for (const auto& name : neighborNames) {
     auto it = servers_.find(name);
     if (it != servers_.end()) {
-      it->second.handler->updateKvStore(kvData);
+      it->second.handler->resetToShared(sharedKvStore);
     }
   }
 }

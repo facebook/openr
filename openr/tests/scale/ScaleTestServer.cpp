@@ -31,7 +31,6 @@
 #include <glog/logging.h>
 
 #include <openr/tests/scale/FakeKvStoreManager.h>
-#include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 #include <openr/tests/scale/RealSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
@@ -250,21 +249,19 @@ main(int argc, char** argv) {
     }
 
     /*
-     * Build per-neighbor KV data from topology
+     * Build shared KV data from topology
      */
     LOG(INFO) << fmt::format(
         "Building KV data for {} neighbors...", neighborNames.size());
-    auto neighborKvData = openr::KvStoreDataBuilder::buildForAllNeighbors(
-        neighborNames, topology);
+    auto sharedKeyVals = std::make_shared<const openr::thrift::KeyVals>(
+        openr::KvStoreThriftInjector::buildKeyVals(topology));
+    LOG(INFO) << fmt::format("Built {} shared keys", sharedKeyVals->size());
 
     /*
      * Add each neighbor to the manager
      */
     for (const auto& name : neighborNames) {
-      auto it = neighborKvData.find(name);
-      if (it != neighborKvData.end()) {
-        kvManager->addNeighbor(name, it->second);
-      }
+      kvManager->addNeighbor(name, sharedKeyVals);
     }
 
     LOG(INFO) << fmt::format(

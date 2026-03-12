@@ -76,6 +76,20 @@ class FakeKvStoreManager {
       const std::string& neighborName, thrift::KeyVals kvStore);
 
   /*
+   * Add a neighbor sharing immutable KV data (COW path).
+   *
+   * Multiple neighbors can share the same underlying data.
+   * Each handler materializes a private copy on first write.
+   *
+   * @param neighborName Name of the fake neighbor
+   * @param sharedKvStore Shared immutable KV data
+   * @return Port assigned to this neighbor
+   */
+  uint16_t addNeighbor(
+      const std::string& neighborName,
+      std::shared_ptr<const thrift::KeyVals> sharedKvStore);
+
+  /*
    * Start all Thrift servers.
    * Must be called after all neighbors are added.
    */
