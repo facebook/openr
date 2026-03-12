@@ -78,7 +78,17 @@ class KvStoreThriftInjector {
    * @return Number of keys injected
    */
   size_t injectTopology(
-      const Topology& topology, const std::string& areaName = "area0");
+      const Topology& topology, const std::string& areaName = "0");
+
+  /*
+   * Inject pre-built key-value pairs into the DUT's KvStore.
+   *
+   * @param keyVals The key-value pairs to inject
+   * @param areaName OpenR area for the publications
+   * @return Number of keys injected
+   */
+  size_t injectKeyVals(
+      const thrift::KeyVals& keyVals, const std::string& areaName = "0");
 
   /*
    * Inject a single adjacency database update.
@@ -92,7 +102,7 @@ class KvStoreThriftInjector {
       const VirtualRouter& router,
       const Topology& topology,
       int64_t version,
-      const std::string& areaName = "area0");
+      const std::string& areaName = "0");
 
   /*
    * Remove a node from the topology by injecting an empty adjacency database.
@@ -104,7 +114,7 @@ class KvStoreThriftInjector {
   void removeNode(
       const std::string& nodeName,
       int64_t version = 2,
-      const std::string& areaName = "area0");
+      const std::string& areaName = "0");
 
   /*
    * Get keys from the DUT's KvStore matching a pattern.
@@ -114,7 +124,7 @@ class KvStoreThriftInjector {
    * @return Publication containing matching key-values
    */
   thrift::Publication getKeys(
-      const std::string& keyPrefix, const std::string& areaName = "area0");
+      const std::string& keyPrefix, const std::string& areaName = "0");
 
   /*
    * Get all adjacency databases from the DUT.
@@ -123,7 +133,7 @@ class KvStoreThriftInjector {
    * @return Map of node name to adjacency database
    */
   std::map<std::string, thrift::AdjacencyDatabase> getAdjacencyDatabases(
-      const std::string& areaName = "area0");
+      const std::string& areaName = "0");
 
   /*
    * Get route database from the DUT via Decision.

@@ -106,7 +106,8 @@ KvStoreThriftInjector::buildAdjacencyDatabase(
       router.nodeName,
       adjs,
       static_cast<int32_t>(router.nodeLabel),
-      router.isOverloaded);
+      router.isOverloaded,
+      "0");
 }
 
 std::pair<std::string, thrift::Value>
@@ -136,7 +137,7 @@ KvStoreThriftInjector::createPrefixKeyValues(
 
   for (const auto& prefixEntry : router.advertisedPrefixes) {
     auto [prefixKey, prefixDb] =
-        createPrefixKeyAndDb(router.nodeName, prefixEntry);
+        createPrefixKeyAndDb(router.nodeName, prefixEntry, "0");
 
     keyValues.emplace_back(
         prefixKey.getPrefixKeyV2(),
@@ -213,6 +214,44 @@ KvStoreThriftInjector::injectTopology(
   } catch (const std::exception& e) {
     LOG(ERROR) << fmt::format(
         "[KVSTORE-INJECTOR] ERROR: Failed to inject topology: {}", e.what());
+    return 0;
+  }
+}
+
+size_t
+KvStoreThriftInjector::injectKeyVals(
+    const thrift::KeyVals& keyVals, const std::string& areaName) {
+  if (!connected_) {
+    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    return 0;
+  }
+
+  size_t keyCount = keyVals.size();
+  LOG(INFO) << fmt::format(
+      "[KVSTORE-INJECTOR] Injecting {} pre-built key-value pairs to area '{}'...",
+      keyCount,
+      areaName);
+
+  thrift::KeySetParams params;
+  params.keyVals() = keyVals;
+
+  try {
+    auto startTime = std::chrono::steady_clock::now();
+    client_->sync_setKvStoreKeyVals(params, areaName);
+    auto endTime = std::chrono::steady_clock::now();
+    auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
+                          endTime - startTime)
+                          .count();
+
+    LOG(INFO) << fmt::format(
+        "[KVSTORE-INJECTOR] SUCCESS: Injected {} keys in {} ms ({} keys/sec)",
+        keyCount,
+        durationMs,
+        durationMs > 0 ? (keyCount * 1000 / durationMs) : keyCount);
+    return keyCount;
+  } catch (const std::exception& e) {
+    LOG(ERROR) << fmt::format(
+        "[KVSTORE-INJECTOR] ERROR: Failed to inject key-values: {}", e.what());
     return 0;
   }
 }

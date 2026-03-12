@@ -113,7 +113,8 @@ KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
       router.nodeName,
       adjs,
       static_cast<int32_t>(router.nodeLabel),
-      router.isOverloaded);
+      router.isOverloaded,
+      "0");
 
   apache::thrift::CompactSerializer serializer;
   std::string key = fmt::format("adj:{}", router.nodeName);
@@ -141,7 +142,7 @@ KvStoreDataBuilder::buildRemovedNodeAdjKeyValue(
   adjDb.isOverloaded() = true;
   adjDb.adjacencies() = {};
   adjDb.nodeLabel() = 0;
-  adjDb.area() = "area0";
+  adjDb.area() = "0";
 
   apache::thrift::CompactSerializer serializer;
   std::string key = fmt::format("adj:{}", routerName);
@@ -190,7 +191,7 @@ KvStoreDataBuilder::buildOverloadedAdjKeyValue(
   }
 
   auto adjDb = createAdjDb(
-      router.nodeName, adjs, static_cast<int32_t>(router.nodeLabel), true);
+      router.nodeName, adjs, static_cast<int32_t>(router.nodeLabel), true, "0");
 
   apache::thrift::CompactSerializer serializer;
   std::string key = fmt::format("adj:{}", router.nodeName);

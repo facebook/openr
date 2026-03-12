@@ -19,7 +19,7 @@ namespace openr {
 /*
  * Area name used for scale testing.
  */
-constexpr folly::StringPiece kScaleTestAreaName = "area0";
+constexpr folly::StringPiece kScaleTestAreaName = "0";
 
 /*
  * KvStoreBulkInjector injects topology directly into KvStore.

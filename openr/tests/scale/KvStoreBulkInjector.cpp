@@ -63,7 +63,8 @@ KvStoreBulkInjector::buildAdjacencyDatabase(
       router.nodeName,
       adjs,
       static_cast<int32_t>(router.nodeLabel),
-      router.isOverloaded);
+      router.isOverloaded,
+      "0");
 }
 
 std::pair<std::string, thrift::Value>
@@ -93,7 +94,7 @@ KvStoreBulkInjector::createPrefixKeyValues(
 
   for (const auto& prefixEntry : router.advertisedPrefixes) {
     auto [prefixKey, prefixDb] =
-        createPrefixKeyAndDb(router.nodeName, prefixEntry);
+        createPrefixKeyAndDb(router.nodeName, prefixEntry, "0");
 
     keyValues.emplace_back(
         prefixKey.getPrefixKeyV2(),

@@ -93,6 +93,12 @@ DEFINE_bool(
 
 namespace {
 
+/*
+ * Node ID for the DUT router entry in the topology. Chosen to be well
+ * above any simulated router ID so it never collides.
+ */
+constexpr int kDutNodeId{99999};
+
 std::atomic<bool> g_running{true};
 
 void
@@ -304,6 +310,53 @@ main(int argc, char** argv) {
   LOG(INFO) << "Connected to DUT: " << dutNodeName;
 
   /*
+   * Add DUT as a router in the topology so that spine adj DBs
+   * include the DUT as a neighbor. Decision requires bidirectional
+   * adjacency — both sides must report the link. The DUT's own
+   * adj DB is created by its LinkMonitor via SparkFaker, but the
+   * injected spine adj DBs must also list the DUT.
+   */
+  if (FLAGS_simulate_neighbors && !interfaces.empty()) {
+    openr::VirtualRouter dutRouter;
+    dutRouter.nodeName = dutNodeName;
+    dutRouter.nodeId = kDutNodeId;
+    dutRouter.nodeLabel = 0;
+    topology.routers.emplace(dutNodeName, std::move(dutRouter));
+
+    int neighborsPerInterface =
+        static_cast<int>(FLAGS_num_spines / interfaces.size());
+    int neighborIdx = 0;
+
+    for (size_t i = 0; i < interfaces.size(); ++i) {
+      const auto& ifName = interfaces[i];
+      int neighborsOnThisIf = (i == interfaces.size() - 1)
+          ? (FLAGS_num_spines - neighborIdx)
+          : neighborsPerInterface;
+
+      for (int j = 0; j < neighborsOnThisIf && neighborIdx < FLAGS_num_spines;
+           ++j, ++neighborIdx) {
+        std::string spineName = fmt::format("spine-{}", neighborIdx);
+        std::string spineIfName = fmt::format("{}-to-dut", spineName);
+
+        auto& spineRouter = topology.routers.at(spineName);
+
+        openr::VirtualAdjacency dutAdj;
+        dutAdj.localIfName = spineIfName;
+        dutAdj.remoteRouterName = dutNodeName;
+        dutAdj.remoteIfName = ifName;
+        dutAdj.metric = 1;
+        dutAdj.latencyMs = 1;
+        spineRouter.adjacencies.push_back(std::move(dutAdj));
+      }
+    }
+
+    LOG(INFO) << fmt::format(
+        "Added DUT '{}' to topology with {} spine->DUT adjacencies",
+        dutNodeName,
+        FLAGS_num_spines);
+  }
+
+  /*
    * Setup FakeKvStoreManager (per-neighbor KvStore Thrift servers)
    */
   std::unique_ptr<openr::FakeKvStoreManager> kvManager;
@@ -327,8 +380,16 @@ main(int argc, char** argv) {
      */
     LOG(INFO) << fmt::format(
         "Building KV data for {} neighbors...", neighborNames.size());
-    auto sharedKeyVals = std::make_shared<const openr::thrift::KeyVals>(
-        openr::KvStoreThriftInjector::buildKeyVals(topology));
+    auto allKeyVals = openr::KvStoreThriftInjector::buildKeyVals(topology);
+
+    /*
+     * Remove the DUT's own adj key — LinkMonitor handles that.
+     * We only want spine/leaf adj DBs in the shared data.
+     */
+    allKeyVals.erase(fmt::format("adj:{}", dutNodeName));
+
+    auto sharedKeyVals =
+        std::make_shared<const openr::thrift::KeyVals>(std::move(allKeyVals));
     LOG(INFO) << fmt::format("Built {} shared keys", sharedKeyVals->size());
 
     /*
@@ -467,7 +528,15 @@ main(int argc, char** argv) {
     LOG(INFO) << "Injecting topology into DUT KvStore...";
     auto startTime = std::chrono::steady_clock::now();
 
-    size_t keysInjected = injector.injectTopology(topology);
+    auto keyVals = openr::KvStoreThriftInjector::buildKeyVals(topology);
+
+    /*
+     * Remove the DUT's own adj key — LinkMonitor handles that.
+     * Injecting it would conflict with LinkMonitor's version.
+     */
+    keyVals.erase(fmt::format("adj:{}", dutNodeName));
+
+    size_t keysInjected = injector.injectKeyVals(keyVals);
 
     auto endTime = std::chrono::steady_clock::now();
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
