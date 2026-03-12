@@ -30,6 +30,7 @@
 #include <gflags/gflags.h>
 #include <glog/logging.h>
 
+#include <openr/tests/scale/DutMonitor.h>
 #include <openr/tests/scale/FakeKvStoreManager.h>
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 #include <openr/tests/scale/RealSparkIo.h>
@@ -220,9 +221,15 @@ main(int argc, char** argv) {
    * Connect to DUT
    */
   openr::KvStoreThriftInjector injector(FLAGS_dut_host, FLAGS_dut_port);
+  openr::DutMonitor monitor(FLAGS_dut_host, FLAGS_dut_port);
 
   if (!injector.connect()) {
     LOG(ERROR) << "Failed to connect to DUT";
+    return 1;
+  }
+
+  if (!monitor.connect()) {
+    LOG(ERROR) << "Failed to connect DutMonitor to DUT";
     return 1;
   }
 
@@ -445,6 +452,24 @@ main(int argc, char** argv) {
         LOG(INFO) << faker->getStatsReport();
         VLOG(1) << faker->getNeighborStatusReport();
       }
+
+      /*
+       * Query DUT OpenR counters
+       */
+      if (monitor.isConnected()) {
+        auto counters = monitor.getRegexCounters(
+            "process\\.cpu\\.peak_pct|process\\.cpu\\.pct|"
+            "process\\.memory\\.rss|"
+            "kvstore\\.received_key_vals\\.sum|"
+            "kvstore\\.updated_key_vals\\.sum");
+        if (!counters.empty()) {
+          std::string report = "\n=== DUT OpenR Counters ===\n";
+          for (const auto& [name, value] : counters) {
+            report += fmt::format("  {}: {}\n", name, value);
+          }
+          LOG(INFO) << report;
+        }
+      }
     }
   }
 
@@ -470,6 +495,7 @@ main(int argc, char** argv) {
     kvManager->stop();
   }
 
+  monitor.disconnect();
   injector.disconnect();
 
   LOG(INFO) << "[SCALE-TEST] Scale test complete.";
