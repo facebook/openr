@@ -4,8 +4,12 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# setup_vlans.sh - Setup VLAN interfaces for OpenR scale testing
-# Creates VLAN interfaces on a test server for connecting to a DUT via VLAN trunk.
+# setup_vlans_dut.sh - Setup VLAN interfaces on an Arista EOS DUT for OpenR scale testing
+# Creates VLAN sub-interfaces using Linux ip commands on the DUT.
+#
+# This is the DUT-side counterpart to setup_vlans.sh (test server side).
+# On EOS, use the Linux interface name (e.g., et4_15_1 for Ethernet4/15/1).
+# Find it with: ip link show | grep et
 
 set -e
 
@@ -13,13 +17,15 @@ usage() {
     echo "Usage: $0 <base_interface> <num_vlans> [start_vlan_id]"
     echo ""
     echo "Arguments:"
-    echo "  base_interface   Physical interface (e.g., eth0, ens3)"
+    echo "  base_interface   Linux interface name (e.g., et4_15_1 for EOS Ethernet4/15/1)"
     echo "  num_vlans        Number of VLAN interfaces to create"
     echo "  start_vlan_id    Starting VLAN ID (default: 1)"
     echo ""
     echo "Examples:"
-    echo "  $0 eth0 4        # Creates eth0.1 through eth0.4"
-    echo "  $0 eth1 8 100    # Creates eth1.100 through eth1.107"
+    echo "  $0 et4_15_1 4        # Creates et4_15_1.1 through et4_15_1.4"
+    echo "  $0 et1_1 8 100       # Creates et1_1.100 through et1_1.107"
+    echo ""
+    echo "Note: On EOS, find Linux interface names with: ip link show | grep et"
     exit 1
 }
 
@@ -40,6 +46,9 @@ fi
 # Check base interface exists
 if ! ip link show "$BASE_IF" >/dev/null 2>&1; then
     echo "Error: Interface $BASE_IF does not exist"
+    echo ""
+    echo "Available interfaces:"
+    ip -br link show | grep -E '^et' || ip -br link show
     exit 1
 fi
 
@@ -85,8 +94,8 @@ end"
         CLI_CMDS="$CLI_CMDS
 interface ${EOS_BASE}.${VLAN_ID}
   encapsulation dot1q vlan $VLAN_ID
-  ip address 10.${V4_O2}.${V4_O3}.1/24
-  ipv6 address fd00:0:0:${V6_HEX}::1/64
+  ip address 10.${V4_O2}.${V4_O3}.2/24
+  ipv6 address fd00:0:0:${V6_HEX}::2/64
   ipv6 enable"
     done
     CLI_CMDS="$CLI_CMDS
@@ -127,15 +136,15 @@ for i in $(seq 0 $((NUM_VLANS - 1))); do
     SYSCTL_IF=$(echo "$VLAN_IF" | sed 's/\./\//g')
     sysctl -q -w "net.ipv6.conf.${SYSCTL_IF}.disable_ipv6=0" 2>/dev/null || true
 
-    # Assign unique IPv4 address (test server = .1)
+    # Assign unique IPv4 address (DUT = .2)
     V4_O2=$((VLAN_ID / 256))
     V4_O3=$((VLAN_ID % 256))
-    V4_ADDR="10.${V4_O2}.${V4_O3}.1"
+    V4_ADDR="10.${V4_O2}.${V4_O3}.2"
     ip addr add "${V4_ADDR}/24" dev "$VLAN_IF" 2>/dev/null || true
 
     # Assign unique IPv6 address (ULA range, each VLAN gets its own /64)
     V6_SUFFIX=$(printf "%x" $VLAN_ID)
-    V6_ADDR="fd00:0:0:${V6_SUFFIX}::1"
+    V6_ADDR="fd00:0:0:${V6_SUFFIX}::2"
     ip -6 addr add "${V6_ADDR}/64" dev "$VLAN_IF" 2>/dev/null || true
 
     CREATED_IFS="${CREATED_IFS}${VLAN_IF},"
@@ -178,7 +187,7 @@ for i in $(seq 0 $((NUM_VLANS - 1))); do
 done
 
 echo ""
-echo "VLAN setup complete!"
+echo "DUT VLAN setup complete!"
 echo ""
 echo "To remove these VLANs later, run:"
 echo "  for i in \$(seq $START_VLAN $((START_VLAN + NUM_VLANS - 1))); do sudo ip link delete ${BASE_IF}.\$i; done"
