@@ -270,13 +270,14 @@ FakeKvStoreManager::simulateNodeOverload(
 void
 FakeKvStoreManager::updateTopology(
     const Topology& newTopology,
-    const std::vector<std::string>& neighborNames) {
+    const std::vector<std::string>& neighborNames,
+    int32_t numFakeKeysPerNode) {
   LOG(INFO) << fmt::format(
       "[FAKE-KVSTORE-MGR] Updating topology for {} neighbors",
       neighborNames.size());
 
   auto sharedKvStore = std::make_shared<const thrift::KeyVals>(
-      KvStoreThriftInjector::buildKeyVals(newTopology));
+      KvStoreThriftInjector::buildKeyVals(newTopology, numFakeKeysPerNode));
 
   for (const auto& name : neighborNames) {
     auto it = servers_.find(name);

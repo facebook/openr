@@ -91,6 +91,12 @@ DEFINE_bool(
     true,
     "Enable per-neighbor FakeKvStore servers for KvStore sync");
 
+DEFINE_int32(
+    num_fake_keys_per_node,
+    0,
+    "Number of fake keys per node (0 = disabled). "
+    "Simulates extra key injection like fakekeys0:<nodeName>, fakekeys1:<nodeName>, ...");
+
 namespace {
 
 /*
@@ -240,6 +246,8 @@ main(int argc, char** argv) {
       FLAGS_enable_fake_kvstore
           ? fmt::format("yes (base port {})", FLAGS_fake_kvstore_base_port)
           : "no");
+  LOG(INFO)
+      << fmt::format("  Fake keys/node:  {}", FLAGS_num_fake_keys_per_node);
   LOG(INFO) << fmt::format(
       "  Run duration:    {} sec (0=infinite)", FLAGS_run_duration_sec);
   LOG(INFO) << "";
@@ -380,7 +388,8 @@ main(int argc, char** argv) {
      */
     LOG(INFO) << fmt::format(
         "Building KV data for {} neighbors...", neighborNames.size());
-    auto allKeyVals = openr::KvStoreThriftInjector::buildKeyVals(topology);
+    auto allKeyVals = openr::KvStoreThriftInjector::buildKeyVals(
+        topology, FLAGS_num_fake_keys_per_node);
 
     /*
      * Remove the DUT's own adj key — LinkMonitor handles that.
@@ -528,7 +537,8 @@ main(int argc, char** argv) {
     LOG(INFO) << "Injecting topology into DUT KvStore...";
     auto startTime = std::chrono::steady_clock::now();
 
-    auto keyVals = openr::KvStoreThriftInjector::buildKeyVals(topology);
+    auto keyVals = openr::KvStoreThriftInjector::buildKeyVals(
+        topology, FLAGS_num_fake_keys_per_node);
 
     /*
      * Remove the DUT's own adj key — LinkMonitor handles that.

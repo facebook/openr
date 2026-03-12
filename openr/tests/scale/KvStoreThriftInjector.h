@@ -153,8 +153,12 @@ class KvStoreThriftInjector {
   /*
    * Build thrift::KeyVals for a topology.
    * Public for use by KvStoreDataBuilder.
+   *
+   * @param topology The topology to build keys for
+   * @param numFakeKeysPerNode Number of fake keys per node (0 = none)
    */
-  static thrift::KeyVals buildKeyVals(const Topology& topology);
+  static thrift::KeyVals buildKeyVals(
+      const Topology& topology, int32_t numFakeKeysPerNode = 0);
 
   /*
    * Build thrift::AdjacencyDatabase from VirtualRouter.
@@ -178,6 +182,18 @@ class KvStoreThriftInjector {
    */
   static std::vector<std::pair<std::string, thrift::Value>>
   createPrefixKeyValues(const VirtualRouter& router, int64_t version = 1);
+
+  /*
+   * Create KvStore key-value pairs for simulated fake keys.
+   * Keys are named "fakekeys{i}:{nodeName}" where i = 0..numKeys-1.
+   * Public for use by KvStoreDataBuilder.
+   *
+   * @param router The router to create fake keys for
+   * @param numKeys Number of fake keys to create
+   * @param version Version number for the keys
+   */
+  static std::vector<std::pair<std::string, thrift::Value>> createFakeKeyValues(
+      const VirtualRouter& router, int32_t numKeys, int64_t version = 1);
 
  private:
   /*

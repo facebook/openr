@@ -164,10 +164,15 @@ class FakeKvStoreManager {
   /*
    * Full topology update: rebuild all per-neighbor KV data
    * from a new topology and push to all handlers.
+   *
+   * @param newTopology New topology to use
+   * @param neighborNames List of neighbors to update
+   * @param numFakeKeysPerNode Number of fake keys per node (0 = none)
    */
   void updateTopology(
       const Topology& newTopology,
-      const std::vector<std::string>& neighborNames);
+      const std::vector<std::string>& neighborNames,
+      int32_t numFakeKeysPerNode = 0);
 
   /*
    * Get list of all neighbor names.

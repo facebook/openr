@@ -153,8 +153,32 @@ KvStoreThriftInjector::createPrefixKeyValues(
   return keyValues;
 }
 
+std::vector<std::pair<std::string, thrift::Value>>
+KvStoreThriftInjector::createFakeKeyValues(
+    const VirtualRouter& router, int32_t numKeys, int64_t version) {
+  std::vector<std::pair<std::string, thrift::Value>> keyValues;
+
+  for (int32_t i = 0; i < numKeys; ++i) {
+    std::string key = fmt::format("fakekeys{}:{}", i, router.nodeName);
+    std::string payload = fmt::format("fake-data-{}-{}", router.nodeName, i);
+
+    keyValues.emplace_back(
+        std::move(key),
+        createThriftValue(
+            version,
+            router.nodeName,
+            std::move(payload),
+            Constants::kTtlInfinity,
+            0,
+            0));
+  }
+
+  return keyValues;
+}
+
 thrift::KeyVals
-KvStoreThriftInjector::buildKeyVals(const Topology& topology) {
+KvStoreThriftInjector::buildKeyVals(
+    const Topology& topology, int32_t numFakeKeysPerNode) {
   thrift::KeyVals keyVals;
 
   for (const auto& [nodeName, router] : topology.routers) {
@@ -166,6 +190,15 @@ KvStoreThriftInjector::buildKeyVals(const Topology& topology) {
     auto prefixKvs = createPrefixKeyValues(router);
     for (auto& [key, value] : prefixKvs) {
       keyVals.emplace(std::move(key), std::move(value));
+    }
+  }
+
+  if (numFakeKeysPerNode > 0) {
+    for (const auto& [nodeName, router] : topology.routers) {
+      auto fakeKvs = createFakeKeyValues(router, numFakeKeysPerNode);
+      for (auto& [key, value] : fakeKvs) {
+        keyVals.emplace(std::move(key), std::move(value));
+      }
     }
   }
 

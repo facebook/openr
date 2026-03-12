@@ -42,11 +42,14 @@ class KvStoreDataBuilder {
    * - Its own adj:<neighborName> key (unique originatorId)
    * - Its own prefix:<neighborName> keys (unique originatorId)
    * - All other routers' adj/prefix keys (shared topology)
+   * - Optionally, fake keys per node
    *
    * @param topology The full topology containing all routers
+   * @param numFakeKeysPerNode Number of fake keys per node (0 = none)
    * @return KeyVals for this neighbor's KV store
    */
-  static thrift::KeyVals buildForNeighbor(const Topology& topology);
+  static thrift::KeyVals buildForNeighbor(
+      const Topology& topology, int32_t numFakeKeysPerNode = 0);
 
   /*
    * Build KV data for ALL neighbors at once (more efficient).
@@ -56,10 +59,13 @@ class KvStoreDataBuilder {
    *
    * @param neighborNames List of neighbor names to build data for
    * @param topology The full topology containing all routers
+   * @param numFakeKeysPerNode Number of fake keys per node (0 = none)
    * @return Map of neighborName -> KeyVals
    */
   static std::map<std::string, thrift::KeyVals> buildForAllNeighbors(
-      const std::vector<std::string>& neighborNames, const Topology& topology);
+      const std::vector<std::string>& neighborNames,
+      const Topology& topology,
+      int32_t numFakeKeysPerNode = 0);
 
   /*
    * Build the adjacency database key-value for a router.
@@ -83,6 +89,18 @@ class KvStoreDataBuilder {
    */
   static std::vector<std::pair<std::string, thrift::Value>>
   buildPrefixKeyValues(const VirtualRouter& router, int64_t version = 1);
+
+  /*
+   * Build fake key-values for a router.
+   * Simulates extra key injection like "fakekeys0:<nodeName>".
+   *
+   * @param router The router to build fake keys for
+   * @param numKeys Number of fake keys per node
+   * @param version Version number for the keys
+   * @return Vector of ("fakekeys{i}:<nodeName>", value)
+   */
+  static std::vector<std::pair<std::string, thrift::Value>> buildFakeKeyValues(
+      const VirtualRouter& router, int32_t numKeys, int64_t version = 1);
 
   /*
    * Build an adjacency database with a specific adjacency removed.

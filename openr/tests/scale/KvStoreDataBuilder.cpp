@@ -18,26 +18,16 @@
 namespace openr {
 
 thrift::KeyVals
-KvStoreDataBuilder::buildForNeighbor(const Topology& topology) {
-  thrift::KeyVals keyVals;
-
-  for (const auto& [nodeName, router] : topology.routers) {
-    auto [adjKey, adjValue] =
-        KvStoreThriftInjector::createAdjKeyValue(router, topology);
-    keyVals.emplace(std::move(adjKey), std::move(adjValue));
-
-    auto prefixKvs = KvStoreThriftInjector::createPrefixKeyValues(router);
-    for (auto& [prefixKey, prefixValue] : prefixKvs) {
-      keyVals.emplace(std::move(prefixKey), std::move(prefixValue));
-    }
-  }
-
-  return keyVals;
+KvStoreDataBuilder::buildForNeighbor(
+    const Topology& topology, int32_t numFakeKeysPerNode) {
+  return KvStoreThriftInjector::buildKeyVals(topology, numFakeKeysPerNode);
 }
 
 std::map<std::string, thrift::KeyVals>
 KvStoreDataBuilder::buildForAllNeighbors(
-    const std::vector<std::string>& neighborNames, const Topology& topology) {
+    const std::vector<std::string>& neighborNames,
+    const Topology& topology,
+    int32_t numFakeKeysPerNode) {
   /*
    * Build shared topology data once. Since each neighbor sees the full
    * topology (after flooding converges), we can reuse this for all neighbors.
@@ -47,7 +37,8 @@ KvStoreDataBuilder::buildForAllNeighbors(
    * flooded data (not self-originated), all keys use their actual router's
    * nodeName as originatorId.
    */
-  thrift::KeyVals sharedKeyVals = KvStoreThriftInjector::buildKeyVals(topology);
+  thrift::KeyVals sharedKeyVals =
+      KvStoreThriftInjector::buildKeyVals(topology, numFakeKeysPerNode);
 
   std::map<std::string, thrift::KeyVals> result;
   for (const auto& neighborName : neighborNames) {
@@ -72,6 +63,12 @@ std::vector<std::pair<std::string, thrift::Value>>
 KvStoreDataBuilder::buildPrefixKeyValues(
     const VirtualRouter& router, int64_t version) {
   return KvStoreThriftInjector::createPrefixKeyValues(router, version);
+}
+
+std::vector<std::pair<std::string, thrift::Value>>
+KvStoreDataBuilder::buildFakeKeyValues(
+    const VirtualRouter& router, int32_t numKeys, int64_t version) {
+  return KvStoreThriftInjector::createFakeKeyValues(router, numKeys, version);
 }
 
 std::pair<std::string, thrift::Value>
