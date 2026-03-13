@@ -222,24 +222,24 @@ service FibService extends fb303_core.BaseService {
   );
 
   NextHopRegistrationResponse registerNextHops(
-    NextHopRegistrationRequest req,
+    -1: NextHopRegistrationRequest req,
   ) throws (1: PlatformError error);
 
   NextHopDeregistrationResponse deregisterNextHops(
-    NextHopDeregistrationRequest req,
+    -1: NextHopDeregistrationRequest req,
   ) throws (1: PlatformError error);
 
   stream<StreamNextHopStatusResponse> streamNextHopStatus(
-    StreamNextHopStatusRequest req,
+    -1: StreamNextHopStatusRequest req,
   ) throws (1: PlatformError error);
 
   ConnectedNextHopStatusResponse updateConnectedNextHopStatus(
-    ConnectedNextHopStatusRequest request,
+    -1: ConnectedNextHopStatusRequest request,
   ) throws (1: PlatformError error);
 
   // Get cached FIB state including routes and nexthop groups from FibAgent
   FibCachedStateResponse getFibCachedState(
-    FibCachedStateRequest request,
+    -1: FibCachedStateRequest request,
   ) throws (1: PlatformError error);
 }
 
