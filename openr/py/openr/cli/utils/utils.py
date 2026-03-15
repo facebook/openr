@@ -458,7 +458,7 @@ def dump_adj_db_full(
             for adjacency in other_node_db.adjacencies
         }
         # skip the uni-directional adjacencies since we only display bi-dir
-        if (this_node_name, adj.ifName) not in other_node_neighbors.keys():
+        if (this_node_name, adj.ifName) not in other_node_neighbors:
             continue
         # if one side of adjacency is OVERLOADED. Set the other side as well.
         adj_updated = openr_types.Adjacency(
