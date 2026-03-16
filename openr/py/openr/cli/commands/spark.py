@@ -242,7 +242,7 @@ class ValidateCmd(SparkBaseCmd):
         estab_str = click.style(f"{num_estab}", fg="green")
         non_estab_str = click.style(f"{num_non_estab}", fg="red")
         click.echo(
-            f"Total Neighbors: {total_neighbors}, Neigbors in ESTABLISHED State: {estab_str}, Neighbors in Other States: {non_estab_str}"
+            f"Total Neighbors: {total_neighbors}, Neighbors in ESTABLISHED State: {estab_str}, Neighbors in Other States: {non_estab_str}"
         )
 
         # Print Neigbor info in horizontal table
