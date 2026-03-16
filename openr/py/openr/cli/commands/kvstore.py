@@ -1394,7 +1394,7 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
     ) -> None:
         """
         Prints result of the ttl check along with information about keys with too low ttl
-        The ttl printed is the ttl of the key right before the check occured
+        The ttl printed is the ttl of the key right before the check occurred
         """
         click.echo(
             self.validation_result_str(

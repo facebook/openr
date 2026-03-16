@@ -471,7 +471,7 @@ class KvStoreDb {
     // initial sync.
     folly::F14FastSet<std::string> pendingKeysDuringInitialization{};
 
-    // Number of occured Thrift API errors in the process of syncing with
+    // Number of occurred Thrift API errors in the process of syncing with
     // peer.
     int64_t numThriftApiErrors{0};
 
