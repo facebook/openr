@@ -97,6 +97,12 @@ DEFINE_int32(
     "Number of fake keys per node (0 = disabled). "
     "Simulates extra key injection like fakekeys0:<nodeName>, fakekeys1:<nodeName>, ...");
 
+DEFINE_int32(
+    fake_key_version_bump_interval_sec,
+    60,
+    "Interval in seconds to bump fake key versions (0 = disabled). "
+    "Simulates LSP agent periodically updating keys.");
+
 namespace {
 
 /*
@@ -248,6 +254,9 @@ main(int argc, char** argv) {
           : "no");
   LOG(INFO)
       << fmt::format("  Fake keys/node:  {}", FLAGS_num_fake_keys_per_node);
+  LOG(INFO) << fmt::format(
+      "  Fake key bump:   {} sec (0=disabled)",
+      FLAGS_fake_key_version_bump_interval_sec);
   LOG(INFO) << fmt::format(
       "  Run duration:    {} sec (0=infinite)", FLAGS_run_duration_sec);
   LOG(INFO) << "";
@@ -597,6 +606,8 @@ main(int argc, char** argv) {
 
   auto startTime = std::chrono::steady_clock::now();
   int64_t lastStatsTime = 0;
+  int64_t lastFakeKeyBumpTime = 0;
+  int64_t fakeKeyVersion = 1;
 
   while (g_running.load()) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
@@ -608,6 +619,39 @@ main(int argc, char** argv) {
     if (FLAGS_run_duration_sec > 0 && elapsed >= FLAGS_run_duration_sec) {
       LOG(INFO) << "[SCALE-TEST] Run duration reached, stopping...";
       break;
+    }
+
+    /*
+     * Periodic fake key version bump (simulates LSP agent)
+     */
+    if (FLAGS_num_fake_keys_per_node > 0 &&
+        FLAGS_fake_key_version_bump_interval_sec > 0 &&
+        elapsed - lastFakeKeyBumpTime >=
+            FLAGS_fake_key_version_bump_interval_sec) {
+      lastFakeKeyBumpTime = elapsed;
+      ++fakeKeyVersion;
+
+      openr::thrift::KeyVals fakeKeyVals;
+      for (const auto& [nodeName, router] : topology.routers) {
+        auto fakeKvs = openr::KvStoreThriftInjector::createFakeKeyValues(
+            router, FLAGS_num_fake_keys_per_node, fakeKeyVersion);
+        for (auto& [key, value] : fakeKvs) {
+          fakeKeyVals.emplace(std::move(key), std::move(value));
+        }
+      }
+
+      if (injector.isConnected()) {
+        injector.injectKeyVals(fakeKeyVals);
+      }
+
+      if (kvManager) {
+        kvManager->propagateKeyUpdates(fakeKeyVals);
+      }
+
+      LOG(INFO) << fmt::format(
+          "[SCALE-TEST] Bumped fake key versions to {} ({} keys)",
+          fakeKeyVersion,
+          fakeKeyVals.size());
     }
 
     /*

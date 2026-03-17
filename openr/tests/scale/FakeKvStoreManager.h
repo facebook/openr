@@ -134,6 +134,13 @@ class FakeKvStoreManager {
   void propagateKeyUpdate(const std::string& key, thrift::Value value);
 
   /*
+   * Propagate multiple key-value updates to ALL neighbor handlers.
+   * Batch version of propagateKeyUpdate — more efficient for bulk updates
+   * (e.g., periodic fake key version bumps).
+   */
+  void propagateKeyUpdates(const thrift::KeyVals& keyVals);
+
+  /*
    * Simulate a link flap: rebuild the adj DB for the affected router
    * with the adjacency removed/restored, then propagate to all neighbors.
    *

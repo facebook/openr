@@ -205,6 +205,20 @@ FakeKvStoreManager::propagateKeyUpdate(
   }
 }
 
+void
+FakeKvStoreManager::propagateKeyUpdates(const thrift::KeyVals& keyVals) {
+  LOG(INFO) << fmt::format(
+      "[FAKE-KVSTORE-MGR] Propagating {} key updates to {} neighbors",
+      keyVals.size(),
+      servers_.size());
+
+  for (auto& [name, ns] : servers_) {
+    for (const auto& [key, value] : keyVals) {
+      ns.handler->updateKey(key, value);
+    }
+  }
+}
+
 int64_t
 FakeKvStoreManager::getNextVersion(const std::string& key) {
   auto it = keyVersions_.find(key);
