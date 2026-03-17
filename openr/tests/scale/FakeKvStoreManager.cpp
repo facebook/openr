@@ -17,10 +17,15 @@ namespace openr {
 FakeKvStoreManager::FakeKvStoreManager(uint16_t basePort, size_t ioThreads)
     : basePort_{basePort},
       nextPort_{basePort},
-      ioPool_{std::make_shared<folly::IOThreadPoolExecutor>(ioThreads)} {
+      ioPool_{std::make_shared<folly::IOThreadPoolExecutor>(ioThreads)},
+      threadManager_{
+          apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
+              ioThreads)} {
+  threadManager_->start();
   LOG(INFO) << fmt::format(
-      "[FAKE-KVSTORE-MGR] Created with basePort={}, ioThreads={}",
+      "[FAKE-KVSTORE-MGR] Created with basePort={}, ioThreads={}, cpuThreads={}",
       basePort_,
+      ioThreads,
       ioThreads);
 }
 
@@ -54,7 +59,7 @@ FakeKvStoreManager::addNeighbor(
   ns.server->setInterface(ns.handler);
   ns.server->setPort(port);
   ns.server->setIOThreadPool(ioPool_);
-  ns.server->setNumCPUWorkerThreads(1);
+  ns.server->setThreadManager(threadManager_);
 
   servers_.emplace(neighborName, std::move(ns));
 
@@ -89,7 +94,7 @@ FakeKvStoreManager::addNeighbor(
   ns.server->setInterface(ns.handler);
   ns.server->setPort(port);
   ns.server->setIOThreadPool(ioPool_);
-  ns.server->setNumCPUWorkerThreads(1);
+  ns.server->setThreadManager(threadManager_);
 
   servers_.emplace(neighborName, std::move(ns));
 
@@ -126,9 +131,15 @@ FakeKvStoreManager::start() {
   running_ = true;
 
   /*
-   * Give servers time to bind.
+   * Give servers time to bind. With many servers (256+), 100ms is
+   * insufficient — increase proportionally.
    */
-  std::this_thread::sleep_for(std::chrono::milliseconds(100));
+  auto bindDelayMs = std::max<size_t>(500, servers_.size() * 5);
+  LOG(INFO) << fmt::format(
+      "[FAKE-KVSTORE-MGR] Waiting {}ms for {} servers to bind...",
+      bindDelayMs,
+      servers_.size());
+  std::this_thread::sleep_for(std::chrono::milliseconds(bindDelayMs));
 
   LOG(INFO) << fmt::format(
       "[FAKE-KVSTORE-MGR] All {} servers started (ports {}-{})",

@@ -14,6 +14,7 @@
 #include <vector>
 
 #include <folly/executors/IOThreadPoolExecutor.h>
+#include <thrift/lib/cpp/concurrency/ThreadManager.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
 
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -37,7 +38,8 @@ namespace openr {
  * - Topology change propagation (simulating flooding)
  *
  * Threading:
- * - Shared IOThreadPoolExecutor for all 64 servers (efficient IO)
+ * - Shared IOThreadPoolExecutor for all servers (efficient IO)
+ * - Shared ThreadManager for CPU work (avoids 1 thread per server)
  * - One thread per server for serve() loop (could optimize later)
  *
  * Usage:
@@ -210,6 +212,7 @@ class FakeKvStoreManager {
   std::map<std::string, int64_t> keyVersions_;
 
   std::shared_ptr<folly::IOThreadPoolExecutor> ioPool_;
+  std::shared_ptr<apache::thrift::concurrency::ThreadManager> threadManager_;
 
   std::map<std::string, NeighborServer> servers_;
 

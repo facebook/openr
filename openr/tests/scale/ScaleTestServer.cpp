@@ -103,6 +103,11 @@ DEFINE_int32(
     "Interval in seconds to bump fake key versions (0 = disabled). "
     "Simulates LSP agent periodically updating keys.");
 
+DEFINE_string(
+    dut_role,
+    "spine",
+    "Role of the DUT: 'leaf' (neighbors are spines) or 'spine' (neighbors are leaves + control nodes)");
+
 namespace {
 
 /*
@@ -231,6 +236,7 @@ main(int argc, char** argv) {
   LOG(INFO) << fmt::format("[SCALE-TEST] Configuration:");
   LOG(INFO) << fmt::format(
       "  DUT Host:        {}:{}", FLAGS_dut_host, FLAGS_dut_port);
+  LOG(INFO) << fmt::format("  DUT Role:        {}", FLAGS_dut_role);
   LOG(INFO) << fmt::format("  Topology:        {}", FLAGS_topology_type);
   LOG(INFO) << fmt::format("  Spines:          {}", FLAGS_num_spines);
   LOG(INFO) << fmt::format("  Leaves:          {}", FLAGS_num_leaves);
@@ -274,6 +280,28 @@ main(int argc, char** argv) {
   }
 
   LOG(INFO) << fmt::format("Interfaces: {}", FLAGS_interfaces);
+
+  /*
+   * Build neighbor list based on DUT role.
+   * When the DUT is a leaf, its neighbors are spines.
+   * When the DUT is a spine, its neighbors are leaves + control nodes.
+   */
+  const bool dutIsSpine = (FLAGS_dut_role == "spine");
+  std::vector<std::string> dutNeighborNames;
+
+  if (dutIsSpine) {
+    for (int i = 0; i < FLAGS_num_leaves; ++i) {
+      dutNeighborNames.push_back(fmt::format("leaf-{}", i));
+    }
+    for (int i = 0; i < FLAGS_num_super_spines; ++i) {
+      dutNeighborNames.push_back(fmt::format("control-{}", i));
+    }
+  } else {
+    for (int i = 0; i < FLAGS_num_spines; ++i) {
+      dutNeighborNames.push_back(fmt::format("spine-{}", i));
+    }
+  }
+  const int numDutNeighbors = static_cast<int>(dutNeighborNames.size());
 
   /*
    * Generate topology
@@ -327,11 +355,11 @@ main(int argc, char** argv) {
   LOG(INFO) << "Connected to DUT: " << dutNodeName;
 
   /*
-   * Add DUT as a router in the topology so that spine adj DBs
+   * Add DUT as a router in the topology so that neighbor adj DBs
    * include the DUT as a neighbor. Decision requires bidirectional
    * adjacency — both sides must report the link. The DUT's own
    * adj DB is created by its LinkMonitor via SparkFaker, but the
-   * injected spine adj DBs must also list the DUT.
+   * injected neighbor adj DBs must also list the DUT.
    */
   if (FLAGS_simulate_neighbors && !interfaces.empty()) {
     openr::VirtualRouter dutRouter;
@@ -340,37 +368,36 @@ main(int argc, char** argv) {
     dutRouter.nodeLabel = 0;
     topology.routers.emplace(dutNodeName, std::move(dutRouter));
 
-    int neighborsPerInterface =
-        static_cast<int>(FLAGS_num_spines / interfaces.size());
+    int neighborsPerInterface = numDutNeighbors / interfaces.size();
     int neighborIdx = 0;
 
     for (size_t i = 0; i < interfaces.size(); ++i) {
       const auto& ifName = interfaces[i];
       int neighborsOnThisIf = (i == interfaces.size() - 1)
-          ? (FLAGS_num_spines - neighborIdx)
+          ? (numDutNeighbors - neighborIdx)
           : neighborsPerInterface;
 
-      for (int j = 0; j < neighborsOnThisIf && neighborIdx < FLAGS_num_spines;
+      for (int j = 0; j < neighborsOnThisIf && neighborIdx < numDutNeighbors;
            ++j, ++neighborIdx) {
-        std::string spineName = fmt::format("spine-{}", neighborIdx);
-        std::string spineIfName = fmt::format("{}-to-dut", spineName);
+        const auto& neighborName = dutNeighborNames[neighborIdx];
+        std::string neighborIfName = fmt::format("{}-to-dut", neighborName);
 
-        auto& spineRouter = topology.routers.at(spineName);
+        auto& neighborRouter = topology.routers.at(neighborName);
 
         openr::VirtualAdjacency dutAdj;
-        dutAdj.localIfName = spineIfName;
+        dutAdj.localIfName = neighborIfName;
         dutAdj.remoteRouterName = dutNodeName;
         dutAdj.remoteIfName = ifName;
         dutAdj.metric = 1;
         dutAdj.latencyMs = 1;
-        spineRouter.adjacencies.push_back(std::move(dutAdj));
+        neighborRouter.adjacencies.push_back(std::move(dutAdj));
       }
     }
 
     LOG(INFO) << fmt::format(
-        "Added DUT '{}' to topology with {} spine->DUT adjacencies",
+        "Added DUT '{}' to topology with {} neighbor->DUT adjacencies",
         dutNodeName,
-        FLAGS_num_spines);
+        numDutNeighbors);
   }
 
   /*
@@ -383,14 +410,12 @@ main(int argc, char** argv) {
     LOG(INFO) << "Setting up FakeKvStoreManager...";
 
     kvManager = std::make_unique<openr::FakeKvStoreManager>(
-        FLAGS_fake_kvstore_base_port, 4);
+        FLAGS_fake_kvstore_base_port, 32);
 
     /*
-     * Collect neighbor names
+     * Use the centralized neighbor list
      */
-    for (int i = 0; i < FLAGS_num_spines; ++i) {
-      neighborNames.push_back(fmt::format("spine-{}", i));
-    }
+    neighborNames = dutNeighborNames;
 
     /*
      * Build shared KV data from topology
@@ -436,9 +461,9 @@ main(int argc, char** argv) {
     realIo = std::make_shared<openr::RealSparkIo>();
 
     /*
-     * Distribute spines across interfaces
+     * Distribute neighbors across interfaces
      */
-    int neighborsPerInterface = FLAGS_num_spines / interfaces.size();
+    int neighborsPerInterface = numDutNeighbors / interfaces.size();
     int neighborIdx = 0;
 
     faker = std::make_shared<openr::SparkFaker>(realIo);
@@ -480,13 +505,13 @@ main(int argc, char** argv) {
        * Add neighbors for this interface
        */
       int neighborsOnThisIf = (i == interfaces.size() - 1)
-          ? (FLAGS_num_spines - neighborIdx)
+          ? (numDutNeighbors - neighborIdx)
           : neighborsPerInterface;
 
-      for (int j = 0; j < neighborsOnThisIf && neighborIdx < FLAGS_num_spines;
+      for (int j = 0; j < neighborsOnThisIf && neighborIdx < numDutNeighbors;
            ++j, ++neighborIdx) {
-        std::string spineName = fmt::format("spine-{}", neighborIdx);
-        std::string spineIfName = fmt::format("{}-to-dut", spineName);
+        const auto& neighborName = dutNeighborNames[neighborIdx];
+        std::string neighborIfName = fmt::format("{}-to-dut", neighborName);
 
         /*
          * Use the real link-local IPv6 address of the interface.
@@ -513,20 +538,26 @@ main(int argc, char** argv) {
         }
 
         faker->addNeighbor(
-            spineName, spineIfName, ifIndex, v6Addr, ifName, ifIndex, v4Addr);
+            neighborName,
+            neighborIfName,
+            ifIndex,
+            v6Addr,
+            ifName,
+            ifIndex,
+            v4Addr);
 
         /*
          * Set the per-neighbor ctrl port for KvStore sync
          */
         if (kvManager) {
-          uint16_t ctrlPort = kvManager->getPort(spineName);
-          faker->setNeighborCtrlPort(spineName, ctrlPort);
-          VLOG(2)
-              << fmt::format("Set ctrlPort for {} to {}", spineName, ctrlPort);
+          uint16_t ctrlPort = kvManager->getPort(neighborName);
+          faker->setNeighborCtrlPort(neighborName, ctrlPort);
+          VLOG(2) << fmt::format(
+              "Set ctrlPort for {} to {}", neighborName, ctrlPort);
         }
 
         VLOG(1) << fmt::format(
-            "Added fake neighbor {} on {} ({})", spineName, ifName, v6Addr);
+            "Added fake neighbor {} on {} ({})", neighborName, ifName, v6Addr);
       }
 
       LOG(INFO) << fmt::format(
