@@ -636,23 +636,28 @@ TopologyGenerator::createBbfSimple(
     int numLeaves,
     int numControlNodes,
     int ecmpWidth,
-    int numPrefixesPerNode) {
+    int numPrefixesPerNode,
+    int numSites) {
+  int leavesPerSite = (numSites > 0) ? (numLeaves / numSites) : 0;
+
   LOG(INFO) << fmt::format(
-      "Creating BBF topology: {} spines, {} leaves, {} control nodes, ECMP width={}",
+      "Creating BBF topology: {} spines, {} leaves, {} control nodes, {} eb-sites, ECMP width={}",
       numSpines,
       numLeaves,
       numControlNodes,
+      numSites,
       ecmpWidth);
 
   Topology topo;
-  topo.name =
-      fmt::format("bbf_s{}_l{}_c{}", numSpines, numLeaves, numControlNodes);
+  topo.name = fmt::format(
+      "bbf_s{}_l{}_c{}_e{}", numSpines, numLeaves, numControlNodes, numSites);
   topo.description = fmt::format(
-      "BBF with {} spines, {} leaves, {} control nodes ({} total)",
+      "BBF with {} spines, {} leaves, {} control nodes, {} eb-sites ({} total)",
       numSpines,
       numLeaves,
       numControlNodes,
-      numSpines + numLeaves + numControlNodes);
+      numSites,
+      numSpines + numLeaves + numControlNodes + numSites);
 
   PrefixGenerator prefixGen;
 
@@ -708,6 +713,23 @@ TopologyGenerator::createBbfSimple(
   }
 
   /*
+   * Create eb-site nodes
+   */
+  for (int i = 0; i < numSites; ++i) {
+    std::string nodeName = fmt::format("eb-site-{}", i);
+
+    VirtualRouter router;
+    router.nodeName = nodeName;
+    router.nodeId = numSpines + numLeaves + numControlNodes + i;
+    router.nodeLabel = 400001 + i;
+    router.advertisedPrefixes =
+        generatePrefixes(nodeName, numPrefixesPerNode, prefixGen);
+
+    topo.routers.emplace(nodeName, std::move(router));
+    topo.routerNames.push_back(nodeName);
+  }
+
+  /*
    * Create ECMP links: every leaf connects to every spine
    */
   for (int leaf = 0; leaf < numLeaves; ++leaf) {
@@ -738,6 +760,24 @@ TopologyGenerator::createBbfSimple(
           spineRouter,
           getIfName(ctrlName, spineName),
           getIfName(spineName, ctrlName));
+    }
+  }
+
+  /*
+   * eb-site nodes connect to their assigned subset of leaves (ECMP)
+   * Each site gets leavesPerSite consecutive leaves.
+   */
+  for (int site = 0; site < numSites; ++site) {
+    std::string siteName = fmt::format("eb-site-{}", site);
+    auto& siteRouter = topo.routers.at(siteName);
+
+    int leafStart = site * leavesPerSite;
+    int leafEnd = leafStart + leavesPerSite;
+
+    for (int leaf = leafStart; leaf < leafEnd; ++leaf) {
+      std::string leafName = fmt::format("leaf-{}", leaf);
+      auto& leafRouter = topo.routers.at(leafName);
+      addEcmpAdjacencies(siteRouter, leafRouter, ecmpWidth);
     }
   }
 

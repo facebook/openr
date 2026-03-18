@@ -153,7 +153,8 @@ class TopologyGenerator {
       int numLeaves,
       int numControlNodes = 0,
       int ecmpWidth = kDefaultBbfEcmpWidth,
-      int numPrefixesPerNode = kDefaultPrefixesPerRouter);
+      int numPrefixesPerNode = kDefaultPrefixesPerRouter,
+      int numSites = 0);
 
   /*
    * Calculate the total number of routers in a BBF topology.

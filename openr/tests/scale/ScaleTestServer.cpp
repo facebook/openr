@@ -61,6 +61,11 @@ DEFINE_int32(
 DEFINE_int32(num_pods, 8, "Number of pods in the topology");
 
 DEFINE_int32(
+    num_sites,
+    20,
+    "Number of eb-site nodes (0 = none). Each site connects to num_leaves/num_sites leaves");
+
+DEFINE_int32(
     num_prefixes_per_node, 11, "Number of prefixes each router advertises");
 
 DEFINE_string(
@@ -242,6 +247,7 @@ main(int argc, char** argv) {
   LOG(INFO) << fmt::format("  Leaves:          {}", FLAGS_num_leaves);
   LOG(INFO) << fmt::format("  Super-spines:    {}", FLAGS_num_super_spines);
   LOG(INFO) << fmt::format("  Pods:            {}", FLAGS_num_pods);
+  LOG(INFO) << fmt::format("  EB-Sites:        {}", FLAGS_num_sites);
   LOG(INFO)
       << fmt::format("  Prefixes/node:   {}", FLAGS_num_prefixes_per_node);
   LOG(INFO) << fmt::format(
@@ -300,6 +306,15 @@ main(int argc, char** argv) {
     for (int i = 0; i < FLAGS_num_spines; ++i) {
       dutNeighborNames.push_back(fmt::format("spine-{}", i));
     }
+    /*
+     * DUT is treated as leaf-0. Only connect to the eb-site that
+     * owns leaf-0: site = 0 / leavesPerSite = site 0.
+     */
+    if (FLAGS_num_sites > 0) {
+      int leavesPerSite = FLAGS_num_leaves / FLAGS_num_sites;
+      int dutSite = (leavesPerSite > 0) ? (0 / leavesPerSite) : 0;
+      dutNeighborNames.push_back(fmt::format("eb-site-{}", dutSite));
+    }
   }
   const int numDutNeighbors = static_cast<int>(dutNeighborNames.size());
 
@@ -315,7 +330,8 @@ main(int argc, char** argv) {
         FLAGS_num_leaves,
         FLAGS_num_super_spines,
         FLAGS_num_pods,
-        FLAGS_num_prefixes_per_node);
+        FLAGS_num_prefixes_per_node,
+        FLAGS_num_sites);
   } else if (FLAGS_topology_type == "bbf-full") {
     topology = openr::TopologyGenerator::createBbf(
         FLAGS_num_spines,
@@ -334,6 +350,50 @@ main(int argc, char** argv) {
       topology.getRouterCount(),
       topology.getTotalAdjacencyCount(),
       topology.getTotalPrefixCount());
+
+  /*
+   * When DUT is a leaf, it takes the place of leaf-0. Remove leaf-0
+   * from the topology so there's no duplicate. Strip adjacencies and
+   * interfaces that reference leaf-0 from all other routers.
+   */
+  if (!dutIsSpine) {
+    const std::string replacedLeaf = "leaf-0";
+
+    topology.routers.erase(replacedLeaf);
+    topology.routerNames.erase(
+        std::remove(
+            topology.routerNames.begin(),
+            topology.routerNames.end(),
+            replacedLeaf),
+        topology.routerNames.end());
+
+    for (auto& [name, router] : topology.routers) {
+      router.adjacencies.erase(
+          std::remove_if(
+              router.adjacencies.begin(),
+              router.adjacencies.end(),
+              [&](const openr::VirtualAdjacency& adj) {
+                return adj.remoteRouterName == replacedLeaf;
+              }),
+          router.adjacencies.end());
+
+      router.interfaces.erase(
+          std::remove_if(
+              router.interfaces.begin(),
+              router.interfaces.end(),
+              [&](const openr::VirtualInterface& iface) {
+                return iface.connectedRouterName == replacedLeaf;
+              }),
+          router.interfaces.end());
+    }
+
+    LOG(INFO) << fmt::format(
+        "Removed {} from topology (DUT takes its place). "
+        "Now {} routers, {} adjacencies",
+        replacedLeaf,
+        topology.getRouterCount(),
+        topology.getTotalAdjacencyCount());
+  }
 
   /*
    * Connect to DUT
