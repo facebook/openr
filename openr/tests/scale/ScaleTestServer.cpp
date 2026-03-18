@@ -26,6 +26,10 @@
 #include <netinet/in.h>
 #include <chrono>
 #include <csignal>
+#include <iostream>
+#include <mutex>
+#include <queue>
+#include <set>
 #include <thread>
 
 #include <fmt/format.h>
@@ -35,6 +39,7 @@
 
 #include <openr/tests/scale/DutMonitor.h>
 #include <openr/tests/scale/FakeKvStoreManager.h>
+#include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 #include <openr/tests/scale/RealSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
@@ -221,6 +226,159 @@ getIfLinkLocalAddrs(const std::string& ifName) {
     LOG(WARNING) << "No link-local IPv6 address found on " << ifName;
   }
   return result;
+}
+
+/*
+ * Process an interactive command (down/up).
+ *
+ * For direct neighbors (in SparkFaker): controls both Spark and KvStore.
+ * For non-neighbors (other topology nodes): controls KvStore only.
+ *
+ * Updates both the fake neighbor handlers AND the DUT's KvStore directly
+ * so that the change takes effect immediately.
+ */
+void
+processCommand(
+    const std::string& line,
+    openr::SparkFaker* faker,
+    openr::FakeKvStoreManager* kvManager,
+    openr::KvStoreThriftInjector* injector,
+    const openr::Topology& topology,
+    std::set<std::string>& downedNodes,
+    int64_t& cmdVersion) {
+  std::istringstream iss(line);
+  std::string cmd, nodeName;
+  iss >> cmd >> nodeName;
+
+  if (cmd.empty()) {
+    return;
+  }
+
+  if (cmd == "down") {
+    if (nodeName.empty()) {
+      LOG(ERROR) << "Usage: down <node-name>";
+      return;
+    }
+
+    if (topology.routers.count(nodeName) == 0) {
+      LOG(ERROR) << "Unknown node: " << nodeName;
+      return;
+    }
+
+    if (downedNodes.count(nodeName)) {
+      LOG(WARNING) << nodeName << " is already down";
+      return;
+    }
+
+    if (faker && faker->failNeighbor(nodeName)) {
+      LOG(INFO) << "[CMD] Spark: failed neighbor " << nodeName;
+    }
+
+    ++cmdVersion;
+
+    /*
+     * Remove the downed node's own adj DB.
+     */
+    if (kvManager) {
+      kvManager->simulateNodeRemoval(nodeName);
+    }
+    if (injector && injector->isConnected()) {
+      injector->removeNode(nodeName, cmdVersion);
+    }
+    LOG(INFO) << "[CMD] KvStore: removed adj:" << nodeName;
+
+    /*
+     * Update adj DBs of all neighbors of the downed node to drop
+     * their adjacency to it. In reality, those neighbors would
+     * detect the link failure and update their own adj DBs.
+     */
+    const auto& downedRouter = topology.getRouter(nodeName);
+    openr::thrift::KeyVals neighborKeyVals;
+    for (const auto& adj : downedRouter.adjacencies) {
+      if (topology.routers.count(adj.remoteRouterName) == 0) {
+        continue;
+      }
+      ++cmdVersion;
+      auto [key, value] =
+          openr::KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
+              topology.getRouter(adj.remoteRouterName),
+              topology,
+              nodeName,
+              cmdVersion);
+      if (kvManager) {
+        kvManager->propagateKeyUpdate(key, value);
+      }
+      neighborKeyVals.emplace(std::move(key), std::move(value));
+    }
+    if (injector && injector->isConnected() && !neighborKeyVals.empty()) {
+      injector->injectKeyVals(neighborKeyVals);
+      LOG(INFO) << "[CMD] KvStore: updated " << neighborKeyVals.size()
+                << " neighbor adj DBs";
+    }
+
+    downedNodes.insert(nodeName);
+    LOG(INFO) << "[CMD] " << nodeName << " is now DOWN";
+
+  } else if (cmd == "up") {
+    if (nodeName.empty()) {
+      LOG(ERROR) << "Usage: up <node-name>";
+      return;
+    }
+
+    if (!downedNodes.count(nodeName)) {
+      LOG(WARNING) << nodeName << " is not down";
+      return;
+    }
+
+    if (faker && faker->recoverNeighbor(nodeName)) {
+      LOG(INFO) << "[CMD] Spark: recovered neighbor " << nodeName;
+    }
+
+    ++cmdVersion;
+
+    /*
+     * Restore the downed node's full adj DB.
+     */
+    openr::thrift::KeyVals allKeyVals;
+    {
+      auto [key, value] = openr::KvStoreDataBuilder::buildAdjKeyValue(
+          topology.getRouter(nodeName), topology, cmdVersion);
+      if (kvManager) {
+        kvManager->propagateKeyUpdate(key, value);
+      }
+      allKeyVals.emplace(std::move(key), std::move(value));
+    }
+    LOG(INFO) << "[CMD] KvStore: restored adj:" << nodeName;
+
+    /*
+     * Restore adj DBs of all neighbors to include the recovered node.
+     */
+    const auto& recoveredRouter = topology.getRouter(nodeName);
+    for (const auto& adj : recoveredRouter.adjacencies) {
+      if (topology.routers.count(adj.remoteRouterName) == 0) {
+        continue;
+      }
+      ++cmdVersion;
+      auto [key, value] = openr::KvStoreDataBuilder::buildAdjKeyValue(
+          topology.getRouter(adj.remoteRouterName), topology, cmdVersion);
+      if (kvManager) {
+        kvManager->propagateKeyUpdate(key, value);
+      }
+      allKeyVals.emplace(std::move(key), std::move(value));
+    }
+    if (injector && injector->isConnected()) {
+      injector->injectKeyVals(allKeyVals);
+      LOG(INFO) << "[CMD] KvStore: updated " << allKeyVals.size()
+                << " adj DBs (node + neighbors)";
+    }
+
+    downedNodes.erase(nodeName);
+    LOG(INFO) << "[CMD] " << nodeName << " is now UP";
+
+  } else {
+    LOG(ERROR) << "Unknown command: " << cmd
+               << ". Use 'down <node>' or 'up <node>'";
+  }
 }
 
 } // namespace
@@ -694,6 +852,25 @@ main(int argc, char** argv) {
    * Main loop
    */
   LOG(INFO) << "=== Scale test running. Press Ctrl+C to stop. ===";
+  LOG(INFO) << "Commands: 'down <node>' / 'up <node>'";
+
+  /*
+   * Start stdin command reader thread.
+   * Commands are queued and processed on the main thread to avoid
+   * concurrent access to faker/kvManager/injector.
+   */
+  std::set<std::string> downedNodes;
+  int64_t cmdVersion =
+      1; /* initial injection uses version 1, first cmd bumps to 2 */
+  std::mutex cmdMutex;
+  std::queue<std::string> cmdQueue;
+  std::thread cmdThread([&]() {
+    std::string line;
+    while (g_running.load() && std::getline(std::cin, line)) {
+      std::lock_guard<std::mutex> lock(cmdMutex);
+      cmdQueue.push(std::move(line));
+    }
+  });
 
   auto startTime = std::chrono::steady_clock::now();
   int64_t lastStatsTime = 0;
@@ -702,6 +879,28 @@ main(int argc, char** argv) {
 
   while (g_running.load()) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
+
+    /*
+     * Drain command queue (commands from stdin reader thread)
+     */
+    {
+      std::queue<std::string> pending;
+      {
+        std::lock_guard<std::mutex> lock(cmdMutex);
+        std::swap(pending, cmdQueue);
+      }
+      while (!pending.empty()) {
+        processCommand(
+            pending.front(),
+            faker.get(),
+            kvManager.get(),
+            &injector,
+            topology,
+            downedNodes,
+            cmdVersion);
+        pending.pop();
+      }
+    }
 
     auto elapsed = std::chrono::duration_cast<std::chrono::seconds>(
                        std::chrono::steady_clock::now() - startTime)
@@ -805,6 +1004,16 @@ main(int argc, char** argv) {
    * Cleanup
    */
   LOG(INFO) << "[SCALE-TEST] Shutting down...";
+
+  /*
+   * Close stdin to unblock the cmdThread's std::getline, then join.
+   * This avoids use-after-free on stack locals (cmdMutex, cmdQueue)
+   * that a detached thread would hit.
+   */
+  std::fclose(stdin);
+  if (cmdThread.joinable()) {
+    cmdThread.join();
+  }
 
   if (faker) {
     faker->stop();
