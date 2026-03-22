@@ -80,8 +80,8 @@ PrefixState::getReceivedRoutesFiltered(
 void
 PrefixState::filterAndAddReceivedRoute(
     std::vector<thrift::ReceivedRouteDetail>& routes,
-    apache::thrift::optional_field_ref<const std::string&> const& nodeFilter,
-    apache::thrift::optional_field_ref<const std::string&> const& areaFilter,
+    apache::thrift::optional_field_ref<const std::string&> nodeFilter,
+    apache::thrift::optional_field_ref<const std::string&> areaFilter,
     folly::CIDRNetwork const& prefix,
     PrefixEntries const& prefixEntries) {
   // Return immediately if no prefix-entry
