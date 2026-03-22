@@ -77,7 +77,7 @@ int64_t generateHash(
 int64_t generateHash(
     const int64_t version,
     const std::string& originatorId,
-    const apache::thrift::optional_field_ref<const std::string&> value);
+    apache::thrift::optional_field_ref<const std::string&> value);
 
 /**
  * Utility functions for creating thrift objects
