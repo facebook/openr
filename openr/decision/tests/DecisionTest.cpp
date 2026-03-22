@@ -60,7 +60,7 @@ const std::chrono::milliseconds debounceTimeoutMax{250};
 
 // Empty Perf Events
 const thrift::AdjacencyDatabase kEmptyAdjDb;
-const apache::thrift::optional_field_ref<thrift::PerfEvents const&>
+apache::thrift::optional_field_ref<thrift::PerfEvents const&>
     kEmptyPerfEventRef{kEmptyAdjDb.perfEvents()};
 } // anonymous namespace
 
