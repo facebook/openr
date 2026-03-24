@@ -4,11 +4,11 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-unsafe
+# pyre-strict
 
 import datetime
 from collections.abc import Sequence
-from typing import Any, Dict, List, Tuple
+from typing import Any
 
 import click
 from openr.py.openr.cli.utils import utils
@@ -108,8 +108,8 @@ class NeighborCmd(SparkBaseCmd):
         client: OpenrCtrlCppClient.Async,
         json: bool,
         detailed: bool,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         # Get data
         neighbors = await client.getNeighbors()
@@ -134,7 +134,7 @@ class NeighborCmd(SparkBaseCmd):
 class ValidateCmd(SparkBaseCmd):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
-        self, client: OpenrCtrlCppClient.Async, detail: bool, *args, **kwards
+        self, client: OpenrCtrlCppClient.Async, detail: bool, *args: Any, **kwards: Any
     ) -> bool:
         is_pass = True
 
@@ -281,8 +281,8 @@ class GracefulRestartCmd(OpenrCtrlCmd):
         self,
         client: OpenrCtrlCppClient.Async,
         yes: bool = False,
-        *args,
-        **kwargs,
+        *args: Any,
+        **kwargs: Any,
     ) -> None:
         question_str = "Are you sure to force sending GR msg to neighbors?"
         if not utils.yesno(question_str, yes):
