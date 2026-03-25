@@ -134,7 +134,7 @@ class NeighborCmd(SparkBaseCmd):
 class ValidateCmd(SparkBaseCmd):
     # pyre-fixme[14]: `_run` overrides method defined in `OpenrCtrlCmd` inconsistently.
     async def _run(
-        self, client: OpenrCtrlCppClient.Async, detail: bool, *args: Any, **kwards: Any
+        self, client: OpenrCtrlCppClient.Async, detail: bool, *args: Any, **kwargs: Any
     ) -> bool:
         is_pass = True
 
