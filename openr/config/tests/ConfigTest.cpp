@@ -862,6 +862,21 @@ TEST(ConfigTest, FabricConfigPrefixKeys) {
   EXPECT_THAT(
       fabricConfig.isFabricPrefixKey("prefix:unknown:[10.0.0.0/8]"),
       ::testing::IsFalse());
+
+  // Keys with other prefixes should not match prefix key checks
+  // This tests the early return in getNodeNameFromPrefixKey
+  EXPECT_THAT(
+      fabricConfig.isLeafPrefixKey("adj:eb01-ld002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isSpinePrefixKey("adj:eb01-sp002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isControlPrefixKey("adj:eb01-lc002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isFabricPrefixKey("adj:eb01-ld002.dfw1"),
+      ::testing::IsFalse());
 }
 
 TEST(ConfigTest, FabricConfigInterface) {
