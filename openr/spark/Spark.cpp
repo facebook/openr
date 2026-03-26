@@ -591,9 +591,10 @@ PacketValidationResult
 Spark::sanityCheckMsg(
     std::string const& neighborName, std::string const& ifName) {
   // check if own packet has looped
-  if (neighborName == myNodeName_) {
+  std::string myNodeName = getMyNodeName(ifName);
+  if (neighborName == myNodeName) {
     XLOG(DBG3) << fmt::format(
-        "[Sanity Check] Ignore packet from self node: {}", myNodeName_);
+        "[Sanity Check] Ignore packet from self node: {}", myNodeName);
     fb303::fbData->addStatValue(
         "spark.invalid_keepalive.looped_packet", 1, fb303::SUM);
     return PacketValidationResult::SKIP;
@@ -916,7 +917,7 @@ Spark::sendHandshakeMsg(
 
   // build handshake msg
   thrift::SparkHandshakeMsg handshakeMsg;
-  handshakeMsg.nodeName() = myNodeName_;
+  handshakeMsg.nodeName() = getMyNodeName(ifName);
   handshakeMsg.isAdjEstablished() = isAdjEstablished;
   handshakeMsg.holdTime() = holdTime_.count();
   handshakeMsg.gracefulRestartTime() = gracefulRestartTime_.count();
@@ -1008,7 +1009,7 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
 
   // build heartbeat msg
   thrift::SparkHeartbeatMsg heartbeatMsg;
-  heartbeatMsg.nodeName() = myNodeName_;
+  heartbeatMsg.nodeName() = getMyNodeName(ifName);
   heartbeatMsg.seqNum() = mySeqNum_;
   heartbeatMsg.holdAdjacency() = false;
   // ATTN: notify peer to set special adjacency flag when node is still within
@@ -1616,7 +1617,8 @@ Spark::processHelloMsg(
   neighbor.localTimestamp = myRecvTimeInUs;
 
   // Deduce RTT for this neighbor and update timestamps
-  auto tsIt = neighborInfos.find(myNodeName_);
+  std::string myNodeName = getMyNodeName(ifName);
+  auto tsIt = neighborInfos.find(myNodeName);
   if (tsIt != neighborInfos.end()) {
     auto& ts = tsIt->second;
     updateNeighborRtt(
@@ -1670,7 +1672,7 @@ Spark::processHelloMsg(
     // Ignore this helloMsg from my previous incarnation.
     // Wait for neighbor to catch up with the latest Seq#.
     const uint64_t myRemoteSeqNum =
-        static_cast<uint64_t>(*neighborInfos.at(myNodeName_).seqNum());
+        static_cast<uint64_t>(*neighborInfos.at(myNodeName).seqNum());
     if (myRemoteSeqNum >= mySeqNum_) {
       XLOG(DBG2)
           << "[SparkHelloMsg] Seeing my previous incarnation from neighbor: "
@@ -1799,11 +1801,12 @@ Spark::processHandshakeMsg(
   // Ignore handshakeMsg if I am NOT the receiver as AREA negotiation
   // is point-to-point
   if (auto neighborNodeName = handshakeMsg.neighborNodeName()) {
-    if (*neighborNodeName != myNodeName_) {
+    std::string myNodeName = getMyNodeName(ifName);
+    if (*neighborNodeName != myNodeName) {
       XLOG(DBG4) << fmt::format(
           "[SparkHandshakeMsg] Ignoring msg targeted for node: {}, my node name: {}",
           *neighborNodeName,
-          myNodeName_);
+          myNodeName);
       return;
     }
   }
@@ -2057,7 +2060,7 @@ Spark::sendHelloMsg(
 
   // build the helloMsg from scratch
   thrift::SparkHelloMsg helloMsg;
-  helloMsg.nodeName() = myNodeName_;
+  helloMsg.nodeName() = getMyNodeName(ifName);
   helloMsg.ifName() = ifName;
   helloMsg.seqNum() = mySeqNum_;
   helloMsg.neighborInfos() =
@@ -2540,6 +2543,24 @@ Spark::getNeighborArea(
 void
 Spark::setThrowParserErrors(bool val) {
   isThrowParserErrorsOn_ = val;
+}
+
+// Returns the node name that we should use for the given
+// peer connected by the interface with ifName. If this
+// node is a fabric node and the other side is a non-fabric
+// node, then returns the fabricName. In all other cases,
+// returns the true name (myNodeName_).
+std::string
+Spark::getMyNodeName(const std::string& ifName) const {
+  // This node is not a part of a fabric.
+  if (!config_->getFabricConfig()) {
+    return myNodeName_;
+  }
+  if (config_->getFabricConfig()->isFabricInterface(ifName)) {
+    // This interface is an internal fabric interface. Return the true name.
+    return myNodeName_;
+  }
+  return config_->getFabricConfig()->getFabricName();
 }
 
 } // namespace openr

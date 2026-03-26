@@ -442,6 +442,11 @@ class Spark final : public OpenrEventBase {
   void updateKeepAliveTimer(
       std::chrono::milliseconds updatedHoldTime, const std::string& ifName);
 
+  // Returns the node name to use for this interface. If this is a fabric node,
+  // and the interface is not an internal fabric interface, then returns the
+  // fabric name from the config. Otherwise, returns myNodeName_.
+  std::string getMyNodeName(const std::string& ifName) const;
+
   //
   // Private state
   //
