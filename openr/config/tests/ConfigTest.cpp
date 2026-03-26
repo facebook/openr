@@ -9,6 +9,7 @@
 #include <folly/json/json.h>
 #include <folly/testing/TestUtil.h>
 #include <glog/logging.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #define Config_TEST_FRIENDS FRIEND_TEST(ConfigTest, PopulateInternalDb);
@@ -41,6 +42,24 @@ getAreaConfig(const std::string& areaId) {
 }
 
 const std::string myArea = "myArea";
+
+openr::thrift::FabricConfig
+makeFabricConfig(
+    const std::string& fabricName = "bbf01.dfw",
+    const std::vector<std::string>& leafRegexes = {"eb01-ld\\d{3}\\.dfw1"},
+    const std::vector<std::string>& spineRegexes = {"eb01-sp\\d{3}\\.dfw1"},
+    const std::vector<std::string>& controlRegexes = {"eb01-lc\\d{3}\\.dfw1"},
+    const std::vector<std::string>& interfaceRegexes = {"port-channel10\\d{3}"},
+    const std::vector<std::string>& fabricPrefixes = {"1::1/128", "2::/64"}) {
+  openr::thrift::FabricConfig fabricConfig;
+  fabricConfig.fabric_name() = fabricName;
+  fabricConfig.fabric_prefixes() = fabricPrefixes;
+  fabricConfig.fabric_leaf_regexes() = leafRegexes;
+  fabricConfig.fabric_spine_regexes() = spineRegexes;
+  fabricConfig.fabric_control_regexes() = controlRegexes;
+  fabricConfig.fabric_interface_regexes() = interfaceRegexes;
+  return fabricConfig;
+}
 
 } // namespace
 
@@ -689,6 +708,277 @@ TEST(ConfigTest, CheckThriftServerConfig) {
     EXPECT_EQ(config.getSSLCaPath(), existing_file);
     EXPECT_EQ(config.getSSLCertPath(), existing_file);
     EXPECT_EQ(config.getSSLKeyPath(), existing_file);
+  }
+}
+
+TEST(ConfigTest, FabricConfigBasicGetters) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+  EXPECT_THAT(fabricConfig.getFabricName(), ::testing::Eq("bbf01.dfw"));
+
+  const std::vector<std::string> expectedPrefixes = {"1::1/128", "2::/64"};
+  EXPECT_THAT(
+      fabricConfig.getFabricPrefixes(), ::testing::Eq(expectedPrefixes));
+}
+
+TEST(ConfigTest, FabricConfigNodeTypeClassification) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+
+  // Leaf nodes
+  EXPECT_THAT(fabricConfig.isLeaf("eb01-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isLeaf("eb01-ld099.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isSpine("eb01-ld002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isControl("eb01-ld002.dfw1"), ::testing::IsFalse());
+
+  // Spine nodes
+  EXPECT_THAT(fabricConfig.isSpine("eb01-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isSpine("eb01-sp099.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isLeaf("eb01-sp002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isControl("eb01-sp002.dfw1"), ::testing::IsFalse());
+
+  // Control nodes
+  EXPECT_THAT(fabricConfig.isControl("eb01-lc002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isControl("eb01-lc099.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isLeaf("eb01-lc002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isSpine("eb01-lc002.dfw1"), ::testing::IsFalse());
+
+  // isFabric returns true for spine, leaf, and control; false for non-fabric
+  EXPECT_THAT(fabricConfig.isFabric("eb01-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb01-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb01-lc002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb01-lc099.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("unknown-node"), ::testing::IsFalse());
+
+  // Non-fabric nodes
+  EXPECT_THAT(fabricConfig.isLeaf("eb01.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isSpine("eb01.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isControl("eb01.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isFabric("eb01.dfw1"), ::testing::IsFalse());
+}
+
+TEST(ConfigTest, FabricConfigAdjKeys) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+
+  // Leaf adj keys
+  EXPECT_THAT(
+      fabricConfig.isLeafAdjKey("adj:eb01-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isLeafAdjKey("adj:eb01-sp002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isLeafAdjKey("adj:eb01-lc002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isLeafAdjKey("adj:unknown"), ::testing::IsFalse());
+
+  // Spine adj keys
+  EXPECT_THAT(
+      fabricConfig.isSpineAdjKey("adj:eb01-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isSpineAdjKey("adj:eb01-ld002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isSpineAdjKey("adj:eb01-lc002.dfw1"), ::testing::IsFalse());
+
+  // Control adj keys
+  EXPECT_THAT(
+      fabricConfig.isControlAdjKey("adj:eb01-lc002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isControlAdjKey("adj:eb01-ld002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isControlAdjKey("adj:eb01-sp002.dfw1"),
+      ::testing::IsFalse());
+
+  // Fabric adj keys (spine, leaf, or control)
+  EXPECT_THAT(
+      fabricConfig.isFabricAdjKey("adj:eb01-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricAdjKey("adj:eb01-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricAdjKey("adj:eb01-lc002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabricAdjKey("adj:unknown"), ::testing::IsFalse());
+
+  // Keys with other prefixes should not match adj key checks
+  EXPECT_THAT(
+      fabricConfig.isLeafAdjKey("prefix:eb01-ld002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isSpineAdjKey("prefix:eb01-sp002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isControlAdjKey("prefix:eb01-lc002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isFabricAdjKey("prefix:eb01-ld002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isLeafAdjKey("abc:eb01-ld002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isSpineAdjKey("abc:eb01-sp002.dfw1"), ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isControlAdjKey("abc:eb01-lc002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isFabricAdjKey("abc:eb01-sp002.dfw1"), ::testing::IsFalse());
+}
+
+TEST(ConfigTest, FabricConfigPrefixKeys) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+
+  // Leaf prefix keys
+  EXPECT_THAT(
+      fabricConfig.isLeafPrefixKey("prefix:eb01-ld002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isLeafPrefixKey("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsFalse());
+
+  // Spine prefix keys
+  EXPECT_THAT(
+      fabricConfig.isSpinePrefixKey("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isSpinePrefixKey("prefix:eb01-ld002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsFalse());
+
+  // Control prefix keys
+  EXPECT_THAT(
+      fabricConfig.isControlPrefixKey("prefix:eb01-lc002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isControlPrefixKey("prefix:eb01-ld002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsFalse());
+
+  // Fabric prefix keys (spine, leaf, or control)
+  EXPECT_THAT(
+      fabricConfig.isFabricPrefixKey("prefix:eb01-ld002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricPrefixKey("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricPrefixKey("prefix:eb01-lc002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricPrefixKey("prefix:unknown:[10.0.0.0/8]"),
+      ::testing::IsFalse());
+}
+
+TEST(ConfigTest, FabricConfigInterface) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+
+  // Fabric internal interfaces
+  EXPECT_THAT(
+      fabricConfig.isFabricInterface("port-channel10001"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricInterface("port-channel10999"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricInterface("port-channel10123"), ::testing::IsTrue());
+  EXPECT_THAT(
+      fabricConfig.isFabricInterface("port-channel1001"), ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isFabricInterface("port-channel20001"),
+      ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isFabricInterface("lo0"), ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isFabricInterface(""), ::testing::IsFalse());
+}
+
+TEST(ConfigTest, FabricConfigMultipleRegexPatterns) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig(
+      "bbf01.dfw",
+      {"eb0\\d-ld.*", "eb1\\d-ld.*"},
+      {"eb0\\d-sp.*", "eb1\\d-sp.*"},
+      {"eb0\\d-lc.*", "eb1\\d-lc.*"});
+  FabricConfig fabricConfig(thriftConfig);
+
+  // Both leaf patterns match
+  EXPECT_THAT(fabricConfig.isLeaf("eb01-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isLeaf("eb12-ld002.dfw1"), ::testing::IsTrue());
+
+  // Both spine patterns match
+  EXPECT_THAT(fabricConfig.isSpine("eb01-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isSpine("eb12-sp002.dfw1"), ::testing::IsTrue());
+
+  // Both control patterns match
+  EXPECT_THAT(fabricConfig.isControl("eb01-lc002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isControl("eb12-lc002.dfw1"), ::testing::IsTrue());
+
+  // isFabric covers leaf, spine, and control patterns
+  EXPECT_THAT(fabricConfig.isFabric("eb01-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb12-ld002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb01-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb12-sp002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb01-lc002.dfw1"), ::testing::IsTrue());
+  EXPECT_THAT(fabricConfig.isFabric("eb12-lc002.dfw1"), ::testing::IsTrue());
+}
+
+TEST(ConfigTest, NoFabricConfigInConfig) {
+  // Config without fabric_config should have no FabricConfig
+  Config config(getBasicOpenrConfig());
+  EXPECT_THAT(config.getFabricConfig().has_value(), ::testing::IsFalse());
+}
+
+TEST(ConfigTest, FabricConfigInConfig) {
+  openr::thrift::OpenrConfig conf = getBasicOpenrConfig();
+  conf.fabric_config() = makeFabricConfig();
+
+  Config config(conf);
+  ASSERT_THAT(config.getFabricConfig().has_value(), ::testing::IsTrue());
+  EXPECT_THAT(
+      config.getFabricConfig()->getFabricName(), ::testing::Eq("bbf01.dfw"));
+}
+
+TEST(ConfigTest, FabricConfigMalformedKey) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+
+  for (const auto& malformedKey :
+       {"",
+        "prefix:[123]",
+        "adj:[123]",
+        "adj:",
+        "prefix:",
+        ":eb01-ld002.dfw1",
+        "adjeb01-ld002.dfw1",
+        "adj::",
+        "prefix::",
+        "random-string"}) {
+    // Malformed key should not match any prefix key checks
+    EXPECT_THAT(fabricConfig.isFabric(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(fabricConfig.isControl(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(fabricConfig.isLeaf(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(fabricConfig.isSpine(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+
+    EXPECT_THAT(fabricConfig.isFabricAdjKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(
+        fabricConfig.isControlAdjKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(fabricConfig.isLeafAdjKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(fabricConfig.isSpineAdjKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+
+    EXPECT_THAT(
+        fabricConfig.isLeafPrefixKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(
+        fabricConfig.isSpinePrefixKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(
+        fabricConfig.isControlPrefixKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(
+        fabricConfig.isFabricPrefixKey(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
+    EXPECT_THAT(
+        fabricConfig.isFabricInterface(malformedKey), ::testing::IsFalse())
+        << fmt::format("key: {}", malformedKey);
   }
 }
 

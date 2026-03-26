@@ -371,6 +371,11 @@ void
 Config::populateInternalDb() {
   populateAreaConfig();
 
+  // Populate fabric config.
+  if (config_.fabric_config().has_value()) {
+    fabricConfig_.emplace(*config_.fabric_config());
+  }
+
   // validate IP-TOS
   if (const auto& ipTos = config_.ip_tos()) {
     if (*ipTos < 0 || *ipTos >= 256) {
@@ -471,6 +476,144 @@ Config::toThriftKvStoreConfig() const {
     config.self_adjacency_timeout_ms() = *oldConfig.self_adjacency_timeout_ms();
   }
   return config;
+}
+
+FabricConfig::FabricConfig(const thrift::FabricConfig& fabricConfig)
+    : fabricConfig_(fabricConfig) {
+  fabricControlNameRegexSet_ = AreaConfiguration::compileRegexSet(
+      *fabricConfig.fabric_control_regexes());
+  fabricLeafNameRegexSet_ =
+      AreaConfiguration::compileRegexSet(*fabricConfig.fabric_leaf_regexes());
+  fabricSpineNameRegexSet_ =
+      AreaConfiguration::compileRegexSet(*fabricConfig.fabric_spine_regexes());
+  std::vector<std::string> fabricNodeNameRegexes =
+      *fabricConfig.fabric_control_regexes();
+  fabricNodeNameRegexes.insert(
+      fabricNodeNameRegexes.end(),
+      fabricConfig.fabric_leaf_regexes()->begin(),
+      fabricConfig.fabric_leaf_regexes()->end());
+  fabricNodeNameRegexes.insert(
+      fabricNodeNameRegexes.end(),
+      fabricConfig.fabric_spine_regexes()->begin(),
+      fabricConfig.fabric_spine_regexes()->end());
+  fabricNodeNameRegexSet_ =
+      AreaConfiguration::compileRegexSet(fabricNodeNameRegexes);
+  fabricInterfaceNameRegexSet_ = AreaConfiguration::compileRegexSet(
+      *fabricConfig.fabric_interface_regexes());
+}
+
+std::string
+FabricConfig::getFabricName() const {
+  return *fabricConfig_.fabric_name();
+}
+
+std::vector<std::string>
+FabricConfig::getFabricPrefixes() const {
+  return *fabricConfig_.fabric_prefixes();
+}
+
+bool
+FabricConfig::isFabric(const std::string& nodeName) const {
+  NodeType type = getNodeType(nodeName);
+  return type == NodeType::SPINE || type == NodeType::LEAF ||
+      type == NodeType::CONTROL;
+}
+
+bool
+FabricConfig::isControl(const std::string& nodeName) const {
+  return getNodeType(nodeName) == NodeType::CONTROL;
+}
+
+bool
+FabricConfig::isLeaf(const std::string& nodeName) const {
+  return getNodeType(nodeName) == NodeType::LEAF;
+}
+
+bool
+FabricConfig::isSpine(const std::string& nodeName) const {
+  return getNodeType(nodeName) == NodeType::SPINE;
+}
+
+bool
+FabricConfig::isControlAdjKey(const std::string& key) const {
+  if (!key.starts_with("adj:")) {
+    return false;
+  }
+  return isControl(key.substr(4));
+}
+
+bool
+FabricConfig::isLeafAdjKey(const std::string& key) const {
+  if (!key.starts_with("adj:")) {
+    return false;
+  }
+  return isLeaf(key.substr(4));
+}
+
+bool
+FabricConfig::isSpineAdjKey(const std::string& key) const {
+  if (!key.starts_with("adj:")) {
+    return false;
+  }
+  return isSpine(key.substr(4));
+}
+
+bool
+FabricConfig::isFabricAdjKey(const std::string& key) const {
+  if (!key.starts_with("adj:")) {
+    return false;
+  }
+  return isFabric(key.substr(4));
+}
+
+std::string
+getNodeNameFromPrefixKey(const std::string& key) {
+  // Expected input: "prefix:eb01.rva1:[1.2.3.4/32]"
+  folly::small_vector<std::string_view> tokens;
+  folly::split(":[", key, tokens);
+  // Expected: tokens[0]="prefix:eb01.rva1"
+  if (!tokens[0].starts_with("prefix:")) {
+    return "";
+  }
+  return std::string(tokens[0]).substr(7);
+}
+
+bool
+FabricConfig::isControlPrefixKey(const std::string& key) const {
+  return isControl(getNodeNameFromPrefixKey(key));
+}
+
+bool
+FabricConfig::isLeafPrefixKey(const std::string& key) const {
+  return isLeaf(getNodeNameFromPrefixKey(key));
+}
+
+bool
+FabricConfig::isSpinePrefixKey(const std::string& key) const {
+  return isSpine(getNodeNameFromPrefixKey(key));
+}
+bool
+FabricConfig::isFabricPrefixKey(const std::string& key) const {
+  return isFabric(getNodeNameFromPrefixKey(key));
+}
+
+bool
+FabricConfig::isFabricInterface(const std::string& ifName) const {
+  return fabricInterfaceNameRegexSet_->Match(ifName, nullptr);
+}
+
+FabricConfig::NodeType
+FabricConfig::getNodeType(const std::string& nodeName) const {
+  if (fabricControlNameRegexSet_->Match(nodeName, nullptr)) {
+    return NodeType::CONTROL;
+  }
+  if (fabricLeafNameRegexSet_->Match(nodeName, nullptr)) {
+    return NodeType::LEAF;
+  }
+  if (fabricSpineNameRegexSet_->Match(nodeName, nullptr)) {
+    return NodeType::SPINE;
+  }
+  return NodeType::NON_FABRIC;
 }
 
 } // namespace openr

@@ -466,6 +466,34 @@ struct AreaConfig {
 }
 
 @cpp.MinimizePadding
+struct FabricConfig {
+  /**
+  * Name of the fabric.
+  */
+  1: string fabric_name = "";
+  /**
+  * Prefixes to advertise from the fabric.
+  */
+  2: list<string> fabric_prefixes = [];
+  /**
+   * Pattern to match fabric leaf node names.
+  */
+  3: list<string> fabric_leaf_regexes = [];
+  /**
+   * Pattern to match fabric spine node names.
+  */
+  4: list<string> fabric_spine_regexes = [];
+  /**
+   * Pattern to match fabric control node names.
+  */
+  5: list<string> fabric_control_regexes = [];
+  /**
+   * Pattern to match fabric internal interface names.
+  */
+  6: list<string> fabric_interface_regexes = [];
+}
+
+@cpp.MinimizePadding
 struct OpenrConfig {
   1: optional string node_name;
   3: list<AreaConfig> areas = [];
@@ -664,4 +692,9 @@ struct OpenrConfig {
    *   self Adjacencies synced signals are received from kvstore module
    */
   201: optional bool enable_init_optimization;
+
+  /**
+  * When non-empty, indicates this node is part of a fabric.
+  */
+  202: optional FabricConfig fabric_config;
 }

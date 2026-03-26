@@ -44,6 +44,10 @@ class AreaConfiguration {
     }
   }
 
+  // given a list of strings we will convert is to a compiled RE2::Set
+  static std::shared_ptr<re2::RE2::Set> compileRegexSet(
+      std::vector<std::string> const& strings);
+
   std::string const&
   getAreaId() const {
     return areaId_;
@@ -75,12 +79,40 @@ class AreaConfiguration {
 
   std::optional<std::string> importPolicyName_{std::nullopt};
 
-  // given a list of strings we will convert is to a compiled RE2::Set
-  static std::shared_ptr<re2::RE2::Set> compileRegexSet(
-      std::vector<std::string> const& strings);
-
   std::shared_ptr<re2::RE2::Set> neighborRegexSet_, interfaceIncludeRegexSet_,
       interfaceExcludeRegexSet_, interfaceRedistRegexSet_;
+};
+
+class FabricConfig {
+ public:
+  explicit FabricConfig(const thrift::FabricConfig& fabricConfig);
+
+  std::string getFabricName() const;
+  std::vector<std::string> getFabricPrefixes() const;
+  bool isFabric(const std::string& nodeName) const;
+  bool isControl(const std::string& nodeName) const;
+  bool isLeaf(const std::string& nodeName) const;
+  bool isSpine(const std::string& nodeName) const;
+  bool isControlAdjKey(const std::string& key) const;
+  bool isLeafAdjKey(const std::string& key) const;
+  bool isSpineAdjKey(const std::string& key) const;
+  bool isFabricAdjKey(const std::string& key) const;
+  bool isControlPrefixKey(const std::string& key) const;
+  bool isLeafPrefixKey(const std::string& key) const;
+  bool isSpinePrefixKey(const std::string& key) const;
+  bool isFabricPrefixKey(const std::string& key) const;
+  bool isFabricInterface(const std::string& ifName) const;
+
+ private:
+  enum class NodeType { CONTROL, LEAF, SPINE, NON_FABRIC };
+  NodeType getNodeType(const std::string& nodeName) const;
+
+  const thrift::FabricConfig fabricConfig_;
+  std::shared_ptr<re2::RE2::Set> fabricControlNameRegexSet_;
+  std::shared_ptr<re2::RE2::Set> fabricLeafNameRegexSet_;
+  std::shared_ptr<re2::RE2::Set> fabricSpineNameRegexSet_;
+  std::shared_ptr<re2::RE2::Set> fabricNodeNameRegexSet_;
+  std::shared_ptr<re2::RE2::Set> fabricInterfaceNameRegexSet_;
 };
 
 class Config {
@@ -487,6 +519,11 @@ class Config {
     }
   }
 
+  const std::optional<FabricConfig>&
+  getFabricConfig() const {
+    return fabricConfig_;
+  }
+
  private:
   void populateInternalDb();
 
@@ -519,6 +556,9 @@ class Config {
 
   // areaId -> neighbor regex and interface regex mapped
   folly::F14FastMap<std::string /* areaId */, AreaConfiguration> areaConfigs_;
+
+  // fabric config if this node is in a fabric.
+  std::optional<FabricConfig> fabricConfig_;
 
 // per class placeholder for test code
 // only need to be setup once here
