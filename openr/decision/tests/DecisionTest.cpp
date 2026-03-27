@@ -281,7 +281,7 @@ class DecisionTestFixture : public ::testing::Test {
       const string& node,
       int64_t version,
       const vector<thrift::IpPrefix>& prefixes = {},
-      const string& area = kTestingAreaName) {
+      const string& = kTestingAreaName) {
     vector<thrift::PrefixEntry> prefixEntries;
     for (const auto& prefix : prefixes) {
       prefixEntries.emplace_back(createPrefixEntry(prefix));
