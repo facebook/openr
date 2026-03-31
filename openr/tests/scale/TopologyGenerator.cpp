@@ -11,7 +11,7 @@
 #include <folly/FileUtil.h>
 #include <folly/json/dynamic.h>
 #include <folly/json/json.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
 
@@ -115,7 +115,8 @@ TopologyGenerator::generatePrefixes(
 
 Topology
 TopologyGenerator::createGrid(int n, int numPrefixesPerNode) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Creating {}x{} grid topology ({} routers, {} prefixes per router)",
       n,
       n,
@@ -189,7 +190,8 @@ TopologyGenerator::createGrid(int n, int numPrefixesPerNode) {
     }
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Created grid topology: {} routers, {} adjacencies, {} prefixes",
       topo.getRouterCount(),
       topo.getTotalAdjacencyCount(),
@@ -332,7 +334,8 @@ TopologyGenerator::createFabric(
   size_t totalRouters = calculateFabricRouterCount(
       numPods, numPlanes, numSswsPerPlane, numRswsPerPod);
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Creating fabric topology: {} pods, {} planes, {} SSWs/plane, {} RSWs/pod ({} total routers)",
       numPods,
       numPlanes,
@@ -372,7 +375,8 @@ TopologyGenerator::createFabric(
       numPrefixesPerNode,
       prefixGen);
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Created fabric topology: {} routers, {} adjacencies, {} prefixes",
       topo.getRouterCount(),
       topo.getTotalAdjacencyCount(),
@@ -383,8 +387,7 @@ TopologyGenerator::createFabric(
 
 Topology
 TopologyGenerator::createRing(int numRouters, int numPrefixesPerNode) {
-  LOG(INFO)
-      << fmt::format("Creating ring topology with {} routers", numRouters);
+  XLOGF(INFO, "Creating ring topology with {} routers", numRouters);
 
   Topology topo;
   topo.name = fmt::format("ring_{}", numRouters);
@@ -427,7 +430,8 @@ TopologyGenerator::createRing(int numRouters, int numPrefixesPerNode) {
         getIfName(nextName, nodeName));
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Created ring topology: {} routers, {} adjacencies",
       topo.getRouterCount(),
       topo.getTotalAdjacencyCount());
@@ -437,7 +441,7 @@ TopologyGenerator::createRing(int numRouters, int numPrefixesPerNode) {
 
 Topology
 TopologyGenerator::loadFromFile(const std::string& filePath) {
-  LOG(INFO) << "Loading topology from file: " << filePath;
+  XLOGF(INFO, "Loading topology from file: {}", filePath);
 
   std::string jsonContent;
   if (!folly::readFile(filePath.c_str(), jsonContent)) {
@@ -529,7 +533,8 @@ TopologyGenerator::loadFromFile(const std::string& filePath) {
     }
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Loaded topology from file: {} routers, {} adjacencies",
       topo.getRouterCount(),
       topo.getTotalAdjacencyCount());
@@ -588,7 +593,8 @@ TopologyGenerator::createBbf(
   size_t totalRouters =
       calculateBbfRouterCount(numPods, numPlanes, spinesPerPlane, leavesPerPod);
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Creating BBF topology: {} pods, {} planes, {} spines/plane, {} leaves/pod, ECMP width={}, total={} routers",
       numPods,
       numPlanes,
@@ -621,7 +627,8 @@ TopologyGenerator::createBbf(
   createBbfEcmpLinks(
       topo, numPods, numPlanes, spinesPerPlane, leavesPerPod, ecmpWidth);
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Created BBF topology: {} routers, {} adjacencies (ECMP width={})",
       topo.getRouterCount(),
       topo.getTotalAdjacencyCount(),
@@ -640,7 +647,8 @@ TopologyGenerator::createBbfSimple(
     int numSites) {
   int leavesPerSite = (numSites > 0) ? (numLeaves / numSites) : 0;
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Creating BBF topology: {} spines, {} leaves, {} control nodes, {} eb-sites, ECMP width={}",
       numSpines,
       numLeaves,
@@ -781,7 +789,8 @@ TopologyGenerator::createBbfSimple(
     }
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Created BBF topology: {} routers, {} adjacencies",
       topo.getRouterCount(),
       topo.getTotalAdjacencyCount());

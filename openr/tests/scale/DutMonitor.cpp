@@ -9,7 +9,7 @@
 
 #include <fmt/format.h>
 #include <folly/io/async/AsyncSocket.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 namespace openr {
@@ -30,8 +30,11 @@ DutMonitor::connect() {
   }
 
   try {
-    LOG(INFO) << fmt::format(
-        "[DUT-MONITOR] Connecting to DUT at {}:{}...", dutHost_, dutPort_);
+    XLOGF(
+        INFO,
+        "[DUT-MONITOR] Connecting to DUT at {}:{}...",
+        dutHost_,
+        dutPort_);
 
     auto socket = folly::AsyncSocket::newSocket(
         evb_.get(), dutHost_, dutPort_, 5000 /* connect timeout ms */);
@@ -43,11 +46,10 @@ DutMonitor::connect() {
         std::move(channel));
 
     connected_ = true;
-    LOG(INFO) << "[DUT-MONITOR] Connected to DUT successfully";
+    XLOG(INFO, "[DUT-MONITOR] Connected to DUT successfully");
     return true;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
-        "[DUT-MONITOR] ERROR: Failed to connect to DUT: {}", e.what());
+    XLOGF(ERR, "[DUT-MONITOR] ERROR: Failed to connect to DUT: {}", e.what());
     return false;
   }
 }
@@ -68,18 +70,22 @@ DutMonitor::isConnected() const {
 std::map<std::string, int64_t>
 DutMonitor::getRegexCounters(const std::string& regex) {
   if (!connected_) {
-    LOG(ERROR) << "[DUT-MONITOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[DUT-MONITOR] ERROR: Not connected to DUT");
     return {};
   }
 
   try {
     std::map<std::string, int64_t> counters;
     client_->sync_getRegexCounters(counters, regex);
-    VLOG(1) << fmt::format(
-        "[DUT-MONITOR] Got {} counters matching '{}'", counters.size(), regex);
+    XLOGF(
+        DBG1,
+        "[DUT-MONITOR] Got {} counters matching '{}'",
+        counters.size(),
+        regex);
     return counters;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[DUT-MONITOR] ERROR: Failed to get regex counters '{}': {}",
         regex,
         e.what());

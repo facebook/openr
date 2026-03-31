@@ -8,7 +8,7 @@
 #include <openr/tests/scale/FakeKvStoreManager.h>
 
 #include <fmt/format.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 
@@ -22,7 +22,8 @@ FakeKvStoreManager::FakeKvStoreManager(uint16_t basePort, size_t ioThreads)
           apache::thrift::concurrency::ThreadManager::newSimpleThreadManager(
               ioThreads)} {
   threadManager_->start();
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Created with basePort={}, ioThreads={}, cpuThreads={}",
       basePort_,
       ioThreads,
@@ -63,8 +64,11 @@ FakeKvStoreManager::addNeighbor(
 
   servers_.emplace(neighborName, std::move(ns));
 
-  LOG(INFO) << fmt::format(
-      "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {}", neighborName, port);
+  XLOGF(
+      INFO,
+      "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {}",
+      neighborName,
+      port);
 
   return port;
 }
@@ -98,7 +102,8 @@ FakeKvStoreManager::addNeighbor(
 
   servers_.emplace(neighborName, std::move(ns));
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {} (shared/COW)",
       neighborName,
       port);
@@ -109,22 +114,22 @@ FakeKvStoreManager::addNeighbor(
 void
 FakeKvStoreManager::start() {
   if (running_) {
-    LOG(WARNING) << "[FAKE-KVSTORE-MGR] Already running";
+    XLOG(WARN, "[FAKE-KVSTORE-MGR] Already running");
     return;
   }
 
-  LOG(INFO) << fmt::format(
-      "[FAKE-KVSTORE-MGR] Starting {} servers...", servers_.size());
+  XLOGF(INFO, "[FAKE-KVSTORE-MGR] Starting {} servers...", servers_.size());
 
   for (auto& [name, ns] : servers_) {
     ns.serverThread = std::make_unique<std::thread>([&ns]() {
-      LOG(INFO) << fmt::format(
+      XLOGF(
+          INFO,
           "[FAKE-KVSTORE-MGR] Server for '{}' starting on port {}",
           ns.neighborName,
           ns.port);
       ns.server->serve();
-      LOG(INFO) << fmt::format(
-          "[FAKE-KVSTORE-MGR] Server for '{}' stopped", ns.neighborName);
+      XLOGF(
+          INFO, "[FAKE-KVSTORE-MGR] Server for '{}' stopped", ns.neighborName);
     });
   }
 
@@ -135,13 +140,15 @@ FakeKvStoreManager::start() {
    * insufficient — increase proportionally.
    */
   auto bindDelayMs = std::max<size_t>(500, servers_.size() * 5);
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Waiting {}ms for {} servers to bind...",
       bindDelayMs,
       servers_.size());
   std::this_thread::sleep_for(std::chrono::milliseconds(bindDelayMs));
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] All {} servers started (ports {}-{})",
       servers_.size(),
       basePort_,
@@ -154,7 +161,7 @@ FakeKvStoreManager::stop() {
     return;
   }
 
-  LOG(INFO) << "[FAKE-KVSTORE-MGR] Stopping all servers...";
+  XLOG(INFO, "[FAKE-KVSTORE-MGR] Stopping all servers...");
 
   for (auto& [name, ns] : servers_) {
     if (ns.server) {
@@ -169,7 +176,7 @@ FakeKvStoreManager::stop() {
   }
 
   running_ = false;
-  LOG(INFO) << "[FAKE-KVSTORE-MGR] All servers stopped";
+  XLOG(INFO, "[FAKE-KVSTORE-MGR] All servers stopped");
 }
 
 uint16_t
@@ -205,7 +212,8 @@ FakeKvStoreManager::getHandler(const std::string& neighborName) {
 void
 FakeKvStoreManager::propagateKeyUpdate(
     const std::string& key, thrift::Value value) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Propagating key '{}' (version={}) to {} neighbors",
       key,
       *value.version(),
@@ -218,7 +226,8 @@ FakeKvStoreManager::propagateKeyUpdate(
 
 void
 FakeKvStoreManager::propagateKeyUpdates(const thrift::KeyVals& keyVals) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Propagating {} key updates to {} neighbors",
       keyVals.size(),
       servers_.size());
@@ -246,7 +255,8 @@ FakeKvStoreManager::simulateLinkFlap(
     const std::string& adjName,
     const Topology& topology,
     bool linkUp) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Simulating link flap: {} <-> {} (linkUp={})",
       routerName,
       adjName,
@@ -268,8 +278,7 @@ FakeKvStoreManager::simulateLinkFlap(
 
 void
 FakeKvStoreManager::simulateNodeRemoval(const std::string& routerName) {
-  LOG(INFO) << fmt::format(
-      "[FAKE-KVSTORE-MGR] Simulating node removal: {}", routerName);
+  XLOGF(INFO, "[FAKE-KVSTORE-MGR] Simulating node removal: {}", routerName);
 
   int64_t version = getNextVersion(fmt::format("adj:{}", routerName));
   auto [key, value] =
@@ -281,8 +290,7 @@ FakeKvStoreManager::simulateNodeRemoval(const std::string& routerName) {
 void
 FakeKvStoreManager::simulateNodeOverload(
     const std::string& routerName, const Topology& topology) {
-  LOG(INFO) << fmt::format(
-      "[FAKE-KVSTORE-MGR] Simulating node overload: {}", routerName);
+  XLOGF(INFO, "[FAKE-KVSTORE-MGR] Simulating node overload: {}", routerName);
 
   const auto& router = topology.getRouter(routerName);
   int64_t version = getNextVersion(fmt::format("adj:{}", routerName));
@@ -297,7 +305,8 @@ FakeKvStoreManager::updateTopology(
     const Topology& newTopology,
     const std::vector<std::string>& neighborNames,
     int32_t numFakeKeysPerNode) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE-MGR] Updating topology for {} neighbors",
       neighborNames.size());
 

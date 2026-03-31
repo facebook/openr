@@ -8,7 +8,7 @@
 #include <openr/tests/scale/RealSparkIo.h>
 
 #include <fmt/format.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <net/if.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
@@ -38,8 +38,8 @@ RealSparkIo::addInterface(const std::string& ifName, int ifIndex) {
   ifIndexToName_[ifIndex] = ifName;
   ifIndexToNames_[ifIndex].insert(ifName);
 
-  LOG(INFO) << fmt::format(
-      "[REAL-SPARK-IO] Added interface {} (ifIndex={})", ifName, ifIndex);
+  XLOGF(
+      INFO, "[REAL-SPARK-IO] Added interface {} (ifIndex={})", ifName, ifIndex);
 }
 
 void
@@ -65,7 +65,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
     bindName = realIfName;
     bindNameLen = strlen(realIfName);
     if (ifName != realIfName) {
-      LOG(INFO) << fmt::format(
+      XLOGF(
+          INFO,
           "[REAL-SPARK-IO] Resolved ifIndex {} to real interface '{}' "
           "(registered as '{}')",
           ifIndex,
@@ -73,7 +74,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
           ifName);
     }
   } else {
-    LOG(WARNING) << fmt::format(
+    XLOGF(
+        WARN,
         "[REAL-SPARK-IO] WARN: Could not resolve ifIndex {} to real name, "
         "using '{}' (may fail)",
         ifIndex,
@@ -85,8 +87,10 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
    */
   int sockFd = ::socket(AF_INET6, SOCK_DGRAM, IPPROTO_UDP);
   if (sockFd < 0) {
-    LOG(ERROR) << fmt::format(
-        "[REAL-SPARK-IO] ERROR: Failed to create socket: {}", strerror(errno));
+    XLOGF(
+        ERR,
+        "[REAL-SPARK-IO] ERROR: Failed to create socket: {}",
+        strerror(errno));
     return -1;
   }
 
@@ -97,7 +101,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
 
   /* Allow reuse of address */
   if (setsockopt(sockFd, SOL_SOCKET, SO_REUSEADDR, &on, sizeof(on)) < 0) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[REAL-SPARK-IO] ERROR: Failed to set SO_REUSEADDR: {}",
         strerror(errno));
     close(sockFd);
@@ -111,7 +116,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
           SO_BINDTODEVICE,
           bindName,
           static_cast<socklen_t>(bindNameLen)) < 0) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[REAL-SPARK-IO] ERROR: Failed to bind to {}: {} (need CAP_NET_RAW?)",
         bindName,
         strerror(errno));
@@ -121,7 +127,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
 
   /* Enable receiving pktinfo (to get interface index) */
   if (setsockopt(sockFd, IPPROTO_IPV6, IPV6_RECVPKTINFO, &on, sizeof(on)) < 0) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[REAL-SPARK-IO] ERROR: Failed to set IPV6_RECVPKTINFO: {}",
         strerror(errno));
     close(sockFd);
@@ -132,7 +139,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
   int off = 0;
   if (setsockopt(sockFd, IPPROTO_IPV6, IPV6_MULTICAST_LOOP, &off, sizeof(off)) <
       0) {
-    LOG(WARNING) << fmt::format(
+    XLOGF(
+        WARN,
         "[REAL-SPARK-IO] WARN: Failed to disable IPV6_MULTICAST_LOOP: {}",
         strerror(errno));
   }
@@ -145,7 +153,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
           IPV6_MULTICAST_HOPS,
           &hopLimit,
           sizeof(hopLimit)) < 0) {
-    LOG(WARNING) << fmt::format(
+    XLOGF(
+        WARN,
         "[REAL-SPARK-IO] WARN: Failed to set IPV6_MULTICAST_HOPS: {}",
         strerror(errno));
   }
@@ -157,7 +166,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
   bindAddr.sin6_port = htons(mcastPort_);
 
   if (::bind(sockFd, (struct sockaddr*)&bindAddr, sizeof(bindAddr)) < 0) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[REAL-SPARK-IO] ERROR: Failed to bind to port {}: {}",
         mcastPort_,
         strerror(errno));
@@ -172,7 +182,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
 
   if (setsockopt(sockFd, IPPROTO_IPV6, IPV6_JOIN_GROUP, &mreq, sizeof(mreq)) <
       0) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[REAL-SPARK-IO] ERROR: Failed to join multicast group on {}: {}",
         ifName,
         strerror(errno));
@@ -180,7 +191,8 @@ RealSparkIo::createSocket(const std::string& ifName, int ifIndex) {
     return -1;
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[REAL-SPARK-IO] Socket created on {} (ifIndex={}, fd={}, port={})",
       ifName,
       ifIndex,
@@ -196,7 +208,7 @@ RealSparkIo::registerCallback(
   std::lock_guard<std::mutex> lock(mutex_);
   callbacks_[ifName] = std::move(callback);
 
-  VLOG(1) << fmt::format("[REAL-SPARK-IO] Registered callback for {}", ifName);
+  XLOGF(DBG1, "[REAL-SPARK-IO] Registered callback for {}", ifName);
 }
 
 void
@@ -217,7 +229,8 @@ RealSparkIo::startReceiving() {
     uniqueIfIndexes.insert(ifIndex);
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[REAL-SPARK-IO] Starting receivers for {} physical interfaces "
       "({} registered names)",
       uniqueIfIndexes.size(),
@@ -243,7 +256,8 @@ RealSparkIo::startReceiving() {
     receiveThreads_[ifIndex] = std::make_unique<std::thread>(
         [this, ifIndex, sockFd]() { receiveLoop(ifIndex, sockFd); });
 
-    LOG(INFO) << fmt::format(
+    XLOGF(
+        INFO,
         "[REAL-SPARK-IO] Started receive thread for ifIndex {} ({} names)",
         ifIndex,
         ifIndexToNames_.count(ifIndex) ? ifIndexToNames_[ifIndex].size() : 0);
@@ -258,7 +272,7 @@ RealSparkIo::stopReceiving() {
 
   std::lock_guard<std::mutex> lock(mutex_);
 
-  LOG(INFO) << "[REAL-SPARK-IO] Stopping receivers...";
+  XLOG(INFO, "[REAL-SPARK-IO] Stopping receivers...");
 
   /*
    * Shutdown sockets to unblock recv calls
@@ -277,7 +291,7 @@ RealSparkIo::stopReceiving() {
   }
   receiveThreads_.clear();
 
-  LOG(INFO) << "[REAL-SPARK-IO] All receivers stopped";
+  XLOG(INFO, "[REAL-SPARK-IO] All receivers stopped");
 }
 
 void
@@ -296,7 +310,8 @@ RealSparkIo::receiveLoop(int ifIndex, int sockFd) {
     }
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[REAL-SPARK-IO] Receive loop started for {} (ifIndex={})",
       displayName,
       ifIndex);
@@ -328,9 +343,12 @@ RealSparkIo::receiveLoop(int ifIndex, int sockFd) {
 
     ssize_t bytesRead = recvmsg(sockFd, &msg, 0);
     if (bytesRead < 0) {
-      if (running_.load() && VLOG_IS_ON(2)) {
-        VLOG(2) << "[REAL-SPARK-IO] recvmsg error on " << displayName << ": "
-                << strerror(errno);
+      if (running_.load() && XLOG_IS_ON(DBG2)) {
+        XLOGF(
+            DBG2,
+            "[REAL-SPARK-IO] recvmsg error on {}: {}",
+            displayName,
+            strerror(errno));
       }
       continue;
     }
@@ -351,8 +369,8 @@ RealSparkIo::receiveLoop(int ifIndex, int sockFd) {
           folly::ByteRange(
               reinterpret_cast<const uint8_t*>(&srcAddr.sin6_addr), 16));
     } catch (const std::exception& e) {
-      if (VLOG_IS_ON(2)) {
-        VLOG(2) << "[REAL-SPARK-IO] Failed to parse source IP: " << e.what();
+      if (XLOG_IS_ON(DBG2)) {
+        XLOGF(DBG2, "[REAL-SPARK-IO] Failed to parse source IP: {}", e.what());
       }
       continue;
     }
@@ -362,11 +380,15 @@ RealSparkIo::receiveLoop(int ifIndex, int sockFd) {
      */
     std::string packet(reinterpret_cast<char*>(buf.data()), bytesRead);
 
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << "[REAL-SPARK-IO] RECV: " << bytesRead << " bytes on "
-              << displayName << " from " << srcIp.str()
-              << " (total: " << packetsReceived << " pkts, " << bytesReceived
-              << " bytes)";
+    if (XLOG_IS_ON(DBG2)) {
+      XLOGF(
+          DBG2,
+          "[REAL-SPARK-IO] RECV: {} bytes on {} from {} (total: {} pkts, {} bytes)",
+          bytesRead,
+          displayName,
+          srcIp.str(),
+          packetsReceived,
+          bytesReceived);
     }
 
     /*
@@ -396,15 +418,19 @@ RealSparkIo::receiveLoop(int ifIndex, int sockFd) {
          */
         callback("dut", dstIfName, folly::IPAddress(srcIp), packet);
       } catch (const std::exception& e) {
-        if (VLOG_IS_ON(2)) {
-          VLOG(2) << "[REAL-SPARK-IO] Callback exception for " << dstIfName
-                  << ": " << e.what();
+        if (XLOG_IS_ON(DBG2)) {
+          XLOGF(
+              DBG2,
+              "[REAL-SPARK-IO] Callback exception for {}: {}",
+              dstIfName,
+              e.what());
         }
       }
     }
   }
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[REAL-SPARK-IO] Receive loop stopped for {} (received {} packets, {} bytes)",
       displayName,
       packetsReceived,
@@ -423,8 +449,9 @@ RealSparkIo::sendPacket(
     std::lock_guard<std::mutex> lock(mutex_);
     auto it = ifIndexToSockFd_.find(dstIfIndex);
     if (it == ifIndexToSockFd_.end()) {
-      if (VLOG_IS_ON(2)) {
-        VLOG(2) << "[REAL-SPARK-IO] WARN: No socket for ifIndex " << dstIfIndex;
+      if (XLOG_IS_ON(DBG2)) {
+        XLOGF(
+            DBG2, "[REAL-SPARK-IO] WARN: No socket for ifIndex {}", dstIfIndex);
       }
       return;
     }
@@ -461,16 +488,25 @@ RealSparkIo::sendPacket(
       reinterpret_cast<const struct sockaddr*>(&dstAddr),
       sizeof(dstAddr));
   if (bytesSent < 0) {
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << "[REAL-SPARK-IO] ERROR: sendmsg failed on " << ifName
-              << " (ifIndex " << dstIfIndex << "): " << strerror(errno);
+    if (XLOG_IS_ON(DBG2)) {
+      XLOGF(
+          DBG2,
+          "[REAL-SPARK-IO] ERROR: sendmsg failed on {} (ifIndex {}): {}",
+          ifName,
+          dstIfIndex,
+          strerror(errno));
     }
     return;
   }
 
-  if (VLOG_IS_ON(3)) {
-    VLOG(3) << "[REAL-SPARK-IO] SENT: " << bytesSent << " bytes on " << ifName
-            << " (ifIndex " << dstIfIndex << ") from " << srcAddr.str();
+  if (XLOG_IS_ON(DBG3)) {
+    XLOGF(
+        DBG3,
+        "[REAL-SPARK-IO] SENT: {} bytes on {} (ifIndex {}) from {}",
+        bytesSent,
+        ifName,
+        dstIfIndex,
+        srcAddr.str());
   }
 }
 

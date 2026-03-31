@@ -5,7 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
 #include <openr/tests/mocks/MockIoProvider.h>

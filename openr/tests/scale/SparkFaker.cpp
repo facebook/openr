@@ -8,7 +8,7 @@
 #include <openr/tests/scale/SparkFaker.h>
 
 #include <fmt/format.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 
 #include <folly/io/IOBuf.h>
 #include <openr/common/Constants.h>
@@ -59,8 +59,13 @@ SparkFaker::addNeighbor(
    */
   io_->addInterface(ifName, ifIndex);
 
-  VLOG(1) << "SparkFaker: Added neighbor " << nodeName << " on " << ifName
-          << " (ifIndex=" << ifIndex << ") -> DUT " << dutIfName;
+  XLOGF(
+      DBG1,
+      "SparkFaker: Added neighbor {} on {} (ifIndex={}) -> DUT {}",
+      nodeName,
+      ifName,
+      ifIndex,
+      dutIfName);
 }
 
 void
@@ -81,7 +86,7 @@ SparkFaker::start() {
 
   thread_ = std::make_unique<std::thread>([this]() { runLoop(); });
 
-  VLOG(1) << "SparkFaker: Started with " << neighbors_.size() << " neighbors";
+  XLOGF(DBG1, "SparkFaker: Started with {} neighbors", neighbors_.size());
 }
 
 void
@@ -100,7 +105,7 @@ SparkFaker::stop() {
   }
   thread_.reset();
 
-  VLOG(1) << "SparkFaker: Stopped";
+  XLOG(DBG1, "SparkFaker: Stopped");
 }
 
 bool
@@ -108,12 +113,14 @@ SparkFaker::failNeighbor(const std::string& nodeName) {
   for (auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       neighbor.failed = true;
-      VLOG(1) << "SparkFaker: Failed neighbor " << nodeName
-              << " - stopping packet transmission";
+      XLOGF(
+          DBG1,
+          "SparkFaker: Failed neighbor {} - stopping packet transmission",
+          nodeName);
       return true;
     }
   }
-  VLOG(1) << "SparkFaker: Neighbor " << nodeName << " not found";
+  XLOGF(DBG1, "SparkFaker: Neighbor {} not found", nodeName);
   return false;
 }
 
@@ -128,12 +135,14 @@ SparkFaker::recoverNeighbor(const std::string& nodeName) {
       neighbor.state = thrift::SparkNeighState::IDLE;
       neighbor.dutSeqNum = std::nullopt;
       neighbor.dutTimestamp = std::nullopt;
-      VLOG(1) << "SparkFaker: Recovered neighbor " << nodeName
-              << " - resuming packet transmission";
+      XLOGF(
+          DBG1,
+          "SparkFaker: Recovered neighbor {} - resuming packet transmission",
+          nodeName);
       return true;
     }
   }
-  VLOG(1) << "SparkFaker: Neighbor " << nodeName << " not found";
+  XLOGF(DBG1, "SparkFaker: Neighbor {} not found", nodeName);
   return false;
 }
 
@@ -152,11 +161,11 @@ SparkFaker::setNeighborCtrlPort(const std::string& nodeName, uint16_t port) {
   for (auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       neighbor.ctrlPort = port;
-      VLOG(1) << "SparkFaker: Set ctrlPort for " << nodeName << " to " << port;
+      XLOGF(DBG1, "SparkFaker: Set ctrlPort for {} to {}", nodeName, port);
       return true;
     }
   }
-  VLOG(1) << "SparkFaker: Neighbor " << nodeName << " not found";
+  XLOGF(DBG1, "SparkFaker: Neighbor {} not found", nodeName);
   return false;
 }
 
@@ -252,18 +261,21 @@ SparkFaker::sendHello(FakeNeighbor& neighbor) {
   neighbor.lastHelloTime = std::chrono::steady_clock::now();
   stats_.hellosSent++;
 
-  if (VLOG_IS_ON(3)) {
-    VLOG(3) << "[SPARK-FAKER] HELLO SENT: " << neighbor.nodeName
-            << " -> DUT:" << neighbor.dutIfName
-            << " state=" << apache::thrift::util::enumNameSafe(neighbor.state)
-            << " seqNum=" << (neighbor.seqNum - 1);
+  if (XLOG_IS_ON(DBG3)) {
+    XLOGF(
+        DBG3,
+        "[SPARK-FAKER] HELLO SENT: {} -> DUT:{} state={} seqNum={}",
+        neighbor.nodeName,
+        neighbor.dutIfName,
+        apache::thrift::util::enumNameSafe(neighbor.state),
+        neighbor.seqNum - 1);
   }
 }
 
 void
 SparkFaker::sendHandshake(FakeNeighbor& neighbor) {
   if (neighbor.dutNodeName.empty()) {
-    VLOG(2) << "SparkFaker: Cannot send handshake, DUT node name unknown";
+    XLOG(DBG2, "SparkFaker: Cannot send handshake, DUT node name unknown");
     return;
   }
 
@@ -283,10 +295,13 @@ SparkFaker::sendHandshake(FakeNeighbor& neighbor) {
   stats_.handshakesSent++;
   neighbor.lastHandshakeTime = std::chrono::steady_clock::now();
 
-  if (VLOG_IS_ON(2)) {
-    VLOG(2) << "[SPARK-FAKER] HANDSHAKE SENT: " << neighbor.nodeName
-            << " -> DUT:" << neighbor.dutNodeName << " isAdjEstablished="
-            << (neighbor.state == thrift::SparkNeighState::ESTABLISHED);
+  if (XLOG_IS_ON(DBG2)) {
+    XLOGF(
+        DBG2,
+        "[SPARK-FAKER] HANDSHAKE SENT: {} -> DUT:{} isAdjEstablished={}",
+        neighbor.nodeName,
+        neighbor.dutNodeName,
+        (neighbor.state == thrift::SparkNeighState::ESTABLISHED));
   }
 }
 
@@ -308,9 +323,12 @@ SparkFaker::sendHeartbeat(FakeNeighbor& neighbor) {
   neighbor.lastHeartbeatTime = std::chrono::steady_clock::now();
   stats_.heartbeatsSent++;
 
-  if (VLOG_IS_ON(3)) {
-    VLOG(3) << "[SPARK-FAKER] HEARTBEAT SENT: " << neighbor.nodeName
-            << " seqNum=" << (neighbor.seqNum - 1);
+  if (XLOG_IS_ON(DBG3)) {
+    XLOGF(
+        DBG3,
+        "[SPARK-FAKER] HEARTBEAT SENT: {} seqNum={}",
+        neighbor.nodeName,
+        neighbor.seqNum - 1);
   }
 }
 
@@ -333,9 +351,11 @@ SparkFaker::handleDutPacket(
   }
 
   if (!found) {
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << "[SPARK-FAKER] WARN: Received packet on unknown interface "
-              << ifName;
+    if (XLOG_IS_ON(DBG2)) {
+      XLOGF(
+          DBG2,
+          "[SPARK-FAKER] WARN: Received packet on unknown interface {}",
+          ifName);
     }
   }
 }
@@ -354,7 +374,8 @@ SparkFaker::handleDutPacketForNeighbor(
      * this is our own multicast being looped back. Drop it.
      */
     if (*hello.nodeName() == neighbor.nodeName) {
-      VLOG(3) << "[SPARK-FAKER] Dropping self-hello for " << neighbor.nodeName;
+      XLOGF(
+          DBG3, "[SPARK-FAKER] Dropping self-hello for {}", neighbor.nodeName);
       return;
     }
 
@@ -363,11 +384,14 @@ SparkFaker::handleDutPacketForNeighbor(
     neighbor.dutTimestamp = *hello.sentTsInUs();
     stats_.hellosReceived++;
 
-    if (VLOG_IS_ON(2)) {
-      VLOG(2)
-          << "[SPARK-FAKER] HELLO RECV: DUT:" << neighbor.dutNodeName << " -> "
-          << neighbor.nodeName << " seqNum=" << neighbor.dutSeqNum.value()
-          << " state=" << apache::thrift::util::enumNameSafe(neighbor.state);
+    if (XLOG_IS_ON(DBG2)) {
+      XLOGF(
+          DBG2,
+          "[SPARK-FAKER] HELLO RECV: DUT:{} -> {} seqNum={} state={}",
+          neighbor.dutNodeName,
+          neighbor.nodeName,
+          neighbor.dutSeqNum.value(),
+          apache::thrift::util::enumNameSafe(neighbor.state));
     }
 
     /*
@@ -375,7 +399,8 @@ SparkFaker::handleDutPacketForNeighbor(
      */
     if (neighbor.state == thrift::SparkNeighState::IDLE) {
       neighbor.state = thrift::SparkNeighState::WARM;
-      LOG(INFO) << fmt::format(
+      XLOGF(
+          INFO,
           "[SPARK-FAKER] STATE: {} IDLE -> WARM (discovered DUT:{})",
           neighbor.nodeName,
           neighbor.dutNodeName);
@@ -388,7 +413,8 @@ SparkFaker::handleDutPacketForNeighbor(
     if (it != hello.neighborInfos()->end()) {
       if (neighbor.state == thrift::SparkNeighState::WARM) {
         neighbor.state = thrift::SparkNeighState::NEGOTIATE;
-        LOG(INFO) << fmt::format(
+        XLOGF(
+            INFO,
             "[SPARK-FAKER] STATE: {} WARM -> NEGOTIATE (DUT sees us)",
             neighbor.nodeName);
         sendHandshake(neighbor);
@@ -407,17 +433,22 @@ SparkFaker::handleDutPacketForNeighbor(
      * this is our own multicast being looped back. Drop it.
      */
     if (*handshake.nodeName() == neighbor.nodeName) {
-      VLOG(3) << "[SPARK-FAKER] Dropping self-handshake for "
-              << neighbor.nodeName;
+      XLOGF(
+          DBG3,
+          "[SPARK-FAKER] Dropping self-handshake for {}",
+          neighbor.nodeName);
       return;
     }
 
     stats_.handshakesReceived++;
 
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << "[SPARK-FAKER] HANDSHAKE RECV: DUT:" << *handshake.nodeName()
-              << " -> " << neighbor.nodeName << " neighborNodeName="
-              << handshake.neighborNodeName().value_or("none");
+    if (XLOG_IS_ON(DBG2)) {
+      XLOGF(
+          DBG2,
+          "[SPARK-FAKER] HANDSHAKE RECV: DUT:{} -> {} neighborNodeName={}",
+          *handshake.nodeName(),
+          neighbor.nodeName,
+          handshake.neighborNodeName().value_or("none"));
     }
 
     /*
@@ -435,7 +466,8 @@ SparkFaker::handleDutPacketForNeighbor(
          */
         neighbor.state = thrift::SparkNeighState::ESTABLISHED;
         stats_.neighborsEstablished++;
-        LOG(INFO) << fmt::format(
+        XLOGF(
+            INFO,
             "[SPARK-FAKER] STATE: {} NEGOTIATE -> ESTABLISHED (adjacency up!)",
             neighbor.nodeName);
         sendHandshake(neighbor);
@@ -457,7 +489,8 @@ SparkFaker::handleDutPacketForNeighbor(
          * Now we can switch to steady-state hello rate.
          */
         neighbor.dutEstablished = true;
-        LOG(INFO) << fmt::format(
+        XLOGF(
+            INFO,
             "[SPARK-FAKER] DUT confirmed ESTABLISHED for {}",
             neighbor.nodeName);
       }
@@ -476,13 +509,14 @@ SparkFaker::handleDutPacketForNeighbor(
      */
     if (!neighbor.dutEstablished) {
       neighbor.dutEstablished = true;
-      LOG(INFO) << fmt::format(
+      XLOGF(
+          INFO,
           "[SPARK-FAKER] DUT confirmed ESTABLISHED for {} (via heartbeat)",
           neighbor.nodeName);
     }
 
-    if (VLOG_IS_ON(3)) {
-      VLOG(3) << "[SPARK-FAKER] HEARTBEAT RECV: DUT -> " << neighbor.nodeName;
+    if (XLOG_IS_ON(DBG3)) {
+      XLOGF(DBG3, "[SPARK-FAKER] HEARTBEAT RECV: DUT -> {}", neighbor.nodeName);
     }
   }
 }
@@ -560,7 +594,7 @@ SparkFaker::processNeighbor(FakeNeighbor& neighbor) {
 
 void
 SparkFaker::runLoop() {
-  VLOG(1) << "SparkFaker: runLoop started";
+  XLOG(DBG1, "SparkFaker: runLoop started");
 
   while (running_.load()) {
     /*
@@ -576,7 +610,7 @@ SparkFaker::runLoop() {
     std::this_thread::sleep_for(std::chrono::milliseconds(10));
   }
 
-  VLOG(1) << "SparkFaker: runLoop stopped";
+  XLOG(DBG1, "SparkFaker: runLoop stopped");
 }
 
 void
@@ -595,7 +629,7 @@ SparkFaker::registerCallbacks() {
             const std::string& packet) {
           handleRawDutPacket(srcIfName, dstIfName, srcAddr, packet);
         });
-    VLOG(2) << "SparkFaker: Registered callback for " << neighbor.ifName;
+    XLOGF(DBG2, "SparkFaker: Registered callback for {}", neighbor.ifName);
   }
 }
 
@@ -618,15 +652,21 @@ SparkFaker::handleRawDutPacket(
      */
     handleDutPacket(dstIfName, pkt);
 
-    if (VLOG_IS_ON(3)) {
-      VLOG(3) << "[SPARK-FAKER] Processed packet from " << srcIfName << " to "
-              << dstIfName;
+    if (XLOG_IS_ON(DBG3)) {
+      XLOGF(
+          DBG3,
+          "[SPARK-FAKER] Processed packet from {} to {}",
+          srcIfName,
+          dstIfName);
     }
   } catch (const std::exception& e) {
     stats_.parseErrors++;
-    if (VLOG_IS_ON(2)) {
-      VLOG(2) << "[SPARK-FAKER] ERROR: Failed to parse packet from "
-              << srcIfName << ": " << e.what();
+    if (XLOG_IS_ON(DBG2)) {
+      XLOGF(
+          DBG2,
+          "[SPARK-FAKER] ERROR: Failed to parse packet from {}: {}",
+          srcIfName,
+          e.what());
     }
   }
 }

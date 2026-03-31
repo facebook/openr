@@ -8,7 +8,7 @@
 #include <openr/tests/scale/FakeKvStoreHandler.h>
 
 #include <fmt/format.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 
 #include <openr/kvstore/KvStoreUtil.h>
 
@@ -17,7 +17,8 @@ namespace openr {
 FakeKvStoreHandler::FakeKvStoreHandler(
     std::string neighborName, thrift::KeyVals kvStore)
     : neighborName_(std::move(neighborName)), ownedStore_(std::move(kvStore)) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE] Handler created for neighbor '{}' with {} keys",
       neighborName_,
       ownedStore_->size());
@@ -28,7 +29,8 @@ FakeKvStoreHandler::FakeKvStoreHandler(
     std::shared_ptr<const thrift::KeyVals> sharedKvStore)
     : neighborName_(std::move(neighborName)),
       sharedStore_(std::move(sharedKvStore)) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[FAKE-KVSTORE] Handler created for neighbor '{}' with {} keys (shared/COW)",
       neighborName_,
       sharedStore_->size());
@@ -67,7 +69,8 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsFilteredArea(
      *   - tobeUpdatedKeys: keys DUT has that we want
      */
     *pub = dumpDifference(*area, store(), filter->keyValHashes().value());
-    VLOG(2) << fmt::format(
+    XLOGF(
+        DBG2,
         "[FAKE-KVSTORE] {} getKvStoreKeyValsFilteredArea: "
         "area={}, DUT sent {} hashes, returning {} keyVals, {} tobeUpdatedKeys",
         neighborName_,
@@ -83,7 +86,8 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsFilteredArea(
      */
     pub->keyVals() = store();
     pub->area() = *area;
-    VLOG(2) << fmt::format(
+    XLOGF(
+        DBG2,
         "[FAKE-KVSTORE] {} getKvStoreKeyValsFilteredArea: "
         "area={}, no hashes, returning all {} keys",
         neighborName_,
@@ -106,7 +110,8 @@ FakeKvStoreHandler::semifuture_setKvStoreKeyVals(
   std::lock_guard<std::mutex> lock(mutex_);
 
   size_t numKeys = setParams->keyVals()->size();
-  VLOG(2) << fmt::format(
+  XLOGF(
+      DBG2,
       "[FAKE-KVSTORE] {} setKvStoreKeyVals: area={}, received {} keys from DUT",
       neighborName_,
       *area,
@@ -148,7 +153,8 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsArea(
     }
   }
 
-  VLOG(2) << fmt::format(
+  XLOGF(
+      DBG2,
       "[FAKE-KVSTORE] {} getKvStoreKeyValsArea: "
       "area={}, requested {} keys, found {}",
       neighborName_,
@@ -182,7 +188,8 @@ FakeKvStoreHandler::semifuture_getKvStoreHashFilteredArea(
     pub->keyVals()->emplace(key, std::move(hashOnly));
   }
 
-  VLOG(2) << fmt::format(
+  XLOGF(
+      DBG2,
       "[FAKE-KVSTORE] {} getKvStoreHashFilteredArea: "
       "area={}, returning {} hashes",
       neighborName_,
@@ -197,7 +204,8 @@ FakeKvStoreHandler::updateKvStore(thrift::KeyVals newKvStore) {
   std::lock_guard<std::mutex> lock(mutex_);
   ownedStore_ = std::move(newKvStore);
   sharedStore_.reset();
-  VLOG(1) << fmt::format(
+  XLOGF(
+      DBG1,
       "[FAKE-KVSTORE] {} KV store replaced with {} keys",
       neighborName_,
       ownedStore_->size());
@@ -207,7 +215,8 @@ void
 FakeKvStoreHandler::updateKey(const std::string& key, thrift::Value value) {
   std::lock_guard<std::mutex> lock(mutex_);
   mutableStore()[key] = std::move(value);
-  VLOG(2) << fmt::format(
+  XLOGF(
+      DBG2,
       "[FAKE-KVSTORE] {} key '{}' updated (version={})",
       neighborName_,
       key,
@@ -219,8 +228,7 @@ FakeKvStoreHandler::removeKey(const std::string& key) {
   std::lock_guard<std::mutex> lock(mutex_);
   auto erased = mutableStore().erase(key);
   if (erased > 0) {
-    VLOG(2) << fmt::format(
-        "[FAKE-KVSTORE] {} key '{}' removed", neighborName_, key);
+    XLOGF(DBG2, "[FAKE-KVSTORE] {} key '{}' removed", neighborName_, key);
   }
 }
 
@@ -236,7 +244,8 @@ FakeKvStoreHandler::resetToShared(
   std::lock_guard<std::mutex> lock(mutex_);
   sharedStore_ = std::move(sharedKvStore);
   ownedStore_.reset();
-  VLOG(1) << fmt::format(
+  XLOGF(
+      DBG1,
       "[FAKE-KVSTORE] {} KV store reset to shared ({} keys)",
       neighborName_,
       sharedStore_->size());

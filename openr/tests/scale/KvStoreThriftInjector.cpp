@@ -9,7 +9,7 @@
 
 #include <fmt/format.h>
 #include <folly/io/async/AsyncSocket.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
@@ -38,8 +38,11 @@ KvStoreThriftInjector::connect() {
   }
 
   try {
-    LOG(INFO) << fmt::format(
-        "[KVSTORE-INJECTOR] Connecting to DUT at {}:{}...", dutHost_, dutPort_);
+    XLOGF(
+        INFO,
+        "[KVSTORE-INJECTOR] Connecting to DUT at {}:{}...",
+        dutHost_,
+        dutPort_);
 
     auto socket = folly::AsyncSocket::newSocket(
         evb_.get(), dutHost_, dutPort_, 5000 /* connect timeout ms */);
@@ -51,11 +54,13 @@ KvStoreThriftInjector::connect() {
         std::move(channel));
 
     connected_ = true;
-    LOG(INFO) << "[KVSTORE-INJECTOR] Connected to DUT successfully";
+    XLOG(INFO, "[KVSTORE-INJECTOR] Connected to DUT successfully");
     return true;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
-        "[KVSTORE-INJECTOR] ERROR: Failed to connect to DUT: {}", e.what());
+    XLOGF(
+        ERR,
+        "[KVSTORE-INJECTOR] ERROR: Failed to connect to DUT: {}",
+        e.what());
     return false;
   }
 }
@@ -209,11 +214,11 @@ size_t
 KvStoreThriftInjector::injectTopology(
     const Topology& topology, const std::string& areaName) {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return 0;
   }
 
-  LOG(INFO) << fmt::format(
+  XLOG(INFO) << fmt::format(
       "[KVSTORE-INJECTOR] Injecting topology: {} routers, {} adjacencies, {} prefixes",
       topology.getRouterCount(),
       topology.getTotalAdjacencyCount(),
@@ -222,7 +227,7 @@ KvStoreThriftInjector::injectTopology(
   auto keyVals = buildKeyVals(topology);
   size_t keyCount = keyVals.size();
 
-  LOG(INFO) << fmt::format(
+  XLOG(INFO) << fmt::format(
       "[KVSTORE-INJECTOR] Built {} key-value pairs, sending to area '{}'...",
       keyCount,
       areaName);
@@ -238,15 +243,18 @@ KvStoreThriftInjector::injectTopology(
                           endTime - startTime)
                           .count();
 
-    LOG(INFO) << fmt::format(
+    XLOGF(
+        INFO,
         "[KVSTORE-INJECTOR] SUCCESS: Injected {} keys in {} ms ({} keys/sec)",
         keyCount,
         durationMs,
         durationMs > 0 ? (keyCount * 1000 / durationMs) : keyCount);
     return keyCount;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
-        "[KVSTORE-INJECTOR] ERROR: Failed to inject topology: {}", e.what());
+    XLOGF(
+        ERR,
+        "[KVSTORE-INJECTOR] ERROR: Failed to inject topology: {}",
+        e.what());
     return 0;
   }
 }
@@ -255,12 +263,12 @@ size_t
 KvStoreThriftInjector::injectKeyVals(
     const thrift::KeyVals& keyVals, const std::string& areaName) {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return 0;
   }
 
   size_t keyCount = keyVals.size();
-  LOG(INFO) << fmt::format(
+  XLOG(INFO) << fmt::format(
       "[KVSTORE-INJECTOR] Injecting {} pre-built key-value pairs to area '{}'...",
       keyCount,
       areaName);
@@ -276,15 +284,18 @@ KvStoreThriftInjector::injectKeyVals(
                           endTime - startTime)
                           .count();
 
-    LOG(INFO) << fmt::format(
+    XLOGF(
+        INFO,
         "[KVSTORE-INJECTOR] SUCCESS: Injected {} keys in {} ms ({} keys/sec)",
         keyCount,
         durationMs,
         durationMs > 0 ? (keyCount * 1000 / durationMs) : keyCount);
     return keyCount;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
-        "[KVSTORE-INJECTOR] ERROR: Failed to inject key-values: {}", e.what());
+    XLOGF(
+        ERR,
+        "[KVSTORE-INJECTOR] ERROR: Failed to inject key-values: {}",
+        e.what());
     return 0;
   }
 }
@@ -296,7 +307,7 @@ KvStoreThriftInjector::injectAdjacencyUpdate(
     int64_t version,
     const std::string& areaName) {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return;
   }
 
@@ -310,12 +321,14 @@ KvStoreThriftInjector::injectAdjacencyUpdate(
 
   try {
     client_->sync_setKvStoreKeyVals(params, areaName);
-    LOG(INFO) << fmt::format(
+    XLOGF(
+        INFO,
         "[KVSTORE-INJECTOR] Adjacency update: {} (version={})",
         router.nodeName,
         version);
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[KVSTORE-INJECTOR] ERROR: Failed to inject adjacency update for {}: {}",
         router.nodeName,
         e.what());
@@ -326,11 +339,11 @@ void
 KvStoreThriftInjector::removeNode(
     const std::string& nodeName, int64_t version, const std::string& areaName) {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return;
   }
 
-  LOG(INFO) << fmt::format(
+  XLOG(INFO) << fmt::format(
       "[KVSTORE-INJECTOR] Removing node {} (simulating failure)", nodeName);
 
   thrift::AdjacencyDatabase adjDb;
@@ -360,10 +373,11 @@ KvStoreThriftInjector::removeNode(
 
   try {
     client_->sync_setKvStoreKeyVals(params, areaName);
-    LOG(INFO)
+    XLOG(INFO)
         << fmt::format("[KVSTORE-INJECTOR] SUCCESS: Removed node {}", nodeName);
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[KVSTORE-INJECTOR] ERROR: Failed to remove node {}: {}",
         nodeName,
         e.what());
@@ -374,7 +388,7 @@ thrift::Publication
 KvStoreThriftInjector::getKeys(
     const std::string& keyPrefix, const std::string& areaName) {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return thrift::Publication{};
   }
 
@@ -384,13 +398,15 @@ KvStoreThriftInjector::getKeys(
   try {
     thrift::Publication pub;
     client_->sync_getKvStoreKeyValsFilteredArea(pub, filter, areaName);
-    VLOG(1) << fmt::format(
+    XLOGF(
+        DBG1,
         "[KVSTORE-INJECTOR] Got {} keys matching prefix '{}'",
         pub.keyVals()->size(),
         keyPrefix);
     return pub;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
+    XLOGF(
+        ERR,
         "[KVSTORE-INJECTOR] ERROR: Failed to get keys with prefix '{}': {}",
         keyPrefix,
         e.what());
@@ -416,8 +432,11 @@ KvStoreThriftInjector::getAdjacencyDatabases(const std::string& areaName) {
       auto nodeName = *adjDb.thisNodeName();
       result.emplace(nodeName, std::move(adjDb));
     } catch (const std::exception& e) {
-      LOG(WARNING) << "Failed to parse adjacency database for key " << key
-                   << ": " << e.what();
+      XLOGF(
+          WARN,
+          "Failed to parse adjacency database for key {}: {}",
+          key,
+          e.what());
     }
   }
 
@@ -427,21 +446,24 @@ KvStoreThriftInjector::getAdjacencyDatabases(const std::string& areaName) {
 thrift::RouteDatabase
 KvStoreThriftInjector::getRouteDatabase(const std::string& /* nodeName */) {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return thrift::RouteDatabase{};
   }
 
   try {
     thrift::RouteDatabase routeDb;
     client_->sync_getRouteDb(routeDb);
-    LOG(INFO) << fmt::format(
+    XLOGF(
+        INFO,
         "[KVSTORE-INJECTOR] Route database: {} unicast routes, {} MPLS routes",
         routeDb.unicastRoutes()->size(),
         routeDb.mplsRoutes()->size());
     return routeDb;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
-        "[KVSTORE-INJECTOR] ERROR: Failed to get route database: {}", e.what());
+    XLOGF(
+        ERR,
+        "[KVSTORE-INJECTOR] ERROR: Failed to get route database: {}",
+        e.what());
     return thrift::RouteDatabase{};
   }
 }
@@ -449,18 +471,20 @@ KvStoreThriftInjector::getRouteDatabase(const std::string& /* nodeName */) {
 std::string
 KvStoreThriftInjector::getDutNodeName() {
   if (!connected_) {
-    LOG(ERROR) << "[KVSTORE-INJECTOR] ERROR: Not connected to DUT";
+    XLOG(ERR, "[KVSTORE-INJECTOR] ERROR: Not connected to DUT");
     return "";
   }
 
   try {
     std::string nodeName;
     client_->sync_getMyNodeName(nodeName);
-    LOG(INFO) << fmt::format("[KVSTORE-INJECTOR] DUT node name: {}", nodeName);
+    XLOGF(INFO, "[KVSTORE-INJECTOR] DUT node name: {}", nodeName);
     return nodeName;
   } catch (const std::exception& e) {
-    LOG(ERROR) << fmt::format(
-        "[KVSTORE-INJECTOR] ERROR: Failed to get DUT node name: {}", e.what());
+    XLOGF(
+        ERR,
+        "[KVSTORE-INJECTOR] ERROR: Failed to get DUT node name: {}",
+        e.what());
     return "";
   }
 }

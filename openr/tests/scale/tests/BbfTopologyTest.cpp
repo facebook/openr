@@ -5,7 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <glog/logging.h>
+#include <folly/init/Init.h>
+#include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
 #include <openr/tests/scale/TopologyGenerator.h>
@@ -20,12 +21,12 @@ class BbfTopologyTest : public ::testing::Test {
  protected:
   void
   SetUp() override {
-    LOG(INFO) << "BbfTopologyTest::SetUp()";
+    XLOG(INFO, "BbfTopologyTest::SetUp()");
   }
 
   void
   TearDown() override {
-    LOG(INFO) << "BbfTopologyTest::TearDown()";
+    XLOG(INFO, "BbfTopologyTest::TearDown()");
   }
 };
 
@@ -108,8 +109,11 @@ TEST_F(BbfTopologyTest, MediumBbf) {
   EXPECT_EQ(expectedAdjs, 65536);
   EXPECT_EQ(topo.getTotalAdjacencyCount(), expectedAdjs);
 
-  LOG(INFO) << "Medium BBF: " << topo.getRouterCount() << " routers, "
-            << topo.getTotalAdjacencyCount() << " adjacencies";
+  XLOGF(
+      INFO,
+      "Medium BBF: {} routers, {} adjacencies",
+      topo.getRouterCount(),
+      topo.getTotalAdjacencyCount());
 }
 
 /*
@@ -146,8 +150,11 @@ TEST_F(BbfTopologyTest, LargeBbf) {
   EXPECT_EQ(expectedAdjs, 2097152);
   EXPECT_EQ(topo.getTotalAdjacencyCount(), expectedAdjs);
 
-  LOG(INFO) << "Large BBF: " << topo.getRouterCount() << " routers, "
-            << topo.getTotalAdjacencyCount() << " adjacencies (2M+)";
+  XLOGF(
+      INFO,
+      "Large BBF: {} routers, {} adjacencies (2M+)",
+      topo.getRouterCount(),
+      topo.getTotalAdjacencyCount());
 }
 
 /*
@@ -175,8 +182,11 @@ TEST_F(BbfTopologyTest, AsymmetricEcmp) {
     EXPECT_EQ(topo.getTotalAdjacencyCount(), expectedAdjs)
         << "Failed for ECMP width " << ecmpWidth;
 
-    LOG(INFO) << "ECMP width " << ecmpWidth << ": "
-              << topo.getTotalAdjacencyCount() << " adjacencies";
+    XLOGF(
+        INFO,
+        "ECMP width {}: {} adjacencies",
+        ecmpWidth,
+        topo.getTotalAdjacencyCount());
   }
 }
 
@@ -287,8 +297,11 @@ TEST_F(BbfTopologyTest, ProductionScaleBbf) {
   EXPECT_EQ(expectedAdjs, 258048);
   EXPECT_EQ(topo.getTotalAdjacencyCount(), expectedAdjs);
 
-  LOG(INFO) << "Production BBF: " << topo.getRouterCount() << " routers, "
-            << topo.getTotalAdjacencyCount() << " adjacencies (258K)";
+  XLOGF(
+      INFO,
+      "Production BBF: {} routers, {} adjacencies (258K)",
+      topo.getRouterCount(),
+      topo.getTotalAdjacencyCount());
 
   /*
    * Verify naming convention
@@ -320,8 +333,7 @@ TEST_F(BbfTopologyTest, ScaleLimits) {
   /* Total routers = 64 spines + 252 leaves = 316 */
   EXPECT_EQ(realRouters, 316);
 
-  LOG(INFO) << "Real BBF (252 leaves, 64 spines): " << realRouters
-            << " routers";
+  XLOGF(INFO, "Real BBF (252 leaves, 64 spines): {} routers", realRouters);
 
   /*
    * 4x buffer for stress testing: ~1000 leaves, ~256 spines
@@ -354,8 +366,11 @@ TEST_F(BbfTopologyTest, ScaleLimits) {
    */
   EXPECT_EQ(stressAdjs, 8257536);
 
-  LOG(INFO) << "4x stress BBF: " << stressRouters << " routers, " << stressAdjs
-            << " adjacencies (8M+)";
+  XLOGF(
+      INFO,
+      "4x stress BBF: {} routers, {} adjacencies (8M+)",
+      stressRouters,
+      stressAdjs);
 
   /*
    * Extreme scale for future proofing (2030+ requirements):
@@ -375,8 +390,11 @@ TEST_F(BbfTopologyTest, ScaleLimits) {
    */
   EXPECT_EQ(extremeAdjs, 264241152);
 
-  LOG(INFO) << "Extreme scale BBF (5k+ nodes): " << extremeRouters
-            << " routers, " << extremeAdjs << " adjacencies (264M!)";
+  XLOGF(
+      INFO,
+      "Extreme scale BBF (5k+ nodes): {} routers, {} adjacencies (264M!)",
+      extremeRouters,
+      extremeAdjs);
 }
 
 } // namespace openr
@@ -385,8 +403,7 @@ int
 main(int argc, char** argv) {
   testing::InitGoogleTest(&argc, argv);
   gflags::ParseCommandLineFlags(&argc, &argv, true);
-  google::InitGoogleLogging(argv[0]);
-  google::InstallFailureSignalHandler();
+  folly::Init init(&argc, &argv);
 
   return RUN_ALL_TESTS();
 }

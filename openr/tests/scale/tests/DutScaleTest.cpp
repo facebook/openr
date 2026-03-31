@@ -24,7 +24,7 @@
 #include <thread>
 
 #include <fmt/format.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
 
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -65,16 +65,16 @@ class DutScaleTestFixture : public ::testing::Test {
     mockIoProvider_ = std::make_shared<MockIoProvider>();
 
     mockIoProviderThread_ = std::make_unique<std::thread>([this]() {
-      LOG(INFO) << "Starting MockIoProvider thread";
+      XLOG(INFO, "Starting MockIoProvider thread");
       mockIoProvider_->start();
-      LOG(INFO) << "MockIoProvider thread stopped";
+      XLOG(INFO, "MockIoProvider thread stopped");
     });
     mockIoProvider_->waitUntilRunning();
   }
 
   void
   TearDown() override {
-    LOG(INFO) << "Stopping MockIoProvider";
+    XLOG(INFO, "Stopping MockIoProvider");
     mockIoProvider_->stop();
     mockIoProviderThread_->join();
   }
@@ -149,15 +149,19 @@ class DutScaleTestFixture : public ::testing::Test {
       if (routeCount >= minRoutes) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
-        LOG(INFO) << fmt::format(
-            "Routes ready: {} routes in {} ms", routeCount, elapsed.count());
+        XLOGF(
+            INFO,
+            "Routes ready: {} routes in {} ms",
+            routeCount,
+            elapsed.count());
         return routeCount;
       }
 
       std::this_thread::sleep_for(kPollInterval);
     }
 
-    LOG(WARNING) << fmt::format(
+    XLOGF(
+        WARN,
         "Timeout waiting for routes: got {} routes, expected at least {}",
         routeCount,
         minRoutes);
@@ -183,7 +187,8 @@ class DutScaleTestFixture : public ::testing::Test {
       if (routeCount != previousRouteCount) {
         auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
-        LOG(INFO) << fmt::format(
+        XLOGF(
+            INFO,
             "Route count changed: {} -> {} in {} ms",
             previousRouteCount,
             routeCount,
@@ -194,8 +199,8 @@ class DutScaleTestFixture : public ::testing::Test {
       std::this_thread::sleep_for(kPollInterval);
     }
 
-    LOG(WARNING) << fmt::format(
-        "Timeout waiting for route change: still {} routes", routeCount);
+    XLOGF(
+        WARN, "Timeout waiting for route change: still {} routes", routeCount);
     return routeCount;
   }
 };
@@ -207,7 +212,7 @@ class DutScaleTestFixture : public ::testing::Test {
  * The DUT is "leaf-0" in the topology.
  */
 TEST_F(DutScaleTestFixture, SmallTopologyInjection) {
-  LOG(INFO) << "=== SmallTopologyInjection Test ===";
+  XLOG(INFO, "=== SmallTopologyInjection Test ===");
 
   /*
    * Step 1: Generate small BBF topology (4 spines + 4 leaves)
@@ -219,23 +224,25 @@ TEST_F(DutScaleTestFixture, SmallTopologyInjection) {
       0, /* numControlNodes */
       1); /* ecmpWidth */
 
-  LOG(INFO) << "Generated topology: " << topology.getRouterCount()
-            << " routers, " << topology.getTotalAdjacencyCount()
-            << " adjacencies";
+  XLOGF(
+      INFO,
+      "Generated topology: {} routers, {} adjacencies",
+      topology.getRouterCount(),
+      topology.getTotalAdjacencyCount());
 
   /*
    * Step 2: Create DUT as "leaf-0" (a node in the topology)
    */
   auto dut = createDut("leaf-0");
   dut->run();
-  LOG(INFO) << "DUT (leaf-0) started";
+  XLOG(INFO, "DUT (leaf-0) started");
 
   /*
    * Step 3: Inject topology into DUT's KvStore
    */
   KvStoreBulkInjector injector(dut->getKvStoreUpdatesQueue());
   injector.injectTopology(topology);
-  LOG(INFO) << "Injected topology into KvStore";
+  XLOG(INFO, "Injected topology into KvStore");
 
   /*
    * Step 4: Wait for Decision to compute routes (poll instead of fixed sleep)
@@ -249,7 +256,7 @@ TEST_F(DutScaleTestFixture, SmallTopologyInjection) {
   auto routeDb = dut->fibDumpRouteDatabase();
   std::string routeDump = dumpRouteDatabase(routeDb);
 
-  LOG(INFO) << "\n" << routeDump;
+  XLOGF(INFO, "\n{}", routeDump);
 
   /*
    * Step 6: Write to file
@@ -262,14 +269,14 @@ TEST_F(DutScaleTestFixture, SmallTopologyInjection) {
   outFile << "Adjacencies: " << topology.getTotalAdjacencyCount() << "\n\n";
   outFile << routeDump;
   outFile.close();
-  LOG(INFO) << "Results written to: " << outputPath;
+  XLOGF(INFO, "Results written to: {}", outputPath);
 
   /*
    * Step 7: Verify routes exist
    * DUT (leaf-0) should have routes to other leaves' prefixes
    */
-  LOG(INFO) << "DUT computed " << routeDb.unicastRoutes()->size()
-            << " unicast routes";
+  XLOGF(
+      INFO, "DUT computed {} unicast routes", routeDb.unicastRoutes()->size());
 }
 
 /*
@@ -279,7 +286,7 @@ TEST_F(DutScaleTestFixture, SmallTopologyInjection) {
  * and verify DUT computes routes. DUT is "leaf-0" in the topology.
  */
 TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
-  LOG(INFO) << "=== ProductionBbfTopologyInjection Test ===";
+  XLOG(INFO, "=== ProductionBbfTopologyInjection Test ===");
 
   /*
    * Generate topology FIRST before starting DUT
@@ -290,16 +297,16 @@ TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
       4, /* numControlNodes */
       8); /* ecmpWidth */
 
-  LOG(INFO) << "Generated production BBF topology:";
-  LOG(INFO) << "  Routers: " << topology.getRouterCount();
-  LOG(INFO) << "  Adjacencies: " << topology.getTotalAdjacencyCount();
+  XLOG(INFO, "Generated production BBF topology:");
+  XLOGF(INFO, "  Routers: {}", topology.getRouterCount());
+  XLOGF(INFO, "  Adjacencies: {}", topology.getTotalAdjacencyCount());
 
   /*
    * Now start DUT
    */
   auto dut = createDut("leaf-0");
   dut->run();
-  LOG(INFO) << "DUT (leaf-0) started";
+  XLOG(INFO, "DUT (leaf-0) started");
 
   /*
    * Immediately inject topology before Decision initializes
@@ -312,13 +319,13 @@ TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
   auto injectTime = std::chrono::steady_clock::now();
   auto injectDuration = std::chrono::duration_cast<std::chrono::milliseconds>(
       injectTime - startTime);
-  LOG(INFO) << "Topology injection took: " << injectDuration.count() << "ms";
+  XLOGF(INFO, "Topology injection took: {}ms", injectDuration.count());
 
   /*
    * Wait for SPF computation using polling (not fixed sleep)
    * For large topology, we expect at least 1 route
    */
-  LOG(INFO) << "Waiting for Decision to compute routes...";
+  XLOG(INFO, "Waiting for Decision to compute routes...");
   waitForRoutes(*dut, 1, std::chrono::seconds(120));
 
   auto spfTime = std::chrono::steady_clock::now();
@@ -331,7 +338,7 @@ TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
   auto routeDb = dut->fibDumpRouteDatabase();
   std::string routeDump = dumpRouteDatabase(routeDb);
 
-  LOG(INFO) << "\n" << routeDump;
+  XLOGF(INFO, "\n{}", routeDump);
 
   std::string outputPath = "/tmp/dut_production_bbf_routes.txt";
   std::ofstream outFile(outputPath);
@@ -344,10 +351,12 @@ TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
   outFile << routeDump;
   outFile.close();
 
-  LOG(INFO) << "Results written to: " << outputPath;
-  LOG(INFO) << "DUT computed " << routeDb.unicastRoutes()->size()
-            << " unicast routes from " << topology.getRouterCount()
-            << " node topology";
+  XLOGF(INFO, "Results written to: {}", outputPath);
+  XLOGF(
+      INFO,
+      "DUT computed {} unicast routes from {} node topology",
+      routeDb.unicastRoutes()->size(),
+      topology.getRouterCount());
 
   /*
    * Verify routes were computed
@@ -365,7 +374,7 @@ TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
  * 4. Verify DUT reconverges - routes now via other spines
  */
 TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
-  LOG(INFO) << "=== TopologyEventLinkFailure Test ===";
+  XLOG(INFO, "=== TopologyEventLinkFailure Test ===");
 
   /*
    * Step 1: Generate small topology
@@ -376,7 +385,8 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
       0, /* numControlNodes */
       1); /* ecmpWidth */
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Generated topology: {} routers, {} adjacencies",
       topology.getRouterCount(),
       topology.getTotalAdjacencyCount());
@@ -390,7 +400,7 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
   KvStoreBulkInjector injector(dut->getKvStoreUpdatesQueue());
   injector.injectTopology(topology);
 
-  LOG(INFO) << "Initial topology injected";
+  XLOG(INFO, "Initial topology injected");
 
   /*
    * Step 3: Wait for initial routes using polling
@@ -399,7 +409,7 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
 
   auto routeDbBefore = dut->fibDumpRouteDatabase();
   size_t routesBefore = routeDbBefore.unicastRoutes()->size();
-  LOG(INFO) << fmt::format("Before failure: {} routes", routesBefore);
+  XLOGF(INFO, "Before failure: {} routes", routesBefore);
 
   /*
    * Step 4: Simulate spine-0 failure by removing its adjacencies
@@ -407,7 +417,7 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
    * We inject an updated adj:spine-0 with no adjacencies.
    * This simulates spine-0 going down from the topology.
    */
-  LOG(INFO) << "Simulating spine-0 failure...";
+  XLOG(INFO, "Simulating spine-0 failure...");
   injector.removeNode("spine-0");
 
   /*
@@ -418,7 +428,7 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
 
   auto routeDbAfter = dut->fibDumpRouteDatabase();
   size_t routesAfter = routeDbAfter.unicastRoutes()->size();
-  LOG(INFO) << fmt::format("After failure: {} routes", routesAfter);
+  XLOGF(INFO, "After failure: {} routes", routesAfter);
 
   /*
    * Step 6: Verify reconvergence
@@ -439,6 +449,6 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
   outFile << "\n" << dumpRouteDatabase(routeDbAfter);
   outFile.close();
 
-  LOG(INFO) << "Results written to: " << outputPath;
-  LOG(INFO) << "DUT successfully reconverged after spine-0 failure";
+  XLOGF(INFO, "Results written to: {}", outputPath);
+  XLOG(INFO, "DUT successfully reconverged after spine-0 failure");
 }

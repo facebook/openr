@@ -8,7 +8,7 @@
 #include <openr/tests/scale/KvStoreBulkInjector.h>
 
 #include <fmt/format.h>
-#include <glog/logging.h>
+#include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/LsdbUtil.h>
@@ -113,7 +113,8 @@ KvStoreBulkInjector::createPrefixKeyValues(
 void
 KvStoreBulkInjector::injectTopology(
     const Topology& topology, const std::string& areaName) {
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Injecting topology with {} routers, {} adjacencies, {} prefixes",
       topology.getRouterCount(),
       topology.getTotalAdjacencyCount(),
@@ -143,8 +144,8 @@ KvStoreBulkInjector::injectTopology(
 
   pub.keyVals() = std::move(keyVals);
 
-  LOG(INFO) << fmt::format(
-      "Publishing {} key-value pairs to KvStore", pub.keyVals()->size());
+  XLOGF(
+      INFO, "Publishing {} key-value pairs to KvStore", pub.keyVals()->size());
 
   kvStoreQueue_.push(std::move(pub));
 }
@@ -156,8 +157,9 @@ KvStoreBulkInjector::injectAdjacencyDb(
    * We need the full topology to build adjacencies, but for single-router
    * injection we create a minimal topology with just this router.
    */
-  LOG(WARNING) << "injectAdjacencyDb requires full topology context. "
-               << "Use injectTopology or injectAdjacencyUpdate instead.";
+  XLOG(
+      WARN,
+      "injectAdjacencyDb requires full topology context. Use injectTopology or injectAdjacencyUpdate instead.");
 }
 
 void
@@ -178,7 +180,7 @@ KvStoreBulkInjector::injectPrefixDb(
 
 void
 KvStoreBulkInjector::sendKvStoreSyncedEvent() {
-  LOG(INFO) << "Sending KvStore synced event to trigger route computation";
+  XLOG(INFO, "Sending KvStore synced event to trigger route computation");
   kvStoreQueue_.push(thrift::InitializationEvent::KVSTORE_SYNCED);
 }
 
@@ -191,8 +193,9 @@ KvStoreBulkInjector::injectAdjacencyUpdate(
    * For updates, we need to rebuild with the topology context.
    * This is typically called from simulateLinkFlap or simulateOverload.
    */
-  LOG(WARNING) << "injectAdjacencyUpdate requires topology context. "
-               << "Use simulateLinkFlap or simulateOverload instead.";
+  XLOG(
+      WARN,
+      "injectAdjacencyUpdate requires topology context. Use simulateLinkFlap or simulateOverload instead.");
 }
 
 void
@@ -228,7 +231,8 @@ KvStoreBulkInjector::simulateLinkFlap(
     if (adj.localIfName == ifName) {
       adj.isUp = isUp;
       found = true;
-      LOG(INFO) << fmt::format(
+      XLOGF(
+          INFO,
           "Simulating link {} on {}:{} (now {})",
           isUp ? "up" : "down",
           routerName,
@@ -239,7 +243,8 @@ KvStoreBulkInjector::simulateLinkFlap(
   }
 
   if (!found) {
-    LOG(WARNING) << fmt::format(
+    XLOGF(
+        WARN,
         "No adjacency found for interface {} on router {}. Link flap not simulated.",
         ifName,
         routerName);
@@ -279,7 +284,8 @@ KvStoreBulkInjector::simulateOverload(
   auto& router = topology.getRouter(routerName);
   router.isOverloaded = isOverloaded;
 
-  LOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Simulating {} overload on {}",
       isOverloaded ? "set" : "clear",
       routerName);
@@ -300,8 +306,7 @@ KvStoreBulkInjector::simulateOverload(
 
 void
 KvStoreBulkInjector::removeNode(const std::string& nodeName, int64_t version) {
-  LOG(INFO) << fmt::format(
-      "Removing node {} from topology (simulating failure)", nodeName);
+  XLOGF(INFO, "Removing node {} from topology (simulating failure)", nodeName);
 
   /*
    * Create an empty adjacency database for this node.
