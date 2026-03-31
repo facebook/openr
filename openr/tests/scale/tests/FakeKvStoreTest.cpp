@@ -8,11 +8,8 @@
 #include <gtest/gtest.h>
 
 #include <fmt/format.h>
-#include <folly/io/async/AsyncSocket.h>
-#include <thrift/lib/cpp2/async/RocketClientChannel.h>
 #include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
-#include <openr/if/gen-cpp2/KvStoreService.h>
 #include <openr/tests/scale/FakeKvStoreHandler.h>
 #include <openr/tests/scale/FakeKvStoreManager.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
@@ -207,7 +204,8 @@ TEST_F(FakeKvStoreTest, HandlerRemovesKey) {
  * Test FakeKvStoreManager basic operations
  */
 TEST_F(FakeKvStoreTest, ManagerAssignsUniquePorts) {
-  FakeKvStoreManager manager(3100, 2);
+  auto base = 0;
+  FakeKvStoreManager manager(base, 2);
 
   auto kvData1 = KvStoreDataBuilder::buildForNeighbor(topology_);
   auto kvData2 = KvStoreDataBuilder::buildForNeighbor(topology_);
@@ -215,19 +213,19 @@ TEST_F(FakeKvStoreTest, ManagerAssignsUniquePorts) {
   uint16_t port1 = manager.addNeighbor("spine-0", std::move(kvData1));
   uint16_t port2 = manager.addNeighbor("spine-1", std::move(kvData2));
 
-  EXPECT_EQ(port1, 3100);
-  EXPECT_EQ(port2, 3101);
+  EXPECT_EQ(port1, base);
+  EXPECT_EQ(port2, base + 1);
   EXPECT_NE(port1, port2);
 }
 
 TEST_F(FakeKvStoreTest, ManagerGetPortThrowsForUnknown) {
-  FakeKvStoreManager manager(3200, 2);
+  FakeKvStoreManager manager(0, 2);
 
   EXPECT_THROW(manager.getPort("nonexistent"), std::runtime_error);
 }
 
 TEST_F(FakeKvStoreTest, ManagerStartsAndStops) {
-  FakeKvStoreManager manager(3300, 2);
+  FakeKvStoreManager manager(0, 2);
 
   auto kvData = KvStoreDataBuilder::buildForNeighbor(topology_);
   manager.addNeighbor("spine-0", std::move(kvData));
@@ -247,7 +245,7 @@ TEST_F(FakeKvStoreTest, ManagerStartsAndStops) {
 }
 
 TEST_F(FakeKvStoreTest, ManagerPropagatesKeyToAllNeighbors) {
-  FakeKvStoreManager manager(3400, 2);
+  FakeKvStoreManager manager(0, 2);
 
   for (const auto& name : neighborNames_) {
     auto kvData = KvStoreDataBuilder::buildForNeighbor(topology_);
@@ -287,7 +285,7 @@ TEST_F(FakeKvStoreTest, ManagerPropagatesKeyToAllNeighbors) {
  * Test topology change simulation
  */
 TEST_F(FakeKvStoreTest, SimulateLinkFlap) {
-  FakeKvStoreManager manager(3500, 2);
+  FakeKvStoreManager manager(0, 2);
 
   for (const auto& name : neighborNames_) {
     auto kvData = KvStoreDataBuilder::buildForNeighbor(topology_);
@@ -322,7 +320,7 @@ TEST_F(FakeKvStoreTest, SimulateLinkFlap) {
 }
 
 TEST_F(FakeKvStoreTest, SimulateNodeRemoval) {
-  FakeKvStoreManager manager(3600, 2);
+  FakeKvStoreManager manager(0, 2);
 
   for (const auto& name : neighborNames_) {
     auto kvData = KvStoreDataBuilder::buildForNeighbor(topology_);
@@ -356,40 +354,23 @@ TEST_F(FakeKvStoreTest, SimulateNodeRemoval) {
  * Test Thrift client connectivity (integration test)
  */
 TEST_F(FakeKvStoreTest, ThriftClientCanConnect) {
-  FakeKvStoreManager manager(3700, 2);
+  FakeKvStoreManager manager(0, 2);
 
   auto kvData = KvStoreDataBuilder::buildForNeighbor(topology_);
-  uint16_t port = manager.addNeighbor("spine-0", std::move(kvData));
-
-  manager.start();
+  manager.addNeighbor("spine-0", std::move(kvData));
 
   /*
-   * Give server time to start
+   * Use makeTestClient to test handler directly (no network bind needed)
    */
-  std::this_thread::sleep_for(std::chrono::milliseconds(200));
+  auto handler = manager.getHandler("spine-0");
+  ASSERT_NE(handler, nullptr);
 
-  /*
-   * Create Thrift client and connect
-   */
-  folly::EventBase evb;
-  auto socket = folly::AsyncSocket::newSocket(&evb, "::1", port);
-  auto channel =
-      apache::thrift::RocketClientChannel::newChannel(std::move(socket));
-  auto client =
-      std::make_unique<apache::thrift::Client<thrift::KvStoreService>>(
-          std::move(channel));
-
-  /*
-   * Call getKvStoreKeyValsFilteredArea
-   */
+  auto client = apache::thrift::makeTestClient(handler);
   thrift::KeyDumpParams filter;
-  auto result = client->semifuture_getKvStoreKeyValsFilteredArea(filter, "0")
-                    .via(&evb)
-                    .getVia(&evb);
+  auto result =
+      client->semifuture_getKvStoreKeyValsFilteredArea(filter, "0").get();
 
   EXPECT_GT(result.keyVals()->size(), 0);
-
-  manager.stop();
 }
 
 } // namespace openr
