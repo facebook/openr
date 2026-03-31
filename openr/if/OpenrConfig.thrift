@@ -482,6 +482,13 @@ struct AreaConfig {
    * Area import policy, applied when a route enters this area
    */
   7: optional string import_policy_name;
+
+  /**
+   * If true, this area is instantiated per-region (e.g., FAN areas where
+   * FX peers with devices in multiple regions). Coop uses this to generate
+   * per-region area_ids for multi-region peering.
+   */
+  8: optional bool per_region;
 }
 
 @cpp.MinimizePadding
