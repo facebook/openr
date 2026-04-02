@@ -39,7 +39,7 @@ class FabricHelperTestFixture : public ::testing::Test {
 
   FabricHelper
   makeHelper() {
-    return FabricHelper(fabricCfg_);
+    return FabricHelper(fabricCfg_, linkMap_);
   }
 
   using NodeInterface = FabricHelper::NodeInterface;
@@ -58,6 +58,7 @@ class FabricHelperTestFixture : public ::testing::Test {
   }
 
   FabricConfig fabricCfg_{makeFabricConfig()};
+  folly::F14FastMap<std::string, Link::LinkSet> linkMap_;
 };
 
 namespace {
@@ -444,6 +445,73 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_LeafToSpine) {
   EXPECT_THAT(link->getIfaceFromNode("bbf01-sp001.dfw1"), Eq("po10200"));
   EXPECT_THAT(link->getMetricFromNode("bbf01-ld001.dfw1"), Eq(10));
   EXPECT_THAT(link->getMetricFromNode("bbf01-sp001.dfw1"), Eq(10));
+}
+
+//
+// getFabricMasterGenerator unit tests
+//
+
+TEST_F(FabricHelperTestFixture, GetFabricMasterGenerator_EmptyLinkMap) {
+  FabricHelper helper = makeHelper();
+
+  EXPECT_THAT(helper.getFabricMasterGenerator(), Eq(""));
+}
+
+TEST_F(FabricHelperTestFixture, TestGetFabricMasterGenerator) {
+  // Topology:
+  //   Fabric nodes: ld001 -- sp001, ld002 -- sp001 (connected)
+  //                 sp002 (disconnected, lexicographically highest fabric node)
+  //   Non-fabric nodes: eb01.rva1 -- eb01.ftw1 (connected, should be ignored)
+  //
+  // Expected: sp002 is skipped (disconnected), non-fabric nodes are ignored,
+  //           sp001 is the highest connected fabric node.
+
+  // Link: ld001 <-> sp001
+  thrift::Adjacency ld001ToSp = createAdjacency(
+      "bbf01-sp001.dfw1", "po10100", "po10200", "fe80::1", "10.0.0.1", 10, 0);
+  thrift::Adjacency spToLd001 = createAdjacency(
+      "bbf01-ld001.dfw1", "po10200", "po10100", "fe80::2", "10.0.0.2", 10, 0);
+  std::shared_ptr<Link> link1 = std::make_shared<Link>(
+      kTestingAreaName,
+      "bbf01-ld001.dfw1",
+      ld001ToSp,
+      "bbf01-sp001.dfw1",
+      spToLd001,
+      true);
+
+  // Link: ld002 <-> sp001
+  thrift::Adjacency ld002ToSp = createAdjacency(
+      "bbf01-sp001.dfw1", "po10101", "po10201", "fe80::3", "10.0.0.3", 10, 0);
+  thrift::Adjacency spToLd002 = createAdjacency(
+      "bbf01-ld002.dfw1", "po10201", "po10101", "fe80::4", "10.0.0.4", 10, 0);
+  std::shared_ptr<Link> link2 = std::make_shared<Link>(
+      kTestingAreaName,
+      "bbf01-ld002.dfw1",
+      ld002ToSp,
+      "bbf01-sp001.dfw1",
+      spToLd002,
+      true);
+
+  // Link: eb01.rva1 <-> eb01.ftw1 (non-fabric)
+  thrift::Adjacency extAdj1 = createAdjacency(
+      "eb01.ftw1", "po1000", "po1001", "fe80::5", "10.0.0.5", 10, 0);
+  thrift::Adjacency extAdj2 = createAdjacency(
+      "eb01.rva1", "po1001", "po1000", "fe80::6", "10.0.0.6", 10, 0);
+  std::shared_ptr<Link> link3 = std::make_shared<Link>(
+      kTestingAreaName, "eb01.rva1", extAdj1, "eb01.ftw1", extAdj2, true);
+
+  linkMap_["bbf01-ld001.dfw1"].insert(link1);
+  linkMap_["bbf01-ld002.dfw1"].insert(link2);
+  linkMap_["bbf01-sp001.dfw1"].insert(link1);
+  linkMap_["bbf01-sp001.dfw1"].insert(link2);
+  linkMap_["bbf01-sp002.dfw1"] = {}; // disconnected
+  linkMap_["eb01.rva1"].insert(link3);
+  linkMap_["eb01.ftw1"].insert(link3);
+
+  FabricHelper helper = makeHelper();
+
+  // sp002 is highest but disconnected, non-fabric nodes ignored → sp001
+  EXPECT_THAT(helper.getFabricMasterGenerator(), Eq("bbf01-sp001.dfw1"));
 }
 
 } // namespace

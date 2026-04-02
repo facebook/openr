@@ -72,4 +72,28 @@ FabricHelper::updateExternalNodeToLeafMap(
   }
 }
 
+// Returns the name of the master generator node. The master generator is the
+// node that is
+// - not disconnected from the rest of the nodes, and
+// - has the lexicographically highest name string.
+std::string
+FabricHelper::getFabricMasterGenerator() const {
+  std::string master;
+  for (const auto& [nodeName, linkSet] : linkMap_) {
+    if (linkSet.empty()) {
+      // disconnected node
+      continue;
+    }
+    if (!fabricConfig_.isFabric(nodeName)) {
+      // non-fabric node
+      continue;
+    }
+    if (master < nodeName) {
+      // higher name
+      master = nodeName;
+    }
+  }
+  return master;
+}
+
 } // namespace openr

@@ -7,6 +7,7 @@
 
 #include <folly/container/F14Map.h>
 #include <openr/config/Config.h>
+#include <openr/decision/Link.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -16,8 +17,11 @@ namespace openr {
 
 class FabricHelper {
  public:
-  explicit FabricHelper(const FabricConfig& fabricConfig)
-      : fabricConfig_(fabricConfig) {}
+  FabricHelper(
+      const FabricConfig& fabricConfig,
+      const folly::F14FastMap<std::string /* nodeName */, Link::LinkSet>&
+          linkMap)
+      : fabricConfig_(fabricConfig), linkMap_(linkMap) {}
 
   // Returns the name of the fabric.
   std::string getFabricName() const;
@@ -28,6 +32,9 @@ class FabricHelper {
 
   void updateExternalNodeToLeafMap(
       const openr::thrift::AdjacencyDatabase& newAdjacencyDb);
+
+  // Returns the name of fabric node that is currently the master generator.
+  std::string getFabricMasterGenerator() const;
 
  private:
   struct NodeInterface {
@@ -56,6 +63,8 @@ class FabricHelper {
       std::string,
       folly::F14NodeMap<NodeInterface, NodeInterface, NodeInterfaceHasher>>
       leafToExternalNode_;
+
+  const folly::F14FastMap<std::string /* nodeName */, Link::LinkSet>& linkMap_;
 
   friend class FabricHelperTestFixture;
 };
