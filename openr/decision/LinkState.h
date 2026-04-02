@@ -350,7 +350,7 @@ class LinkState {
       const std::string& nodeName, const thrift::Adjacency& adj) const;
 
   // this stores the same link object accessible from either nodeName
-  folly::F14FastMap<std::string /* nodeName */, Link::LinkSet> linkMap_;
+  folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet> linkMap_;
 
   // useful for iterating over all the links
   Link::LinkSet allLinks_;

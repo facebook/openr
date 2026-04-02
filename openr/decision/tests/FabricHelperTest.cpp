@@ -58,7 +58,7 @@ class FabricHelperTestFixture : public ::testing::Test {
   }
 
   FabricConfig fabricCfg_{makeFabricConfig()};
-  folly::F14FastMap<std::string, Link::LinkSet> linkMap_;
+  folly::F14NodeMap<std::string, Link::LinkSet> linkMap_;
 };
 
 namespace {

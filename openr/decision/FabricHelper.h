@@ -19,7 +19,7 @@ class FabricHelper {
  public:
   FabricHelper(
       const FabricConfig& fabricConfig,
-      const folly::F14FastMap<std::string /* nodeName */, Link::LinkSet>&
+      const folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet>&
           linkMap)
       : fabricConfig_(fabricConfig), linkMap_(linkMap) {}
 
@@ -64,7 +64,7 @@ class FabricHelper {
       folly::F14NodeMap<NodeInterface, NodeInterface, NodeInterfaceHasher>>
       leafToExternalNode_;
 
-  const folly::F14FastMap<std::string /* nodeName */, Link::LinkSet>& linkMap_;
+  const folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet>& linkMap_;
 
   friend class FabricHelperTestFixture;
 };
