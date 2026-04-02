@@ -323,7 +323,7 @@ SpfSolver::buildRouteDb(
   }
 
   // Create static unicast routes
-  for (auto [prefix, ribUnicastEntry] : staticUnicastRoutes_) {
+  for (const auto& [prefix, ribUnicastEntry] : staticUnicastRoutes_) {
     if (routeDb.unicastRoutes.count(prefix)) {
       // ignore prefixes as prefixState has higher priority
       continue;
