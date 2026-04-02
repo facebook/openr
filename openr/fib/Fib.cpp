@@ -263,6 +263,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
 
   // if the params is empty, return all routes
   if (prefixes.empty()) {
+    retRouteVec.reserve(routeState_.unicastRoutes.size());
     for (const auto& routes : routeState_.unicastRoutes) {
       retRouteVec.emplace_back(routes.second.toThrift());
     }
@@ -303,6 +304,7 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
 
   // if the params is empty, return all MPLS routes
   if (labels.empty()) {
+    retRouteVec.reserve(routeState_.mplsRoutes.size());
     for (const auto& routes : routeState_.mplsRoutes) {
       retRouteVec.emplace_back(routes.second.toThrift());
     }

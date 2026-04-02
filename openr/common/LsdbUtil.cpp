@@ -675,6 +675,7 @@ createUnicastRoutesFromMap(
     const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutes) {
   std::vector<thrift::UnicastRoute> newRoutes;
+  newRoutes.reserve(unicastRoutes.size());
   for (auto const& [_, route] : unicastRoutes) {
     newRoutes.emplace_back(route.toThrift());
   }
@@ -685,6 +686,7 @@ std::vector<thrift::MplsRoute>
 createMplsRoutesFromMap(
     const folly::F14FastMap<int32_t, RibMplsEntry>& mplsRoutes) {
   std::vector<thrift::MplsRoute> newRoutes;
+  newRoutes.reserve(mplsRoutes.size());
   for (auto const& [_, route] : mplsRoutes) {
     newRoutes.emplace_back(route.toThrift());
   }
