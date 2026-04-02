@@ -302,6 +302,15 @@ LinkState::orderedLinksFromNode(const std::string& nodeName) const {
   return links;
 }
 
+std::string
+LinkState::getRealOtherNodeName(
+    const std::string& nodeName, const thrift::Adjacency& adj) const {
+  if (fabricHelper_) {
+    return fabricHelper_->getRealOtherNodeName(nodeName, adj);
+  }
+  return *adj.otherNodeName();
+}
+
 bool
 LinkState::updateNodeOverloaded(
     const std::string& nodeName, bool isOverloaded) {
@@ -408,15 +417,22 @@ std::shared_ptr<Link>
 LinkState::maybeMakeLink(
     const std::string& nodeName, const thrift::Adjacency& adj) const {
   // only return Link if it is bidirectional.
-  auto search = adjacencyDatabases_.find(*adj.otherNodeName());
+  std::string adjOtherNodeName = getRealOtherNodeName(nodeName, adj);
+  auto search = adjacencyDatabases_.find(adjOtherNodeName);
   if (search != adjacencyDatabases_.end()) {
     for (const auto& otherAdj : *search->second.adjacencies()) {
-      if (nodeName == *otherAdj.otherNodeName() &&
+      if (nodeName == getRealOtherNodeName(adjOtherNodeName, otherAdj) &&
           *adj.otherIfName() == *otherAdj.ifName() &&
           *adj.ifName() == *otherAdj.otherIfName()) {
-        auto usable = linkUsable(adj, otherAdj);
+        // link is usable, only if both adj are usable by us.
+        const std::string& myNodeName =
+            fabricHelper_ && adjOtherNodeName == fabricHelper_->getFabricName()
+            ? fabricHelper_->getFabricName()
+            : myNodeName_;
+        bool usable =
+            adjUsable(adj, myNodeName) && adjUsable(otherAdj, myNodeName_);
         return std::make_shared<Link>(
-            area_, nodeName, adj, *adj.otherNodeName(), otherAdj, usable);
+            area_, nodeName, adj, adjOtherNodeName, otherAdj, usable);
       }
     }
   }
@@ -457,6 +473,9 @@ LinkState::updateAdjacencyDatabase(
 
   // Default construct if it did not exist
   auto const& nodeName = *newAdjacencyDb.thisNodeName();
+  if (fabricHelper_) {
+    fabricHelper_->updateExternalNodeToLeafMap(newAdjacencyDb);
+  }
   bool firstPub = false;
   if (adjacencyDatabases_.find(nodeName) == adjacencyDatabases_.end()) {
     firstPub = true;
@@ -819,6 +838,11 @@ LinkState::runSpf(
   XLOG(DBG3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
   fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
+}
+
+void
+LinkState::addFabricHelper(const FabricConfig& fabricConfig) {
+  fabricHelper_.emplace(fabricConfig);
 }
 
 } // namespace openr

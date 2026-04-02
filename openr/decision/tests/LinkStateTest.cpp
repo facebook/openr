@@ -231,6 +231,58 @@ TEST(LinkStateTest, pathAInPathB) {
   EXPECT_FALSE(openr::LinkState::pathAInPathB(p2, p1));
 }
 
+TEST(LinkStateTest, WithFabricHelper) {
+  // Test that addFabricHelper works and triggers fabric helper code paths
+  // This covers:
+  // - addFabricHelper() method
+  // - fabricHelper_->getRealOtherNodeName() in maybeMakeLink
+  // - fabricHelper_->updateExternalNodeToLeafMap() in updateAdjacencyDatabase
+
+  // Create a FabricConfig
+  thrift::FabricConfig thriftCfg;
+  thriftCfg.fabric_name() = "bbf01.dfw1";
+  thriftCfg.fabric_leaf_regexes() = {"bbf01-ld\\d{3}\\.dfw1"};
+  thriftCfg.fabric_spine_regexes() = {"bbf01-sp\\d{3}\\.dfw1"};
+  thriftCfg.fabric_control_regexes() = {"bbf01-lc\\d{3}\\.dfw1"};
+  FabricConfig fabricCfg(thriftCfg);
+
+  // Create LinkState and add FabricHelper
+  LinkState state{kTestingAreaName, "eb01.rva1"};
+  state.addFabricHelper(fabricCfg);
+
+  // Verify FabricHelper was added
+  EXPECT_THAT(state.getFabricHelper().has_value(), IsTrue());
+
+  // Create adjacency from leaf to external node
+  thrift::Adjacency leafToExt = openr::createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 100);
+  thrift::AdjacencyDatabase leafAdjDb =
+      openr::createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
+
+  // Update with leaf's adjacency database
+  // This triggers fabricHelper_->updateExternalNodeToLeafMap()
+  LinkState::LinkStateChange update1 =
+      state.updateAdjacencyDatabase(leafAdjDb, kTestingAreaName);
+  EXPECT_THAT(update1.topologyChanged, IsFalse());
+
+  // Create adjacency from external node to fabric
+  thrift::Adjacency extToFabric = openr::createAdjacency(
+      "bbf01.dfw1", "po1001", "po1000", "fe80::2", "10.0.0.2", 10, 200);
+  thrift::AdjacencyDatabase extAdjDb =
+      openr::createAdjDb("eb01.rva1", {extToFabric}, 2);
+
+  // Update with external node's adjacency database
+  // This triggers fabricHelper_->getRealOtherNodeName() in maybeMakeLink
+  LinkState::LinkStateChange update2 =
+      state.updateAdjacencyDatabase(extAdjDb, kTestingAreaName);
+  EXPECT_THAT(update2.topologyChanged, IsTrue());
+  EXPECT_THAT(update2.addedLinks, SizeIs(1));
+
+  // Verify the link was created correctly
+  const Link::LinkSet& links = state.linksFromNode("eb01.rva1");
+  EXPECT_THAT(links, SizeIs(1));
+}
+
 TEST(LinkStateTest, getKthPaths) {
   {
     //      10

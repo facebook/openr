@@ -9,6 +9,7 @@
 
 #include <folly/container/F14Map.h>
 #include <openr/common/Constants.h>
+#include <openr/decision/FabricHelper.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
 
@@ -431,6 +432,15 @@ class LinkState {
   // return true if this has caused any change in graph
   LinkStateChange deleteAdjacencyDatabase(const std::string& nodeName);
 
+  // Populates the FabricHelper object.
+  void addFabricHelper(const FabricConfig& fabricConfig);
+
+  // Returns the FabricHelper object.
+  std::optional<FabricHelper>&
+  getFabricHelper() {
+    return fabricHelper_;
+  }
+
   // const public methods
 
   // returns metric from a to b,
@@ -464,13 +474,6 @@ class LinkState {
   size_t
   numNodes() const {
     return linkMap_.size();
-  }
-
-  bool
-  linkUsable(
-      const thrift::Adjacency& adj1, const thrift::Adjacency& adj2) const {
-    // link is usable, only if both adj are usable by us.
-    return adjUsable(adj1, myNodeName_) && adjUsable(adj2, myNodeName_);
   }
 
   // get adjacency databases
@@ -561,6 +564,11 @@ class LinkState {
   std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
       const std::string& nodeName) const;
 
+  // Returns the leaf node's name if the other node name stored in the
+  // adj is the fabric name; otherwise, returns the other node name from adj.
+  std::string getRealOtherNodeName(
+      const std::string& nodeName, const thrift::Adjacency& adj) const;
+
   // this stores the same link object accessible from either nodeName
   folly::F14FastMap<std::string /* nodeName */, Link::LinkSet> linkMap_;
 
@@ -579,6 +587,9 @@ class LinkState {
   // the latest AdjacencyDatabase we've received from each node
   folly::F14FastMap<std::string, thrift::AdjacencyDatabase> adjacencyDatabases_;
 
+  // Object that holds Fabric related data and methods. Initialized only if this
+  // node is a Fabric node.
+  std::optional<FabricHelper> fabricHelper_;
 }; // class LinkState
 
 // Classes needed for running Dijkstra to build an SPF graph starting at a root

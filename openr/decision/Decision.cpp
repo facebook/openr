@@ -869,11 +869,18 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   CHECK(!thriftPub.area()->empty());
   auto const& area = *thriftPub.area();
 
+  bool newAreaLinkState = false;
   auto it = areaLinkStates_.find(area);
   if (it == areaLinkStates_.end()) {
     it = areaLinkStates_.emplace(area, LinkState(area, myNodeName_)).first;
+    newAreaLinkState = true;
   }
   auto& areaLinkState = it->second;
+  if (newAreaLinkState && config_->getFabricConfig()) {
+    // Fabric must be created *after* the LinkState object has been inserted in
+    // the map.
+    areaLinkState.addFabricHelper(*config_->getFabricConfig());
+  }
 
   // Nothing to process if no adj/prefix db changes
   if (thriftPub.keyVals()->empty() && thriftPub.expiredKeys()->empty()) {
