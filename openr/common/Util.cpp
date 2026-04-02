@@ -117,8 +117,6 @@ createThriftValue(
     std::optional<int64_t> hash) {
   thrift::Value value;
   value.version() = version;
-  value.originatorId() = originatorId;
-  value.value().from_optional(data);
   value.ttl() = ttl;
   value.ttlVersion() = ttlVersion;
   if (hash.has_value()) {
@@ -126,6 +124,8 @@ createThriftValue(
   } else {
     value.hash() = generateHash(version, originatorId, data);
   }
+  value.originatorId() = std::move(originatorId);
+  value.value().from_optional(std::move(data));
 
   return value;
 }

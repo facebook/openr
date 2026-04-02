@@ -610,7 +610,7 @@ Fib::updateRoutes(
 
   DecisionRouteUpdate routeUpdate;
   if (maybeRouteUpdate.has_value()) {
-    routeUpdate = *maybeRouteUpdate;
+    routeUpdate = std::move(*maybeRouteUpdate);
     XLOG(INFO) << "Processing route update from Decision";
   } else {
     routeUpdate = routeState_.createUpdate();

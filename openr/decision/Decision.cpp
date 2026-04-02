@@ -384,21 +384,22 @@ folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 Decision::getDecisionRouteDb(std::string nodeName) {
   folly::Promise<std::unique_ptr<thrift::RouteDatabase>> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread([p = std::move(p), nodeName, this]() mutable {
-    thrift::RouteDatabase routeDb;
+  runInEventBaseThread(
+      [p = std::move(p), nodeName = std::move(nodeName), this]() mutable {
+        thrift::RouteDatabase routeDb;
 
-    if (nodeName.empty()) {
-      nodeName = myNodeName_;
-    }
-    auto maybeRouteDb =
-        spfSolver_->buildRouteDb(nodeName, areaLinkStates_, prefixState_);
-    if (maybeRouteDb.has_value()) {
-      routeDb = maybeRouteDb->toThrift();
-    }
+        if (nodeName.empty()) {
+          nodeName = myNodeName_;
+        }
+        auto maybeRouteDb =
+            spfSolver_->buildRouteDb(nodeName, areaLinkStates_, prefixState_);
+        if (maybeRouteDb.has_value()) {
+          routeDb = maybeRouteDb->toThrift();
+        }
 
-    *routeDb.thisNodeName() = nodeName;
-    p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
-  });
+        *routeDb.thisNodeName() = nodeName;
+        p.setValue(std::make_unique<thrift::RouteDatabase>(std::move(routeDb)));
+      });
   return sf;
 }
 

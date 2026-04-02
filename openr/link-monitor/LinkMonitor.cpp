@@ -1155,7 +1155,7 @@ LinkMonitor::syncInterfaces() {
 
   // ATTN: treat empty link as failure to make sure LinkMonitor can keep
   // retrying to retrieve data from underneath platform.
-  InterfaceDatabase ifDb = maybeIfDb.value();
+  InterfaceDatabase ifDb = std::move(maybeIfDb).value();
   if (ifDb.empty()) {
     XLOG(ERR) << "[Interface Sync] No interface found. Retry in a moment.";
     return false;
@@ -1921,7 +1921,7 @@ LinkMonitor::logLinkEvent(
   sample.addString("interface", iface);
   sample.addInt("backoff_ms", backoffTime.count());
 
-  logSampleQueue_.push(sample);
+  logSampleQueue_.push(std::move(sample));
 
   SYSLOG(INFO) << "Interface " << iface << " is " << event
                << " and has backoff of " << backoffTime.count() << "ms";
