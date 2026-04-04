@@ -58,7 +58,8 @@ class DecisionWrapper {
         peerUpdatesQueue.getReader(),
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
-        routeUpdatesQueue);
+        routeUpdatesQueue,
+        kvRequestQueue);
 
     decisionThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Decision thread starting";
@@ -156,6 +157,7 @@ class DecisionWrapper {
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 

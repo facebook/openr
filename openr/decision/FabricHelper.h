@@ -6,6 +6,10 @@
  */
 
 #include <folly/container/F14Map.h>
+#include <openr/common/LsdbUtil.h>
+#include <openr/common/NetworkUtil.h>
+#include <openr/common/Types.h>
+#include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/decision/Link.h>
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -53,14 +57,14 @@ class FabricHelper {
   std::pair<bool, std::unordered_set<std::string>> getFabricChanges(
       const std::unordered_set<std::string>& changedKeys) const;
 
-  // Returns an updated AdjacencyDatabase if any of the external adjacencies
-  // changed.
-  std::optional<thrift::AdjacencyDatabase> getFabricAdjacencyDatabaseIfChanged(
-      const std::unordered_set<std::string>& changedLeafNames);
+  // Clears external adjacencies and returns KV unset requests if anything
+  // changed. Returns an empty vector if nothing was cleared.
+  std::vector<ClearKeyValueRequest> clearFabricKvs();
 
-  // Clears the stored external adjacencies.
-  // Returns true if the external adjacency store changed.
-  bool clearFabricAdjacencies();
+  // Updates external adjacencies for the given changed leaves and returns KV
+  // set requests if anything changed. Returns an empty vector if unchanged.
+  std::vector<PersistKeyValueRequest> updateChangedFabricKvs(
+      const std::unordered_set<std::string>& changedLeafNames);
 
  private:
   struct NodeInterface {
@@ -105,6 +109,8 @@ class FabricHelper {
 
   // The area for the adjacencies.
   const std::string area_;
+
+  apache::thrift::CompactSerializer serializer_;
 
   friend class FabricHelperTestFixture;
 };

@@ -446,7 +446,8 @@ main(int argc, char** argv) {
           std::move(decisionPeerUpdatesQueueReader),
           std::move(decisionKvStoreUpdatesQueueReader),
           std::move(decisionStaticRouteUpdatesQueueReader),
-          routeUpdatesQueue));
+          routeUpdatesQueue,
+          kvRequestQueue));
   watchdog->addQueue(routeUpdatesQueue, "routeUpdatesQueue");
 
   // Start Fib

@@ -158,7 +158,8 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       peerUpdatesQueue_.getReader(),
       kvStoreUpdatesQueue_.getReader(),
       staticRoutesQueue_.getReader(),
-      routeUpdatesQueue_);
+      routeUpdatesQueue_,
+      kvRequestQueue_);
 
   //
   // create FIB

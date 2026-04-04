@@ -106,9 +106,12 @@ Decision::Decision(
     messaging::RQueue<KvStorePublication> kvStoreUpdatesQueue,
     messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
     // producer queue
-    messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue)
+    messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue,
+    // Queue for publishing Fabric key-value updates
+    messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue)
     : config_(config),
       routeUpdatesQueue_(routeUpdatesQueue),
+      kvRequestQueue_(kvRequestQueue),
       myNodeName_(*config->getConfig().node_name()),
       pendingUpdates_(*config->getConfig().node_name()),
       rebuildRoutesDebounced_(
@@ -910,23 +913,23 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
 
   // Generate/delete fabric kvs if needed.
   if (areaLinkState.getFabricHelper()) {
-    updateFabricKv(changedKeys, areaLinkState);
+    updateFabricKv(changedKeys, areaLinkState.getFabricHelper());
   }
 }
 
 void
 Decision::updateFabricKv(
     const std::unordered_set<std::string>& changedKeys,
-    openr::LinkState& areaLinkState) {
+    std::optional<FabricHelper>& fabricHelper) {
   // This is a part of a fabric.
   const auto [isFabricNodeChanged, changedLeafNames] =
-      areaLinkState.getFabricHelper()->getFabricChanges(changedKeys);
+      fabricHelper->getFabricChanges(changedKeys);
   if (!isFabricNodeChanged) {
     return;
   }
   // Fabric master may have changed.
   const std::string newFabricMasterName =
-      areaLinkState.getFabricHelper()->getFabricMasterGenerator();
+      fabricHelper->getFabricMasterGenerator();
   if (newFabricMasterName != fabricMasterName_) {
     XLOGF(
         INFO, "Fabric master: {}->{}", fabricMasterName_, newFabricMasterName);
@@ -934,12 +937,25 @@ Decision::updateFabricKv(
   }
   if (myNodeName_ != fabricMasterName_) {
     // This node is not the fabric master.
-    areaLinkState.getFabricHelper()->clearFabricAdjacencies();
+    std::vector<ClearKeyValueRequest> clearRequests =
+        fabricHelper->clearFabricKvs();
+    if (!clearRequests.empty()) {
+      XLOGF(INFO, "Deleting Fabric keys from KvStore.");
+      for (ClearKeyValueRequest& kvRequest : clearRequests) {
+        kvRequestQueue_.push(std::move(kvRequest));
+      }
+    }
     return;
   }
   // This node is the fabric master.
-  areaLinkState.getFabricHelper()->getFabricAdjacencyDatabaseIfChanged(
-      changedLeafNames);
+  std::vector<PersistKeyValueRequest> setRequests =
+      fabricHelper->updateChangedFabricKvs(changedLeafNames);
+  if (!setRequests.empty()) {
+    XLOGF(INFO, "Generating fabric keys.");
+    for (PersistKeyValueRequest& kvRequest : setRequests) {
+      kvRequestQueue_.push(std::move(kvRequest));
+    }
+  }
 }
 
 void

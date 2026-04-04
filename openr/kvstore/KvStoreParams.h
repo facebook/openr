@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <openr/config/Config.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
@@ -53,10 +54,13 @@ struct KvStoreParams {
   std::optional<std::string> x509_key_path{std::nullopt};
   std::optional<std::string> x509_ca_path{std::nullopt};
 
+  std::optional<FabricConfig> fabricConfig;
+
   KvStoreParams(
       const thrift::KvStoreConfig& kvStoreConfig,
       messaging::ReplicateQueue<KvStorePublication>& kvStoreUpdatesQueue,
-      messaging::ReplicateQueue<LogSample>& logSampleQueue)
+      messaging::ReplicateQueue<LogSample>& logSampleQueue,
+      std::optional<FabricConfig> fabricConfig = std::nullopt)
       : nodeId(*kvStoreConfig.node_name()),
         kvStoreUpdatesQueue(kvStoreUpdatesQueue),
         logSampleQueue(logSampleQueue),
@@ -78,7 +82,8 @@ struct KvStoreParams {
             *kvStoreConfig.enable_secure_thrift_client()),
         x509_cert_path(kvStoreConfig.x509_cert_path().to_optional()),
         x509_key_path(kvStoreConfig.x509_key_path().to_optional()),
-        x509_ca_path(kvStoreConfig.x509_ca_path().to_optional()) {}
+        x509_ca_path(kvStoreConfig.x509_ca_path().to_optional()),
+        fabricConfig(std::move(fabricConfig)) {}
 };
 
 } // namespace openr

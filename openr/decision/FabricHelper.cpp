@@ -39,7 +39,7 @@ FabricHelper::updateExternalNodeToLeafMap(
   // Build the new map of external NI -> leaf NI from newAdjacencyDb.
   folly::F14NodeMap<NodeInterface, NodeInterface, NodeInterfaceHasher>
       newExternalLinks;
-  for (const auto& adj : *newAdjacencyDb.adjacencies()) {
+  for (const thrift::Adjacency& adj : *newAdjacencyDb.adjacencies()) {
     if (fabricConfig_.isFabric(*adj.otherNodeName())) {
       continue;
     }
@@ -118,31 +118,6 @@ FabricHelper::getFabricChanges(
 }
 
 bool
-FabricHelper::clearFabricAdjacencies() {
-  bool changed = !externalAdjacencies_.empty();
-  externalAdjacencies_.clear();
-  return changed;
-}
-
-std::optional<thrift::AdjacencyDatabase>
-FabricHelper::getFabricAdjacencyDatabaseIfChanged(
-    const std::unordered_set<std::string>& changedLeafNames) {
-  bool isChanged = updateFabricAdjacencies(changedLeafNames);
-  if (!isChanged) {
-    return std::nullopt;
-  }
-  thrift::AdjacencyDatabase fabricAdjDb;
-  for (const auto& [_, adjacencies] : externalAdjacencies_) {
-    for (const auto& adj : adjacencies) {
-      fabricAdjDb.adjacencies()->push_back(adj);
-    }
-  }
-  fabricAdjDb.thisNodeName() = fabricConfig_.getFabricName();
-  fabricAdjDb.area() = area_;
-  return fabricAdjDb;
-}
-
-bool
 FabricHelper::updateFabricAdjacencies(
     const std::unordered_set<std::string>& changedNodes) {
   bool rebuildNeeded = externalAdjacencies_.empty();
@@ -157,9 +132,10 @@ FabricHelper::updateFabricAdjacencies(
     }
     std::set<thrift::Adjacency> newExternalAdjs;
     for (const thrift::Adjacency& adj : *adjDb.adjacencies()) {
-      if (!fabricConfig_.isFabric(*adj.otherNodeName())) {
-        newExternalAdjs.insert(adj);
+      if (fabricConfig_.isFabric(*adj.otherNodeName())) {
+        continue;
       }
+      newExternalAdjs.insert(adj);
     }
     std::set<thrift::Adjacency>& existingAdjs = externalAdjacencies_[nodeName];
     if (existingAdjs != newExternalAdjs) {
@@ -168,6 +144,65 @@ FabricHelper::updateFabricAdjacencies(
     }
   }
   return changed;
+}
+
+std::vector<ClearKeyValueRequest>
+FabricHelper::clearFabricKvs() {
+  if (externalAdjacencies_.empty()) {
+    return {};
+  }
+  externalAdjacencies_.clear();
+
+  std::vector<ClearKeyValueRequest> requests;
+  const std::string& fabricName = getFabricName();
+  // Erase the local key from KvStore, but do not flood a ttl=0 key
+  // by setting setValue=false in ClearKeyValueRequest.
+  requests.emplace_back(
+      AreaId{area_}, fmt::format("{}{}", Constants::kAdjDbMarker, fabricName));
+  for (const std::string& fabricPrefix : fabricConfig_.getFabricPrefixes()) {
+    requests.emplace_back(
+        AreaId{area_},
+        fmt::format(
+            "{}{}:[{}]", Constants::kPrefixDbMarker, fabricName, fabricPrefix));
+  }
+  return requests;
+}
+
+std::vector<PersistKeyValueRequest>
+FabricHelper::updateChangedFabricKvs(
+    const std::unordered_set<std::string>& changedLeafNames) {
+  if (!updateFabricAdjacencies(changedLeafNames)) {
+    return {};
+  }
+
+  thrift::AdjacencyDatabase fabricAdjDb;
+  for (const auto& [_, adjacencies] : externalAdjacencies_) {
+    for (const thrift::Adjacency& adj : adjacencies) {
+      fabricAdjDb.adjacencies()->push_back(adj);
+    }
+  }
+  const std::string& fabricName = getFabricName();
+  fabricAdjDb.thisNodeName() = fabricName;
+  fabricAdjDb.area() = area_;
+
+  std::vector<PersistKeyValueRequest> requests;
+  std::string adjDbStr = writeThriftObjStr(fabricAdjDb, serializer_);
+  requests.emplace_back(
+      AreaId{area_},
+      fmt::format("{}{}", Constants::kAdjDbMarker, fabricName),
+      adjDbStr);
+  for (const std::string& fabricPrefix : fabricConfig_.getFabricPrefixes()) {
+    thrift::PrefixDatabase prefixDb;
+    prefixDb.thisNodeName() = fabricName;
+    prefixDb.prefixEntries() = {createPrefixEntry(toIpPrefix(fabricPrefix))};
+    std::string prefixDbStr = writeThriftObjStr(prefixDb, serializer_);
+    requests.emplace_back(
+        AreaId{area_},
+        fmt::format(
+            "{}{}:[{}]", Constants::kPrefixDbMarker, fabricName, fabricPrefix),
+        prefixDbStr);
+  }
+  return requests;
 }
 
 } // namespace openr

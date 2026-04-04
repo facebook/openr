@@ -87,7 +87,8 @@ class OpenrCtrlFixture : public ::testing::Test {
         peerUpdatesQueue_.getReader(),
         kvStoreWrapper_->getReader(),
         staticRoutesUpdatesQueue_.getReader(),
-        routeUpdatesQueue_);
+        routeUpdatesQueue_,
+        kvRequestQueue_);
     decisionThread_ = std::thread([&]() { decision->run(); });
 
     // Create Fib moduleKeySyncMultipleArea

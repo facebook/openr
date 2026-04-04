@@ -576,17 +576,17 @@ TEST_F(FabricHelperTestFixture, GetFabricChanges_MixedKeys) {
 }
 
 //
-// clearFabricAdjacencies unit tests
+// clearFabricKvs unit tests
 //
 
-TEST_F(FabricHelperTestFixture, ClearFabricAdjacencies_AlreadyEmpty) {
+TEST_F(FabricHelperTestFixture, ClearFabricKvs_AlreadyEmpty) {
   FabricHelper helper = makeHelper();
 
-  EXPECT_THAT(helper.clearFabricAdjacencies(), IsFalse());
+  EXPECT_THAT(helper.clearFabricKvs(), IsEmpty());
   EXPECT_THAT(getExternalAdjacencies(helper), IsEmpty());
 }
 
-TEST_F(FabricHelperTestFixture, ClearFabricAdjacencies_WithEntries) {
+TEST_F(FabricHelperTestFixture, ClearFabricKvs_WithEntries) {
   // Populate adjacencyDatabases_ with a leaf that has an external adjacency
   thrift::Adjacency leafToExt = createAdjacency(
       "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
@@ -598,32 +598,26 @@ TEST_F(FabricHelperTestFixture, ClearFabricAdjacencies_WithEntries) {
 
   // Build external adjacencies first
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
-  helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
+  helper.updateChangedFabricKvs(changedLeaves);
   EXPECT_THAT(getExternalAdjacencies(helper), Not(IsEmpty()));
 
-  // Now clear — should return true since entries existed
-  EXPECT_THAT(helper.clearFabricAdjacencies(), IsTrue());
+  // Now clear — should return non-empty requests since entries existed
+  EXPECT_THAT(helper.clearFabricKvs(), Not(IsEmpty()));
   EXPECT_THAT(getExternalAdjacencies(helper), IsEmpty());
 }
 
 //
-// getFabricAdjacencyDatabaseIfChanged unit tests
+// updateChangedFabricKvs unit tests
 //
 
-TEST_F(
-    FabricHelperTestFixture,
-    GetFabricAdjacencyDatabaseIfChanged_NoAdjacencies) {
+TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_NoAdjacencies) {
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  std::optional<thrift::AdjacencyDatabase> result =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  EXPECT_THAT(result.has_value(), IsFalse());
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), IsEmpty());
 }
 
-TEST_F(
-    FabricHelperTestFixture,
-    GetFabricAdjacencyDatabaseIfChanged_WithExternalAdjacency) {
+TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_WithExternalAdjacency) {
   // Leaf has an adjacency to an external node
   thrift::Adjacency leafToExt = createAdjacency(
       "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
@@ -634,18 +628,16 @@ TEST_F(
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  std::optional<thrift::AdjacencyDatabase> result =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  ASSERT_THAT(result.has_value(), IsTrue());
-  EXPECT_THAT(*result->thisNodeName(), Eq("bbf01.dfw1"));
-  EXPECT_THAT(*result->area(), Eq(area_));
-  EXPECT_THAT(*result->adjacencies(), SizeIs(1));
-  EXPECT_THAT(*result->adjacencies()->at(0).otherNodeName(), Eq("eb01.rva1"));
+  std::vector<PersistKeyValueRequest> requests =
+      helper.updateChangedFabricKvs(changedLeaves);
+  EXPECT_THAT(requests, Not(IsEmpty()));
+  // Verify internal state: external adjacencies are populated
+  const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs =
+      getExternalAdjacencies(helper);
+  EXPECT_THAT(extAdjs, Not(IsEmpty()));
 }
 
-TEST_F(
-    FabricHelperTestFixture,
-    GetFabricAdjacencyDatabaseIfChanged_NoChangeOnSecondCall) {
+TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_NoChangeOnSecondCall) {
   // Leaf has an adjacency to an external node
   thrift::Adjacency leafToExt = createAdjacency(
       "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
@@ -656,20 +648,16 @@ TEST_F(
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  // First call — should return the database
-  std::optional<thrift::AdjacencyDatabase> result1 =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  EXPECT_THAT(result1.has_value(), IsTrue());
+  // First call — should return requests
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
 
   // Second call with same leaves — no new changes
-  std::optional<thrift::AdjacencyDatabase> result2 =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  EXPECT_THAT(result2.has_value(), IsFalse());
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), IsEmpty());
 }
 
 TEST_F(
     FabricHelperTestFixture,
-    GetFabricAdjacencyDatabaseIfChanged_SkipsFabricToFabricAdjacency) {
+    UpdateChangedFabricKvs_SkipsFabricToFabricAdjacency) {
   // Leaf has one external adjacency and one fabric-to-fabric adjacency
   thrift::Adjacency leafToExt = createAdjacency(
       "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
@@ -682,12 +670,17 @@ TEST_F(
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  std::optional<thrift::AdjacencyDatabase> result =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  ASSERT_THAT(result.has_value(), IsTrue());
-  // Only the external adjacency should be included, not the spine adjacency
-  EXPECT_THAT(*result->adjacencies(), SizeIs(1));
-  EXPECT_THAT(*result->adjacencies()->at(0).otherNodeName(), Eq("eb01.rva1"));
+  std::vector<PersistKeyValueRequest> requests =
+      helper.updateChangedFabricKvs(changedLeaves);
+  EXPECT_THAT(requests, Not(IsEmpty()));
+  // Verify internal state: only external adjacency, not fabric-to-fabric
+  const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs =
+      getExternalAdjacencies(helper);
+  size_t totalAdjs = 0;
+  for (const auto& [_, adjs] : extAdjs) {
+    totalAdjs += adjs.size();
+  }
+  EXPECT_EQ(totalAdjs, 1);
 }
 
 TEST_F(
@@ -706,10 +699,14 @@ TEST_F(
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  std::optional<thrift::AdjacencyDatabase> result1 =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  ASSERT_THAT(result1.has_value(), IsTrue());
-  EXPECT_THAT(*result1->adjacencies(), SizeIs(3));
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs1 =
+      getExternalAdjacencies(helper);
+  size_t totalAdjs1 = 0;
+  for (const auto& [_, adjs] : extAdjs1) {
+    totalAdjs1 += adjs.size();
+  }
+  EXPECT_THAT(totalAdjs1, Eq(3));
 
   // Update: ext1 unchanged, ext2 removed, ext3 removed, ext4 added
   thrift::Adjacency leafToExt4 = createAdjacency(
@@ -717,16 +714,20 @@ TEST_F(
   adjacencyDatabases_["bbf01-ld001.dfw1"] =
       createAdjDb("bbf01-ld001.dfw1", {leafToExt1, leafToExt4}, 2);
 
-  std::optional<thrift::AdjacencyDatabase> result2 =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  ASSERT_THAT(result2.has_value(), IsTrue());
-  EXPECT_THAT(*result2->adjacencies(), SizeIs(2));
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs2 =
+      getExternalAdjacencies(helper);
+  size_t totalAdjs2 = 0;
   std::set<std::string> otherNames;
-  for (const auto& adj : *result2->adjacencies()) {
-    otherNames.insert(*adj.otherNodeName());
+  for (const auto& [_, adjs] : extAdjs2) {
+    totalAdjs2 += adjs.size();
+    for (const thrift::Adjacency& adj : adjs) {
+      otherNames.insert(*adj.otherNodeName());
+    }
   }
+  EXPECT_THAT(totalAdjs2, Eq(2));
   std::set<std::string> expected = {"eb01.rva1", "eb01.iad1"};
-  EXPECT_EQ(otherNames, expected);
+  EXPECT_THAT(otherNames, Eq(expected));
 }
 
 TEST_F(
@@ -742,10 +743,14 @@ TEST_F(
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
   // First call — external adjacency present
-  std::optional<thrift::AdjacencyDatabase> result1 =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  ASSERT_THAT(result1.has_value(), IsTrue());
-  EXPECT_THAT(*result1->adjacencies(), SizeIs(1));
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs1 =
+      getExternalAdjacencies(helper);
+  size_t totalAdjs1 = 0;
+  for (const auto& [_, adjs] : extAdjs1) {
+    totalAdjs1 += adjs.size();
+  }
+  EXPECT_THAT(totalAdjs1, Eq(1));
 
   // Remove all external adjs: only a spine adjacency remains
   thrift::Adjacency leafToSpine = createAdjacency(
@@ -753,11 +758,15 @@ TEST_F(
   adjacencyDatabases_["bbf01-ld001.dfw1"] =
       createAdjDb("bbf01-ld001.dfw1", {leafToSpine}, 2);
 
-  // Second call — should detect removal, return empty adjacencies
-  std::optional<thrift::AdjacencyDatabase> result2 =
-      helper.getFabricAdjacencyDatabaseIfChanged(changedLeaves);
-  ASSERT_THAT(result2.has_value(), IsTrue());
-  EXPECT_THAT(*result2->adjacencies(), IsEmpty());
+  // Second call — should detect removal
+  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs2 =
+      getExternalAdjacencies(helper);
+  size_t totalAdjs2 = 0;
+  for (const auto& [_, adjs] : extAdjs2) {
+    totalAdjs2 += adjs.size();
+  }
+  EXPECT_THAT(totalAdjs2, Eq(0));
 }
 
 } // namespace

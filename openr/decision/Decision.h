@@ -139,7 +139,9 @@ class Decision : public OpenrEventBase {
       // Queue for receiving static route updates
       messaging::RQueue<DecisionRouteUpdate> staticRouteUpdatesQueue,
       // Queue for publishing route updates
-      messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue);
+      messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue,
+      // Queue for publishing Fabric key-value updates
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue);
 
   ~Decision() override;
 
@@ -283,7 +285,7 @@ class Decision : public OpenrEventBase {
   // needed for the given areaLinkState.
   void updateFabricKv(
       const std::unordered_set<std::string>& changedKeys,
-      openr::LinkState& areaLinkState);
+      std::optional<FabricHelper>& fabricHelper);
 
   // Openr config
   std::shared_ptr<const Config> config_;
@@ -302,6 +304,9 @@ class Decision : public OpenrEventBase {
 
   // Queue to publish route changes
   messaging::ReplicateQueue<DecisionRouteUpdate>& routeUpdatesQueue_;
+
+  // Queue to publish Fabric key-value changes
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
   // Pointer to RibPolicy
   std::unique_ptr<RibPolicy> ribPolicy_;

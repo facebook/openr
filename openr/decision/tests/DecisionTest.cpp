@@ -85,7 +85,8 @@ class DecisionTestFixture : public ::testing::Test {
         peerUpdatesQueue.getReader(),
         kvStoreUpdatesQueue.getReader(),
         staticRouteUpdatesQueue.getReader(),
-        routeUpdatesQueue);
+        routeUpdatesQueue,
+        kvRequestQueue);
 
     decisionThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "Decision thread starting";
@@ -114,6 +115,7 @@ class DecisionTestFixture : public ::testing::Test {
     kvStoreUpdatesQueue.close();
     staticRouteUpdatesQueue.close();
     routeUpdatesQueue.close();
+    kvRequestQueue.close();
 
     // Delete default rib policy file.
     remove(FLAGS_rib_policy_file.c_str());
@@ -160,7 +162,8 @@ class DecisionTestFixture : public ::testing::Test {
 
   void
   verifyReceivedRoutes(const folly::CIDRNetwork& network, bool isRemoved) {
-    auto startTime = std::chrono::steady_clock::now();
+    std::chrono::steady_clock::time_point startTime =
+        std::chrono::steady_clock::now();
     while (true) {
       auto endTime = std::chrono::steady_clock::now();
       if (endTime - startTime > debounceTimeoutMax) {
@@ -330,6 +333,7 @@ class DecisionTestFixture : public ::testing::Test {
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
   messaging::RQueue<DecisionRouteUpdate> routeUpdatesQueueReader{
       routeUpdatesQueue.getReader()};
 
@@ -1792,12 +1796,14 @@ TEST_F(DecisionTestFixture, GracefulRestartSupportForRibPolicy) {
         messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
         messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
         auto routeUpdatesQueueReader = routeUpdatesQueue.getReader();
+        messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
         decision = std::make_unique<Decision>(
             config,
             peerUpdatesQueue.getReader(),
             kvStoreUpdatesQueue.getReader(),
             staticRouteUpdatesQueue.getReader(),
-            routeUpdatesQueue);
+            routeUpdatesQueue,
+            kvRequestQueue);
         decisionThread =
             std::make_unique<std::thread>([&]() { decision->run(); });
         decision->waitUntilRunning();
@@ -1905,12 +1911,14 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
         messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
         messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
         auto routeUpdatesQueueReader = routeUpdatesQueue.getReader();
+        messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
         decision = std::make_unique<Decision>(
             config,
             peerUpdatesQueue.getReader(),
             kvStoreUpdatesQueue.getReader(),
             staticRouteUpdatesQueue.getReader(),
-            routeUpdatesQueue);
+            routeUpdatesQueue,
+            kvRequestQueue);
         decisionThread = std::make_unique<std::thread>([&]() {
           LOG(INFO) << "Decision thread starting";
           decision->run();
@@ -3474,6 +3482,138 @@ TEST_F(DecisionTestFixture, TestLinkPropagationWithFirstPubCall) {
   EXPECT_GT(counters["decision.linkstate.down.propagation_time_ms.avg.60"], 1);
   EXPECT_LT(
       counters["decision.linkstate.down.propagation_time_ms.avg.60"], 4000);
+}
+
+/**
+ * Test fixture for testing Decision module's fabric KV orchestration logic.
+ * The spine node is the master generator that pushes KV requests.
+ */
+class DecisionFabricTestFixture : public DecisionTestFixture {
+ protected:
+  openr::thrift::OpenrConfig
+  createConfig() override {
+    openr::thrift::OpenrConfig tConfig = getBasicOpenrConfig(
+        spineNodeName_,
+        {},
+        true /* enable v4 */,
+        true /* dryrun */,
+        false /* enableV4OverV6Nexthop */);
+
+    tConfig.decision_config()->debounce_min_ms() = debounceTimeoutMin.count();
+    tConfig.decision_config()->debounce_max_ms() = debounceTimeoutMax.count();
+    tConfig.enable_best_route_selection() = true;
+
+    thrift::FabricConfig fabricCfg;
+    fabricCfg.fabric_name() = "bbf01.dfw1";
+    fabricCfg.fabric_leaf_regexes() = {"bbf01-ld\\d{3}\\.dfw1"};
+    fabricCfg.fabric_spine_regexes() = {"bbf01-sp\\d{3}\\.dfw1"};
+    tConfig.fabric_config() = fabricCfg;
+
+    return tConfig;
+  }
+
+  void
+  publishInitialPeers() override {
+    thrift::PeersMap peers;
+    peers.emplace(leafNodeName_, thrift::PeerSpec());
+    PeerEvent peerEvent{
+        {kTestingAreaName, AreaPeerEvent(peers, {} /*peersToDel*/)}};
+    peerUpdatesQueue.push(std::move(peerEvent));
+  }
+
+  std::optional<KeyValueRequest>
+  recvKvRequest(
+      std::chrono::milliseconds timeout = std::chrono::milliseconds{1000}) {
+    auto startTime = std::chrono::steady_clock::now();
+    while (std::chrono::steady_clock::now() - startTime < timeout) {
+      if (kvRequestQueueReader_.size() > 0) {
+        folly::Expected<KeyValueRequest, messaging::QueueError> maybeReq =
+            kvRequestQueueReader_.get();
+        if (!maybeReq.hasError()) {
+          return maybeReq.value();
+        }
+      }
+      std::this_thread::sleep_for(std::chrono::milliseconds{10});
+    }
+    return std::nullopt;
+  }
+
+  const std::string spineNodeName_{"bbf01-sp001.dfw1"};
+  const std::string leafNodeName_{"bbf01-ld001.dfw1"};
+  const std::string externalNodeName_{"eb01.rva1"};
+  messaging::RQueue<KeyValueRequest> kvRequestQueueReader_{
+      kvRequestQueue.getReader()};
+};
+
+TEST_F(DecisionFabricTestFixture, MasterGeneratesFabricKvs) {
+  // Spine adj to leaf
+  thrift::Adjacency spineToLeaf = createAdjacency(
+      leafNodeName_, "po10200", "po10100", "fe80::2", "10.0.0.2", 10, 100);
+  // Leaf adj to spine
+  thrift::Adjacency leafToSpine = createAdjacency(
+      spineNodeName_, "po10100", "po10200", "fe80::1", "10.0.0.1", 10, 200);
+  // Leaf adj to external node
+  thrift::Adjacency leafToExt = createAdjacency(
+      externalNodeName_, "po1000", "po1001", "fe80::3", "10.0.0.3", 10, 300);
+
+  thrift::Publication publication = createThriftPublication(
+      {{"adj:" + spineNodeName_,
+        createAdjValue(serializer, spineNodeName_, 1, {spineToLeaf}, false, 1)},
+       {"adj:" + leafNodeName_,
+        createAdjValue(
+            serializer, leafNodeName_, 1, {leafToSpine, leafToExt}, false, 2)}},
+      {},
+      {},
+      {});
+
+  sendKvPublication(publication);
+
+  // The spine is the fabric master; expect PersistKeyValueRequest on queue.
+  std::optional<KeyValueRequest> maybeReq = recvKvRequest();
+  ASSERT_TRUE(maybeReq.has_value());
+  EXPECT_TRUE(std::holds_alternative<PersistKeyValueRequest>(maybeReq.value()));
+}
+
+TEST_F(DecisionFabricTestFixture, MasterUpdatesOnExternalAdjRemoved) {
+  // Spine adj to leaf
+  thrift::Adjacency spineToLeaf = createAdjacency(
+      leafNodeName_, "po10200", "po10100", "fe80::2", "10.0.0.2", 10, 100);
+  // Leaf adj to spine
+  thrift::Adjacency leafToSpine = createAdjacency(
+      spineNodeName_, "po10100", "po10200", "fe80::1", "10.0.0.1", 10, 200);
+  // Leaf adj to external node
+  thrift::Adjacency leafToExt = createAdjacency(
+      externalNodeName_, "po1000", "po1001", "fe80::3", "10.0.0.3", 10, 300);
+
+  // Step 1: Publish adjacencies with external adj on the leaf.
+  thrift::Publication publication1 = createThriftPublication(
+      {{"adj:" + spineNodeName_,
+        createAdjValue(serializer, spineNodeName_, 1, {spineToLeaf}, false, 1)},
+       {"adj:" + leafNodeName_,
+        createAdjValue(
+            serializer, leafNodeName_, 1, {leafToSpine, leafToExt}, false, 2)}},
+      {},
+      {},
+      {});
+  sendKvPublication(publication1);
+
+  // Drain initial KV requests.
+  while (recvKvRequest(std::chrono::milliseconds{100}).has_value()) {
+  }
+
+  // Step 2: Publish updated leaf adjacency without the external adj.
+  thrift::Publication publication2 = createThriftPublication(
+      {{"adj:" + leafNodeName_,
+        createAdjValue(serializer, leafNodeName_, 2, {leafToSpine}, false, 2)}},
+      {},
+      {},
+      {});
+  sendKvPublication(publication2, false /* prefixPubExists */);
+
+  // Expect new KV requests reflecting the removal.
+  std::optional<KeyValueRequest> maybeReq = recvKvRequest();
+  ASSERT_TRUE(maybeReq.has_value());
+  EXPECT_TRUE(std::holds_alternative<PersistKeyValueRequest>(maybeReq.value()));
 }
 
 TEST(DecisionPendingUpdates, perfEvents) {
