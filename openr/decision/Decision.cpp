@@ -753,7 +753,7 @@ Decision::readRibPolicy() {
       ttlDurationSec);
 }
 
-void
+bool
 Decision::updateKeyInLsdb(
     const std::string& area,
     LinkState& areaLinkState,
@@ -762,7 +762,7 @@ Decision::updateKeyInLsdb(
   if (!rawVal.value().has_value()) {
     // skip TTL update
     DCHECK(*rawVal.ttlVersion() > 0);
-    return;
+    return false;
   }
 
   try {
@@ -783,7 +783,7 @@ Decision::updateKeyInLsdb(
               area,
               (!initialKvStoreSynced_ || !initialSelfAdjSynced_)),
           adjacencyDb.perfEvents());
-      return;
+      return true;
     }
 
     if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
@@ -798,7 +798,7 @@ Decision::updateKeyInLsdb(
             << "Expecting exactly one entry per prefix key, publication received from "
             << *prefixDb.thisNodeName();
         fb303::fbData->addStatValue("decision.error", 1, fb303::COUNT);
-        return;
+        return false;
       }
 
       auto const& entry = prefixDb.prefixEntries()->front();
@@ -811,7 +811,7 @@ Decision::updateKeyInLsdb(
           areaLinkStates_.count(areaStack.back())) {
         XLOG(DBG2) << "Ignore self redistributed route reflection for prefix: "
                    << key << " area_stack: " << folly::join(",", areaStack);
-        return;
+        return false;
       }
 
       // construct new prefix key with local publication area id
@@ -823,14 +823,16 @@ Decision::updateKeyInLsdb(
               ? prefixState_.deletePrefix(prefixKey)
               : prefixState_.updatePrefix(prefixKey, entry),
           prefixDb.perfEvents());
+      return true;
     }
   } catch (const std::exception& e) {
     XLOG(ERR) << "Failed to deserialize info for key " << key
               << ". Exception: " << folly::exceptionStr(e);
   }
+  return false;
 }
 
-void
+bool
 Decision::deleteKeyFromLsdb(
     const std::string& area, LinkState& areaLinkState, const std::string& key) {
   // TODO: avoid decoding from string by injecting data-structures
@@ -844,7 +846,7 @@ Decision::deleteKeyFromLsdb(
         nodeName,
         areaLinkState.deleteAdjacencyDatabase(nodeName),
         thrift::PrefixDatabase().perfEvents()); // Empty perf events
-    return;
+    return true;
   }
 
   if (key.find(Constants::kPrefixDbMarker.toString()) == 0) {
@@ -856,12 +858,14 @@ Decision::deleteKeyFromLsdb(
           "Unable to parse prefix key: {} with error: {}",
           key,
           maybePrefixKey.error());
-      return;
+      return false;
     }
     pendingUpdates_.applyPrefixStateChange(
         prefixState_.deletePrefix(maybePrefixKey.value()),
         thrift::PrefixDatabase().perfEvents()); // Empty perf events
+    return true;
   }
+  return false;
 }
 
 void
@@ -888,14 +892,54 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   }
 
   // LSDB addition/update
+  std::unordered_set<std::string> changedKeys;
   for (const auto& [key, rawVal] : *thriftPub.keyVals()) {
-    updateKeyInLsdb(area, areaLinkState, key, rawVal);
+    bool changed = updateKeyInLsdb(area, areaLinkState, key, rawVal);
+    if (changed) {
+      changedKeys.emplace(key);
+    }
   }
 
   // LSDB deletion
   for (const auto& key : *thriftPub.expiredKeys()) {
-    deleteKeyFromLsdb(area, areaLinkState, key);
+    bool isDeleted = deleteKeyFromLsdb(area, areaLinkState, key);
+    if (isDeleted) {
+      changedKeys.emplace(key);
+    }
   }
+
+  // Generate/delete fabric kvs if needed.
+  if (areaLinkState.getFabricHelper()) {
+    updateFabricKv(changedKeys, areaLinkState);
+  }
+}
+
+void
+Decision::updateFabricKv(
+    const std::unordered_set<std::string>& changedKeys,
+    openr::LinkState& areaLinkState) {
+  // This is a part of a fabric.
+  const auto [isFabricNodeChanged, changedLeafNames] =
+      areaLinkState.getFabricHelper()->getFabricChanges(changedKeys);
+  if (!isFabricNodeChanged) {
+    return;
+  }
+  // Fabric master may have changed.
+  const std::string newFabricMasterName =
+      areaLinkState.getFabricHelper()->getFabricMasterGenerator();
+  if (newFabricMasterName != fabricMasterName_) {
+    XLOGF(
+        INFO, "Fabric master: {}->{}", fabricMasterName_, newFabricMasterName);
+    fabricMasterName_ = newFabricMasterName;
+  }
+  if (myNodeName_ != fabricMasterName_) {
+    // This node is not the fabric master.
+    areaLinkState.getFabricHelper()->clearFabricAdjacencies();
+    return;
+  }
+  // This node is the fabric master.
+  areaLinkState.getFabricHelper()->getFabricAdjacencyDatabaseIfChanged(
+      changedLeafNames);
 }
 
 void

@@ -20,8 +20,14 @@ class FabricHelper {
   FabricHelper(
       const FabricConfig& fabricConfig,
       const folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet>&
-          linkMap)
-      : fabricConfig_(fabricConfig), linkMap_(linkMap) {}
+          linkMap,
+      const folly::F14FastMap<std::string, thrift::AdjacencyDatabase>&
+          adjacencyDatabases,
+      const std::string& area)
+      : fabricConfig_(fabricConfig),
+        linkMap_(linkMap),
+        adjacencyDatabases_(adjacencyDatabases),
+        area_(area) {}
 
   // Returns the name of the fabric.
   std::string getFabricName() const;
@@ -35,6 +41,26 @@ class FabricHelper {
 
   // Returns the name of fabric node that is currently the master generator.
   std::string getFabricMasterGenerator() const;
+
+  // Returns a pair of:
+  //   bool: True the changed keys contain a leaf, spine or control node's key
+  //   std::unordered_set<std::string>: Set of leaf node names whose keys
+  //   changed
+  //
+  // Note: Only a spine or a control nodes' adjacency changes, returns
+  // {true,{}}. The bool is used to determine if the fabric master generator may
+  // have changed.
+  std::pair<bool, std::unordered_set<std::string>> getFabricChanges(
+      const std::unordered_set<std::string>& changedKeys) const;
+
+  // Returns an updated AdjacencyDatabase if any of the external adjacencies
+  // changed.
+  std::optional<thrift::AdjacencyDatabase> getFabricAdjacencyDatabaseIfChanged(
+      const std::unordered_set<std::string>& changedLeafNames);
+
+  // Clears the stored external adjacencies.
+  // Returns true if the external adjacency store changed.
+  bool clearFabricAdjacencies();
 
  private:
   struct NodeInterface {
@@ -52,6 +78,10 @@ class FabricHelper {
     }
   };
 
+  // Returns true if any of the adjacencies changed.
+  bool updateFabricAdjacencies(
+      const std::unordered_set<std::string>& changedNodes);
+
   FabricConfig fabricConfig_;
 
   // External node/interface to the fabric leaf/interface mapping.
@@ -65,6 +95,16 @@ class FabricHelper {
       leafToExternalNode_;
 
   const folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet>& linkMap_;
+
+  const folly::F14FastMap<std::string, thrift::AdjacencyDatabase>&
+      adjacencyDatabases_;
+
+  // True nodeName (not key) -> {leaf to external adjacency}
+  std::unordered_map<std::string, std::set<thrift::Adjacency>>
+      externalAdjacencies_;
+
+  // The area for the adjacencies.
+  const std::string area_;
 
   friend class FabricHelperTestFixture;
 };

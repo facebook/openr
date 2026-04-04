@@ -64,6 +64,8 @@ apache::thrift::optional_field_ref<thrift::PerfEvents const&>
     kEmptyPerfEventRef{kEmptyAdjDb.perfEvents()};
 } // anonymous namespace
 
+namespace openr {
+
 //
 // Start the decision thread and simulate KvStore communications
 // Expect proper RouteDatabase publications to appear
@@ -340,6 +342,28 @@ class DecisionTestFixture : public ::testing::Test {
   // Initial KvStore synced signal is sent.
   bool kvStoreSyncEventSent{false};
   bool adjacencyDbSyncEventSent{false};
+
+  // Helper to call the private updateKeyInLsdb via friend access.
+  bool
+  callUpdateKeyInLsdb(
+      const std::string& area,
+      LinkState& areaLinkState,
+      const std::string& key,
+      const thrift::Value& rawVal) {
+    return decision->updateKeyInLsdb(area, areaLinkState, key, rawVal);
+  }
+
+  // Helper to access private areaLinkStates_ via friend access.
+  folly::F14FastMap<std::string, LinkState>&
+  getAreaLinkStates() {
+    return decision->areaLinkStates_;
+  }
+
+  // Helper to access pendingUpdates_ count via friend access.
+  uint32_t
+  getPendingUpdatesCount() {
+    return decision->pendingUpdates_.getCount();
+  }
 };
 
 TEST_F(DecisionTestFixture, StopDecisionWithoutInitialPeers) {
@@ -3476,6 +3500,249 @@ TEST(DecisionPendingUpdates, perfEvents) {
       *updates.perfEvents()->events()->back().eventDescr(),
       "DECISION_RECEIVED");
 }
+
+//
+// Tests for Decision::updateKeyInLsdb covering different return paths.
+//
+
+// TTL-only update (value is empty) -> returns false, no state change.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_TtlOnlyUpdate) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  thrift::Value ttlVal;
+  ttlVal.value().reset();
+  ttlVal.ttlVersion() = 2;
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, "adj:2", ttlVal),
+      IsFalse());
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
+}
+
+// Valid adjacency DB key -> returns true, areaLinkState changes.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_ValidAdjKey) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       createPrefixKeyValue("1", 1, addr1)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  EXPECT_THAT(areaLinkState.hasNode("2"), IsFalse());
+
+  thrift::Value adjVal = createAdjValue(serializer, "2", 1, {adj21}, false, 2);
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, "adj:2", adjVal),
+      IsTrue());
+  EXPECT_THAT(areaLinkState.hasNode("2"), IsTrue());
+}
+
+// Valid prefix DB key with exactly one entry -> returns true, state changes.
+// Note: prefix updates modify pendingUpdates_ rather than areaLinkState.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_ValidPrefixKey) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  auto [key, val] = createPrefixKeyValue("2", 1, addr2, kTestingAreaName);
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, key, val), IsTrue());
+  // areaLinkState itself is unchanged for prefix updates.
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  // pendingUpdates_ reflects the state change.
+  EXPECT_THAT(getPendingUpdatesCount(), Gt(pendingCountBefore));
+}
+
+// Prefix DB with wrong entry count (0 entries) -> returns false,
+// increments decision.error counter, no state change.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_WrongPrefixEntryCount) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  thrift::PrefixDatabase emptyPrefixDb = createPrefixDb("2");
+  thrift::Value val =
+      createThriftValue(2, "2", writeThriftObjStr(emptyPrefixDb, serializer));
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, "prefix:2", val),
+      IsFalse());
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
+
+  folly::Optional<int64_t> errorCount =
+      fb303::fbData->getCounterIfExists("decision.error.count");
+  EXPECT_THAT(errorCount.has_value(), IsTrue());
+  EXPECT_THAT(errorCount.value(), Ge(1));
+}
+
+// Self-redistributed route reflection -> returns false, no state change.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_SelfRedistributedRoute) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  thrift::PrefixEntry entry = createPrefixEntry(addr3);
+  entry.area_stack() = {std::string(kTestingAreaName)};
+  thrift::PrefixDatabase selfPrefixDb = createPrefixDb("1", {entry});
+  thrift::Value val =
+      createThriftValue(1, "1", writeThriftObjStr(selfPrefixDb, serializer));
+  PrefixKey prefixKey("1", toIPNetwork(addr3), kTestingAreaName);
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(
+          kTestingAreaName, areaLinkState, prefixKey.getPrefixKeyV2(), val),
+      IsFalse());
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
+}
+
+// Invalid serialized data -> exception caught, returns false, no state change.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_DeserializationFailure) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  thrift::Value badVal =
+      createThriftValue(2, "2", std::string("invalid_thrift_data"));
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, "adj:2", badVal),
+      IsFalse());
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, "prefix:2", badVal),
+      IsFalse());
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
+}
+
+// Key with unrecognized prefix (neither "adj:" nor "prefix:") -> returns false,
+// no state change.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_UnknownKeyPrefix) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  thrift::Value val = createThriftValue(1, "2", std::string("some_data"));
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, "unknown:key", val),
+      IsFalse());
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
+}
+
+// Prefix DB key with deletePrefix=true -> returns true, state changes.
+// Note: prefix updates modify pendingUpdates_ rather than areaLinkState.
+TEST_F(DecisionTestFixture, UpdateKeyInLsdb_PrefixDelete) {
+  thrift::Publication basePub = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {});
+  sendKvPublication(basePub);
+  recvRouteUpdates();
+
+  LinkState& areaLinkState =
+      getAreaLinkStates().at(std::string(kTestingAreaName));
+
+  size_t adjDbSizeBefore = areaLinkState.getAdjacencyDatabases().size();
+  uint32_t pendingCountBefore = getPendingUpdatesCount();
+
+  auto [delKey, delVal] = createPrefixKeyValue(
+      "2", 2, createPrefixEntry(addr2), kTestingAreaName, true /* withdraw */);
+
+  EXPECT_THAT(
+      callUpdateKeyInLsdb(kTestingAreaName, areaLinkState, delKey, delVal),
+      IsTrue());
+  // areaLinkState itself is unchanged for prefix updates.
+  EXPECT_THAT(
+      areaLinkState.getAdjacencyDatabases().size(), Eq(adjDbSizeBefore));
+  // pendingUpdates_ reflects the state change.
+  EXPECT_THAT(getPendingUpdatesCount(), Gt(pendingCountBefore));
+}
+
+} // namespace openr
 
 int
 main(int argc, char* argv[]) {

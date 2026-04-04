@@ -211,6 +211,8 @@ class Decision : public OpenrEventBase {
       std::chrono::steady_clock::time_point end) const;
 
  private:
+  friend class DecisionTestFixture;
+
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
   Decision(Decision&&) = delete;
@@ -232,13 +234,13 @@ class Decision : public OpenrEventBase {
    */
   void processPublication(thrift::Publication&& thriftPub);
 
-  void updateKeyInLsdb(
+  bool updateKeyInLsdb(
       const std::string& area,
       LinkState& areaLinkState,
       const std::string& key,
       const thrift::Value& rawVal);
 
-  void deleteKeyFromLsdb(
+  bool deleteKeyFromLsdb(
       const std::string& area,
       LinkState& areaLinkState,
       const std::string& key);
@@ -276,6 +278,12 @@ class Decision : public OpenrEventBase {
   // node to prefix entries database for nodes advertising per prefix keys
   std::optional<thrift::PrefixDatabase> updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
+
+  // Updates the fabric master generator and fabric (synthetic) key-values as
+  // needed for the given areaLinkState.
+  void updateFabricKv(
+      const std::unordered_set<std::string>& changedKeys,
+      openr::LinkState& areaLinkState);
 
   // Openr config
   std::shared_ptr<const Config> config_;
@@ -324,6 +332,10 @@ class Decision : public OpenrEventBase {
 
   // this node's name and the key markers
   const std::string myNodeName_;
+
+  // The name of the node that is currently the master of the fabric.
+  // This is set only when this node is a fabric node.
+  std::string fabricMasterName_;
 
   // store rebuildRoutes to-do status and perf events
   detail::DecisionPendingUpdates pendingUpdates_;

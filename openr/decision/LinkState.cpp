@@ -637,7 +637,7 @@ LinkState::runSpf(
 
 void
 LinkState::addFabricHelper(const FabricConfig& fabricConfig) {
-  fabricHelper_.emplace(fabricConfig, linkMap_);
+  fabricHelper_.emplace(fabricConfig, linkMap_, adjacencyDatabases_, area_);
 }
 
 } // namespace openr

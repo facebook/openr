@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <openr/common/Constants.h>
 #include <openr/decision/FabricHelper.h>
 
 namespace openr {
@@ -94,6 +95,79 @@ FabricHelper::getFabricMasterGenerator() const {
     }
   }
   return master;
+}
+
+std::pair<bool, std::unordered_set<std::string>>
+FabricHelper::getFabricChanges(
+    const std::unordered_set<std::string>& changedKeys) const {
+  std::unordered_set<std::string> changedFabricLeafNames;
+  bool fabricNodeChanged = false;
+  for (const std::string& key : changedKeys) {
+    if (fabricConfig_.isLeafAdjKey(key)) {
+      fabricNodeChanged = true;
+      // Remove adj: from the key to get the node name.
+      std::string nodeName = key.substr(Constants::kAdjDbMarker.size());
+      changedFabricLeafNames.emplace(nodeName);
+      continue;
+    }
+    if (fabricConfig_.isFabricAdjKey(key)) {
+      fabricNodeChanged = true;
+    }
+  }
+  return {fabricNodeChanged, changedFabricLeafNames};
+}
+
+bool
+FabricHelper::clearFabricAdjacencies() {
+  bool changed = !externalAdjacencies_.empty();
+  externalAdjacencies_.clear();
+  return changed;
+}
+
+std::optional<thrift::AdjacencyDatabase>
+FabricHelper::getFabricAdjacencyDatabaseIfChanged(
+    const std::unordered_set<std::string>& changedLeafNames) {
+  bool isChanged = updateFabricAdjacencies(changedLeafNames);
+  if (!isChanged) {
+    return std::nullopt;
+  }
+  thrift::AdjacencyDatabase fabricAdjDb;
+  for (const auto& [_, adjacencies] : externalAdjacencies_) {
+    for (const auto& adj : adjacencies) {
+      fabricAdjDb.adjacencies()->push_back(adj);
+    }
+  }
+  fabricAdjDb.thisNodeName() = fabricConfig_.getFabricName();
+  fabricAdjDb.area() = area_;
+  return fabricAdjDb;
+}
+
+bool
+FabricHelper::updateFabricAdjacencies(
+    const std::unordered_set<std::string>& changedNodes) {
+  bool rebuildNeeded = externalAdjacencies_.empty();
+  bool changed = false;
+  for (const auto& [_, adjDb] : adjacencyDatabases_) {
+    const std::string& nodeName = *adjDb.thisNodeName();
+    if (!rebuildNeeded && !changedNodes.contains(nodeName)) {
+      continue;
+    }
+    if (!fabricConfig_.isLeaf(nodeName)) {
+      continue;
+    }
+    std::set<thrift::Adjacency> newExternalAdjs;
+    for (const thrift::Adjacency& adj : *adjDb.adjacencies()) {
+      if (!fabricConfig_.isFabric(*adj.otherNodeName())) {
+        newExternalAdjs.insert(adj);
+      }
+    }
+    std::set<thrift::Adjacency>& existingAdjs = externalAdjacencies_[nodeName];
+    if (existingAdjs != newExternalAdjs) {
+      existingAdjs = std::move(newExternalAdjs);
+      changed = true;
+    }
+  }
+  return changed;
 }
 
 } // namespace openr
