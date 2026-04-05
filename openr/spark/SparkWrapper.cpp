@@ -104,7 +104,12 @@ SparkWrapper::recvNeighborEvent(
     std::this_thread::yield();
   }
 
-  return std::get<NeighborEvents>(neighborUpdatesReader_.get().value());
+  auto val = neighborUpdatesReader_.get().value();
+  if (auto* events = std::get_if<NeighborEvents>(&val)) {
+    return std::move(*events);
+  }
+  XLOG(WARNING) << "recvNeighborEvent: unexpected variant type in queue";
+  return std::nullopt;
 }
 
 std::optional<NeighborEvents>
@@ -162,8 +167,12 @@ SparkWrapper::recvInitializationEvent(
     std::this_thread::yield();
   }
 
-  return std::get<thrift::InitializationEvent>(
-      neighborUpdatesReader_.get().value());
+  auto val = neighborUpdatesReader_.get().value();
+  if (auto* event = std::get_if<thrift::InitializationEvent>(&val)) {
+    return *event;
+  }
+  XLOG(WARNING) << "recvInitializationEvent: unexpected variant type in queue";
+  return std::nullopt;
 }
 
 /**
