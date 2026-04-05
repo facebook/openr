@@ -439,7 +439,8 @@ Route::str() const {
 
   if (oif_) {
     char ifName[IF_NAMESIZE] = {0};
-    result += fmt::format(", dev {}", if_indextoname(oif_.value(), ifName));
+    auto* name = if_indextoname(oif_.value(), ifName);
+    result += fmt::format(", dev {}", name ? name : "unknown");
   }
   if (prefSrc_) {
     result += fmt::format(", src {}", prefSrc_.value().str());

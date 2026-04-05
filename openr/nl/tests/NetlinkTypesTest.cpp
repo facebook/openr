@@ -654,6 +654,14 @@ TEST(NetlinkTypes, RuleTypeBaseTest) {
   EXPECT_EQ(priority, rule.getPriority());
 }
 
+TEST(NetlinkTypes, RouteStrInvalidIfIndex) {
+  RouteBuilder builder;
+  builder.setOIf(99999);
+  builder.setDestination(folly::CIDRNetwork(folly::IPAddress("10.0.0.0"), 24));
+  auto route = builder.build();
+  EXPECT_NO_THROW(route.str());
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags
