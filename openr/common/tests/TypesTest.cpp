@@ -61,6 +61,12 @@ TEST(TypesTest, RegexSetTest) {
       RegexSet{{"prefix:[addr_without_right_bracket"}}, RegexSetException);
 }
 
+TEST(TypesTest, RegexSetEmptyPrefixList) {
+  RegexSet rs(std::vector<std::string>{});
+  EXPECT_FALSE(rs.match("anything"));
+  EXPECT_FALSE(rs.match(""));
+}
+
 int
 main(int argc, char* argv[]) {
   // Parse command line flags

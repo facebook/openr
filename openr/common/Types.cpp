@@ -40,7 +40,9 @@ RegexSet::RegexSet(std::vector<std::string> const& keyPrefixList) {
 
 bool
 RegexSet::match(std::string const& key) const {
-  CHECK(regexSet_);
+  if (!regexSet_) {
+    return false;
+  }
   std::vector<int> matches;
   return regexSet_->Match(key, &matches);
 }
