@@ -677,7 +677,12 @@ NetlinkFibHandler::getRouteTableId() {
 
 void
 NetlinkFibHandler::initializeInterfaceCache() noexcept {
-  auto links = nlSock_->getAllLinks().get().value();
+  auto result = nlSock_->getAllLinks().get();
+  if (result.hasError()) {
+    XLOG(ERR) << "Failed to get links for interface cache initialization";
+    return;
+  }
+  auto links = std::move(result).value();
 
   // Acquire locks on the cache
   auto lockedIfNameToIndex = ifNameToIndex_.wlock();
