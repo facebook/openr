@@ -8,6 +8,7 @@
 #pragma once
 
 #include <any>
+#include <atomic>
 #include <deque>
 #include <memory>
 #include <mutex>
@@ -175,7 +176,7 @@ class RWQueue {
   size_t writes_{0};
 
   // Received messages
-  size_t reads_{0};
+  std::atomic<size_t> reads_{0};
 };
 
 } // namespace openr::messaging

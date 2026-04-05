@@ -42,6 +42,7 @@ ReplicateQueue<ValueType>::push(ValueTypeT&& value) {
         ++it;
       }
     }
+    ++writes_;
   }
 
   // Replicate messages
@@ -52,7 +53,6 @@ ReplicateQueue<ValueType>::push(ValueTypeT&& value) {
     // Perfect forwarding for last reader
     readers.back()->push(std::forward<ValueTypeT>(value));
   }
-  ++writes_;
 
   return true;
 }

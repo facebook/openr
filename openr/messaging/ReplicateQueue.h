@@ -7,8 +7,9 @@
 
 #pragma once
 
-#include <openr/messaging/Queue.h>
 #include <list>
+
+#include <openr/messaging/Queue.h>
 
 namespace openr::messaging {
 
@@ -73,6 +74,7 @@ class ReplicateQueue : public ReplicateQueueBase {
    */
   void
   open() {
+    auto lockedReaders = readers_.wlock();
     closed_ = false;
   }
 
