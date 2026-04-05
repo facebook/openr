@@ -90,7 +90,7 @@ class KvStoreBenchmarkTestFixture {
     while (true) {
       auto thriftPub = kvStoreUpdatesQ.get();
       if (!thriftPub.hasValue()) {
-        continue;
+        break;
       }
 
       if (auto* pub = std::get_if<thrift::Publication>(&(thriftPub.value()))) {
