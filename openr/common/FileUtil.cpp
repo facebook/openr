@@ -19,7 +19,10 @@ FileUtil::readFileToString(const std::string& path, std::string& contents) {
   // This prevents directory traversal attacks, e.g. writing to
   // "../../../etc/passwd".
   std::array<char, PATH_MAX + 1> resolvedPath;
-  realpath(path.c_str(), resolvedPath.data());
+  if (realpath(path.c_str(), resolvedPath.data()) == nullptr) {
+    XLOG(ERR) << "Failed to resolve path: " << path;
+    return false;
+  }
   XLOG(INFO) << "Read the file: " << resolvedPath.data();
 
   // read the file
