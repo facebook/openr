@@ -1693,6 +1693,66 @@ TEST_F(DecisionTestFixture, RibPolicyClear) {
 }
 
 /**
+ * Verifies that clearing a policy cancels the pending debounced save.
+ * Without the fix, saveRibPolicy() would fire after clearRibPolicy() and
+ * dereference the null ribPolicy_ pointer.
+ */
+TEST_F(DecisionTestFixture, RibPolicyClearCancelsDebounce) {
+  auto publication = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       {"prefix:1", createPrefixValue("1", 1, {addr1})},
+       {"prefix:2", createPrefixValue("2", 1, {addr2})}},
+      {},
+      {},
+      {});
+  sendKvPublication(publication);
+
+  /* Drain the initial route update */
+  {
+    auto updates = recvRouteUpdates();
+    ASSERT_EQ(1, updates.unicastRoutesToUpdate.size());
+  }
+
+  /* Set a rib policy — this schedules saveRibPolicyDebounced_ */
+  thrift::RibRouteActionWeight actionWeight;
+  actionWeight.neighbor_to_weight()->emplace("2", 2);
+  thrift::RibPolicyStatement policyStatement;
+  policyStatement.matcher()->prefixes() =
+      std::vector<thrift::IpPrefix>({addr2});
+  policyStatement.action()->set_weight() = actionWeight;
+  thrift::RibPolicy policy;
+  policy.statements()->emplace_back(policyStatement);
+  policy.ttl_secs() = 60;
+  EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
+
+  /* Drain the route update from setRibPolicy */
+  {
+    auto updates = recvRouteUpdates();
+  }
+
+  /* Immediately clear — must cancel the debounced save */
+  EXPECT_NO_THROW(decision->clearRibPolicy());
+
+  /* Drain the route update from clearRibPolicy */
+  {
+    auto updates = recvRouteUpdates();
+  }
+
+  /*
+   * Wait longer than save_rib_policy_max_ms (2000ms) to ensure the
+   * debounced callback would have fired if it wasn't canceled.
+   * If cancelScheduledTimeout didn't work, saveRibPolicy() would
+   * dereference null ribPolicy_ and crash here.
+   */
+  /* sleep override */
+  std::this_thread::sleep_for(std::chrono::milliseconds(2500));
+
+  /* Verify policy is gone */
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+}
+
+/**
  * Verifies that set/get APIs throws exception if RibPolicy feature is not
  * enabled.
  */

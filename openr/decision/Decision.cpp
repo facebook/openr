@@ -509,6 +509,7 @@ Decision::clearRibPolicy() {
       promise.setException(error);
     } else {
       ribPolicy_ = nullptr;
+      saveRibPolicyDebounced_.cancelScheduledTimeout();
       // Trigger route computation
       pendingUpdates_.setNeedsFullRebuild();
       rebuildRoutes("RIB_POLICY_CLEARED");
