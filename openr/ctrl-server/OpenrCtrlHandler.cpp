@@ -292,6 +292,9 @@ OpenrCtrlHandler::getStatus() {
 
 void
 OpenrCtrlHandler::getEventLogs(std::vector<::std::string>& _return) {
+  if (!monitor_) {
+    return;
+  }
   auto recentEventLogs = monitor_->getRecentEventLogs();
   for (auto const& log : recentEventLogs) {
     _return.emplace_back(log);
