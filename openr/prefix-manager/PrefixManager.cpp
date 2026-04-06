@@ -928,7 +928,7 @@ PrefixManager::filterAndAddOriginatedRoute(
     folly::F14FastMap<
         thrift::PrefixType,
         std::pair<PrefixEntry, std::string>> const& prefixEntries,
-    apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter) {
+    apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {
     return;
@@ -1055,7 +1055,7 @@ PrefixManager::getOriginatedPrefixes() {
 void
 PrefixManager::filterAndAddAdvertisedRoute(
     std::vector<thrift::AdvertisedRouteDetail>& routes,
-    apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
+    apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter,
     folly::CIDRNetwork const& prefix,
     folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries) {
   // Return immediately if no prefix-entry
@@ -1096,7 +1096,7 @@ PrefixManager::filterAndAddAreaRoute(
     const std::string& area,
     const thrift::RouteFilterType& routeFilterType,
     folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries,
-    apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter) {
+    apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter) {
   // Return immediately if no prefix-entry
   if (prefixEntries.empty()) {
     return;

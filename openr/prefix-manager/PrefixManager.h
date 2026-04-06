@@ -137,8 +137,7 @@ class PrefixManager final : public OpenrEventBase {
       const std::string& area,
       const thrift::RouteFilterType& routeFilterType,
       folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries,
-      apache::thrift::optional_field_ref<thrift::PrefixType&> const&
-          typeFilter);
+      apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter);
   /**
    * Util function to convert thrift::OriginatedPrefix to thrift::PrefixEntry
    * @param prefix: the OriginatedPrefix to be converted
@@ -166,7 +165,7 @@ class PrefixManager final : public OpenrEventBase {
    */
   static void filterAndAddAdvertisedRoute(
       std::vector<thrift::AdvertisedRouteDetail>& routes,
-      apache::thrift::optional_field_ref<thrift::PrefixType&> const& typeFilter,
+      apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter,
       folly::CIDRNetwork const& prefix,
       folly::F14FastMap<thrift::PrefixType, PrefixEntry> const& prefixEntries);
 
@@ -197,8 +196,7 @@ class PrefixManager final : public OpenrEventBase {
       folly::F14FastMap<
           thrift::PrefixType,
           std::pair<PrefixEntry, std::string>> const& prefixEntries,
-      apache::thrift::optional_field_ref<thrift::PrefixType&> const&
-          typeFilter);
+      apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter);
 
  private:
   // initialize counters
