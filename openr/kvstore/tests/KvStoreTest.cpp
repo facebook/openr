@@ -10,16 +10,20 @@
 #include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
 using namespace std::chrono;
+using ::testing::Eq;
+using ::testing::IsTrue;
 
 namespace fb303 = facebook::fb303;
 
@@ -72,17 +76,23 @@ class KvStoreTestFixture : public ::testing::Test {
    * stopped as well as destroyed automatically when test exits.
    * Returned raw pointer of an object will be freed as well.
    */
-  KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*
   createKvStore(
       thrift::KvStoreConfig kvStoreConf,
       const folly::F14FastSet<std::string>& areaIds = {kTestingAreaName.t},
       std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue =
           std::nullopt,
       std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue =
-          std::nullopt) {
+          std::nullopt,
+      std::optional<FabricConfig> fabricConfig = std::nullopt) {
     stores_.emplace_back(
-        std::make_unique<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>(
-            areaIds, kvStoreConf, peerUpdatesQueue, kvRequestQueue));
+        std::make_unique<
+            KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>>(
+            areaIds,
+            kvStoreConf,
+            peerUpdatesQueue,
+            kvRequestQueue,
+            std::move(fabricConfig)));
     return stores_.back().get();
   }
 
@@ -117,7 +127,7 @@ class KvStoreTestFixture : public ::testing::Test {
 
   void
   waitForKeyInStoreWithTimeout(
-      KvStoreWrapper<thrift::KvStoreServiceAsyncClient>* store,
+      KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* store,
       AreaId const& areaId,
       std::string const& key) const {
     auto const start = std::chrono::steady_clock::now();
@@ -141,8 +151,8 @@ class KvStoreTestFixture : public ::testing::Test {
   }
 
   // Internal stores
-  std::vector<
-      std::unique_ptr<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>>>
+  std::vector<std::unique_ptr<
+      KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>>>
       stores_{};
 };
 
@@ -2043,7 +2053,8 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   const unsigned int kNumStores = 16;
 
   // Create and start peer-stores
-  std::vector<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*> peerStores;
+  std::vector<KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*>
+      peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto nodeId = getNodeId(kOriginBase, j);
     auto store = createKvStore(getTestKvConf(nodeId));
@@ -2249,7 +2260,8 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   // Start the intermediate stores in string topology
   //
   LOG(INFO) << "Preparing and starting stores.";
-  std::vector<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*> stores;
+  std::vector<KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*>
+      stores;
   std::vector<std::string> nodeIdsSeq;
   for (unsigned int i = 0; i < kNumStores; ++i) {
     auto nodeId = getNodeId(kOriginBase, i);
@@ -2381,7 +2393,8 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   const unsigned int kNumStores = 16;
 
   // Create and start peer-stores
-  std::vector<KvStoreWrapper<thrift::KvStoreServiceAsyncClient>*> peerStores;
+  std::vector<KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*>
+      peerStores;
   for (unsigned int j = 0; j < kNumStores; ++j) {
     auto store = createKvStore(getTestKvConf(getNodeId(kOriginBase, j)));
     store->run();
@@ -3363,6 +3376,523 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
 //   EXPECT_TRUE(storeB->addPeer(defaultAreaId, "storeA",
 //   storeA->getPeerSpec()));
 // }
+
+/**
+ * Verify that fabric-internal keys (adj/prefix keys for fabric nodes) are
+ * flooded only to fabric peers, while non-fabric keys are flooded to all peers.
+ *
+ * Setup:
+ *  - Node A (fabric node "eb01-ld002.dfw1") with fabricConfig — publisher
+ *  - Node B (fabric peer "eb01-sp002.dfw1") — matches spine regex
+ *  - Node C (non-fabric peer "external-node") — no regex match
+ *
+ * Expected behavior:
+ *  - Fabric adj/prefix keys set on A → flood to B only
+ *  - Non-fabric key set on A → flood to both B and C
+ */
+TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
+  // Build FabricConfig with leaf/spine regexes
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeAId = "eb01-ld002.dfw1";
+  const std::string nodeBId = "eb01-sp002.dfw1";
+  const std::string nodeCId = "external-node";
+
+  // Node A: fabric node (publisher) with fabricConfig
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* storeA =
+      createKvStore(
+          getTestKvConf(nodeAId),
+          {kTestingAreaName.t},
+          std::nullopt,
+          std::nullopt,
+          fabricConfig);
+  // Node B: fabric peer (spine name matches spine regex)
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* storeB =
+      createKvStore(getTestKvConf(nodeBId));
+  // Node C: non-fabric peer (name does not match any regex)
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* storeC =
+      createKvStore(getTestKvConf(nodeCId));
+
+  storeA->run();
+  storeB->run();
+  storeC->run();
+
+  // Establish bidirectional peering: A↔B
+  EXPECT_THAT(
+      storeA->addPeer(
+          kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      storeB->addPeer(
+          kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+      IsTrue());
+
+  // Establish bidirectional peering: A↔C
+  EXPECT_THAT(
+      storeA->addPeer(
+          kTestingAreaName, storeC->getNodeId(), storeC->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      storeC->addPeer(
+          kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+      IsTrue());
+
+  waitForAllPeersInitialized();
+
+  // Keys to set on Node A:
+  //  - fabricAdjKey: adj key for a fabric leaf node → fabric-internal
+  //  - fabricPrefixKey: prefix key for a fabric spine node → fabric-internal
+  //  - nonFabricKey: adj key for external node → NOT fabric-internal
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string nonFabricKey = "adj:external-node";
+
+  const auto thriftVal = [&](const std::string& val) {
+    return createThriftValue(
+        1 /* version */,
+        nodeAId /* originatorId */,
+        val /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(1, nodeAId, thrift::Value().value() = std::string(val)));
+  };
+
+  EXPECT_THAT(
+      storeA->setKey(kTestingAreaName, fabricAdjKey, thriftVal("fab-adj")),
+      IsTrue());
+  EXPECT_THAT(
+      storeA->setKey(
+          kTestingAreaName, fabricPrefixKey, thriftVal("fab-prefix")),
+      IsTrue());
+  EXPECT_THAT(
+      storeA->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
+      IsTrue());
+
+  // Wait for the non-fabric key to propagate to both peers (it should always
+  // reach both B and C).
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, nonFabricKey);
+  waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, nonFabricKey);
+
+  // Also wait for fabric keys to arrive at B
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricAdjKey);
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricPrefixKey);
+
+  // Node B (fabric peer): should have ALL 3 keys
+  folly::F14FastMap<std::string, thrift::Value> dumpB =
+      storeB->dumpAll(kTestingAreaName);
+  EXPECT_THAT(dumpB.count(fabricAdjKey), Eq(1));
+  EXPECT_THAT(dumpB.count(fabricPrefixKey), Eq(1));
+  EXPECT_THAT(dumpB.count(nonFabricKey), Eq(1));
+
+  // Node C (non-fabric peer): should have ONLY the non-fabric key
+  folly::F14FastMap<std::string, thrift::Value> dumpC =
+      storeC->dumpAll(kTestingAreaName);
+  EXPECT_THAT(dumpC.count(nonFabricKey), Eq(1));
+  EXPECT_THAT(dumpC.count(fabricAdjKey), Eq(0))
+      << "Fabric adj key should NOT be flooded to non-fabric peer";
+  EXPECT_THAT(dumpC.count(fabricPrefixKey), Eq(0))
+      << "Fabric prefix key should NOT be flooded to non-fabric peer";
+}
+
+/**
+ * Verify that finalizeFullSync (the last step of the 3-way full-sync
+ * handshake) filters fabric-internal keys when syncing to non-fabric peers.
+ *
+ * This test differs from FloodPublicationFabricScope by setting keys BEFORE
+ * establishing peering, so the keys are exchanged via full-sync rather than
+ * flood publication.
+ *
+ * Setup:
+ *  - Node A (fabric node "eb01-ld002.dfw1") with fabricConfig — holds keys
+ *  - Node B (fabric peer "eb01-sp002.dfw1") — matches spine regex
+ *  - Node C (non-fabric peer "external-node") — no regex match
+ *
+ * Expected behavior after full-sync:
+ *  - Node B receives all 3 keys (fabric + non-fabric)
+ *  - Node C receives only the non-fabric key
+ */
+TEST_F(KvStoreTestFixture, FinalizeFullSyncFabricScope) {
+  // Build FabricConfig with leaf/spine regexes
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeAId = "eb01-ld002.dfw1";
+  const std::string nodeBId = "eb01-sp002.dfw1";
+  const std::string nodeCId = "external-node";
+
+  // Node A: fabric node (publisher) with fabricConfig
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* storeA =
+      createKvStore(
+          getTestKvConf(nodeAId),
+          {kTestingAreaName.t},
+          std::nullopt,
+          std::nullopt,
+          fabricConfig);
+  // Node B: fabric peer (spine name matches spine regex)
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* storeB =
+      createKvStore(getTestKvConf(nodeBId));
+  // Node C: non-fabric peer (name does not match any regex)
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* storeC =
+      createKvStore(getTestKvConf(nodeCId));
+
+  storeA->run();
+  storeB->run();
+  storeC->run();
+
+  // Set keys on Node A BEFORE establishing peering so that they are
+  // exchanged during the 3-way full-sync (finalizeFullSync), not via flood.
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string nonFabricKey = "adj:external-node";
+
+  const auto thriftVal = [&](const std::string& val) {
+    return createThriftValue(
+        1 /* version */,
+        nodeAId /* originatorId */,
+        val /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(1, nodeAId, thrift::Value().value() = std::string(val)));
+  };
+
+  EXPECT_THAT(
+      storeA->setKey(kTestingAreaName, fabricAdjKey, thriftVal("fab-adj")),
+      IsTrue());
+  EXPECT_THAT(
+      storeA->setKey(
+          kTestingAreaName, fabricPrefixKey, thriftVal("fab-prefix")),
+      IsTrue());
+  EXPECT_THAT(
+      storeA->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
+      IsTrue());
+
+  // Now establish bidirectional peering: A↔B
+  EXPECT_THAT(
+      storeA->addPeer(
+          kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      storeB->addPeer(
+          kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+      IsTrue());
+
+  // Establish bidirectional peering: A↔C
+  EXPECT_THAT(
+      storeA->addPeer(
+          kTestingAreaName, storeC->getNodeId(), storeC->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      storeC->addPeer(
+          kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+      IsTrue());
+
+  // Wait for full-sync to complete
+  waitForAllPeersInitialized();
+
+  // Wait for the non-fabric key to arrive at both peers
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, nonFabricKey);
+  waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, nonFabricKey);
+
+  // Wait for fabric keys to arrive at B
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricAdjKey);
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricPrefixKey);
+
+  // Node B (fabric peer): should have ALL 3 keys after full-sync
+  folly::F14FastMap<std::string, thrift::Value> dumpB =
+      storeB->dumpAll(kTestingAreaName);
+  EXPECT_THAT(dumpB.count(fabricAdjKey), Eq(1));
+  EXPECT_THAT(dumpB.count(fabricPrefixKey), Eq(1));
+  EXPECT_THAT(dumpB.count(nonFabricKey), Eq(1));
+
+  // Node C (non-fabric peer): should have ONLY the non-fabric key
+  folly::F14FastMap<std::string, thrift::Value> dumpC =
+      storeC->dumpAll(kTestingAreaName);
+  EXPECT_THAT(dumpC.count(nonFabricKey), Eq(1));
+  EXPECT_THAT(dumpC.count(fabricAdjKey), Eq(0))
+      << "Fabric adj key should NOT be synced to non-fabric peer";
+  EXPECT_THAT(dumpC.count(fabricPrefixKey), Eq(0))
+      << "Fabric prefix key should NOT be synced to non-fabric peer";
+}
+
+/**
+ * Verify that semifuture_dumpKvStoreKeys applies fabric filtering based on
+ * the senderId in KeyDumpParams. When a non-fabric sender requests a dump,
+ * fabric-internal keys should be excluded from the response.
+ *
+ * Setup:
+ *  - Single fabric node ("eb01-ld002.dfw1") with fabricConfig holding 3 keys
+ *
+ * Scenarios:
+ *  - Dump with senderId = fabric peer name → returns all 3 keys
+ *  - Dump with senderId = non-fabric peer name → returns only non-fabric key
+ *  - Dump with no senderId → returns all 3 keys (no filtering)
+ */
+TEST_F(KvStoreTestFixture, DumpKvStoreKeysFabricScope) {
+  // Build FabricConfig with leaf/spine regexes
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeId = "eb01-ld002.dfw1";
+
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* store =
+      createKvStore(
+          getTestKvConf(nodeId),
+          {kTestingAreaName.t},
+          std::nullopt,
+          std::nullopt,
+          fabricConfig);
+  store->run();
+
+  // Set fabric and non-fabric keys
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string nonFabricKey = "adj:external-node";
+
+  const auto thriftVal = [&](const std::string& val) {
+    return createThriftValue(
+        1 /* version */,
+        nodeId /* originatorId */,
+        val /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(1, nodeId, thrift::Value().value() = std::string(val)));
+  };
+
+  EXPECT_THAT(
+      store->setKey(kTestingAreaName, fabricAdjKey, thriftVal("fab-adj")),
+      IsTrue());
+  EXPECT_THAT(
+      store->setKey(kTestingAreaName, fabricPrefixKey, thriftVal("fab-prefix")),
+      IsTrue());
+  EXPECT_THAT(
+      store->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
+      IsTrue());
+
+  // Helper to call semifuture_dumpKvStoreKeys and return the key-value map
+  const auto dumpWithSender = [&](const std::string& senderId)
+      -> folly::F14FastMap<std::string, thrift::Value> {
+    thrift::KeyDumpParams params;
+    if (!senderId.empty()) {
+      params.senderId() = senderId;
+    }
+    std::vector<thrift::Publication> pubs =
+        *store->getKvStore()
+             ->semifuture_dumpKvStoreKeys(
+                 std::move(params), {kTestingAreaName.t})
+             .get();
+    EXPECT_THAT(pubs.size(), Eq(1));
+    const auto& kvs = *pubs.begin()->keyVals();
+    return folly::F14FastMap<std::string, thrift::Value>(
+        kvs.begin(), kvs.end());
+  };
+
+  // Scenario 1: fabric peer sender → all keys returned
+  {
+    folly::F14FastMap<std::string, thrift::Value> dump =
+        dumpWithSender("eb01-sp002.dfw1");
+    EXPECT_THAT(dump.count(fabricAdjKey), Eq(1));
+    EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
+    EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
+  }
+
+  // Scenario 2: non-fabric peer sender → only non-fabric key returned
+  {
+    folly::F14FastMap<std::string, thrift::Value> dump =
+        dumpWithSender("external-node");
+    EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
+    EXPECT_THAT(dump.count(fabricAdjKey), Eq(0))
+        << "Fabric adj key should NOT be dumped for non-fabric sender";
+    EXPECT_THAT(dump.count(fabricPrefixKey), Eq(0))
+        << "Fabric prefix key should NOT be dumped for non-fabric sender";
+  }
+
+  // Scenario 3: no senderId → all keys returned (no filtering)
+  {
+    folly::F14FastMap<std::string, thrift::Value> dump = dumpWithSender("");
+    EXPECT_THAT(dump.count(fabricAdjKey), Eq(1));
+    EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
+    EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
+  }
+}
+
+/**
+ * Verify that semifuture_dumpKvStoreSelfOriginatedKeys returns ALL
+ * self-originated keys on a fabric node, including fabric-internal keys.
+ * This API has no fabric filtering — the node should always be able to
+ * inspect its own self-originated keys.
+ *
+ * Setup:
+ *  - Single fabric node ("eb01-ld002.dfw1") with fabricConfig
+ *  - Self-originate 3 keys via kvRequestQueue: 2 fabric + 1 non-fabric
+ *
+ * Expected:
+ *  - dumpAllSelfOriginated returns all 3 keys
+ */
+TEST_F(KvStoreTestFixture, DumpSelfOriginatedKeysFabricScope) {
+  // Build FabricConfig with leaf/spine regexes
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeId = "eb01-ld002.dfw1";
+
+  // Create kvRequestQueue to push self-originated keys
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* store =
+      createKvStore(
+          getTestKvConf(nodeId),
+          {kTestingAreaName.t},
+          std::nullopt,
+          kvRequestQueue.getReader(),
+          fabricConfig);
+  store->run();
+
+  // Self-originate fabric and non-fabric keys
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string nonFabricKey = "adj:external-node";
+
+  kvRequestQueue.push(
+      PersistKeyValueRequest(kTestingAreaName, fabricAdjKey, "fab-adj"));
+  kvRequestQueue.push(
+      PersistKeyValueRequest(kTestingAreaName, fabricPrefixKey, "fab-prefix"));
+  kvRequestQueue.push(
+      PersistKeyValueRequest(kTestingAreaName, nonFabricKey, "non-fab"));
+
+  // Wait for all keys to appear in the store
+  waitForKeyInStoreWithTimeout(store, kTestingAreaName, fabricAdjKey);
+  waitForKeyInStoreWithTimeout(store, kTestingAreaName, fabricPrefixKey);
+  waitForKeyInStoreWithTimeout(store, kTestingAreaName, nonFabricKey);
+
+  // dumpAllSelfOriginated should return ALL 3 keys — no fabric filtering
+  SelfOriginatedKeyVals selfOriginated =
+      store->dumpAllSelfOriginated(kTestingAreaName);
+  EXPECT_THAT(selfOriginated.size(), Eq(3));
+  EXPECT_THAT(selfOriginated.count(fabricAdjKey), Eq(1));
+  EXPECT_THAT(selfOriginated.count(fabricPrefixKey), Eq(1));
+  EXPECT_THAT(selfOriginated.count(nonFabricKey), Eq(1));
+}
+
+/**
+ * Verify that semifuture_dumpKvStoreHashes applies fabric filtering based on
+ * the senderId in KeyDumpParams. When a non-fabric sender requests a hash
+ * dump, fabric-internal key hashes should be excluded from the response.
+ *
+ * Setup:
+ *  - Single fabric node ("eb01-ld002.dfw1") with fabricConfig holding 3 keys
+ *
+ * Scenarios:
+ *  - Hash dump with senderId = fabric peer name → returns hashes for all 3 keys
+ *  - Hash dump with senderId = non-fabric peer name → returns hash for only
+ *    non-fabric key
+ *  - Hash dump with no senderId → returns hashes for all 3 keys (no filtering)
+ */
+TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
+  // Build FabricConfig with leaf/spine regexes
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeId = "eb01-ld002.dfw1";
+
+  KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* store =
+      createKvStore(
+          getTestKvConf(nodeId),
+          {kTestingAreaName.t},
+          std::nullopt,
+          std::nullopt,
+          fabricConfig);
+  store->run();
+
+  // Set fabric and non-fabric keys
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string nonFabricKey = "adj:external-node";
+
+  const auto thriftVal = [&](const std::string& val) {
+    return createThriftValue(
+        1 /* version */,
+        nodeId /* originatorId */,
+        val /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(1, nodeId, thrift::Value().value() = std::string(val)));
+  };
+
+  EXPECT_THAT(
+      store->setKey(kTestingAreaName, fabricAdjKey, thriftVal("fab-adj")),
+      IsTrue());
+  EXPECT_THAT(
+      store->setKey(kTestingAreaName, fabricPrefixKey, thriftVal("fab-prefix")),
+      IsTrue());
+  EXPECT_THAT(
+      store->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
+      IsTrue());
+
+  // Helper to call semifuture_dumpKvStoreHashes and return the key-value map
+  const auto dumpHashesWithSender = [&](const std::string& senderId)
+      -> folly::F14FastMap<std::string, thrift::Value> {
+    thrift::KeyDumpParams params;
+    if (!senderId.empty()) {
+      params.senderId() = senderId;
+    }
+    thrift::Publication pub = *store->getKvStore()
+                                   ->semifuture_dumpKvStoreHashes(
+                                       kTestingAreaName.t, std::move(params))
+                                   .get();
+    const auto& kvs = *pub.keyVals();
+    return folly::F14FastMap<std::string, thrift::Value>(
+        kvs.begin(), kvs.end());
+  };
+
+  // Scenario 1: fabric peer sender → hashes for all keys returned
+  {
+    folly::F14FastMap<std::string, thrift::Value> dump =
+        dumpHashesWithSender("eb01-sp002.dfw1");
+    EXPECT_THAT(dump.count(fabricAdjKey), Eq(1));
+    EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
+    EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
+  }
+
+  // Scenario 2: non-fabric peer sender → only non-fabric key hash returned
+  {
+    folly::F14FastMap<std::string, thrift::Value> dump =
+        dumpHashesWithSender("external-node");
+    EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
+    EXPECT_THAT(dump.count(fabricAdjKey), Eq(0))
+        << "Fabric adj key hash should NOT be dumped for non-fabric sender";
+    EXPECT_THAT(dump.count(fabricPrefixKey), Eq(0))
+        << "Fabric prefix key hash should NOT be dumped for non-fabric sender";
+  }
+
+  // Scenario 3: no senderId → hashes for all keys returned (no filtering)
+  {
+    folly::F14FastMap<std::string, thrift::Value> dump =
+        dumpHashesWithSender("");
+    EXPECT_THAT(dump.count(fabricAdjKey), Eq(1));
+    EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
+    EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
+  }
+}
 
 int
 main(int argc, char* argv[]) {

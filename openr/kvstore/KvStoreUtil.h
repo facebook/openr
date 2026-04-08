@@ -16,6 +16,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/Types.h>
+#include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStore_constants.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
@@ -79,11 +80,15 @@ class KvStoreFilters {
  public:
   // takes the list of comma separated key prefixes to match,
   // and the list of originator IDs to match in the value
+  static inline const std::optional<FabricConfig> kNoFabricConfig =
+      std::nullopt;
+  static inline const std::optional<std::string> kNoPeerName = std::nullopt;
   explicit KvStoreFilters(
       std::vector<std::string> const& keyPrefix,
       std::set<std::string> const& originatorIds,
-      thrift::FilterOperator const& filterOperator =
-          thrift::FilterOperator::OR);
+      thrift::FilterOperator const& filterOperator = thrift::FilterOperator::OR,
+      const std::optional<FabricConfig>& fabricConfig = kNoFabricConfig,
+      const std::optional<std::string>& peerName = kNoPeerName);
 
   // Check if key matches the filters
   bool keyMatchAny(std::string const& key, thrift::Value const& value) const;
@@ -106,6 +111,10 @@ class KvStoreFilters {
   std::string str() const;
 
  private:
+  // Returns true if key is allowed to be published based on the fabric scope
+  // rule. Runs before the matches.
+  bool isAllowedByFabricScope(const std::string& key) const;
+
   // list of string prefixes, empty list matches all keys
   std::vector<std::string> keyPrefixList_{};
 
@@ -117,6 +126,12 @@ class KvStoreFilters {
 
   // filter's OR/AND matching logic for attributes
   thrift::FilterOperator filterOperator_;
+
+  // fabric config.
+  const std::optional<FabricConfig>& fabricConfig_;
+
+  // peer name.
+  const std::optional<std::string> peerName_;
 };
 
 namespace detail {
@@ -281,7 +296,8 @@ ComparisonResult compareValues(
 thrift::Publication dumpDifference(
     const std::string& area,
     const thrift::KeyVals& myKeyVal,
-    const thrift::KeyVals& reqKeyVal);
+    const thrift::KeyVals& reqKeyVal,
+    const KvStoreFilters& kvFilters);
 
 // Dump the entries of my KV store whose keys match the filter
 thrift::Publication dumpAllWithFilters(

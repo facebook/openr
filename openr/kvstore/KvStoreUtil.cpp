@@ -533,17 +533,26 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
 KvStoreFilters::KvStoreFilters(
     std::vector<std::string> const& keyPrefix,
     std::set<std::string> const& nodeIds,
-    thrift::FilterOperator const& filterOperator)
+    thrift::FilterOperator const& filterOperator,
+    const std::optional<FabricConfig>& fabricConfig,
+    const std::optional<std::string>& peerName)
     : keyPrefixList_(keyPrefix),
       originatorIds_(nodeIds),
       keyRegexSet_(RegexSet(keyPrefixList_)),
-      filterOperator_(filterOperator) {}
+      filterOperator_(filterOperator),
+      fabricConfig_(fabricConfig),
+      peerName_(peerName) {}
 
 // The function return true if there is a match on one of
-// the attributes, such as key prefix or originator ids.
+// the attributes, such as key prefix or originator ids, and
+// the key is not blocked by the fabric scope rule.
 bool
 KvStoreFilters::keyMatchAny(
     std::string const& key, thrift::Value const& value) const {
+  if (!isAllowedByFabricScope(key)) {
+    return false;
+  }
+
   if (keyPrefixList_.empty() && originatorIds_.empty()) {
     // No filter and nothing to match against.
     return true;
@@ -558,10 +567,15 @@ KvStoreFilters::keyMatchAny(
 }
 
 // The function return true if there is a match on all the attributes
-// such as key prefix and originator ids.
+// such as key prefix and originator ids, and
+// the key is not blocked by the fabric scope rule.
 bool
 KvStoreFilters::keyMatchAll(
     std::string const& key, thrift::Value const& value) const {
+  if (!isAllowedByFabricScope(key)) {
+    return false;
+  }
+
   if (keyPrefixList_.empty() && originatorIds_.empty()) {
     // No filter and nothing to match against.
     return true;
@@ -590,6 +604,9 @@ KvStoreFilters::keyMatch(
 // The function return true if there is a key match
 bool
 KvStoreFilters::keyMatch(std::string const& key) const {
+  if (!isAllowedByFabricScope(key)) {
+    return false;
+  }
   if (keyPrefixList_.empty()) {
     return true;
   }
@@ -617,7 +634,38 @@ KvStoreFilters::str() const {
   for (const auto& originatorId : originatorIds_) {
     result += fmt::format("{}, ", originatorId);
   }
+  if (fabricConfig_) {
+    result += fmt::format("\nFabricConfig: {}", fabricConfig_->getFabricName());
+  }
+  if (peerName_) {
+    result += fmt::format("\nPeerName: {}", peerName_.value());
+  }
   return result;
+}
+
+// A fabric node should not send a fabric key to a non-fabric node.
+bool
+KvStoreFilters::isAllowedByFabricScope(const std::string& key) const {
+  if (!fabricConfig_.has_value()) {
+    // This is not a fabric node. No keys are blocked by this rule.
+    return true;
+  }
+  if (!peerName_ || peerName_->empty()) {
+    // No peer name is set. No keys are blocked by this rule.
+    return true;
+  }
+  if (!fabricConfig_->isFabricAdjKey(key) &&
+      !fabricConfig_->isFabricPrefixKey(key)) {
+    // Non-fabric key. Not blocked by this rule.
+    return true;
+  }
+  if (fabricConfig_->isFabric(peerName_.value())) {
+    // The peer is a fabric node. No keys are blocked by this rule.
+    return true;
+  }
+  // This is a fabric node; the peer is a non-fabric node and this is a fabric
+  // key. Block it.
+  return false;
 }
 
 // dump the keys on which hashes differ from given keyVals
@@ -629,13 +677,17 @@ thrift::Publication
 dumpDifference(
     const std::string& area,
     const thrift::KeyVals& myKeyVal,
-    const thrift::KeyVals& reqKeyVal) {
+    const thrift::KeyVals& reqKeyVal,
+    const KvStoreFilters& kvFilters) {
   thrift::Publication thriftPub;
   thriftPub.area() = area;
 
   thriftPub.tobeUpdatedKeys() = std::vector<std::string>{};
 
   for (const auto& [myKey, myVal] : myKeyVal) {
+    if (!kvFilters.keyMatch(myKey)) {
+      continue;
+    }
     const auto& reqKv = reqKeyVal.find(myKey);
 
     if (reqKv == reqKeyVal.end()) {
@@ -656,6 +708,9 @@ dumpDifference(
   }
 
   for (const auto& [reqKey, reqVal] : reqKeyVal) {
+    if (!kvFilters.keyMatch(reqKey)) {
+      continue;
+    }
     const auto& myKv = myKeyVal.find(reqKey);
     if (myKv == myKeyVal.end()) {
       // not exist in myKeyVal

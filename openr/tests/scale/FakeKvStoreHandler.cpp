@@ -68,7 +68,8 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsFilteredArea(
      *   - keyVals: keys we have that DUT doesn't, or have newer versions
      *   - tobeUpdatedKeys: keys DUT has that we want
      */
-    *pub = dumpDifference(*area, store(), filter->keyValHashes().value());
+    *pub = dumpDifference(
+        *area, store(), filter->keyValHashes().value(), KvStoreFilters({}, {}));
     XLOGF(
         DBG2,
         "[FAKE-KVSTORE] {} getKvStoreKeyValsFilteredArea: "

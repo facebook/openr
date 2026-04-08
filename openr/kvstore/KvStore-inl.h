@@ -53,8 +53,13 @@ KvStore<ClientType>::KvStore(
     messaging::RQueue<KeyValueRequest> kvRequestQueue,
     messaging::ReplicateQueue<LogSample>& logSampleQueue,
     const folly::F14FastSet<std::string>& areaIds,
-    const thrift::KvStoreConfig& kvStoreConfig)
-    : kvParams_(kvStoreConfig, kvStoreUpdatesQueue, logSampleQueue) {
+    const thrift::KvStoreConfig& kvStoreConfig,
+    std::optional<FabricConfig> fabricConfig)
+    : kvParams_(
+          kvStoreConfig,
+          kvStoreUpdatesQueue,
+          logSampleQueue,
+          std::move(fabricConfig)) {
   // Schedule periodic timer for counters submission
   counterUpdateTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
     for (auto& [key, val] : getGlobalCounters()) {
@@ -434,15 +439,16 @@ KvStore<ClientType>::semifuture_dumpKvStoreSelfOriginatedKeys(
 template <class ClientType>
 std::unique_ptr<std::vector<thrift::Publication>>
 KvStore<ClientType>::dumpKvStoreKeysImpl(
-    thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
+    thrift::KeyDumpParams keyDumpParams,
+    const std::set<std::string>& selectAreas) {
+  const auto senderStr =
+      (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                            : kEmptyString);
   if (XLOG_IS_ON(DBG3)) {
     const auto areaStr =
         (selectAreas.empty()
              ? "default areas."
              : fmt::format("areas: {}", folly::join(", ", selectAreas)));
-    const auto senderStr =
-        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                              : "");
     XLOG(DBG3) << fmt::format(
         "Dump all keys requested for {}, by sender: {}", areaStr, senderStr);
   }
@@ -463,7 +469,11 @@ KvStore<ClientType>::dumpKvStoreKeysImpl(
       thrift::Publication thriftPub;
       try {
         const auto keyPrefixMatch = KvStoreFilters(
-            *keyDumpParams.keys(), *keyDumpParams.originatorIds(), oper);
+            *keyDumpParams.keys(),
+            *keyDumpParams.originatorIds(),
+            oper,
+            kvParams_.fabricConfig,
+            senderStr);
         thriftPub = dumpAllWithFilters(
             area,
             kvStoreDb.getKeyValueMap(),
@@ -473,8 +483,12 @@ KvStore<ClientType>::dumpKvStoreKeysImpl(
         XLOG(ERR) << fmt::format(
             "Fail to create KvStoreFilters with exception: {}. Dump without filter",
             folly::exceptionStr(err));
-        const auto keyPrefixMatch =
-            KvStoreFilters({}, *keyDumpParams.originatorIds(), oper);
+        const auto keyPrefixMatch = KvStoreFilters(
+            {},
+            *keyDumpParams.originatorIds(),
+            oper,
+            kvParams_.fabricConfig,
+            senderStr);
         thriftPub = dumpAllWithFilters(
             area,
             kvStoreDb.getKeyValueMap(),
@@ -484,7 +498,15 @@ KvStore<ClientType>::dumpKvStoreKeysImpl(
 
       if (keyDumpParams.keyValHashes().has_value()) {
         thriftPub = dumpDifference(
-            area, *thriftPub.keyVals(), keyDumpParams.keyValHashes().value());
+            area,
+            *thriftPub.keyVals(),
+            keyDumpParams.keyValHashes().value(),
+            KvStoreFilters(
+                {},
+                {},
+                thrift::FilterOperator::OR,
+                kvParams_.fabricConfig,
+                senderStr));
       }
       updatePublicationTtl(
           kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub);
@@ -545,8 +567,7 @@ KvStore<ClientType>::semifuture_dumpKvStoreKeys(
                         p = std::move(p),
                         selectAreas = std::move(selectAreas),
                         keyDumpParams = std::move(keyDumpParams)]() mutable {
-    auto result =
-        dumpKvStoreKeysImpl(std::move(keyDumpParams), std::move(selectAreas));
+    auto result = dumpKvStoreKeysImpl(std::move(keyDumpParams), selectAreas);
     p.setValue(std::move(result));
   });
   return sf;
@@ -556,19 +577,20 @@ template <class ClientType>
 thrift::Publication
 KvStore<ClientType>::dumpKvStoreHashesImpl(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
-  if (XLOG_IS_ON(DBG3)) {
-    const auto senderStr =
-        (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
-                                              : "");
-    XLOG(DBG3) << fmt::format(
-        "Dump all hashes requested for AREA: {}, by sender: {}",
-        area,
-        senderStr);
-  }
+  const auto senderStr =
+      (keyDumpParams.senderId().has_value() ? keyDumpParams.senderId().value()
+                                            : kEmptyString);
+  XLOG(DBG3) << fmt::format(
+      "Dump all hashes requested for AREA: {}, by sender: {}", area, senderStr);
   auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreHashesImpl");
   fb303::fbData->addStatValue("kvstore.cmd_hash_dump", 1, fb303::COUNT);
   std::set<std::string> originatorIdList{};
-  KvStoreFilters kvFilters{*keyDumpParams.keys(), std::move(originatorIdList)};
+  KvStoreFilters kvFilters{
+      *keyDumpParams.keys(),
+      originatorIdList,
+      thrift::FilterOperator::OR,
+      kvParams_.fabricConfig,
+      senderStr};
   auto thriftPub =
       dumpHashWithFilters(area, kvStoreDb.getKeyValueMap(), kvFilters);
   updatePublicationTtl(
@@ -2384,6 +2406,7 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
   // Lazily build KeyDumpParams only when needed (i.e., when there's a peer to
   // sync). Once built, reuse for all peers.
   std::optional<thrift::KeyDumpParams> params;
+  std::optional<thrift::KeyDumpParams> fabricExternalParams;
 
   // Scan over thriftPeers to promote IDLE peers to SYNCING
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
@@ -2426,21 +2449,30 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
                       "[Thrift Sync] Initiating full-sync request for peer: {}",
                       peerName);
 
+    std::optional<thrift::KeyDumpParams>* paramsToSend =
+        kvParams_.fabricConfig.has_value() &&
+            !kvParams_.fabricConfig->isFabric(peerName)
+        ? &fabricExternalParams
+        : &params;
     // Lazily build KeyDumpParams on first peer that needs syncing
-    if (!params.has_value()) {
-      params.emplace();
+    if (!paramsToSend->has_value()) {
+      paramsToSend->emplace();
       KvStoreFilters kvFilters(
           std::vector<std::string>{}, /* keyPrefix list */
-          std::set<std::string>{} /* originatorId list */);
+          std::set<std::string>{} /* originatorId list */,
+          thrift::FilterOperator::OR,
+          kvParams_.fabricConfig,
+          peerName);
       // ATTN: dump hashes instead of full key-val pairs with values
       auto thriftPub = dumpHashWithFilters(area_, kvStore_, kvFilters);
-      params->keyValHashes() = *thriftPub.keyVals();
-      params->senderId() = kvParams_.nodeId;
+      paramsToSend->value().keyValHashes() = *thriftPub.keyVals();
+      paramsToSend->value().senderId() = kvParams_.nodeId;
     }
 
     // send request over thrift client and attach callback
     auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.getKvStoreKeyValsFilteredAreaWrapper(*params, area_);
+    auto sf = thriftPeer.getKvStoreKeyValsFilteredAreaWrapper(
+        paramsToSend->value(), area_);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue(
@@ -3063,7 +3095,17 @@ KvStoreDb<ClientType>::finalizeFullSync(
                               startTime.time_since_epoch())
                               .count();
 
-  auto sf = thriftPeer.setKvStoreKeyValsWrapper(area_, params);
+  thrift::KeySetParams* paramsToSend = &params;
+  std::unique_ptr<thrift::KeySetParams> fabricParams = nullptr;
+  bool isFabricExternal = kvParams_.fabricConfig.has_value() &&
+      !kvParams_.fabricConfig->isFabric(senderId);
+  if (isFabricExternal) {
+    fabricParams = makeFabricParam(/*publication=*/updates,
+                                   /*senderId=*/kvParams_.nodeId);
+    fabricParams->nodeIds() = {kvParams_.nodeId};
+    paramsToSend = fabricParams.get();
+  }
+  auto sf = thriftPeer.setKvStoreKeyValsWrapper(area_, *paramsToSend);
   std::move(sf)
       .via(evb_->getEvb())
       .thenValue([this, senderId, startTime](folly::Unit&&) {
@@ -3114,6 +3156,55 @@ KvStoreDb<ClientType>::getFloodPeers() {
     floodPeers.emplace(peerName);
   }
   return floodPeers;
+}
+
+template <class ClientType>
+uint16_t
+KvStoreDb<ClientType>::getProtocolType(const KvStorePeer& peer) const {
+  auto* client = peer.kvParams_.enable_secure_thrift_client
+      ? peer.secureClient.get()
+      : peer.plainTextClient.get();
+  if (client && client->getChannel()) {
+    return client->getChannel()->getProtocolId();
+  }
+  return apache::thrift::protocol::T_COMPACT_PROTOCOL;
+}
+
+template <class ClientType>
+apache::thrift::SerializedRequest
+KvStoreDb<ClientType>::serializeRequest(
+    const uint16_t protocolType,
+    thrift::KeySetParams& params,
+    const std::string& area) const {
+  using SetKvStoreKeyVals_PArgs = apache::thrift::ThriftPresult<
+      false,
+      apache::thrift::FieldData<
+          1,
+          apache::thrift::type_class::structure,
+          openr::thrift::KeySetParams*>,
+      apache::thrift::
+          FieldData<2, apache::thrift::type_class::string, std::string*>>;
+
+  std::string areaCopy = area;
+  return apache::thrift::detail::ac::withProtocolWriter(
+      protocolType, [&](auto&& prot) -> apache::thrift::SerializedRequest {
+        using PW = std::decay_t<decltype(prot)>;
+        SetKvStoreKeyVals_PArgs args;
+        args.template get<0>().value = &params;
+        args.template get<1>().value = &areaCopy;
+        const auto sizer = [&](PW* p) { return args.serializedSizeZC(p); };
+        const auto writer = [&](PW* p) { args.write(p); };
+        apache::thrift::transport::THeader header;
+        return apache::thrift::preprocessSendT<PW>(
+            &prot,
+            apache::thrift::RpcOptions{},
+            nullptr,
+            header,
+            "setKvStoreKeyVals",
+            writer,
+            sizer,
+            0);
+      });
 }
 
 template <class ClientType>
@@ -3185,56 +3276,17 @@ KvStoreDb<ClientType>::floodPublication(
   params.nodeIds().copy_from(publication.nodeIds());
   params.timestamp_ms() = getUnixTimeStampMs();
   params.senderId() = kvParams_.nodeId;
+  // Param representing the whole fabric. Gets created if needed.
+  std::unique_ptr<thrift::KeySetParams> fabricParams = nullptr;
 
-  // Pre-serialize the setKvStoreKeyVals RPC args lazily on the first
-  // INITIALIZED peer, then reuse the same zero-copy IOBuf for the rest.
-  std::optional<apache::thrift::SerializedRequest> serializedRequest;
-  uint16_t serializedProtocolId = apache::thrift::protocol::T_COMPACT_PROTOCOL;
-
-  auto serializeOnce =
-      [&](const auto& peer) -> const apache::thrift::SerializedRequest& {
-    if (!serializedRequest.has_value()) {
-      auto* client = peer.kvParams_.enable_secure_thrift_client
-          ? peer.secureClient.get()
-          : peer.plainTextClient.get();
-      if (client && client->getChannel()) {
-        serializedProtocolId = client->getChannel()->getProtocolId();
-      }
-
-      using SetKvStoreKeyVals_PArgs = apache::thrift::ThriftPresult<
-          false,
-          apache::thrift::FieldData<
-              1,
-              apache::thrift::type_class::structure,
-              openr::thrift::KeySetParams*>,
-          apache::thrift::
-              FieldData<2, apache::thrift::type_class::string, std::string*>>;
-
-      std::string areaCopy = area_;
-      serializedRequest = apache::thrift::detail::ac::withProtocolWriter(
-          serializedProtocolId,
-          [&](auto&& prot) -> apache::thrift::SerializedRequest {
-            using PW = std::decay_t<decltype(prot)>;
-            SetKvStoreKeyVals_PArgs args;
-            args.template get<0>().value = &params;
-            args.template get<1>().value = &areaCopy;
-            const auto sizer = [&](PW* p) { return args.serializedSizeZC(p); };
-            const auto writer = [&](PW* p) { args.write(p); };
-            apache::thrift::transport::THeader header;
-            return apache::thrift::preprocessSendT<PW>(
-                &prot,
-                apache::thrift::RpcOptions{},
-                nullptr,
-                header,
-                "setKvStoreKeyVals",
-                writer,
-                sizer,
-                0);
-          });
-    }
-    return *serializedRequest;
-  };
-
+  // Buffers to cache the serialized requests for flooding.
+  // The serialized request depends on the protocol type and whether the
+  // peer is a fabric-external peer.
+  folly::F14NodeMap<
+      std::pair</*protocolType=*/uint16_t,
+                /*standard or fabric-external*/ bool>,
+      std::optional<apache::thrift::SerializedRequest>>
+      serializedRequests;
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     if (senderId.has_value() && senderId.value() == peerName) {
       // Do not flood towards senderId from whom we received this
@@ -3252,6 +3304,18 @@ KvStoreDb<ClientType>::floodPublication(
       continue;
     }
 
+    bool isFabricExternal = kvParams_.fabricConfig.has_value() &&
+        !kvParams_.fabricConfig->isFabric(peerName);
+    if (isFabricExternal && !fabricParams) {
+      fabricParams = makeFabricParam(publication, kvParams_.nodeId);
+    }
+    uint16_t protocolType = getProtocolType(thriftPeer);
+    std::optional<apache::thrift::SerializedRequest>& serializedRequest =
+        serializedRequests[{protocolType, isFabricExternal}];
+    if (!serializedRequest) {
+      serializedRequest.emplace(serializeRequest(
+          protocolType, isFabricExternal ? *fabricParams : params, area_));
+    }
     // record telemetry for flooding publications
     fb303::fbData->addStatValue(
         "kvstore.thrift.num_flood_pub", 1, fb303::COUNT);
@@ -3262,7 +3326,7 @@ KvStoreDb<ClientType>::floodPublication(
 
     auto startTime = std::chrono::steady_clock::now();
     auto sf = thriftPeer.sendPreSerializedSetKvStoreKeyVals(
-        *serializeOnce(thriftPeer).buffer, serializedProtocolId);
+        *serializedRequest->buffer, protocolType);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([startTime](folly::Unit&&) {
@@ -3296,6 +3360,25 @@ KvStoreDb<ClientType>::floodPublication(
               startTime);
         });
   }
+}
+
+template <class ClientType>
+std::unique_ptr<thrift::KeySetParams>
+KvStoreDb<ClientType>::makeFabricParam(
+    const thrift::Publication& publication, const std::string& senderId) const {
+  std::unique_ptr<thrift::KeySetParams> params =
+      std::make_unique<thrift::KeySetParams>();
+  for (const auto& [key, val] : *publication.keyVals()) {
+    if (kvParams_.fabricConfig->isFabricAdjKey(key) ||
+        kvParams_.fabricConfig->isFabricPrefixKey(key)) {
+      continue;
+    }
+    params->keyVals()->insert({key, val});
+  }
+  params->nodeIds().copy_from(publication.nodeIds());
+  params->timestamp_ms() = getUnixTimeStampMs();
+  params->senderId() = senderId;
+  return params;
 }
 
 template <class ClientType>
@@ -3599,8 +3682,7 @@ template <class ClientType>
 folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
 KvStore<ClientType>::co_dumpKvStoreKeysImpl(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
-  auto result =
-      dumpKvStoreKeysImpl(std::move(keyDumpParams), std::move(selectAreas));
+  auto result = dumpKvStoreKeysImpl(std::move(keyDumpParams), selectAreas);
   co_return result;
 }
 
@@ -3700,8 +3782,7 @@ folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
 KvStore<ClientType>::co_dumpKvStoreKeys(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
   auto result = co_await co_withExecutor(
-      getEvb(),
-      co_dumpKvStoreKeysImpl(std::move(keyDumpParams), std::move(selectAreas)));
+      getEvb(), co_dumpKvStoreKeysImpl(std::move(keyDumpParams), selectAreas));
   co_return result;
 }
 

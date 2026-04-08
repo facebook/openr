@@ -18,7 +18,8 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
     const folly::F14FastSet<std::string>& areaIds,
     const thrift::KvStoreConfig& kvStoreConfig,
     std::optional<messaging::RQueue<PeerEvent>> peerUpdatesQueue,
-    std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue)
+    std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue,
+    std::optional<FabricConfig> fabricConfig)
     : nodeId_(*kvStoreConfig.node_name()),
       areaIds_(areaIds),
       kvStoreConfig_(kvStoreConfig) {
@@ -31,7 +32,8 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
                                  : dummyKvRequestQueue_.getReader(),
       logSampleQueue_,
       areaIds_,
-      kvStoreConfig_);
+      kvStoreConfig_,
+      std::move(fabricConfig));
 
   // we need to spin up a thrift server for KvStore clients to connect to. See
   // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update

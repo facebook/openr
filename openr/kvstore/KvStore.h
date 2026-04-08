@@ -286,6 +286,16 @@ class KvStoreDb {
   struct KvStorePeer;
   void disconnectPeer(KvStorePeer& peer, KvStorePeerEvent const& event);
 
+  // Returns the protocol type to use for serialization for the given peer.
+  uint16_t getProtocolType(const KvStorePeer& peer) const;
+
+  // Returns serialized request for a thrift::KeySetParams object and the given
+  // protocol type.
+  apache::thrift::SerializedRequest serializeRequest(
+      const uint16_t protocolType,
+      thrift::KeySetParams& paramsToSend,
+      const std::string& area) const;
+
   /*
    * [Incremental flooding]
    *
@@ -296,6 +306,10 @@ class KvStoreDb {
    */
   void floodPublication(
       thrift::Publication&& publication, bool rateLimit = true);
+
+  std::unique_ptr<thrift::KeySetParams> makeFabricParam(
+      const thrift::Publication& publication,
+      const std::string& senderId) const;
 
   /*
    * [Incremental flooding]
@@ -598,7 +612,9 @@ class KvStore final : public OpenrEventBase {
       // AreaId collection
       const folly::F14FastSet<std::string>& areaIds,
       // KvStoreConfig to drive the instance
-      const thrift::KvStoreConfig& kvStoreConfig);
+      const thrift::KvStoreConfig& kvStoreConfig,
+      // Fabric config set when the node is a fabric node
+      std::optional<FabricConfig> fabricConfig = std::nullopt);
 
   ~KvStore() override = default;
 
@@ -811,6 +827,9 @@ class KvStore final : public OpenrEventBase {
 #endif // FOLLY_HAS_COROUTINES
 
  private:
+  // Define an empty string to keep the linter happy.
+  static inline const std::string kEmptyString;
+
   // disable copying
   KvStore(KvStore const&) = delete;
   KvStore& operator=(KvStore const&) = delete;
@@ -856,7 +875,8 @@ class KvStore final : public OpenrEventBase {
       std::string const& areaId, std::string const& caller);
 
   std::unique_ptr<std::vector<thrift::Publication>> dumpKvStoreKeysImpl(
-      thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas);
+      thrift::KeyDumpParams keyDumpParams,
+      const std::set<std::string>& selectAreas);
 
   thrift::Publication dumpKvStoreHashesImpl(
       std::string area, thrift::KeyDumpParams keyDumpParams);

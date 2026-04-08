@@ -41,7 +41,9 @@ class KvStoreWrapper {
           std::nullopt,
       // Queue for receiving key-value update requests
       std::optional<messaging::RQueue<KeyValueRequest>> kvRequestQueue =
-          std::nullopt);
+          std::nullopt,
+      // Fabric config set when the node is a fabric node
+      std::optional<FabricConfig> fabricConfig = std::nullopt);
 
   ~KvStoreWrapper() {
     stop();

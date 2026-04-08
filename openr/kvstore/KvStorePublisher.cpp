@@ -18,15 +18,14 @@ KvStorePublisher::KvStorePublisher(
     int64_t total_messages)
     : selectAreas_(selectAreas),
       filter_(filter),
+      keyPrefixFilter_(
+          *filter.keys(),
+          *filter.originatorIds(),
+          filter.oper().has_value() ? *filter.oper()
+                                    : thrift::FilterOperator::OR),
       publisher_(std::move(publisher)),
       subscription_time_(subscription_time),
-      total_messages_(total_messages) {
-  thrift::FilterOperator op =
-      filter_.oper().has_value() ? *filter_.oper() : thrift::FilterOperator::OR;
-
-  keyPrefixFilter_ =
-      KvStoreFilters(*filter.keys(), std::move(*filter.originatorIds()), op);
-}
+      total_messages_(total_messages) {}
 
 /**
  * A publication object (param) can have multiple key value pairs as follows.

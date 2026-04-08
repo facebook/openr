@@ -7,6 +7,7 @@
 
 #include <folly/init/Init.h>
 #include <folly/io/async/ScopedEventBaseThread.h>
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <openr/common/OpenrClient.h>
@@ -16,6 +17,8 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
+using ::testing::IsFalse;
+using ::testing::IsTrue;
 
 class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
@@ -505,6 +508,95 @@ TEST(KvStoreUtil, KvStoreFiltersTest) {
   ASSERT_FALSE(andFilter.keyMatch(node1_key1, node3_val1)); // Match key only
   ASSERT_FALSE(andFilter.keyMatch(node3_key1, node1_val1)); // Match node only
   ASSERT_FALSE(andFilter.keyMatch(node3_key1, node3_val1)); // No match
+}
+
+namespace {
+openr::thrift::FabricConfig
+makeTestFabricConfig() {
+  openr::thrift::FabricConfig fabricConfig;
+  fabricConfig.fabric_name() = "bbf01.dfw";
+  fabricConfig.fabric_prefixes() = {"1::1/128"};
+  fabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  fabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  fabricConfig.fabric_control_regexes() = {"eb01-lc\\d{3}\\.dfw1"};
+  fabricConfig.fabric_interface_regexes() = {"port-channel10\\d{3}"};
+  return fabricConfig;
+}
+} // namespace
+
+// Tests for isAllowedByFabricScope via keyMatch.
+// isAllowedByFabricScope blocks fabric keys (adj/prefix keys for fabric nodes)
+// from being sent to non-fabric peers. It is called before key/originator
+// matching.
+TEST(KvStoreUtil, FabricScope_NoFabricConfig) {
+  // Without fabricConfig, all keys are allowed regardless of content.
+  auto filter = KvStoreFilters({}, {});
+  EXPECT_THAT(filter.keyMatch("adj:eb01-ld002.dfw1"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("random-key"), IsTrue());
+}
+
+TEST(KvStoreUtil, FabricScope_NoPeerName) {
+  // With fabricConfig but no peerName, all keys are allowed.
+  std::optional<FabricConfig> fabricCfg{FabricConfig(makeTestFabricConfig())};
+  auto filter = KvStoreFilters({}, {}, thrift::FilterOperator::OR, fabricCfg);
+  EXPECT_THAT(filter.keyMatch("adj:eb01-ld002.dfw1"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("random-key"), IsTrue());
+}
+
+TEST(KvStoreUtil, FabricScope_EmptyPeerName) {
+  // With fabricConfig and empty peerName, all keys are allowed.
+  std::optional<FabricConfig> fabricCfg{FabricConfig(makeTestFabricConfig())};
+  std::optional<std::string> emptyPeer{""};
+  auto filter =
+      KvStoreFilters({}, {}, thrift::FilterOperator::OR, fabricCfg, emptyPeer);
+  EXPECT_THAT(filter.keyMatch("adj:eb01-ld002.dfw1"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"), IsTrue());
+}
+
+TEST(KvStoreUtil, FabricScope_NonFabricKey) {
+  // Fabric config + peer name, but non-fabric keys are always allowed.
+  std::optional<FabricConfig> fabricCfg{FabricConfig(makeTestFabricConfig())};
+  std::optional<std::string> nonFabricPeer{"external-node"};
+  auto filter = KvStoreFilters(
+      {}, {}, thrift::FilterOperator::OR, fabricCfg, nonFabricPeer);
+  EXPECT_THAT(filter.keyMatch("adj:external-node"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("prefix:external-node:[10.0.0.0/8]"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("random-key"), IsTrue());
+}
+
+TEST(KvStoreUtil, FabricScope_FabricKeyToFabricPeer) {
+  // Fabric adj/prefix keys sent to a fabric peer are allowed.
+  std::optional<FabricConfig> fabricCfg{FabricConfig(makeTestFabricConfig())};
+  std::optional<std::string> fabricPeer{"eb01-ld002.dfw1"};
+  auto filter =
+      KvStoreFilters({}, {}, thrift::FilterOperator::OR, fabricCfg, fabricPeer);
+  EXPECT_THAT(filter.keyMatch("adj:eb01-ld002.dfw1"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("adj:eb01-sp002.dfw1"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("prefix:eb01-lc002.dfw1:[10.0.0.0/8]"), IsTrue());
+}
+
+TEST(KvStoreUtil, FabricScope_FabricKeyToNonFabricPeer) {
+  // Fabric adj/prefix keys sent to a non-fabric peer are BLOCKED.
+  std::optional<FabricConfig> fabricCfg{FabricConfig(makeTestFabricConfig())};
+  std::optional<std::string> nonFabricPeer{"external-node"};
+  auto filter = KvStoreFilters(
+      {}, {}, thrift::FilterOperator::OR, fabricCfg, nonFabricPeer);
+  // Fabric adj keys → blocked
+  EXPECT_THAT(filter.keyMatch("adj:eb01-ld002.dfw1"), IsFalse());
+  EXPECT_THAT(filter.keyMatch("adj:eb01-sp002.dfw1"), IsFalse());
+  EXPECT_THAT(filter.keyMatch("adj:eb01-lc002.dfw1"), IsFalse());
+  // Fabric prefix keys → blocked
+  EXPECT_THAT(
+      filter.keyMatch("prefix:eb01-ld002.dfw1:[10.0.0.0/8]"), IsFalse());
+  EXPECT_THAT(
+      filter.keyMatch("prefix:eb01-sp002.dfw1:[10.0.0.0/8]"), IsFalse());
+  EXPECT_THAT(
+      filter.keyMatch("prefix:eb01-lc002.dfw1:[10.0.0.0/8]"), IsFalse());
+  // Non-fabric keys from same filter → still allowed
+  EXPECT_THAT(filter.keyMatch("adj:external-node"), IsTrue());
+  EXPECT_THAT(filter.keyMatch("random-key"), IsTrue());
 }
 
 TEST(KvStoreUtil, IsValidTtlTest) {

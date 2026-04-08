@@ -396,7 +396,8 @@ BM_KvStoreDumpDifference(
     }
     suspender.dismiss();
     // Call dumpDifference
-    dumpDifference(kTestingAreaName, myKeyVals, comparedKeyVals);
+    dumpDifference(
+        kTestingAreaName, myKeyVals, comparedKeyVals, KvStoreFilters({}, {}));
     suspender.rehire();
     if (record) {
       auto mem = sysMetrics.getVirtualMemBytes();
