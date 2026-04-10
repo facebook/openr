@@ -28,6 +28,7 @@ class DecisionCli:
         self.decision.add_command(DecisionPartialAdjCli().show, name="partial-adj")
 
     @click.group(cls=deduceCommandGroup)
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def decision(ctx):  # noqa: B902
         """CLI tool to peek into Decision module."""
@@ -50,6 +51,7 @@ class PathCli:
     def path(cli_opts, src, dst, max_hop, area):  # noqa: B902
         """path from src to dst"""
 
+        # pyrefly: ignore [bad-argument-type]
         decision.PathCmd(cli_opts).run(src, dst, max_hop, area)
 
 
@@ -80,7 +82,9 @@ class DecisionRoutesComputedCli:
     def routes(cli_opts, nodes, prefixes, labels, hostnames, json):  # noqa: B902
         """Request the routing table from Decision module"""
 
+        # pyrefly: ignore [bad-argument-type]
         nodes_set = parse_nodes(cli_opts, nodes)
+        # pyrefly: ignore [bad-argument-type]
         decision.DecisionRoutesComputedCmd(cli_opts).run(
             nodes_set, prefixes, labels, json, hostnames
         )
@@ -93,6 +97,7 @@ class DecisionPartialAdjCli:
     def show(cli_opts, area):  # noqa: B902
         """dump the partial adjacencies of an area"""
 
+        # pyrefly: ignore [bad-argument-type]
         decision.DecisionShowPartialAdjCmd(cli_opts).run(area)
 
 
@@ -119,7 +124,9 @@ class DecisionAdjCli:
     def adj(cli_opts, nodes, areas, bidir, json):  # noqa: B902
         """dump the link-state adjacencies from Decision module"""
 
+        # pyrefly: ignore [bad-argument-type]
         nodes_set = parse_nodes(cli_opts, nodes)
+        # pyrefly: ignore [bad-argument-type]
         decision.DecisionAdjCmd(cli_opts).run(nodes_set, set(areas), bidir, json)
 
 
@@ -184,6 +191,7 @@ class DecisionRibPolicyCli:
         Show currently configured RibPolicy
         """
 
+        # pyrefly: ignore [bad-argument-type]
         decision.DecisionRibPolicyCmd(cli_opts).run()
 
 

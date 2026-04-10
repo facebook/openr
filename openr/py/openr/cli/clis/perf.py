@@ -17,6 +17,7 @@ class PerfCli:
         self.perf.add_command(ViewFibCli().fib)
 
     @click.group()
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def perf(ctx):  # noqa: B902
         """CLI tool to view latest perf log of each module."""
@@ -29,4 +30,5 @@ class ViewFibCli:
     def fib(cli_opts):  # noqa: B902
         """View latest perf log of fib module from this node"""
 
+        # pyrefly: ignore [bad-argument-type]
         perf.ViewFibCmd(cli_opts).run()

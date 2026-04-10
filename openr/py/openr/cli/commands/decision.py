@@ -211,6 +211,7 @@ class PathCmd(OpenrCtrlCmd):
                 nexthop_dict[(adj.ifName, nh4_addr)] = adj.otherNodeName
 
         if2node = defaultdict(dict)
+        # pyrefly: ignore [bad-argument-type]
         self.iter_dbs(if2node, adj_dbs, ["all"], _parse)
         return if2node
 

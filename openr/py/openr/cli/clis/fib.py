@@ -39,6 +39,7 @@ class FibCli:
     @click.group(cls=deduceCommandGroup)
     @breeze_option("--fib_agent_port", type=int, help="Fib thrift server port")
     @breeze_option("--client-id", type=int, help="FIB Client ID")
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def fib(ctx, fib_agent_port, client_id):  # noqa: B902
         """CLI tool to peek into Fib module."""

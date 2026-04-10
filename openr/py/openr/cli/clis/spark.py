@@ -18,6 +18,7 @@ class SparkCli:
         self.spark.add_command(SparkValidateCli().validate, name="validate")
 
     @click.group(cls=deduceCommandGroup)
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def spark(ctx):  # noqa: B902
         """CLI tool to peek into Spark information."""
@@ -36,6 +37,7 @@ class SparkValidateCli:
         """Outputs number of neighbors in ESTABLISHED state and information about
         neighbors which are not"""
 
+        # pyrefly: ignore [bad-argument-type]
         spark.ValidateCmd(cli_opts).run(detail)
 
 
@@ -51,6 +53,7 @@ class SparkNeighborCli:
     def neighbors(cli_opts, detail, json):  # noqa: B902
         """Dump all detected neighbor information"""
 
+        # pyrefly: ignore [bad-argument-type]
         spark.NeighborCmd(cli_opts).run(json, detail)
 
 
@@ -61,4 +64,5 @@ class SparkGRCli:
     def graceful_restart(cli_opts, yes):  # noqa: B902
         """Force to send out restarting msg indicating GR"""
 
+        # pyrefly: ignore [bad-argument-type]
         spark.GracefulRestartCmd(cli_opts).run(yes)

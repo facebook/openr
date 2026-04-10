@@ -33,7 +33,6 @@ def sprint_bytes(bytes: int | float) -> str:
 
     if bytes < 1024:
         return f"{bytes} B"
-    # pyre-fixme[58]: `/` is not supported for operand types `Union[float, int]` and
     #  `int`.
     bytes /= 1024
     if bytes < 1024:

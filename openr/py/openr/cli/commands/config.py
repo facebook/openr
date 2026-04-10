@@ -102,8 +102,10 @@ class ConfigLinkMonitorCmd(ConfigStoreCmdBase):
             ["isOverloaded: {}".format("Yes" if lm_config.isOverloaded else "No")]
         )
         rows.append(
+            # pyrefly: ignore [bad-argument-type]
             ["overloadedLinks: {}".format(", ".join(lm_config.overloadedLinks))]
         )
+        # pyrefly: ignore [bad-argument-type]
         print(printing.render_vertical_table(rows, caption=caption))
 
         print(printing.render_vertical_table([["linkMetricOverrides:"]]))

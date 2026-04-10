@@ -909,29 +909,36 @@ def find_adj_list_deltas(
         tags = ("NEIGHBOR_DOWN", "NEIGHBOR_UP", "NEIGHBOR_UPDATE")
 
     if old_adj_list is None:
+        # pyrefly: ignore [bad-assignment]
         old_adj_list = set()
     if new_adj_list is None:
+        # pyrefly: ignore [bad-assignment]
         new_adj_list = set()
 
+    # pyrefly: ignore [not-iterable]
     old_neighbors = {(a.otherNodeName, a.ifName) for a in old_adj_list}
+    # pyrefly: ignore [not-iterable]
     new_neighbors = {(a.otherNodeName, a.ifName) for a in new_adj_list}
     delta_list = [
         (tags[0], a, None)
+        # pyrefly: ignore [not-iterable]
         for a in old_adj_list
         if (a.otherNodeName, a.ifName) in old_neighbors - new_neighbors
     ]
     delta_list.extend(
+        # pyrefly: ignore [bad-argument-type]
         [
             (tags[1], None, a)
+            # pyrefly: ignore [not-iterable]
             for a in new_adj_list
             if (a.otherNodeName, a.ifName) in new_neighbors - old_neighbors
         ]
     )
     delta_list.extend(
-        # pyre-fixme[6]: For 1st argument expected `Iterable[Tuple[str, typing.Any,
         #  None]]` but got `List[Tuple[str, Adjacency, Adjacency]]`.
         [
             (tags[2], a, b)
+            # pyrefly: ignore [no-matching-overload]
             for a, b in product(old_adj_list, new_adj_list)
             if (
                 a.otherNodeName == b.otherNodeName
@@ -1382,6 +1389,7 @@ def prefixes_with_different_nexthops(
                 print(key, l_nh_coll, r_nh_coll)
                 keys.append((key, l_nh_coll, r_nh_coll))
 
+    # pyrefly: ignore [bad-return]
     return keys
 
 
@@ -1746,7 +1754,6 @@ def get_routes_json(
             "dest": dest,
             "nexthops": [ip_nexthop_to_str(nh) for nh in route.nextHops],
         }
-        # pyre-fixme[16]: `int` has no attribute `append`.
         data["routes"].append(route_data)
 
     if mpls_routes:
@@ -1758,7 +1765,6 @@ def get_routes_json(
                 "dest": dest,
                 "nexthops": [ip_nexthop_to_str(nh) for nh in label.nextHops],
             }
-            # pyre-fixme[16]: Item `int` of `Union[List[typing.Any], int, str]` has
             #  no attribute `append`.
             data["mplsRoutes"].append(route_data)
 

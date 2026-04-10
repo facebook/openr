@@ -28,6 +28,7 @@ from openr.thrift.Types.thrift_types import OriginatedPrefixEntry, PrefixEntry
 
 def prefix_type_key_fn(key: PrintAdvertisedTypes) -> tuple[str]:
     try:
+        # pyrefly: ignore [missing-attribute]
         return (key.name if key in PrefixType else "N/A - Not in PrefixType enum",)
     except ValueError:
         pass  # Here we should have debug logging ...

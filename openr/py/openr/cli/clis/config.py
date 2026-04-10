@@ -28,6 +28,7 @@ class ConfigCli:
         self.config.add_command(ConfigStoreCli().config_store, name="store")
 
     @click.group(cls=deduceCommandGroup)
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def config(ctx: Bunch) -> None:  # noqa: B902
         """CLI tool to peek into Config Store module."""
@@ -75,6 +76,7 @@ class ConfigLinkMonitorCli:
     def config_link_monitor(cli_opts):  # noqa: B902
         """Dump link monitor config"""
 
+        # pyrefly: ignore [bad-argument-type]
         config.ConfigLinkMonitorCmd(cli_opts).run()
 
 
@@ -84,6 +86,7 @@ class ConfigPrefixManagerCli:
     def config_prefix_manager(cli_opts):  # noqa: B902
         """Dump prefix manager config"""
 
+        # pyrefly: ignore [bad-argument-type]
         config.ConfigPrefixManagerCmd(cli_opts).run()
 
 
@@ -94,6 +97,7 @@ class ConfigEraseCli:
     def config_erase(cli_opts, key):  # noqa: B902
         """Erase a config key"""
 
+        # pyrefly: ignore [bad-argument-type]
         config.ConfigEraseCmd(cli_opts).run(key)
 
 
@@ -105,4 +109,5 @@ class ConfigStoreCli:
     def config_store(cli_opts, key, value):  # noqa: B902
         """Store a config key"""
 
+        # pyrefly: ignore [bad-argument-type]
         config.ConfigStoreCmd(cli_opts).run(key, value)

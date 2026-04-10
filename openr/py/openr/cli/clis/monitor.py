@@ -20,6 +20,7 @@ class MonitorCli:
         self.monitor.add_command(MonitorStatistics().statistics)
 
     @click.group(cls=deduceCommandGroup)
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def monitor(ctx):  # noqa: B902
         """CLI tool to peek into Monitor module."""
@@ -36,6 +37,7 @@ class CountersCli:
     def counters(cli_opts, prefix, json):  # noqa: B902
         """Fetch and display OpenR counters"""
 
+        # pyrefly: ignore [bad-argument-type]
         monitor.CountersCmd(cli_opts).run(prefix, json)
 
 
@@ -47,6 +49,7 @@ class MonitorLogs:
     def logs(cli_opts, prefix, json):  # noqa: B902
         """Print log events"""
 
+        # pyrefly: ignore [bad-argument-type]
         monitor.LogCmd(cli_opts).run(json)
 
 
@@ -56,4 +59,5 @@ class MonitorStatistics:
     def statistics(cli_opts):  # noqa: B902
         """Print counters in pretty format"""
 
+        # pyrefly: ignore [bad-argument-type]
         monitor.StatisticsCmd(cli_opts).run()

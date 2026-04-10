@@ -413,6 +413,7 @@ class KeyValsCmd(KvStoreWithInitAreaCmdBase):
                 ):
                     val = value.value
                 else:
+                    # pyrefly: ignore [missing-attribute]
                     val = hexdump.hexdump(value.value, "return")
 
             ttl = "INF" if value.ttl == Consts.CONST_TTL_INF else value.ttl
@@ -462,7 +463,6 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
 
         all_kv = Publication(keyVals=key_vals)
 
-        # pyre-fixme[61]: `host_id` may not be initialized here.
         self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
 
     def get_connected_nodes(self, adj_keys: Publication, node_id: str) -> set[str]:
@@ -486,6 +486,7 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
                     graph.add_edge(adj.otherNodeName, adj_db.thisNodeName)
                     continue
                 edges.add((adj_db.thisNodeName, adj.otherNodeName, adj.ifName))
+        # pyrefly: ignore [missing-attribute]
         return nx.node_connected_component(graph, node_id)
 
     def print_kvstore_nodes(
@@ -669,6 +670,7 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
         if lines != []:
             self.print_publication_delta(
                 f"Key: {key} difference",
+                # pyrefly: ignore [bad-argument-type]
                 utils.sprint_pub_update(our_kv_pub_db, key, other_val),
                 "\n".join(lines) if lines else "",
             )
@@ -686,6 +688,7 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
         kv_dict = {}
         for node in nodes:
             node_ip = all_nodes_to_ips.get(node, node)
+            # pyrefly: ignore [bad-argument-type]
             kv = utils.dump_node_kvs(self.cli_opts, node_ip, area)
             if kv is not None:
                 kv_dict[node] = kv.keyVals
@@ -1283,6 +1286,7 @@ class ValidateCmd(KvStoreWithInitAreaCmdBase):
 
         is_pass = is_pass and is_adj_advertised and is_prefix_advertised
 
+        # pyrefly: ignore [bad-argument-type]
         invalid_peers = self._validate_peer_state(area_to_peers_dict)
 
         is_pass = is_pass and (len(invalid_peers) == 0)

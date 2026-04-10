@@ -23,6 +23,7 @@ class PrefixMgrCli:
         self.prefixmgr.add_command(PrefixMgrValidateCli().validate)
 
     @click.group(cls=deduceCommandGroup)
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def prefixmgr(ctx):  # noqa: B902
         """CLI tool to peek into Prefix Manager module."""
@@ -49,6 +50,7 @@ class AdvertisedRoutesCli:
         help="Translate tag string to human readable name",
     )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def show(
         ctx: bunch.Bunch,  # noqa: B902
@@ -189,4 +191,5 @@ class PrefixMgrValidateCli:
     def validate(cli_opts):
         """Runs validation checks on prefix manager module"""
 
+        # pyrefly: ignore [bad-argument-type]
         prefix_mgr.ValidateCmd(cli_opts).run()

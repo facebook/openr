@@ -53,6 +53,7 @@ def get_fib_agent_client(
     client_id: int = FibClient.OPENR,
     client_class: type[
         Client[TAsyncClient, TSyncClient]
+        # pyrefly: ignore [bad-function-definition]
     ] = FibServiceClient,  # Allow service client overwrite
 ) -> TSyncClient:  # return client_class.Sync
     """
@@ -102,6 +103,7 @@ def get_fib_agent_client(
     # Assign so that we can refer to later on
     # Pyre does not allow us to assign a non-existing attribute to FibServiceClient
     # Therefore we need to explicitly ignore the error
+    # pyrefly: ignore [missing-attribute]
     client.client_id = client_id
     return client
 

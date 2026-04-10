@@ -142,6 +142,7 @@ def mpls_nexthop_to_nexthop_thrift(
         # pyre-fixme[16]: `Optional` has no attribute `__getitem__`.
         mpls_action = mpls_action(swapLabel=label[0])
     elif action == MplsActionCode.PUSH:
+        # pyrefly: ignore [unsupported-operation]
         mpls_action = mpls_action(pushLabels=label[:])
 
     return NextHopThrift(

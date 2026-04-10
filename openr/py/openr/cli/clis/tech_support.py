@@ -18,6 +18,7 @@ class TechSupportCli:
     @click.option(
         "--routes", is_flag=True, default=True, help="Show routes in techsupport output"
     )
+    # pyrefly: ignore [bad-argument-type]
     @click.pass_context
     def tech_support(ctx, fib_agent_port, routes):  # noqa: B902
         """Extensive logging of Open/R's state for debugging"""
@@ -28,4 +29,5 @@ class TechSupportCli:
         - Recent perf events
         """
 
+        # pyrefly: ignore [missing-attribute]
         TechSupportCmd(ctx.obj).run(routes)
