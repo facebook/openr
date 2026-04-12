@@ -147,6 +147,10 @@ class PersistentStore : public OpenrEventBase {
   // Keeps track of number of writes of PersistentObject to disk
   std::atomic<std::uint64_t> numOfNewWritesToDisk_{0};
 
+  // Whether the TlvFormatMarker has been written to the file.
+  // Set on successful load or full database save.
+  bool tlvMarkerWritten_{false};
+
   // Location on disk where data will be synced up. A file will be created
   // if doesn't exists.
   const fs::path storageFilePath_;

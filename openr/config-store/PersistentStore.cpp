@@ -137,6 +137,13 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
 
     auto queue = folly::IOBufQueue(folly::IOBufQueue::cacheChainLength());
 
+    // Prepend the TLV format marker if it hasn't been written yet.
+    // This happens when the file is new and no full database save has occurred.
+    if (!tlvMarkerWritten_) {
+      queue.append(kTlvFormatMarker.data(), kTlvFormatMarker.size());
+      tlvMarkerWritten_ = true;
+    }
+
     for (auto& pObject : newObjects) {
       auto buf = encodePersistentObject(pObject);
       if (buf.hasError()) {
@@ -215,6 +222,7 @@ PersistentStore::saveDatabaseToDisk() noexcept {
               << "'. Error: " << success.error();
     return false;
   }
+  tlvMarkerWritten_ = true;
   return true;
 }
 
@@ -282,6 +290,7 @@ PersistentStore::loadDatabaseTlvFormat(
     }
   }
   database_ = std::move(newDatabase);
+  tlvMarkerWritten_ = true;
   return folly::Unit();
 }
 
