@@ -13,6 +13,7 @@
 #include <openr/common/Constants.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/OpenrProfiler.h>
 #include <openr/fib/Fib.h>
 
 namespace fb303 = facebook::fb303;
@@ -440,6 +441,7 @@ Fib::RouteState::processFibUpdateError(
 // Process new route updates received from Decision module.
 void
 Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
+  OPENR_PROFILE("Fib::processDecisionRouteUpdate");
   // Process state transition event
   transitionRouteState(RouteState::RIB_UPDATE);
 
@@ -605,6 +607,7 @@ bool
 Fib::updateRoutes(
     std::optional<DecisionRouteUpdate>&& maybeRouteUpdate,
     bool useDeleteDelay) {
+  OPENR_PROFILE("Fib::updateRoutes");
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
@@ -672,6 +675,7 @@ Fib::updateRoutes(
 
 bool
 Fib::syncRoutes() {
+  OPENR_PROFILE("Fib::syncRoutes");
   SCOPE_EXIT {
     updateRoutesSemaphore_.signal(); // Release when this function returns
   };
@@ -797,6 +801,7 @@ Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
 
 void
 Fib::retryRoutes() noexcept {
+  OPENR_PROFILE("Fib::retryRoutes");
   bool success{false};
   retryRoutesExpBackoff_.reportError(); // We increase backoff on every retry
 
