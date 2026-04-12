@@ -20,6 +20,7 @@
 #include <openr/common/Flags.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/common/OpenrProfiler.h>
 #include <openr/decision/Decision.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
@@ -874,6 +875,7 @@ Decision::deleteKeyFromLsdb(
 
 void
 Decision::processPublication(thrift::Publication&& thriftPub) {
+  OPENR_PROFILE("Decision::processPublication");
   CHECK(!thriftPub.area()->empty());
   auto const& area = *thriftPub.area();
 
@@ -961,6 +963,7 @@ Decision::updateFabricKv(
 
 void
 Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
+  OPENR_PROFILE("Decision::processStaticRoutesUpdate");
   /*
    * ATTN: static route processing ONLY applies to unicast routes
    */
@@ -1001,6 +1004,7 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
 
 void
 Decision::rebuildRoutes(std::string const& event) {
+  OPENR_PROFILE("Decision::rebuildRoutes");
   // Do NOT trigger initial route computation until all conditions are met.
   if (!unblockInitialRoutesBuild()) {
     return;
