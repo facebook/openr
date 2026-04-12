@@ -28,6 +28,19 @@ exception OpenrError {
   1: string message;
 }
 
+/**
+ * Per-function profiler statistics with histogram percentiles.
+ */
+struct ProfilerStat {
+  1: string name;
+  2: i64 count;
+  3: i64 p50_ms;
+  4: i64 p90_ms;
+  5: i64 p99_ms;
+  6: i64 max_ms;
+  7: i64 total_ms;
+}
+
 struct NodeAndArea {
   1: string node;
   2: string area;
@@ -740,4 +753,29 @@ service OpenrCtrl extends KvStore.KvStoreService {
    * Get filters for each of the subscribers of Dispatcher
    */
   list<list<string>> getDispatcherFilters();
+
+  //
+  // Profiler APIs
+  //
+
+  /**
+   * Enable or disable the profiler.
+   */
+  void startProfiler(1: bool enable);
+
+  /**
+   * Set a regex filter to limit which functions are profiled.
+   * Empty string clears the filter.
+   */
+  void setProfilerFilter(1: string regex);
+
+  /**
+   * Get per-function profiler statistics.
+   */
+  list<ProfilerStat> getProfilerStats();
+
+  /**
+   * Clear all profiler statistics.
+   */
+  void clearProfilerStats();
 }

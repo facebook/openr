@@ -239,6 +239,20 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
   semifuture_getDispatcherFilters() override;
 
+  //
+  // Profiler APIs
+  //
+
+  folly::SemiFuture<folly::Unit> semifuture_startProfiler(bool enable) override;
+
+  folly::SemiFuture<folly::Unit> semifuture_setProfilerFilter(
+      std::unique_ptr<std::string> regex) override;
+
+  folly::SemiFuture<std::unique_ptr<std::vector<thrift::ProfilerStat>>>
+  semifuture_getProfilerStats() override;
+
+  folly::SemiFuture<folly::Unit> semifuture_clearProfilerStats() override;
+
   // Subscriber Info API
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>

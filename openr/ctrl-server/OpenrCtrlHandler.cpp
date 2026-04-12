@@ -16,6 +16,7 @@ namespace fs = std::filesystem;
 
 #include <openr/common/Constants.h>
 #include <openr/common/LsdbUtil.h>
+#include <openr/common/OpenrProfiler.h>
 #include <openr/common/Util.h>
 #include <openr/monitor/LogSample.h>
 
@@ -690,6 +691,49 @@ OpenrCtrlHandler::semifuture_getDispatcherFilters() {
     return sf;
   }
   return dispatcher_->getDispatcherFilters();
+}
+
+//
+// Profiler APIs
+//
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_startProfiler(bool enable) {
+  OpenrProfiler::getInstance()->setEnabled(enable);
+  return folly::makeSemiFuture(folly::Unit{});
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_setProfilerFilter(
+    std::unique_ptr<std::string> regex) {
+  if (regex) {
+    OpenrProfiler::getInstance()->setFilterRegex(*regex);
+  }
+  return folly::makeSemiFuture(folly::Unit{});
+}
+
+folly::SemiFuture<std::unique_ptr<std::vector<thrift::ProfilerStat>>>
+OpenrCtrlHandler::semifuture_getProfilerStats() {
+  auto stats = OpenrProfiler::getInstance()->getStats();
+  auto result = std::make_unique<std::vector<thrift::ProfilerStat>>();
+  result->reserve(stats.size());
+  for (const auto& s : stats) {
+    thrift::ProfilerStat thriftStat;
+    thriftStat.name() = s.name;
+    thriftStat.count() = s.count;
+    thriftStat.p50_ms() = s.p50Ms;
+    thriftStat.p90_ms() = s.p90Ms;
+    thriftStat.p99_ms() = s.p99Ms;
+    thriftStat.max_ms() = s.maxMs;
+    thriftStat.total_ms() = s.totalMs;
+    result->push_back(std::move(thriftStat));
+  }
+  return folly::makeSemiFuture(std::move(result));
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_clearProfilerStats() {
+  OpenrProfiler::getInstance()->clearStats();
+  return folly::makeSemiFuture(folly::Unit{});
 }
 
 //
