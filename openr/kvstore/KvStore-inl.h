@@ -12,6 +12,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
+#include <openr/common/OpenrProfiler.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
@@ -349,6 +350,7 @@ KvStore<ClientType>::initZeroPeersKvStores() {
 template <class ClientType>
 void
 KvStore<ClientType>::processPeerUpdates(PeerEvent&& event) {
+  OPENR_PROFILE("KvStore::processPeerUpdates");
   for (const auto& [area, areaPeerEvent] : event) {
     // Event can contain peerAdd/peerDel simultaneously
     if (!areaPeerEvent.peersToAdd.empty()) {
@@ -2396,6 +2398,7 @@ KvStoreDb<ClientType>::getKeyVals(std::vector<std::string> const& keys) {
 template <class ClientType>
 void
 KvStoreDb<ClientType>::requestThriftPeerSync() {
+  OPENR_PROFILE("KvStore::requestThriftPeerSync");
   // minimal timeout for next run
   auto timeout = kvParams_.syncMaxBackoff;
 
