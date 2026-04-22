@@ -18,6 +18,7 @@ import prettytable
 import pytz
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.cli.utils.commands import OpenrCtrlCmd
+from openr.py.openr.cli.utils.default_option_overrides import isEbbDevice
 from openr.py.openr.clients.openr_client import get_fib_agent_client
 from openr.py.openr.utils import ipnetwork, printing
 from openr.thrift.Network.thrift_types import IpPrefix
@@ -322,7 +323,10 @@ class FibValidateRoutesCmd(FibAgentCmd):
         all_success = all_success and ret
 
         # ATTN: with dryrun=true. Fib module will skip programming routes
-        if not openr_config.dryrun:
+        # ATTN: skip Fib-vs-FibAgent validation on EBB devices due to ACL issues
+        if isEbbDevice(self.host):
+            print("Skipping Fib-vs-FibAgent route validation on EBB device")
+        elif not openr_config.dryrun:
             agent_unicast_routes = self.fib_agent_client.getRouteTableByClient(
                 clientId=self.fib_agent_client.client_id
             )

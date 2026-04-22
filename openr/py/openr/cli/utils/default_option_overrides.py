@@ -9,5 +9,9 @@ from typing import Any
 from bunch import Bunch
 
 
+def isEbbDevice(host: str) -> bool:
+    return False
+
+
 def getDefaultOption(options: Bunch, name: str) -> Any:
     return options[name]

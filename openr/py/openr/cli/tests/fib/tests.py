@@ -9,8 +9,9 @@
 import asyncio
 from collections.abc import Sequence
 from typing import Dict, List, Optional
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
+from bunch import Bunch
 from click.testing import CliRunner
 from later.unittest import TestCase
 from openr.py.openr.cli.clis import fib
@@ -18,6 +19,7 @@ from openr.py.openr.cli.tests import helpers
 from openr.py.openr.cli.utils import utils
 from openr.py.openr.utils import ipnetwork
 from openr.thrift.Network.thrift_types import NextHopThrift, UnicastRoute
+from openr.thrift.Types.thrift_types import RouteDatabase
 
 from .fixtures import (
     MOCKED_ADJDB,
@@ -215,3 +217,124 @@ class CliFibTests(TestCase):
         self.check_printed_routes(
             stdout_lines, MOCKED_UNICAST_ROUTELIST_MULTIPLE, addr_to_name
         )
+
+
+class FibValidateRoutesEbbTests(TestCase):
+    """Tests for EBB device skip logic in FibValidateRoutesCmd."""
+
+    def setUp(self) -> None:
+        self.runner = CliRunner()
+        self.cli_opts = Bunch(
+            host="localhost",
+            timeout=1000,
+            fib_agent_port=5909,
+            client_id=786,
+            ssl=False,
+            cert_file=None,
+            key_file=None,
+            ca_file=None,
+            acceptable_peer_name=None,
+            cert_reqs=None,
+        )
+
+    def _setup_openr_client_mocks(
+        self, mocked_openr_client: AsyncMock, dryrun: bool = False
+    ) -> AsyncMock:
+        mocked_conn = helpers.get_enter_thrift_asyncmock(mocked_openr_client)
+
+        openr_config = MagicMock()
+        openr_config.dryrun = dryrun
+        mocked_conn.getRunningConfigThrift.return_value = openr_config
+
+        mocked_conn.getRouteDbComputed.return_value = RouteDatabase()
+        mocked_conn.getRouteDb.return_value = RouteDatabase()
+
+        interfaces_result = MagicMock()
+        interfaces_result.interfaceDetails = {}
+        mocked_conn.getInterfaces.return_value = interfaces_result
+
+        return mocked_conn
+
+    @patch("openr.py.openr.cli.commands.fib.isEbbDevice", return_value=True)
+    @patch("openr.py.openr.cli.commands.fib.get_fib_agent_client")
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_ebb_device_skips_fib_agent_validation(
+        self,
+        mocked_openr_client: AsyncMock,
+        mocked_fib_agent_client: MagicMock,
+        mocked_is_ebb: MagicMock,
+    ) -> None:
+        self._setup_openr_client_mocks(mocked_openr_client)
+
+        fib_agent = MagicMock()
+        mocked_fib_agent_client.return_value = fib_agent
+
+        invoked_return = self.runner.invoke(
+            fib.FibValidateRoutesCli.validate,
+            [],
+            obj=self.cli_opts,
+            catch_exceptions=False,
+        )
+
+        self.assertEqual(0, invoked_return.exit_code)
+        self.assertIn(
+            "Skipping Fib-vs-FibAgent route validation on EBB device",
+            invoked_return.output,
+        )
+        fib_agent.getRouteTableByClient.assert_not_called()
+        fib_agent.getMplsRouteTableByClient.assert_not_called()
+
+    @patch("openr.py.openr.cli.commands.fib.isEbbDevice", return_value=False)
+    @patch("openr.py.openr.cli.commands.fib.get_fib_agent_client")
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_non_ebb_device_runs_fib_agent_validation(
+        self,
+        mocked_openr_client: AsyncMock,
+        mocked_fib_agent_client: MagicMock,
+        mocked_is_ebb: MagicMock,
+    ) -> None:
+        self._setup_openr_client_mocks(mocked_openr_client)
+
+        fib_agent = MagicMock()
+        fib_agent.getRouteTableByClient.return_value = []
+        fib_agent.getMplsRouteTableByClient.return_value = []
+        mocked_fib_agent_client.return_value = fib_agent
+
+        invoked_return = self.runner.invoke(
+            fib.FibValidateRoutesCli.validate,
+            [],
+            obj=self.cli_opts,
+            catch_exceptions=False,
+        )
+
+        self.assertEqual(0, invoked_return.exit_code)
+        self.assertNotIn(
+            "Skipping Fib-vs-FibAgent route validation on EBB device",
+            invoked_return.output,
+        )
+        fib_agent.getRouteTableByClient.assert_called_once()
+
+    @patch("openr.py.openr.cli.commands.fib.isEbbDevice", return_value=False)
+    @patch("openr.py.openr.cli.commands.fib.get_fib_agent_client")
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_dryrun_skips_fib_agent_validation(
+        self,
+        mocked_openr_client: AsyncMock,
+        mocked_fib_agent_client: MagicMock,
+        mocked_is_ebb: MagicMock,
+    ) -> None:
+        self._setup_openr_client_mocks(mocked_openr_client, dryrun=True)
+
+        fib_agent = MagicMock()
+        mocked_fib_agent_client.return_value = fib_agent
+
+        invoked_return = self.runner.invoke(
+            fib.FibValidateRoutesCli.validate,
+            [],
+            obj=self.cli_opts,
+            catch_exceptions=False,
+        )
+
+        self.assertEqual(0, invoked_return.exit_code)
+        fib_agent.getRouteTableByClient.assert_not_called()
+        fib_agent.getMplsRouteTableByClient.assert_not_called()
