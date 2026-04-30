@@ -73,14 +73,14 @@ except ImportError:
     "name we deem acceptable to connect to.",
 )
 @click.pass_context
-def cli(ctx, *args, **kwargs) -> None:
+def cli(ctx: click.Context, *args, **kwargs) -> None:
     """Command line tools for Open/R."""
 
     # Default config options
     ctx.obj = OPTIONS
 
 
-def get_breeze_cli():
+def get_breeze_cli() -> click.Group:
     # add cli submodules
     cli.add_command(config.ConfigCli().config)
     cli.add_command(decision.DecisionCli().decision)
