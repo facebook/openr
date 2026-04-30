@@ -111,7 +111,7 @@ def get_fib_agent_client(
 def get_openr_ctrl_cpp_sync_client(
     host: str,
     options: bunch.Bunch | None = None,
-    client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
+    client_type: ClientType = ClientType.THRIFT_ROCKET_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient.Sync:
     """
     Utility function to get thrift-python SYNC OpenrClient.
@@ -160,7 +160,7 @@ def get_openr_ctrl_cpp_sync_client(
 def get_openr_ctrl_cpp_client(
     host: str,
     options: bunch.Bunch | None = None,
-    client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
+    client_type: ClientType = ClientType.THRIFT_ROCKET_CLIENT_TYPE,
 ) -> OpenrCtrlCppClient.Async:
     """
     Utility function to get thrift-python async OpenrClient. We must eventually move all of our
