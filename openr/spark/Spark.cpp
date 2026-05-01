@@ -1840,15 +1840,72 @@ Spark::processHandshakeMsg(
         neighbor.state != thrift::SparkNeighState::NEGOTIATE);
   }
 
-  // skip NEGOTIATE step if neighbor is NOT in state. This can happen:
+  // Skip handshake processing if neighbor is NOT in NEGOTIATE state, with one
+  // important exception: WARM state gets promoted to NEGOTIATE (see below).
+  //
+  // Normal reasons for being outside NEGOTIATE:
   //  1). negotiate hold timer already expired;
-  //  2). v4 validation failed and fall back to WARM;
+  //  2). v4 validation failed and fell back to WARM;
+  //
+  // However, there is a deadlock scenario after a crash-loop recovery that
+  // requires special handling when the neighbor is in WARM state:
+  //
+  //   Consider two nodes A and B. After B's OpenR crash-loops and restarts:
+  //
+  //   1. B discovers A via hello exchange, enters NEGOTIATE, sends handshake.
+  //   2. A is still in WARM (hasn't seen B's hello with A's info yet).
+  //      A replies with a handshake (lines above) but stays in WARM.
+  //   3. B receives A's reply, advances to ESTABLISHED.
+  //   4. B starts its heartbeat hold timer (holdTime, typically 30s).
+  //      But A is still in WARM — A never reached ESTABLISHED, so A never
+  //      sends heartbeats to B.
+  //   5. B's heartbeat timer expires. B transitions ESTABLISHED -> IDLE and
+  //      ERASES A from its neighbor tracking (eraseSparkNeighbor in
+  //      processHeartbeatTimeout).
+  //   6. A eventually receives B's hello containing A's info. A transitions
+  //      WARM -> NEGOTIATE and sends a handshake to B.
+  //   7. B has no neighbor entry for A (erased in step 5). B drops A's
+  //      handshake silently ("Neighbor is NOT found" at line 1820-1823).
+  //   8. A's negotiate hold timer expires (handshakeHoldTime, typically 3s).
+  //      A falls back to WARM. Go to step 1 and repeat forever.
+  //
+  //   The 3-second negotiate window on A must align with the brief period
+  //   where B has A tracked and is in NEGOTIATE — but B keeps erasing A
+  //   every 30 seconds, making the timing extremely unlikely to converge.
+  //
+  // Fix: When we are in WARM and receive a handshake from a neighbor that
+  // is actively trying to negotiate (isAdjEstablished=false), proactively
+  // enter NEGOTIATE and process this handshake to reach ESTABLISHED in one
+  // shot. This is safe because:
+  //   - processNegotiation() sets up negotiate timers as a safety net
+  //   - neighborUpWrapper() (called on ESTABLISHED) cleans up those timers
+  //   - All validation (v4 subnet, area) still runs before ESTABLISHED
+  //   - If validation fails, timers are cleaned up in the failure paths
   if (neighbor.state != thrift::SparkNeighState::NEGOTIATE) {
-    XLOG(DBG3) << fmt::format(
-        "[SparkHandshakeMsg] Current state of neighbor: {} is [{}], expected state: [NEGOTIIATE]",
-        neighborName,
-        apache::thrift::util::enumNameSafe(neighbor.state));
-    return;
+    if (neighbor.state == thrift::SparkNeighState::WARM) {
+      XLOG(INFO) << fmt::format(
+          "[SparkHandshakeMsg] Neighbor: {} sent handshake while in WARM state "
+          "on intf: {}. Promoting to NEGOTIATE to avoid asymmetric adjacency "
+          "deadlock.",
+          neighborName,
+          ifName);
+
+      processNegotiation(ifName, neighborName, neighbor);
+
+      thrift::SparkNeighState oldState = neighbor.state;
+      neighbor.state =
+          getNextState(oldState, thrift::SparkNeighEvent::HELLO_RCVD_INFO);
+      neighbor.event = thrift::SparkNeighEvent::HELLO_RCVD_INFO;
+      logStateTransition(neighborName, ifName, oldState, neighbor.state);
+      // Fall through to process this handshake and advance to ESTABLISHED.
+    } else {
+      XLOG(DBG3) << fmt::format(
+          "[SparkHandshakeMsg] Current state of neighbor: {} is [{}], "
+          "expected state: [NEGOTIATE]",
+          neighborName,
+          apache::thrift::util::enumNameSafe(neighbor.state));
+      return;
+    }
   }
 
   // update Spark neighborState

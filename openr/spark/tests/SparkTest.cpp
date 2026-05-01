@@ -2847,3 +2847,203 @@ TEST_F(SimpleSparkFixture, ConsecutiveHandshakeMsgBufferReuseTest) {
     ASSERT_EQ(node2_->getTotalNeighborCount(), 1);
   }
 }
+
+//
+// Verify that Spark recovers adjacency after a crash-loop on one side.
+//
+// This test reproduces an asymmetric adjacency deadlock that occurs when one
+// node crash-loops (rapid kill-restart cycles). The crash-loop causes the two
+// nodes to fall out of sync in the Spark state machine:
+//
+//   1. The stable node (node1) ends up in WARM state for the restarting peer,
+//      because each rapid restart resets seq numbers and triggers RESTART
+//      detection, and eventually the GR timer expires, bringing node1 to IDLE.
+//
+//   2. The restarting node (node2), once it finally stabilizes, discovers node1
+//      quickly and enters NEGOTIATE → ESTABLISHED. But node1 is still in WARM
+//      and never sends heartbeats, so node2's heartbeat hold timer (holdTime)
+//      expires and it drops back to IDLE — erasing node1 from its neighbor
+//      tracking entirely.
+//
+//   3. Node1 eventually receives node2's hello with its info and enters
+//      NEGOTIATE. But by now node2 has erased node1 (step 2) and doesn't
+//      respond to node1's handshake. Node1's negotiate timer expires (3s)
+//      and falls back to WARM. This cycle repeats indefinitely.
+//
+// The fix in processHandshakeMsg promotes a WARM-state node to NEGOTIATE when
+// it receives a handshake, then processes that handshake to reach ESTABLISHED
+// in one shot — breaking the deadlock.
+//
+// Without the fix, node1 remains stuck in WARM and the test would timeout
+// waiting for NB_UP. With the fix, both sides reach ESTABLISHED.
+//
+TEST_F(SimpleSparkFixture, CrashLoopRecoveryTest) {
+  // Establish initial adjacency between node1 and node2
+  createAndConnect();
+
+  node1_->sendPrefixDbSyncedSignal();
+  node2_->sendPrefixDbSyncedSignal();
+
+  LOG(INFO) << "Initial adjacency established. Starting crash-loop on node2.";
+
+  auto grTime = std::chrono::seconds(
+      *config1_->getSparkConfig().graceful_restart_time_s());
+  auto holdTime =
+      std::chrono::seconds(*config1_->getSparkConfig().hold_time_s());
+
+  // -----------------------------------------------------------------------
+  // Phase 1: Disconnect and simulate a crash-loop on node2.
+  //
+  // Disconnect the two nodes so that node1 cannot receive any hellos or
+  // handshakes from the restarting node2. This ensures that node1's GR
+  // timer expires and node2 is fully erased from node1's neighbor tracking
+  // — reproducing the production scenario where the stable node ends up
+  // with a clean slate (IDLE, no neighbor entry) after the crash-loop.
+  //
+  // Without the disconnect, node1 would discover the new node2 instance
+  // within the GR window and recover via the normal RESTART→NEGOTIATE path,
+  // which doesn't exercise the fix.
+  // -----------------------------------------------------------------------
+  ConnectedIfPairs emptyPairs = {};
+  mockIoProvider_->setConnectedPairs(emptyPairs);
+
+  constexpr int kCrashLoopIterations = 4;
+  for (int i = 0; i < kCrashLoopIterations; ++i) {
+    LOG(INFO) << fmt::format(
+        "Crash-loop iteration {}/{}: killing {}",
+        i + 1,
+        kCrashLoopIterations,
+        nodeName2_);
+
+    node2_.reset();
+
+    /* sleep override */
+    std::this_thread::sleep_for(std::chrono::milliseconds(200));
+
+    node2_ = createSpark(nodeName2_, config2_);
+    node2_->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V4, ip2V6} /* networks */)});
+  }
+
+  LOG(INFO) << "Crash-loop ended. Final node2 instance is now stable.";
+
+  // -----------------------------------------------------------------------
+  // Phase 2: Wait for node1's GR timer to expire.
+  //
+  // While disconnected, node1 transitions:
+  //   ESTABLISHED → RESTART (detected seq# jump from crash-loop hellos
+  //   that arrived before disconnect, or missed hellos)
+  //   → GR timer expires → IDLE → neighbor erased
+  //
+  // After this, node1 has no knowledge of node2. This is the exact state
+  // observed in production after the qxt1 crash-loop: the stable side
+  // (qxs1) had its GR timer expire and erased the neighbor.
+  // -----------------------------------------------------------------------
+  {
+    LOG(INFO) << "Waiting for node1 to declare node2 DOWN (GR timer expiry).";
+    auto events = node1_->waitForEvents(NB_DOWN);
+    ASSERT_TRUE(events.has_value());
+    LOG(INFO) << fmt::format(
+        "{} reported {} as DOWN (GR expired or heartbeat timeout).",
+        nodeName1_,
+        nodeName2_);
+  }
+
+  ASSERT_EQ(node1_->getActiveNeighborCount(), 0);
+  checkTotalNeighborCountWithTimeout(node1_);
+
+  // -----------------------------------------------------------------------
+  // Phase 3: Reconnect and verify fresh adjacency formation.
+  //
+  // Restore connectivity between the interfaces. Both nodes now go through
+  // fresh neighbor discovery:
+  //   IDLE → WARM (receive hello) → NEGOTIATE (receive hello with our info)
+  //                                → ESTABLISHED (complete handshake)
+  //
+  // In the production deadlock scenario, the timing was such that one side
+  // reached ESTABLISHED while the other was still in WARM. The ESTABLISHED
+  // side's heartbeat timer would expire (no heartbeats from the WARM peer),
+  // it would drop to IDLE and erase the neighbor, and the cycle would
+  // repeat forever.
+  //
+  // The fix in processHandshakeMsg breaks this deadlock: when a node in
+  // WARM receives a handshake, it proactively promotes to NEGOTIATE and
+  // processes the handshake to reach ESTABLISHED in one shot, rather than
+  // passively waiting for the hello exchange to catch up.
+  // -----------------------------------------------------------------------
+  LOG(INFO) << "Reconnecting interfaces. Waiting for adjacency to re-form.";
+
+  ConnectedIfPairs connectedPairs = {
+      {iface1, {{iface2, 10}}},
+      {iface2, {{iface1, 10}}},
+  };
+  mockIoProvider_->setConnectedPairs(connectedPairs);
+
+  auto convergenceTimeout = grTime * 3;
+
+  {
+    auto events =
+        node1_->waitForEvents(NB_UP, convergenceTimeout, convergenceTimeout);
+    ASSERT_TRUE(events.has_value())
+        << "node1 failed to establish adjacency with node2 after crash-loop — "
+           "possible asymmetric adjacency deadlock";
+    auto& event = events.value().back();
+    EXPECT_EQ(iface1, event.localIfName);
+    EXPECT_EQ(nodeName2_, event.remoteNodeName);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {} after crash-loop recovery",
+        nodeName1_,
+        nodeName2_);
+  }
+
+  {
+    auto events =
+        node2_->waitForEvents(NB_UP, convergenceTimeout, convergenceTimeout);
+    ASSERT_TRUE(events.has_value())
+        << "node2 failed to establish adjacency with node1 after crash-loop — "
+           "possible asymmetric adjacency deadlock";
+    auto& event = events.value().back();
+    EXPECT_EQ(iface2, event.localIfName);
+    EXPECT_EQ(nodeName1_, event.remoteNodeName);
+    LOG(INFO) << fmt::format(
+        "{} reported adjacency UP towards {} after crash-loop recovery",
+        nodeName2_,
+        nodeName1_);
+  }
+
+  ASSERT_EQ(node1_->getSparkNeighState(iface1, nodeName2_), ESTABLISHED);
+  ASSERT_EQ(node2_->getSparkNeighState(iface2, nodeName1_), ESTABLISHED);
+  ASSERT_EQ(node1_->getTotalNeighborCount(), 1);
+  ASSERT_EQ(node2_->getTotalNeighborCount(), 1);
+  ASSERT_EQ(node1_->getActiveNeighborCount(), 1);
+  ASSERT_EQ(node2_->getActiveNeighborCount(), 1);
+
+  // -----------------------------------------------------------------------
+  // Phase 4: Verify stability — adjacency must not flap after recovery.
+  //
+  // Without the fix, even if the adjacency momentarily forms, it would
+  // immediately flap because one side never reaches ESTABLISHED (stuck in
+  // WARM), so it never sends heartbeats, causing the other side's heartbeat
+  // hold timer to expire. Verify that no DOWN event occurs for at least
+  // 3x the hold time — well beyond the heartbeat expiry window.
+  // -----------------------------------------------------------------------
+  auto stabilityWindow = holdTime * 3;
+
+  LOG(INFO) << "Verifying adjacency stability for " << stabilityWindow.count()
+            << " seconds.";
+
+  EXPECT_FALSE(
+      node1_->waitForEvents(NB_DOWN, stabilityWindow, stabilityWindow * 2)
+          .has_value())
+      << "node1 reported unexpected NB_DOWN — adjacency is flapping";
+  EXPECT_FALSE(
+      node2_->waitForEvents(NB_DOWN, stabilityWindow, stabilityWindow * 2)
+          .has_value())
+      << "node2 reported unexpected NB_DOWN — adjacency is flapping";
+
+  ASSERT_EQ(node1_->getSparkNeighState(iface1, nodeName2_), ESTABLISHED);
+  ASSERT_EQ(node2_->getSparkNeighState(iface2, nodeName1_), ESTABLISHED);
+}
