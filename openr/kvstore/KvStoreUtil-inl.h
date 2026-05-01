@@ -234,7 +234,7 @@ dumpAllWithThriftClientFromMultiple(
 
 // dump KvStore key-val over multiple instances
 template <typename ClientType, StringRange KeyPrefixes>
-KvStoreDumpWithConnectionMeta
+KvStoreDumpWithConnectionMeta<ClientType>
 dumpAllWithThriftClientFromMultiple(
     folly::EventBase& evb,
     const AreaId& area,
@@ -254,13 +254,14 @@ dumpAllWithThriftClientFromMultiple(
         client->semifuture_getKvStoreKeyValsFilteredArea(params, area));
   }
 
-  uint32_t failures = 0;
-  // loop semifuture collection to merge all values
+  std::vector<ClientType*> failedClients;
+  // order of inputs preserved
+  size_t clientIdx = 0;
   for (const auto& result : folly::collectAll(calls).via(&evb).getVia(&evb)) {
     // folly::Try will contain either value or exception
     if (result.hasException()) {
       LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
-      failures++;
+      failedClients.push_back(clients[clientIdx].get());
     } else if (result.hasValue()) {
       auto keyVals = *result.value().keyVals();
       const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
@@ -269,6 +270,7 @@ dumpAllWithThriftClientFromMultiple(
                  << " key-vals. Incurred " << deltaPub.size()
                  << " key-val updates.";
     }
+    ++clientIdx;
   }
 
   // record time used to fetch from all Open/R instances
@@ -279,7 +281,7 @@ dumpAllWithThriftClientFromMultiple(
 
   XLOG(DBG1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
 
-  return {merged, failures};
+  return {merged, std::move(failedClients)};
 }
 
 } // namespace openr
