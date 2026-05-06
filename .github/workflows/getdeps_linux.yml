@@ -2,16 +2,7 @@
 
 name: linux
 
-on:
-  push:
-  pull_request:
-  workflow_dispatch:
-    inputs:
-      tmate_enabled:
-        description: 'Start a tmate SSH session on failure'
-        required: false
-        default: false
-        type: boolean
+on: [push, pull_request]
 
 permissions:
   contents: read  #  to fetch code (actions/checkout)
@@ -720,6 +711,3 @@ jobs:
       env:
         GH_TOKEN: ${{ github.token }}
       run: gh cache list --repo ${{ github.repository }} --sort size_in_bytes --order desc --limit 30
-    - name: Setup tmate session
-      if: failure() && github.event_name == 'workflow_dispatch' && inputs.tmate_enabled
-      uses: mxschmitt/action-tmate@v3
