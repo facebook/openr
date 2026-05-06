@@ -30,7 +30,6 @@ class AdjacencyEntry final {
       AdjacencyKey const& adjKey,
       thrift::PeerSpec const& peerSpec,
       thrift::Adjacency const& adj,
-      int32_t baseMetric,
       bool isRestarting = false,
       bool onlyUsedByOtherNode = false);
 
@@ -53,9 +52,6 @@ class AdjacencyEntry final {
   AdjacencyKey adjKey_;
   thrift::PeerSpec peerSpec_;
   thrift::Adjacency adj_;
-
-  // metric info from Spark module
-  int32_t baseMetric_;
 
   // flag for WARM_BOOT(GR) and COLD_BOOT processing
   bool isRestarting_{false};

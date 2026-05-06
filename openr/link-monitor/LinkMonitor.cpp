@@ -476,7 +476,6 @@ LinkMonitor::neighborUpEvent(
           adjKey,
           tPeerSpec,
           newAdj,
-          useRttMetric_ ? getRttMetric(rttUs) : 1, /* baseMetric */
           false, /* isRestarting flag */
           isGracefulRestart ? false : onlyUsedByOtherNode));
 
@@ -1020,12 +1019,12 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       // 1. base metric derived from round-trip-time(RTT) or default hop-count;
       // 2. [Soft-Drain] node-level incremental metric;
       // 3. [Soft-Drain] link-level incremental metric.
-      int32_t metric = adjValue.baseMetric_;
+      const int32_t baseMetric = *adj.metric();
 
       // [TO BE DEPRECATED]
       // override metric with link metric if it exists
-      metric = folly::get_default(
-          *state_.linkMetricOverrides(), *adj.ifName(), adjValue.baseMetric_);
+      int32_t metric = folly::get_default(
+          *state_.linkMetricOverrides(), *adj.ifName(), baseMetric);
 
       // increment the node-level metric if any
       metric += *state_.nodeMetricIncrementVal();

@@ -648,6 +648,16 @@ class LinkMonitorTestFixture : public testing::Test {
   std::vector<thrift::AreaConfig> areaConfigs_;
 };
 
+class RttMetricTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+    tConfig.link_monitor_config()->use_rtt_metric() = true;
+    return tConfig;
+  }
+};
+
 // Test communication between LinkMonitor and KvStore via KeyValueRequeust
 // queue.
 TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
@@ -1677,6 +1687,62 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     auto adjDb = createAdjDb("node-1", {adj_3_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
 
+    checkNextAdjPub("adj:node-1");
+  }
+}
+
+// Verify that NEIGHBOR_RTT_CHANGE updates the advertised metric.
+TEST_F(RttMetricTestFixture, RttChangeUpdatesAdvertisedMetric) {
+  constexpr int64_t kInitialRttUs = 50000;
+  constexpr int64_t kUpdatedRttUs = 100000;
+  const int32_t initialMetric =
+      std::max(static_cast<int>(kInitialRttUs / 100), 1);
+  const int32_t updatedMetric =
+      std::max(static_cast<int>(kUpdatedRttUs / 100), 1);
+
+  auto buildAdj = [](int32_t metric, int64_t rttUs) {
+    return createThriftAdjacency(
+        "node-2",
+        if_2_1,
+        nb2_v6_addr,
+        nb2_v4_addr,
+        metric,
+        0 /* label */,
+        false /* overload-bit */,
+        rttUs,
+        kTimestamp,
+        Constants::kDefaultAdjWeight,
+        "" /* otherIfName */);
+  };
+
+  // Bring neighbor up with the initial RTT.
+  {
+    auto upEvent = nb2_up_event;
+    upEvent.rttUs = kInitialRttUs;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(upEvent)})));
+
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+    auto adjDb = createAdjDb(
+        "node-1", {buildAdj(initialMetric, kInitialRttUs)}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
+    checkNextAdjPub("adj:node-1");
+  }
+
+  // Send NEIGHBOR_RTT_CHANGE with a different RTT and verify the next
+  // publication advertises the new metric.
+  {
+    auto rttEvent = nb2_up_event;
+    rttEvent.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
+    rttEvent.rttUs = kUpdatedRttUs;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(rttEvent)})));
+
+    auto adjDb = createAdjDb(
+        "node-1", {buildAdj(updatedMetric, kUpdatedRttUs)}, kNodeLabel);
+    expectedAdjDbs.push(std::move(adjDb));
     checkNextAdjPub("adj:node-1");
   }
 }

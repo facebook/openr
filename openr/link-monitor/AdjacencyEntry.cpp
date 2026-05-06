@@ -18,13 +18,11 @@ AdjacencyEntry::AdjacencyEntry(
     AdjacencyKey const& adjKey,
     thrift::PeerSpec const& peerSpec,
     thrift::Adjacency const& adj,
-    int32_t baseMetric,
     bool isRestarting,
     bool onlyUsedByOtherNode)
     : adjKey_(adjKey),
       peerSpec_(peerSpec),
       adj_(adj),
-      baseMetric_(baseMetric),
       isRestarting_(isRestarting),
       onlyUsedByOtherNode_(onlyUsedByOtherNode) {}
 
