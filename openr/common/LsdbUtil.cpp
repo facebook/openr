@@ -614,6 +614,7 @@ createNextHop(
   nextHop.address() = addr;
   nextHop.address()->ifName().from_optional(std::move(ifName));
   nextHop.metric() = metric;
+  nextHop.cost() = static_cast<int64_t>(metric);
   nextHop.mplsAction().from_optional(maybeMplsAction);
   nextHop.area().from_optional(area);
   nextHop.neighborNodeName().from_optional(neighborNodeName);

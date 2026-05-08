@@ -75,14 +75,22 @@ struct NextHopThrift {
   // MPLS encapsulation information for IP->MPLS and MPLS routes
   3: optional MplsAction mplsAction;
 
-  // Metric (aka cost) associated with this nexthop
-  51: i32 metric = 0;
+  /*
+   * Cost associated with this nexthop. This carries the same value as `metric`
+   * (field 51) but is needed for FBOSS FIB programming: FBOSS's NextHopThrift
+   * defines cost at field ID 17 (optional i64), and since OpenR and FBOSS use
+   * separate thrift type systems bridged by field-ID matching on the wire,
+   * this field must exist here for the value to reach FBOSS. Must always be
+   * kept in sync with `metric` — see createNextHop() in LsdbUtil.cpp.
+   */
+  17: optional i64 cost;
 
-  //
-  // TODO: Define internal representation of NextHop within Open/R. We shouldn't
-  // expose internal attributes to outside. `metric` though internal as of now,
-  // is going to be useful when FBOSS supports it underneath
-  //
+  /*
+   * Metric (aka cost) associated with this nexthop. Used by all FIB clients
+   * other than FBOSS. For FBOSS, the value is mirrored into `cost` (field 17)
+   * during route serialization.
+   */
+  51: i32 metric = 0;
 
   // Area field associated with next-hop. This is derived from an adjacency,
   // from where the transport address is also derived. This can be none for
