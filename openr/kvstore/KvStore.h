@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <type_traits>
+
 #include <folly/TokenBucket.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
@@ -459,6 +461,15 @@ class KvStoreDb {
     folly::SemiFuture<thrift::Publication> getKvStoreKeyValsFilteredAreaWrapper(
         const thrift::KeyDumpParams& filter, const std::string& area);
 #pragma endregion ApiWrapper
+
+    // Centralized secure-client-with-plaintext-fallback logic.
+    // If TLS is disabled, calls fn(plainTextClient). Otherwise tries
+    // fn(secureClient), catching AsyncSocketException and falling back
+    // to fn(plainTextClient).
+    template <typename Fn>
+    auto withSecureFallback(
+        const char* callerName, const std::string& counterName, Fn&& fn)
+        -> std::invoke_result_t<Fn, ClientType*>;
 
     // node name
     const std::string nodeName{};

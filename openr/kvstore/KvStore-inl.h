@@ -1451,30 +1451,39 @@ KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
 }
 
 template <class ClientType>
+template <typename Fn>
+auto
+KvStoreDb<ClientType>::KvStorePeer::withSecureFallback(
+    const char* callerName, const std::string& counterName, Fn&& fn)
+    -> std::invoke_result_t<Fn, ClientType*> {
+  if (!kvParams_.enable_secure_thrift_client) {
+    return fn(plainTextClient.get());
+  }
+  try {
+    return fn(secureClient.get());
+  } catch (const folly::AsyncSocketException& ex) {
+    XLOG(ERR) << fmt::format("{} got exception: {}", callerName, ex.what());
+    fb303::fbData->addStatValue(counterName, 1, fb303::COUNT);
+    return fn(plainTextClient.get());
+  }
+}
+
+template <class ClientType>
 folly::SemiFuture<folly::Unit>
 KvStoreDb<ClientType>::KvStorePeer::setKvStoreKeyValsWrapper(
     const std::string& area, const thrift::KeySetParams& keySetParams) {
-  if (!kvParams_.enable_secure_thrift_client) {
-    return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
-  }
-  // TLS fallback
-  try {
-    return secureClient->semifuture_setKvStoreKeyVals(keySetParams, area);
-  } catch (const folly::AsyncSocketException& ex) {
-    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
-        1,
-        fb303::COUNT);
-    return plainTextClient->semifuture_setKvStoreKeyVals(keySetParams, area);
-  }
+  return withSecureFallback(
+      __FUNCTION__,
+      "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
+      [&](ClientType* client) {
+        return client->semifuture_setKvStoreKeyVals(keySetParams, area);
+      });
 }
 
 template <class ClientType>
 folly::SemiFuture<folly::Unit>
 KvStoreDb<ClientType>::KvStorePeer::sendPreSerializedSetKvStoreKeyVals(
     const folly::IOBuf& serializedBuf, uint16_t protocolId) {
-  // Lambda to send a pre-serialized request via a specific client's channel
   auto sendVia = [&](ClientType* client) -> folly::SemiFuture<folly::Unit> {
     if (!client || !client->getChannel()) {
       return folly::makeSemiFuture<folly::Unit>(
@@ -1506,42 +1515,22 @@ KvStoreDb<ClientType>::KvStorePeer::sendPreSerializedSetKvStoreKeyVals(
     return std::move(future);
   };
 
-  // Mirror secure/plaintext fallback from setKvStoreKeyValsWrapper
-  if (!kvParams_.enable_secure_thrift_client) {
-    return sendVia(plainTextClient.get());
-  }
-  try {
-    return sendVia(secureClient.get());
-  } catch (const folly::AsyncSocketException& ex) {
-    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
-        1,
-        fb303::COUNT);
-    return sendVia(plainTextClient.get());
-  }
+  return withSecureFallback(
+      __FUNCTION__,
+      "kvstore.thrift.semifuture_setKvStoreKeyVals.secure_client.failure",
+      sendVia);
 }
 
 template <class ClientType>
 folly::SemiFuture<thrift::Publication>
 KvStoreDb<ClientType>::KvStorePeer::getKvStoreKeyValsFilteredAreaWrapper(
     const thrift::KeyDumpParams& filter, const std::string& area) {
-  if (!kvParams_.enable_secure_thrift_client) {
-    return plainTextClient->semifuture_getKvStoreKeyValsFilteredArea(
-        filter, area);
-  }
-  // TLS fallback
-  try {
-    return secureClient->semifuture_getKvStoreKeyValsFilteredArea(filter, area);
-  } catch (const folly::AsyncSocketException& ex) {
-    XLOG(ERR) << fmt::format("{} got exception: {}", __FUNCTION__, ex.what());
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
-        1,
-        fb303::COUNT);
-    return plainTextClient->semifuture_getKvStoreKeyValsFilteredArea(
-        filter, area);
-  }
+  return withSecureFallback(
+      __FUNCTION__,
+      "kvstore.thrift.semifuture_getKvStoreKeyValsFilteredArea.secure_client.failure",
+      [&](ClientType* client) {
+        return client->semifuture_getKvStoreKeyValsFilteredArea(filter, area);
+      });
 }
 
 template <class ClientType>
