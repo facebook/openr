@@ -1244,6 +1244,47 @@ TEST_F(KvStoreTestFixture, BasicSetKey) {
   EXPECT_EQ(2, counters.at("kvstore.received_publications.count"));
 }
 
+/**
+ * KvStore stamps three PerfEvents on the chain that rides into Decision via
+ * the local update queue (RECV_PUB → KVSTORE_MERGED → KVSTORE_HANDOFF).
+ * PEER_FLOOD_COMPLETE is stamped on the local-only copy after the peer
+ * for-loop; receive-to-advertise latency (RECV_PUB → now) is published as
+ * the kvstore.recv_to_advertise_ms fb303 stat.
+ */
+TEST_F(KvStoreTestFixture, ConvergenceProfilerPerfEventsStamping) {
+  fb303::fbData->resetAllData();
+
+  const std::string nodeId = "node-cp";
+  const std::string key{"key-cp"};
+  auto kvStore = createKvStore(getTestKvConf(nodeId));
+  kvStore->run();
+
+  const auto thriftVal = createThriftValue(
+      1 /* version */,
+      nodeId /* originatorId */,
+      std::string("v") /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(1, nodeId, thrift::Value().value() = std::string("v")));
+  EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftVal));
+
+  auto publication = kvStore->recvPublication();
+  ASSERT_TRUE(publication.perfEvents().has_value());
+  const auto& events = *publication.perfEvents()->events();
+  ASSERT_EQ(3, events.size());
+
+  const std::vector<std::string> expectedDescriptions{
+      "RECV_PUB", "KVSTORE_MERGED", "KVSTORE_HANDOFF"};
+  for (size_t i = 0; i < events.size(); ++i) {
+    EXPECT_EQ(expectedDescriptions[i], *events[i].eventDescr());
+    EXPECT_EQ(nodeId, *events[i].nodeName());
+  }
+
+  EXPECT_TRUE(
+      fb303::fbData->getCounters().contains(
+          "kvstore.recv_to_advertise_ms.avg"));
+}
+
 //
 // Test counter reporting
 //

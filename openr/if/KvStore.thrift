@@ -17,6 +17,7 @@ namespace hack OpenrKvStore
 namespace rust openr_kvstore_thrift
 
 include "fb303/thrift/fb303_core.thrift"
+include "openr/if/Types.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/thrift.thrift"
 
@@ -385,6 +386,12 @@ struct Publication {
    * in milliseconds since epoch
    */
   8: optional i64 timestamp_ms;
+
+  /**
+   * KvStore-stamped PerfEvents.
+   * Internal-only, not propagated to peers.
+   */
+  9: optional Types.PerfEvents perfEvents;
 }
 
 /**

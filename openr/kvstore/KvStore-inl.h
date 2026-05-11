@@ -12,6 +12,7 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/EventLogger.h>
+#include <openr/common/LsdbUtil.h>
 #include <openr/common/OpenrProfiler.h>
 #include <openr/common/Types.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -3236,6 +3237,12 @@ KvStoreDb<ClientType>::floodPublication(
   }
   publication.nodeIds()->emplace_back(kvParams_.nodeId);
 
+  // Stamp before the queue push so the chain reaches Decision.
+  if (publication.perfEvents().has_value()) {
+    addPerfEvent(
+        *publication.perfEvents(), kvParams_.nodeId, "KVSTORE_HANDOFF");
+  }
+
   // Flood publication to internal subscribers
   kvParams_.kvStoreUpdatesQueue.push(publication);
   fb303::fbData->addStatValue("kvstore.num_updates", 1, fb303::COUNT);
@@ -3351,6 +3358,23 @@ KvStoreDb<ClientType>::floodPublication(
                   "FLOOD_PUB failure with {}, {}", peerNameStr, ew.what()),
               startTime);
         });
+  }
+
+  // Local-only stamp; the queue copy was pushed earlier, so this doesn't
+  // propagate.
+  if (publication.perfEvents().has_value()) {
+    auto& events = *publication.perfEvents()->events();
+    auto it = std::find_if(events.begin(), events.end(), [](const auto& e) {
+      return *e.eventDescr() == "RECV_PUB";
+    });
+    if (it != events.end()) {
+      fb303::fbData->addStatValue(
+          "kvstore.recv_to_advertise_ms",
+          getUnixTimeStampMs() - *it->unixTs(),
+          fb303::AVG);
+    }
+    addPerfEvent(
+        *publication.perfEvents(), kvParams_.nodeId, "PEER_FLOOD_COMPLETE");
   }
 }
 
@@ -3470,6 +3494,11 @@ KvStoreDb<ClientType>::mergePublication(
   const auto tobeUpdatedKeys = rcvdPublication.tobeUpdatedKeys();
   const auto nodeIds = rcvdPublication.nodeIds();
 
+  thrift::PerfEvents perfEvents;
+  if (rcvdPublication.perfEvents().has_value()) {
+    perfEvents = *rcvdPublication.perfEvents();
+  }
+
   /*
    * [Loop Prevention]
    *
@@ -3501,6 +3530,8 @@ KvStoreDb<ClientType>::mergePublication(
         "kvstore.received_key_vals", keyVals.size(), fb303::SUM);
     fb303::fbData->addStatValue(
         "kvstore.received_key_vals." + area_, keyVals.size(), fb303::SUM);
+
+    addPerfEvent(perfEvents, kvParams_.nodeId, "RECV_PUB");
   }
 
   /*
@@ -3570,6 +3601,11 @@ KvStoreDb<ClientType>::mergePublication(
   const auto result =
       mergeKeyValues(kvStore_, keyVals, kvParams_.filters, sender);
   const auto& mergedKeyVals = *result.keyVals();
+
+  if (!isSelfOriginatedUpdate) {
+    addPerfEvent(perfEvents, kvParams_.nodeId, "KVSTORE_MERGED");
+  }
+
   if (*result.inconsistencyDetetectedWithOriginator()) {
     // inconsistency detected: Received a TTL update from originator
     // but key version are mismatched
@@ -3589,6 +3625,9 @@ KvStoreDb<ClientType>::mergePublication(
   thrift::Publication deltaPublication;
   deltaPublication.keyVals() = std::move(mergedKeyVals);
   deltaPublication.area() = area_;
+  if (!perfEvents.events()->empty()) {
+    deltaPublication.perfEvents() = std::move(perfEvents);
+  }
 
   const size_t kvUpdateCnt = deltaPublication.keyVals()->size();
   fb303::fbData->addStatValue(
