@@ -127,6 +127,7 @@ class AreasCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def areas(cli_opts: Bunch, json) -> None:  # noqa: B902
         """get list of 'areas' configured"""
         kvstore.Areas(cli_opts).run(json)
@@ -249,6 +250,7 @@ class SnoopCli:
         "--print-initial", is_flag=True, help="Print initial snapshot before snooping"
     )
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def snoop(
         cli_opts: Bunch,  # noqa: B902
         delta: bool,
@@ -290,6 +292,7 @@ class SummaryCli:
         "either of the two valid flags: -a or --areas",
     )
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def summary(cli_opts: Bunch, area: list[str]) -> None:  # noqa: B902
         """show the KV store summary for each area"""
 

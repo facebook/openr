@@ -52,6 +52,7 @@ class AdvertisedRoutesCli:
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
     # pyrefly: ignore [bad-argument-type]
     @click.pass_context
+    # pyrefly: ignore [invalid-annotation]
     def show(
         ctx: bunch.Bunch,  # noqa: B902
         prefix_type: str | None,
@@ -76,6 +77,7 @@ class AdvertisedRoutesCli:
     @show.command("all")
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def all(cli_opts: bunch.Bunch, prefix: list[str]) -> None:  # noqa: B902
         """
         Show routes that this node should be advertising across all areas. This
@@ -91,6 +93,7 @@ class AdvertisedRoutesCli:
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def pre_area_policy(
         cli_opts: bunch.Bunch,
         area: str,
@@ -115,6 +118,7 @@ class AdvertisedRoutesCli:
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def post_area_policy(
         cli_opts: bunch.Bunch,
         area: str,
@@ -138,6 +142,7 @@ class AdvertisedRoutesCli:
     @click.argument("area", type=str)
     @click.argument("prefix", nargs=-1, type=str, required=False)
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def rejected_on_area(
         cli_opts: bunch.Bunch,
         area: str,
@@ -173,6 +178,7 @@ class OriginatedRoutesCli:
         help="Translate tag string to human readable name",
     )
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def show(
         cli_opts: bunch.Bunch,  # noqa: B902
         detail: bool,

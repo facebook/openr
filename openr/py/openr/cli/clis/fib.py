@@ -80,6 +80,7 @@ class FibRoutesInstalledCli:
     )
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def routes(
         cli_opts: Bunch,  # noqa: B902
         prefixes: list[str],
@@ -108,6 +109,7 @@ class FibUnicastRoutesCli:
         help="Show Hostnames rather than IP addresses",
     )
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def routes(
         cli_opts: Bunch,  # noqa: B902
         prefix_or_ip: list[str],
@@ -195,6 +197,7 @@ class FibSnoopCli:
         help="Display stream of specific Prefixes.",
     )
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def snoop(
         cli_opts: Bunch,  # noqa: B902
         duration: int,

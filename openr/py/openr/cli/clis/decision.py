@@ -141,6 +141,7 @@ class DecisionValidateCli:
     @click.argument("areas", nargs=-1)
     @click.pass_obj
     @click.pass_context
+    # pyrefly: ignore [invalid-annotation]
     def validate(
         ctx: click.Context,  # noqa: B902
         cli_opts: bunch.Bunch,
@@ -214,6 +215,7 @@ class ReceivedRoutesCli:
     )
     @click.option("--json/--no-json", default=False, help="Output in JSON format")
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def show(
         cli_opts: bunch.Bunch,  # noqa: B902
         prefix: list[str],

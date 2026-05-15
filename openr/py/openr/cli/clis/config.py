@@ -30,6 +30,7 @@ class ConfigCli:
     @click.group(cls=deduceCommandGroup)
     # pyrefly: ignore [bad-argument-type]
     @click.pass_context
+    # pyrefly: ignore [invalid-annotation]
     def config(ctx: Bunch) -> None:  # noqa: B902
         """CLI tool to peek into Config Store module."""
         pass
@@ -38,6 +39,7 @@ class ConfigCli:
 class ConfigShowCli:
     @click.command()
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def show(cli_opts: Bunch) -> None:  # noqa: B902
         """Show openr running config"""
 
@@ -49,6 +51,7 @@ class ConfigDryRunCli:
     @click.argument("file")
     @click.pass_obj
     @click.pass_context
+    # pyrefly: ignore [invalid-annotation]
     def dryrun(ctx: click.Context, cli_opts: Bunch, file: str) -> None:  # noqa: B902
         """Dryrun/validate openr config, output JSON parsed config upon success"""
 
@@ -64,6 +67,7 @@ class ConfigCompareCli:
     @click.command()
     @click.argument("file")
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def compare(cli_opts: Bunch, file: str) -> None:  # noqa: B902
         """Migration cli: Compare config with current running config"""
 

@@ -50,6 +50,7 @@ class OpenrCli:
     @breeze_option("--client-id", type=int, help="FIB Client ID")
     @breeze_option("--area", type=str, help="area identifier")
     @click.pass_context
+    # pyrefly: ignore [invalid-annotation]
     def openr(
         ctx: click.Context, fib_agent_port: int, client_id: int, area: str
     ) -> None:  # noqa: B902
@@ -61,6 +62,7 @@ class VersionCli:
     @click.command()
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def version(cli_opts: Bunch, json: bool) -> None:  # noqa: B902
         """
         Get OpenR version
@@ -82,6 +84,7 @@ class OpenrValidateCli:
         help="Additionally outputs whether or not all checks passed for each module in JSON format",
     )
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def validate(cli_opts: Bunch, suppress_error: bool, json: bool) -> None:
         """Run validation checks for all modules"""
 

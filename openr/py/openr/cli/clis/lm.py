@@ -102,6 +102,7 @@ class LMAdjCli:
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.argument("areas", nargs=-1)
     @click.pass_obj
+    # pyrefly: ignore [invalid-annotation]
     def adj(cli_opts: bunch.Bunch, json: bool, areas: list[str]):  # noqa: B902
         """Dump all formed adjacencies of the current host"""
 
