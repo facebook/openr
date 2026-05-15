@@ -130,7 +130,7 @@ class PathCmd(OpenrCtrlCmd):
         src: str,
         dst: str,
         max_hop: int,
-        area: str,
+        area: str | None,
         *args,
         **kwargs,
     ) -> None:
@@ -141,18 +141,16 @@ class PathCmd(OpenrCtrlCmd):
 
         # pyre-fixme[16]: `PathCmd` has no attribute `prefix_dbs`.
         self.prefix_dbs: dict[str, openr_types.PrefixDatabase] = {}
-        area = await utils.get_area_id(client, area)
-        # Get prefix_dbs from KvStore
 
+        area_id = await utils.get_area_id(client, area)
+
+        # Get prefix_dbs from KvStore for the requested area
         params = kv_store_types.KeyDumpParams(keys=[Consts.PREFIX_DB_MARKER])
-        if area is None:
-            pub = await client.getKvStoreKeyValsFiltered(params)
-        else:
-            pub = await client.getKvStoreKeyValsFilteredArea(params, area)
+        pub = await client.getKvStoreKeyValsFilteredArea(params, area_id)
         for value in pub.keyVals.values():
             utils.parse_prefix_database("", "", self.prefix_dbs, value)
 
-        paths = await self.get_paths(client, src, dst, max_hop)
+        paths = await self.get_paths(client, src, dst, max_hop, {area_id})
         self.print_paths(paths)
 
     def get_loopback_addr(self, node):
@@ -200,19 +198,20 @@ class PathCmd(OpenrCtrlCmd):
         return prefix_set
 
     def get_if2node_map(self, adj_dbs):
-        """create a map from interface to node"""
+        """create a map from interface to node
 
-        def _parse(if2node, adj_db):
+        adj_dbs is a list of AdjacencyDatabase. On a multi-area node, the same
+        thisNodeName may appear in more than one entry (one per area); we merge
+        all entries into a single per-node nexthop dict.
+        """
+        if2node = defaultdict(dict)
+        for adj_db in adj_dbs:
             nexthop_dict = if2node[adj_db.thisNodeName]
             for adj in adj_db.adjacencies:
                 nh6_addr = ipnetwork.sprint_addr(adj.nextHopV6.addr)
                 nh4_addr = ipnetwork.sprint_addr(adj.nextHopV4.addr)
                 nexthop_dict[(adj.ifName, nh6_addr)] = adj.otherNodeName
                 nexthop_dict[(adj.ifName, nh4_addr)] = adj.otherNodeName
-
-        if2node = defaultdict(dict)
-        # pyrefly: ignore [bad-argument-type]
-        self.iter_dbs(if2node, adj_dbs, ["all"], _parse)
         return if2node
 
     def get_lpm_route(self, route_db, dst_addr):
@@ -307,7 +306,12 @@ class PathCmd(OpenrCtrlCmd):
         return []
 
     async def get_paths(
-        self, client: OpenrCtrlCppClient.Async, src: str, dst: str, max_hop: int
+        self,
+        client: OpenrCtrlCppClient.Async,
+        src: str,
+        dst: str,
+        max_hop: int,
+        areas: set[str],
     ) -> Any:
         """
         calc paths from src to dst using backtracking. can add memoization to
@@ -327,7 +331,11 @@ class PathCmd(OpenrCtrlCmd):
                 print("node name or ip address not valid.")
                 sys.exit(1)
 
-        adj_dbs = await client.getDecisionAdjacencyDbs()
+        # Use the area-aware adjacency API so this works on multi-area nodes.
+        adj_dbs_by_area = await client.getDecisionAreaAdjacenciesFiltered(
+            ctrl_types.AdjacenciesFilter(selectAreas=areas)
+        )
+        adj_dbs = [db for dbs in adj_dbs_by_area.values() for db in dbs]
         if2node = self.get_if2node_map(adj_dbs)
         fib_routes = defaultdict(list)
 

@@ -29,6 +29,7 @@ from openr.thrift.Types.thrift_types import (
     PerfEvents,
     PrefixEntry,
     PrefixMetrics,
+    RouteDatabase,
 )
 
 ## Fixtures for testing decision validate
@@ -116,6 +117,61 @@ DECISION_ADJ_DBS_OK = [
         area="area2",
     ),
 ]
+
+# Two AdjacencyDatabase entries for the same node, in different areas.
+# Used to verify that get_if2node_map merges per-area adjacencies correctly
+# on multi-area (e.g. ABR) nodes.
+DECISION_ADJ_DBS_MULTI_AREA = [
+    AdjacencyDatabase(
+        thisNodeName="abr-node",
+        isOverloaded=False,
+        adjacencies=[
+            Adjacency(
+                otherNodeName="peer-area1",
+                ifName="if-area1",
+                nextHopV6=BinaryAddress(
+                    addr=b"\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x01"
+                ),
+                nextHopV4=BinaryAddress(addr=b"\n\x00\x00\x01"),
+                metric=1,
+                adjLabel=0,
+                isOverloaded=False,
+                rtt=0,
+                timestamp=0,
+                weight=1,
+                otherIfName="peer-if-1",
+            )
+        ],
+        nodeLabel=0,
+        area="area1",
+    ),
+    AdjacencyDatabase(
+        thisNodeName="abr-node",
+        isOverloaded=False,
+        adjacencies=[
+            Adjacency(
+                otherNodeName="peer-area2",
+                ifName="if-area2",
+                nextHopV6=BinaryAddress(
+                    addr=b"\xfe\x80\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\x02"
+                ),
+                nextHopV4=BinaryAddress(addr=b"\n\x00\x00\x02"),
+                metric=1,
+                adjLabel=0,
+                isOverloaded=False,
+                rtt=0,
+                timestamp=0,
+                weight=1,
+                otherIfName="peer-if-2",
+            )
+        ],
+        nodeLabel=0,
+        area="area2",
+    ),
+]
+
+EMPTY_KVSTORE_PUBLICATION = Publication(keyVals={}, expiredKeys=[], area="area1")
+EMPTY_ROUTE_DB = RouteDatabase(thisNodeName="src-node", unicastRoutes=[])
 
 RECEIVED_ROUTES_DB_OK = [
     ReceivedRouteDetail(

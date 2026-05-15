@@ -1824,12 +1824,15 @@ async def deduce_area(
 # area ID. For older images that don't support area feature, this API will
 # return 'None'. If area ID is passed, API checks if it's valid and returns
 # the same ID
-async def get_area_id(client: OpenrCtrlCppClient.Async, area: str) -> str:
+async def get_area_id(client: OpenrCtrlCppClient.Async, area: str | None) -> str:
     # if no area is provided, return area in case only one area is configured
     areas = await get_areas_list(client)
-    if (area is None or area == "") and 1 == len(areas):
-        (area,) = areas
-        return area
+    if area is None or area == "":
+        if 1 == len(areas):
+            (area,) = areas
+            return area
+        print(f"Error: Must specify one of the areas: {areas}")
+        sys.exit(1)
 
     if area not in areas:
         print(f"Error: Must specify one of the areas: {areas}")
