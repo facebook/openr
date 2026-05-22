@@ -164,6 +164,7 @@ add_fbthrift_cpp_library(
     json
   DEPENDS
     fb303::fb303_thrift_cpp
+    types_cpp2
   SERVICES
     KvStoreService
 )
