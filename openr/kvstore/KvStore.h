@@ -455,8 +455,12 @@ class KvStoreDb {
     // Send a pre-serialized setKvStoreKeyVals request via the channel.
     // Used by floodPublication to avoid redundant serialization.
     // protocolId must match the protocol used to serialize the buffer.
+    // If preCompressed is true, the buffer is already zstd-compressed and
+    // the channel skips re-compression.
     folly::SemiFuture<folly::Unit> sendPreSerializedSetKvStoreKeyVals(
-        const folly::IOBuf& serializedBuf, uint16_t protocolId);
+        const folly::IOBuf& serializedBuf,
+        uint16_t protocolId,
+        bool preCompressed = false);
 
     folly::SemiFuture<thrift::Publication> getKvStoreKeyValsFilteredAreaWrapper(
         const thrift::KeyDumpParams& filter, const std::string& area);

@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/compression/Compression.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/GeneratedCodeHelper.h>
@@ -1484,7 +1485,9 @@ KvStoreDb<ClientType>::KvStorePeer::setKvStoreKeyValsWrapper(
 template <class ClientType>
 folly::SemiFuture<folly::Unit>
 KvStoreDb<ClientType>::KvStorePeer::sendPreSerializedSetKvStoreKeyVals(
-    const folly::IOBuf& serializedBuf, uint16_t protocolId) {
+    const folly::IOBuf& serializedBuf,
+    uint16_t protocolId,
+    bool preCompressed) {
   auto sendVia = [&](ClientType* client) -> folly::SemiFuture<folly::Unit> {
     if (!client || !client->getChannel()) {
       return folly::makeSemiFuture<folly::Unit>(
@@ -1496,6 +1499,11 @@ KvStoreDb<ClientType>::KvStorePeer::sendPreSerializedSetKvStoreKeyVals(
 
     auto header = std::make_shared<apache::thrift::transport::THeader>();
     header->setProtocolId(protocolId);
+
+    if (preCompressed) {
+      header->setPreCompressedAlgorithm(
+          apache::thrift::CompressionAlgorithm::ZSTD);
+    }
 
     // Static method metadata — allocated once, never freed (intentional).
     static auto* methodData /* library-local */ =
@@ -3278,12 +3286,12 @@ KvStoreDb<ClientType>::floodPublication(
   // Param representing the whole fabric. Gets created if needed.
   std::unique_ptr<thrift::KeySetParams> fabricParams = nullptr;
 
-  // Buffers to cache the serialized requests for flooding.
-  // The serialized request depends on the protocol type and whether the
-  // peer is a fabric-external peer.
+  // Buffers to cache serialized + pre-compressed requests for flooding.
+  // Serialized once per protocol type, then compressed in-place with zstd —
+  // shared across all peers to avoid redundant per-peer compression.
+  using FloodCacheKey = std::pair<uint16_t, bool>;
   folly::F14NodeMap<
-      std::pair</*protocolType=*/uint16_t,
-                /*standard or fabric-external*/ bool>,
+      FloodCacheKey,
       std::optional<apache::thrift::SerializedRequest>>
       serializedRequests;
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
@@ -3309,11 +3317,15 @@ KvStoreDb<ClientType>::floodPublication(
       fabricParams = makeFabricParam(publication, kvParams_.nodeId);
     }
     uint16_t protocolType = getProtocolType(thriftPeer);
+    FloodCacheKey cacheKey{protocolType, isFabricExternal};
     std::optional<apache::thrift::SerializedRequest>& serializedRequest =
-        serializedRequests[{protocolType, isFabricExternal}];
+        serializedRequests[cacheKey];
     if (!serializedRequest) {
       serializedRequest.emplace(serializeRequest(
           protocolType, isFabricExternal ? *fabricParams : params, area_));
+      serializedRequest->buffer =
+          folly::compression::getCodec(folly::compression::CodecType::ZSTD, 1)
+              ->compress(serializedRequest->buffer.get());
     }
     // record telemetry for flooding publications
     fb303::fbData->addStatValue(
@@ -3325,7 +3337,7 @@ KvStoreDb<ClientType>::floodPublication(
 
     auto startTime = std::chrono::steady_clock::now();
     auto sf = thriftPeer.sendPreSerializedSetKvStoreKeyVals(
-        *serializedRequest->buffer, protocolType);
+        *serializedRequest->buffer, protocolType, true /* preCompressed */);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([startTime](folly::Unit&&) {
