@@ -239,6 +239,12 @@ FakeKvStoreHandler::getKvStore() const {
   return store();
 }
 
+std::shared_ptr<const thrift::KeyVals>
+FakeKvStoreHandler::getSharedStore() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return sharedStore_;
+}
+
 void
 FakeKvStoreHandler::resetToShared(
     std::shared_ptr<const thrift::KeyVals> sharedKvStore) {

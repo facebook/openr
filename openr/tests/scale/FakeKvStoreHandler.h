@@ -127,6 +127,11 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
   }
 
   /*
+   * Get the shared store pointer (nullptr if handler owns a private copy).
+   */
+  std::shared_ptr<const thrift::KeyVals> getSharedStore() const;
+
+  /*
    * Get a copy of the current KV store (for debugging/testing).
    */
   thrift::KeyVals getKvStore() const;

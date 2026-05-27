@@ -219,8 +219,23 @@ FakeKvStoreManager::propagateKeyUpdate(
       *value.version(),
       servers_.size());
 
+  std::unordered_map<
+      const thrift::KeyVals*,
+      std::shared_ptr<const thrift::KeyVals>>
+      sharedUpdates;
   for (auto& [name, ns] : servers_) {
-    ns.handler->updateKey(key, value);
+    auto currentShared = ns.handler->getSharedStore();
+    if (currentShared) {
+      auto it = sharedUpdates.find(currentShared.get());
+      if (it == sharedUpdates.end()) {
+        auto updated = std::make_shared<thrift::KeyVals>(*currentShared);
+        (*updated)[key] = value;
+        sharedUpdates[currentShared.get()] = std::move(updated);
+      }
+      ns.handler->resetToShared(sharedUpdates[currentShared.get()]);
+    } else {
+      ns.handler->updateKey(key, value);
+    }
   }
 }
 
@@ -232,7 +247,24 @@ FakeKvStoreManager::propagateKeyUpdates(const thrift::KeyVals& keyVals) {
       keyVals.size(),
       servers_.size());
 
+  std::unordered_map<
+      const thrift::KeyVals*,
+      std::shared_ptr<const thrift::KeyVals>>
+      sharedUpdates;
   for (auto& [name, ns] : servers_) {
+    auto currentShared = ns.handler->getSharedStore();
+    if (currentShared) {
+      auto it = sharedUpdates.find(currentShared.get());
+      if (it == sharedUpdates.end()) {
+        auto updated = std::make_shared<thrift::KeyVals>(*currentShared);
+        for (const auto& [key, value] : keyVals) {
+          (*updated)[key] = value;
+        }
+        sharedUpdates[currentShared.get()] = std::move(updated);
+      }
+      ns.handler->resetToShared(sharedUpdates[currentShared.get()]);
+      continue;
+    }
     for (const auto& [key, value] : keyVals) {
       ns.handler->updateKey(key, value);
     }
