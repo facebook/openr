@@ -21,4 +21,18 @@ TEST(SessionTest, ConstructorPopulatesTopology) {
   EXPECT_FALSE(names.empty());
 }
 
+TEST(SessionTest, StartThrowsDutUnreachable) {
+  thrift::ScaleTestConfig cfg = test::MakeTestConfig();
+  // Use a port that reliably refuses connection so injector_->connect() fails.
+  cfg.dut()->host() = "::1";
+  cfg.dut()->port() = 1;
+  Session s(cfg, /*basePortOverride=*/0);
+  try {
+    s.start();
+    FAIL() << "expected SetupError";
+  } catch (const thrift::SetupError& e) {
+    EXPECT_EQ(*e.reason(), thrift::SetupErrorReason::DUT_UNREACHABLE);
+  }
+}
+
 } // namespace openr

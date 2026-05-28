@@ -142,7 +142,37 @@ Session::~Session() = default;
 
 void
 Session::start() {
-  // Implementation built up across Step 3a sub-steps.
+  auto failDutUnreachable = [&](std::string detail) {
+    thrift::SetupError se;
+    se.reason() = thrift::SetupErrorReason::DUT_UNREACHABLE;
+    se.message() = fmt::format(
+        "DUT unreachable ({}:{}): {}",
+        *config_.dut()->host(),
+        *config_.dut()->port(),
+        detail);
+    throw se;
+  };
+
+  // Connect to the DUT. KvStoreThriftInjector::connect() and
+  // DutMonitor::connect() both return false on failure; some lower-level paths
+  // may also throw.
+  bool ok = false;
+  std::string failMsg;
+  try {
+    ok = injector_->connect() && dutMonitor_->connect();
+  } catch (const std::exception& ex) {
+    failMsg = ex.what();
+  }
+  if (!ok) {
+    failDutUnreachable(
+        failMsg.empty() ? "connect() returned false"
+                        : fmt::format("connect() threw: {}", failMsg));
+  }
+  dutNodeName_ = injector_->getDutNodeName();
+  if (dutNodeName_.empty()) {
+    failDutUnreachable("getDutNodeName() returned empty after connect");
+  }
+  XLOGF(INFO, "[Session] Connected to DUT: {}", dutNodeName_);
 }
 
 std::vector<std::string>
