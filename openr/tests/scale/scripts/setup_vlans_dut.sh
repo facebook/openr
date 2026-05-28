@@ -187,6 +187,28 @@ for i in $(seq 0 $((NUM_VLANS - 1))); do
 done
 
 echo ""
+# Port ranges for FakeKvStore Thrift servers (see ScaleTestServer.cpp
+# --fake_kvstore_base_port, default 3000). Override via env vars if running
+# with more neighbors or a different base port.
+INPUT_PORT_RANGE="${INPUT_PORT_RANGE:-3000:3500}"
+OUTPUT_PORT_RANGE="${OUTPUT_PORT_RANGE:-3000:3100}"
+echo "Configuring ip6tables to allow OpenR scale test traffic..."
+echo "  INPUT dport range:  $INPUT_PORT_RANGE"
+echo "  OUTPUT sport range: $OUTPUT_PORT_RANGE"
+if ! ip6tables -C INPUT -p tcp --dport "$INPUT_PORT_RANGE" -j ACCEPT 2>/dev/null; then
+    ip6tables -I INPUT 1 -p tcp --dport "$INPUT_PORT_RANGE" -j ACCEPT
+    echo "  Added INPUT rule for tcp dpts $INPUT_PORT_RANGE"
+else
+    echo "  INPUT rule for tcp dpts $INPUT_PORT_RANGE already present"
+fi
+if ! ip6tables -C OUTPUT -p tcp --sport "$OUTPUT_PORT_RANGE" -j ACCEPT 2>/dev/null; then
+    ip6tables -I OUTPUT 1 -p tcp --sport "$OUTPUT_PORT_RANGE" -j ACCEPT
+    echo "  Added OUTPUT rule for tcp spts $OUTPUT_PORT_RANGE"
+else
+    echo "  OUTPUT rule for tcp spts $OUTPUT_PORT_RANGE already present"
+fi
+
+echo ""
 echo "DUT VLAN setup complete!"
 echo ""
 echo "To remove these VLANs later, run:"
