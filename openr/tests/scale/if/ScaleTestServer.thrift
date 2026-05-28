@@ -31,6 +31,7 @@ struct TopologyConfig {
   6: optional i32 numPods;
   7: optional i32 numSites;
   8: optional i32 numPrefixesPerNode;
+  9: optional i32 ecmpWidth;
 }
 
 struct InjectionConfig {

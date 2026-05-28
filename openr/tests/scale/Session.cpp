@@ -68,6 +68,9 @@ validateConfig(const thrift::ScaleTestConfig& cfg) {
   if (!t.dutRole().has_value()) {
     fail("TopologyConfig.dutRole must be set");
   }
+  if (!t.ecmpWidth().has_value()) {
+    fail("TopologyConfig.ecmpWidth must be set");
+  }
   const auto& inj = *cfg.injection();
   if (!inj.injectTopology().has_value()) {
     fail("InjectionConfig.injectTopology must be set");
@@ -89,7 +92,7 @@ buildTopology(const thrift::ScaleTestConfig& cfg) {
         *t.numSpines(),
         *t.numLeaves(),
         *t.numSuperSpines(),
-        kDefaultBbfEcmpWidth,
+        *t.ecmpWidth(),
         *t.numPrefixesPerNode(),
         *t.numSites());
   }
@@ -99,7 +102,7 @@ buildTopology(const thrift::ScaleTestConfig& cfg) {
       *t.numSpines(), // numPlanes
       kDefaultBbfSpinesPerPlane,
       kDefaultBbfLeavesPerPod,
-      kDefaultBbfEcmpWidth,
+      *t.ecmpWidth(),
       *t.numPrefixesPerNode());
 }
 

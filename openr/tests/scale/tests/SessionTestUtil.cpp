@@ -33,6 +33,7 @@ MakeTestConfig() {
   cfg.topology()->numSites() = 0;
   cfg.topology()->numPrefixesPerNode() = 1;
   cfg.topology()->dutRole() = thrift::DutRole::SPINE;
+  cfg.topology()->ecmpWidth() = 2;
   return cfg;
 }
 
