@@ -81,27 +81,34 @@ SpfSolver::updateStaticUnicastRoutes(
         unicastRoutesToUpdate,
     const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
-  XLOG_IF(INFO, unicastRoutesToUpdate.size())
-      << "Adding/Updating " << unicastRoutesToUpdate.size()
-      << " static unicast routes.";
+  XLOGF_IF(
+      INFO,
+      unicastRoutesToUpdate.size(),
+      "Adding/Updating {} static unicast routes.",
+      unicastRoutesToUpdate.size());
   for (const auto& [prefix, ribUnicastEntry] : unicastRoutesToUpdate) {
     staticUnicastRoutes_.insert_or_assign(prefix, ribUnicastEntry);
 
-    XLOG(DBG1) << "> " << folly::IPAddress::networkToString(prefix)
-               << ", NextHopsCount = " << ribUnicastEntry.nexthops.size();
+    XLOGF(
+        DBG1,
+        "> {}, NextHopsCount = {}",
+        folly::IPAddress::networkToString(prefix),
+        ribUnicastEntry.nexthops.size());
     for (auto const& nh : ribUnicastEntry.nexthops) {
-      XLOG(DBG2) << " via " << toString(nh);
+      XLOGF(DBG2, " via {}", toString(nh));
     }
   }
 
-  XLOG_IF(INFO, unicastRoutesToDelete.size())
-      << "Deleting " << unicastRoutesToDelete.size()
-      << " static unicast routes.";
+  XLOGF_IF(
+      INFO,
+      unicastRoutesToDelete.size(),
+      "Deleting {} static unicast routes.",
+      unicastRoutesToDelete.size());
   for (const auto& prefix : unicastRoutesToDelete) {
     // mark unicast entry to be deleted
     staticUnicastRoutes_.erase(prefix);
 
-    XLOG(DBG1) << "> " << folly::IPAddress::networkToString(prefix);
+    XLOGF(DBG1, "> {}", folly::IPAddress::networkToString(prefix));
   }
 }
 
@@ -177,10 +184,10 @@ SpfSolver::createRouteForPrefix(
   // Sanity check for V4 prefixes
   const bool isV4Prefix = prefix.first.isV4();
   if (isV4Prefix && (!enableV4_) && (!v4OverV6Nexthop_)) {
-    XLOG(WARNING) << "Received v4 prefix "
-                  << folly::IPAddress::networkToString(prefix)
-                  << " while v4 is not enabled, and "
-                  << "we are not allowing v4 prefix over v6 nexthop.";
+    XLOGF(
+        WARNING,
+        "Received v4 prefix {} while v4 is not enabled, and we are not allowing v4 prefix over v6 nexthop.",
+        folly::IPAddress::networkToString(prefix));
     return std::nullopt;
   }
 
@@ -198,9 +205,10 @@ SpfSolver::createRouteForPrefix(
 
   // Skip if no valid prefixes
   if (prefixEntries.empty()) {
-    XLOG(INFO) << "Skipping route to "
-               << folly::IPAddress::networkToString(prefix)
-               << " with no reachable node.";
+    XLOGF(
+        INFO,
+        "Skipping route to {} with no reachable node.",
+        folly::IPAddress::networkToString(prefix));
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -220,8 +228,10 @@ SpfSolver::createRouteForPrefix(
   auto routeSelectionResult =
       selectBestRoutes(myNodeName, prefix, prefixEntries, areaLinkStates);
   if (routeSelectionResult.allNodeAreas.empty()) {
-    XLOG(WARNING) << "No route to prefix "
-                  << folly::IPAddress::networkToString(prefix);
+    XLOGF(
+        WARNING,
+        "No route to prefix {}",
+        folly::IPAddress::networkToString(prefix));
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return std::nullopt;
   }
@@ -234,8 +244,11 @@ SpfSolver::createRouteForPrefix(
    * Skip adding route if one prefix is advertised by local node.
    */
   if (routeSelectionResult.hasNode(myNodeName)) {
-    XLOG(DBG3) << "Skip adding route for prefixes advertised by " << myNodeName
-               << " " << folly::IPAddress::networkToString(prefix);
+    XLOGF(
+        DBG3,
+        "Skip adding route for prefixes advertised by {} {}",
+        myNodeName,
+        folly::IPAddress::networkToString(prefix));
 
     return std::nullopt;
   }
@@ -333,7 +346,7 @@ SpfSolver::buildRouteDb(
 
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  XLOG(INFO) << "Decision::buildRouteDb took " << deltaTime.count() << "ms.";
+  XLOGF(INFO, "Decision::buildRouteDb took {}ms.", deltaTime.count());
   fb303::fbData->addStatValue(
       "decision.route_build_ms", deltaTime.count(), fb303::AVG);
   return routeDb;
@@ -461,8 +474,10 @@ SpfSolver::selectBestPathsSpf(
   // Populate the SPF result
   result.bestMetric = nextHopsWithMetric.first;
   if (nextHopsWithMetric.second.empty()) {
-    XLOG(DBG3) << "No route to prefix "
-               << folly::IPAddress::networkToString(prefix);
+    XLOGF(
+        DBG3,
+        "No route to prefix {}",
+        folly::IPAddress::networkToString(prefix));
     fb303::fbData->addStatValue("decision.no_route_to_prefix", 1, fb303::COUNT);
     return result;
   }
@@ -496,11 +511,12 @@ SpfSolver::addBestPaths(
   // min-nexthop requirement is not met.
   auto minNextHop = getMinNextHopThreshold(routeSelectionResult, prefixEntries);
   if (minNextHop.has_value() && minNextHop.value() > nextHops.size()) {
-    XLOG(WARNING) << "Ignore programming of route to "
-                  << folly::IPAddress::networkToString(prefix)
-                  << " because of min-nexthop requirement. "
-                  << "Minimum required " << minNextHop.value() << ", got "
-                  << nextHops.size();
+    XLOGF(
+        WARNING,
+        "Ignore programming of route to {} because of min-nexthop requirement. Minimum required {}, got {}",
+        folly::IPAddress::networkToString(prefix),
+        minNextHop.value(),
+        nextHops.size());
     return std::nullopt;
   }
 

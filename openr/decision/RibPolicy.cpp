@@ -147,8 +147,10 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   // NOTE: In future we may modify this code to also support dropping
   //       routes with no-invalid next-hops
   if (newNexthops.empty()) {
-    XLOG(WARNING) << "RibPolicy invalidated all next-hops for route to "
-                  << folly::IPAddress::networkToString(route.prefix);
+    XLOGF(
+        WARNING,
+        "RibPolicy invalidated all next-hops for route to {}",
+        folly::IPAddress::networkToString(route.prefix));
     facebook::fb303::fbData->addStatValue(
         "decision.rib_policy.invalidated_routes", 1, facebook::fb303::COUNT);
     return false;
@@ -241,8 +243,10 @@ RibPolicy::applyPolicy(
     if (applyAction(iter->second)) {
       DCHECK(iter->second.nexthops.size()) << "Unexpected empty next-hops";
       change.updatedRoutes.push_back(iter->second.prefix);
-      XLOG(DBG2) << "RibPolicy transformed the route "
-                 << folly::IPAddress::networkToString(iter->second.prefix);
+      XLOGF(
+          DBG2,
+          "RibPolicy transformed the route {}",
+          folly::IPAddress::networkToString(iter->second.prefix));
     }
     ++iter;
   }

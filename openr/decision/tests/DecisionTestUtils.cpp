@@ -83,8 +83,7 @@ fillRouteMap(
   for (auto const& [_, entry] : routeDb.unicastRoutes) {
     auto prefix = folly::IPAddress::networkToString(entry.prefix);
     for (const auto& nextHop : entry.nexthops) {
-      XLOG(DBG4) << "node: " << node << " prefix: " << prefix << " -> "
-                 << toString(nextHop);
+      XLOGF(DBG4, "node: {} prefix: {} -> {}", node, prefix, toString(nextHop));
 
       routeMap[make_pair(node, prefix)].emplace(nextHop);
     }
@@ -99,8 +98,7 @@ fillRouteMap(
   for (auto const& route : *routeDb.unicastRoutes()) {
     auto prefix = toString(*route.dest());
     for (const auto& nextHop : *route.nextHops()) {
-      XLOG(DBG4) << "node: " << node << " prefix: " << prefix << " -> "
-                 << toString(nextHop);
+      XLOGF(DBG4, "node: {} prefix: {} -> {}", node, prefix, toString(nextHop));
 
       routeMap[make_pair(node, prefix)].emplace(nextHop);
     }

@@ -69,7 +69,7 @@ LinkState::removeNode(const std::string& nodeName) {
       CHECK(linkMap_.at(link->getOtherNodeName(nodeName)).erase(link));
       CHECK(allLinks_.erase(link));
     } catch (std::out_of_range const&) {
-      XLOG(FATAL) << "std::out_of_range for " << nodeName;
+      XLOGF(FATAL, "std::out_of_range for {}", nodeName);
     }
   }
   linkMap_.erase(search);
@@ -259,11 +259,16 @@ LinkState::updateAdjacencyDatabase(
   // Area field must be specified and match with area_
   DCHECK_EQ(area_, area);
   for (auto const& adj : *newAdjacencyDb.adjacencies()) {
-    XLOG(DBG3) << "  neighbor: " << *adj.otherNodeName()
-               << ", remoteIfName: " << getRemoteIfName(adj)
-               << ", ifName: " << *adj.ifName() << ", metric: " << *adj.metric()
-               << ", overloaded: " << *adj.isOverloaded()
-               << ", rtt: " << *adj.rtt() << ", weight: " << *adj.weight();
+    XLOGF(
+        DBG3,
+        "  neighbor: {}, remoteIfName: {}, ifName: {}, metric: {}, overloaded: {:d}, rtt: {}, weight: {}",
+        *adj.otherNodeName(),
+        getRemoteIfName(adj),
+        *adj.ifName(),
+        *adj.metric(),
+        *adj.isOverloaded(),
+        *adj.rtt(),
+        *adj.weight());
   }
 
   // Default construct if it did not exist
@@ -322,7 +327,8 @@ LinkState::updateAdjacencyDatabase(
           true /* up */,
           firstPub,
           inInitialization);
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UP] {} [from {}] {}",
           (*newIter)->toString(),
           *newAdjacencyDb.thisNodeName(),
@@ -344,7 +350,8 @@ LinkState::updateAdjacencyDatabase(
           false /* down */,
           firstPub,
           inInitialization);
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK DOWN] {} [from {}] {}",
           (*oldIter)->toString(),
           *newAdjacencyDb.thisNodeName(),
@@ -361,7 +368,8 @@ LinkState::updateAdjacencyDatabase(
     // change the metric on the link object we already have
     if (newLink.getMetricFromNode(nodeName) !=
         oldLink.getMetricFromNode(nodeName)) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UPDATE] Metric change on link {}, {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getMetricFromNode(nodeName),
@@ -374,14 +382,14 @@ LinkState::updateAdjacencyDatabase(
     auto isUp = newLink.isUp();
     auto wasUp = oldLink.isUp();
     if (isUp != wasUp) {
-      XLOG(DBG1)
-          << fmt::format("[LINK UPDATE] Link usability: {} -> {}", wasUp, isUp);
+      XLOGF(DBG1, "[LINK UPDATE] Link usability: {} -> {}", wasUp, isUp);
       change.topologyChanged |= oldLink.setLinkUsability(newLink);
     }
 
     if (newLink.getOverloadFromNode(nodeName) !=
         oldLink.getOverloadFromNode(nodeName)) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UPDATE] Overload change on link {}: {} -> {}",
           newLink.directionalToString(nodeName),
           oldLink.getOverloadFromNode(nodeName),
@@ -393,7 +401,8 @@ LinkState::updateAdjacencyDatabase(
     // Check if adjacency label has changed
     if (newLink.getAdjLabelFromNode(nodeName) !=
         oldLink.getAdjLabelFromNode(nodeName)) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UPDATE] AdjLabel change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getAdjLabelFromNode(nodeName),
@@ -409,7 +418,8 @@ LinkState::updateAdjacencyDatabase(
     // Check if link weight has changed
     if (newLink.getWeightFromNode(nodeName) !=
         oldLink.getWeightFromNode(nodeName)) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UPDATE] Weight change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           oldLink.getWeightFromNode(nodeName),
@@ -424,7 +434,8 @@ LinkState::updateAdjacencyDatabase(
     // check if local nextHops Changed
     if (newLink.getNhV4FromNode(nodeName) !=
         oldLink.getNhV4FromNode(nodeName)) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UPDATE] V4-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV4FromNode(nodeName)),
@@ -435,7 +446,8 @@ LinkState::updateAdjacencyDatabase(
     }
     if (newLink.getNhV6FromNode(nodeName) !=
         oldLink.getNhV6FromNode(nodeName)) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "[LINK UPDATE] V6-NextHop address change on link {}: {} => {}",
           newLink.directionalToString(nodeName),
           toString(oldLink.getNhV6FromNode(nodeName)),
@@ -457,7 +469,7 @@ LinkState::updateAdjacencyDatabase(
 LinkState::LinkStateChange
 LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
   LinkStateChange change;
-  XLOG(DBG1) << "Deleting adjacency database for node " << nodeName;
+  XLOGF(DBG1, "Deleting adjacency database for node {}", nodeName);
   auto search = adjacencyDatabases_.find(nodeName);
 
   if (search != adjacencyDatabases_.end()) {
@@ -467,8 +479,10 @@ LinkState::deleteAdjacencyDatabase(const std::string& nodeName) {
     kthPathResults_.clear();
     change.topologyChanged = true;
   } else {
-    XLOG(WARNING) << "Trying to delete adjacency db for non-existing node "
-                  << nodeName;
+    XLOGF(
+        WARNING,
+        "Trying to delete adjacency db for non-existing node {}",
+        nodeName);
   }
   return change;
 }
@@ -630,7 +644,7 @@ LinkState::runSpf(
   }
   auto deltaTime = std::chrono::duration_cast<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - startTime);
-  XLOG(DBG3) << "SPF elapsed time: " << deltaTime.count() << "ms.";
+  XLOGF(DBG3, "SPF elapsed time: {}ms.", deltaTime.count());
   fb303::fbData->addStatValue("decision.spf_ms", deltaTime.count(), fb303::AVG);
   return result;
 }
