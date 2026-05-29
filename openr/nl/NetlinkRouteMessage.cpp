@@ -68,7 +68,7 @@ NetlinkRouteMessage::setReturnStatus(int status) {
 void
 NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   if (type != RTM_NEWROUTE && type != RTM_DELROUTE && type != RTM_GETROUTE) {
-    XLOG(ERR) << "Incorrect netlink message type";
+    XLOG(ERR, "Incorrect netlink message type");
     return;
   }
   // initialize netlink header
@@ -86,11 +86,13 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
     filters_.type = route.getType();
     filters_.protocol = route.getProtocolId();
 
-    XLOG(DBG3) << "RTM_GETROUTE "
-               << " table=" << static_cast<int>(filters_.table)
-               << " type=" << static_cast<int>(filters_.type)
-               << " protocol=" << static_cast<int>(filters_.protocol)
-               << " family=" << static_cast<int>(route.getFamily());
+    XLOGF(
+        DBG3,
+        "RTM_GETROUTE  table={} type={} protocol={} family={}",
+        static_cast<int>(filters_.table),
+        static_cast<int>(filters_.type),
+        static_cast<int>(filters_.protocol),
+        static_cast<int>(route.getFamily()));
   }
 
   if (type == RTM_NEWROUTE) {
@@ -129,7 +131,7 @@ NetlinkRouteMessage::initGet(uint32_t flags, const Route& route) {
 uint32_t
 NetlinkRouteMessage::encodeLabel(uint32_t label, bool bos) {
   if (label > 0xFFFFF) {
-    XLOG(ERR) << "Invalid label 0x" << std::hex << label;
+    XLOGF(ERR, "Invalid label 0x{:x}", label);
     label = 0;
   }
   uint32_t encodeLabel = htonl(label << kLabelShift);
@@ -185,7 +187,7 @@ NetlinkRouteMessage::addIpNexthop(
     if (route.getType() == RTN_MULTICAST || route.getScope() == RT_SCOPE_LINK) {
       return 0;
     }
-    XLOG(ERR) << "Nexthop address not provided";
+    XLOG(ERR, "Nexthop address not provided");
     return EINVAL;
   }
 
@@ -229,7 +231,7 @@ NetlinkRouteMessage::addSwapOrPHPNexthop(
 
   // Weights are not supported for MPLS routes
   if (path.getWeight()) {
-    XLOG(ERR) << "Weight is not supported for MPLS PHP or SWAP next-hop";
+    XLOG(ERR, "Weight is not supported for MPLS PHP or SWAP next-hop");
     return -EINVAL;
   }
 
@@ -284,12 +286,12 @@ NetlinkRouteMessage::addPopNexthop(
   // for each next hop add the ENCAP
   rtnh->rtnh_len = sizeof(*rtnh);
   if (!path.getIfIndex().has_value()) {
-    XLOG(ERR) << "Loopback interface index not provided for POP";
+    XLOG(ERR, "Loopback interface index not provided for POP");
     return -EINVAL;
   }
   // Weights are not supported for MPLS routes
   if (path.getWeight()) {
-    XLOG(ERR) << "Weight is not supported for MPLS POP next-hop";
+    XLOG(ERR, "Weight is not supported for MPLS POP next-hop");
     return -EINVAL;
   }
 
@@ -341,7 +343,7 @@ NetlinkRouteMessage::addPushNexthop(
   size_t i = 0;
   auto labels = path.getPushLabels();
   if (!labels.has_value()) {
-    XLOG(ERR) << "Labels not provided for PUSH action";
+    XLOG(ERR, "Labels not provided for PUSH action");
     return EINVAL;
   }
   // abort immediately to bring attention
@@ -448,7 +450,7 @@ NetlinkRouteMessage::addMultiPathNexthop(
         break;
 
       default:
-        XLOG(ERR) << "Unknown action";
+        XLOG(ERR, "Unknown action");
         return EINVAL;
       }
     } else {
@@ -745,7 +747,7 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
   }
 
   auto route = routeBuilder.build();
-  XLOG(DBG3) << "Netlink parsed route message. " << route.str();
+  XLOGF(DBG3, "Netlink parsed route message. {}", route.str());
   return route;
 }
 
@@ -797,7 +799,7 @@ NetlinkRouteMessage::addRoute(const Route& route) {
   auto addressFamily = route.getFamily();
 
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
-    XLOG(ERR) << "Address family is not AF_INET or AF_INET6";
+    XLOG(ERR, "Address family is not AF_INET or AF_INET6");
     return EINVAL;
   }
 
@@ -852,7 +854,7 @@ NetlinkRouteMessage::deleteRoute(const Route& route) {
   auto const& pfix = route.getDestination();
   auto addressFamily = route.getFamily();
   if (addressFamily != AF_INET && addressFamily != AF_INET6) {
-    XLOG(ERR) << "Invalid address family. Expected AF_INET or AF_INET6";
+    XLOG(ERR, "Invalid address family. Expected AF_INET or AF_INET6");
     return EINVAL;
   }
   init(RTM_DELROUTE, 0, route);
@@ -880,13 +882,13 @@ NetlinkRouteMessage::addLabelRoute(const Route& route) {
   struct mpls_label mlabel;
 
   if (route.getFamily() != AF_MPLS) {
-    XLOG(ERR) << "Invalid address family. Expected AF_MPLS";
+    XLOG(ERR, "Invalid address family. Expected AF_MPLS");
     return EINVAL;
   }
 
   auto label = route.getMplsLabel();
   if (!label.has_value()) {
-    XLOG(ERR) << "Missing label";
+    XLOG(ERR, "Missing label");
     return EINVAL;
   }
 
@@ -911,7 +913,7 @@ NetlinkRouteMessage::deleteLabelRoute(const Route& route) {
   struct mpls_label mlabel;
   auto label = route.getMplsLabel();
   if (!label.has_value()) {
-    XLOG(ERR) << "Label not provided";
+    XLOG(ERR, "Label not provided");
     return EINVAL;
   }
   mlabel.entry = encodeLabel(label.value(), true);
@@ -922,15 +924,27 @@ NetlinkRouteMessage::deleteLabelRoute(const Route& route) {
 /* ATTN: debugging util function. DO NOT REMOVE */
 void
 NetlinkRouteMessage::showRtmMsg(const struct rtmsg* const hdr) {
-  XLOG(DBG3) << "Route message data" << "\n\trtm_family    =>  "
-             << +hdr->rtm_family << "\n\trtm_dst_len   =>  "
-             << +hdr->rtm_dst_len << "\n\trtm_src_len   =>  "
-             << +hdr->rtm_src_len << "\n\trtm_tos       =>  " << +hdr->rtm_tos
-             << "\n\trtm_table     =>  " << +hdr->rtm_table
-             << "\n\trtm_protocol  =>  " << +hdr->rtm_protocol
-             << "\n\trtm_scope     =>  " << +hdr->rtm_scope
-             << "\n\trtm_type      =>  " << +hdr->rtm_type
-             << "\n\trtm_flags     =>  " << std::hex << hdr->rtm_flags;
+  XLOGF(
+      DBG3,
+      "Route message data"
+      "\n\trtm_family    =>  {}"
+      "\n\trtm_dst_len   =>  {}"
+      "\n\trtm_src_len   =>  {}"
+      "\n\trtm_tos       =>  {}"
+      "\n\trtm_table     =>  {}"
+      "\n\trtm_protocol  =>  {}"
+      "\n\trtm_scope     =>  {}"
+      "\n\trtm_type      =>  {}"
+      "\n\trtm_flags     =>  {:x}",
+      +hdr->rtm_family,
+      +hdr->rtm_dst_len,
+      +hdr->rtm_src_len,
+      +hdr->rtm_tos,
+      +hdr->rtm_table,
+      +hdr->rtm_protocol,
+      +hdr->rtm_scope,
+      +hdr->rtm_type,
+      hdr->rtm_flags);
 }
 
 void
@@ -938,19 +952,30 @@ NetlinkRouteMessage::showMultiPathAttributes(const struct rtattr* const rta) {
   struct rtnexthop* rtnh = reinterpret_cast<struct rtnexthop*>(RTA_DATA(rta));
   int nhLen = RTA_PAYLOAD(rta);
 
-  XLOG(DBG3) << "Multi-path nexthop data" << "\n\trtnh_len      => "
-             << rtnh->rtnh_len << "\n\trtnh_flags    => "
-             << static_cast<size_t>(rtnh->rtnh_flags) << "\n\trtnh_hops     => "
-             << static_cast<size_t>(rtnh->rtnh_hops) << "\n\trtnh_ifindex  => "
-             << rtnh->rtnh_ifindex;
+  XLOGF(
+      DBG3,
+      "Multi-path nexthop data"
+      "\n\trtnh_len      => {}"
+      "\n\trtnh_flags    => {}"
+      "\n\trtnh_hops     => {}"
+      "\n\trtnh_ifindex  => {}",
+      rtnh->rtnh_len,
+      static_cast<size_t>(rtnh->rtnh_flags),
+      static_cast<size_t>(rtnh->rtnh_hops),
+      rtnh->rtnh_ifindex);
 
   do {
     const struct rtattr* attr;
     auto attrLen = rtnh->rtnh_len;
     for (attr = RTNH_DATA(rtnh); RTA_OK(attr, attrLen);
          attr = RTA_NEXT(attr, attrLen)) {
-      XLOG(DBG3) << "Nexthop attributes:" << "\n\trta_len       => "
-                 << attr->rta_len << "\n\trta_type      => " << attr->rta_type;
+      XLOGF(
+          DBG3,
+          "Nexthop attributes:"
+          "\n\trta_len       => {}"
+          "\n\trta_type      => {}",
+          attr->rta_len,
+          attr->rta_type);
     }
     nhLen -= NLMSG_ALIGN(rtnh->rtnh_len);
     rtnh = RTNH_NEXT(rtnh);

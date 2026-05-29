@@ -34,7 +34,7 @@ NetlinkRuleMessage::setReturnStatus(int status) {
 void
 NetlinkRuleMessage::init(int type) {
   if (type != RTM_NEWRULE && type != RTM_DELRULE && type != RTM_GETRULE) {
-    XLOG(ERR) << "Incorrect Netlink message type";
+    XLOG(ERR, "Incorrect Netlink message type");
     return;
   }
 
@@ -89,7 +89,7 @@ NetlinkRuleMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
 
-  XLOG(DBG3) << "Netlink parsed rule message. " << rule.str();
+  XLOGF(DBG3, "Netlink parsed rule message. {}", rule.str());
   return rule;
 }
 

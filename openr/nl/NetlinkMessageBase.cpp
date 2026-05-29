@@ -47,11 +47,11 @@ NetlinkMessageBase::addSubAttributes(
   uint32_t subRtaLen = RTA_LENGTH(len);
 
   if (RTA_ALIGN(rta->rta_len) + RTA_ALIGN(subRtaLen) > kMaxNlSendPayloadSize) {
-    XLOG(ERR) << "No buffer for adding attr: " << type << " length: " << len;
+    XLOGF(ERR, "No buffer for adding attr: {} length: {}", type, len);
     return subrta;
   }
 
-  XLOG(DBG3) << "Adding sub attribute. type=" << type << ", len=" << len;
+  XLOGF(DBG3, "Adding sub attribute. type={}, len={}", type, len);
 
   // add the subattribute
   subrta = (struct rtattr*)(((char*)rta) + RTA_ALIGN(rta->rta_len));
@@ -73,7 +73,7 @@ NetlinkMessageBase::addAttributes(
   uint32_t nlmsgAlen = NLMSG_ALIGN((msghdr_)->nlmsg_len);
 
   if (nlmsgAlen + RTA_ALIGN(rtaLen) > kMaxNlSendPayloadSize) {
-    XLOG(ERR) << "Space not available to add attribute type " << type;
+    XLOGF(ERR, "Space not available to add attribute type {}", type);
     return ENOBUFS;
   }
 
@@ -82,7 +82,7 @@ NetlinkMessageBase::addAttributes(
       reinterpret_cast<struct rtattr*>(((char*)(msghdr_)) + nlmsgAlen);
   rptr->rta_type = type;
   rptr->rta_len = rtaLen;
-  XLOG(DBG3) << "Adding attribute. type=" << type << ", len=" << rtaLen;
+  XLOGF(DBG3, "Adding attribute. type={}, len={}", type, rtaLen);
   if (data) {
     memcpy(RTA_DATA(rptr), data, len);
   }
@@ -99,8 +99,11 @@ NetlinkMessageBase::getSemiFuture() {
 
 void
 NetlinkMessageBase::setReturnStatus(int status) {
-  XLOG(DBG3) << "Netlink request completed. retval=" << status << ", "
-             << folly::errnoStr(std::abs(status));
+  XLOGF(
+      DBG3,
+      "Netlink request completed. retval={}, {}",
+      status,
+      folly::errnoStr(std::abs(status)));
   promise_.setValue(status);
 }
 

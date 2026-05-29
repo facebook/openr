@@ -41,7 +41,7 @@ NetlinkLinkMessage::setReturnStatus(int status) {
 void
 NetlinkLinkMessage::init(int type, uint32_t linkFlags) {
   if (type != RTM_NEWLINK && type != RTM_DELLINK && type != RTM_GETLINK) {
-    XLOG(ERR) << "Incorrect Netlink message type";
+    XLOG(ERR, "Incorrect Netlink message type");
     return;
   }
   // initialize netlink header
@@ -103,7 +103,7 @@ NetlinkLinkMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
   auto link = builder.build();
-  XLOG(DBG3) << "Netlink parsed link message. " << link.str();
+  XLOGF(DBG3, "Netlink parsed link message. {}", link.str());
   return link;
 }
 
