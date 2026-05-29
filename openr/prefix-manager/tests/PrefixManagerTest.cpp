@@ -171,7 +171,7 @@ class PrefixManagerTestFixture : public testing::Test {
     // ATTN: make sure PREFIX_DB_SYNC event received.
     initializationEventsQueueReader.get(); // perform read
 
-    XLOG(INFO) << "Successfully published PREFIX_DB_SYNC event";
+    XLOG(INFO, "Successfully published PREFIX_DB_SYNC event");
   }
 
   virtual thrift::OpenrConfig
@@ -1632,7 +1632,8 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
           auto prefixEntry = db.prefixEntries()->at(0);
           auto prefixKeyWithArea = std::make_pair(key, *pub->area());
           if (isDeleted && expDeleted.count(prefixKeyWithArea)) {
-            XLOG(DBG2) << fmt::format(
+            XLOGF(
+                DBG2,
                 "Withdraw of prefix: {} in area: {} received",
                 prefixKeyWithArea.first,
                 prefixKeyWithArea.second);
@@ -1640,7 +1641,8 @@ class RouteOriginationFixture : public PrefixManagerMultiAreaTestFixture {
           }
           if ((!isDeleted) && exp.count(prefixKeyWithArea) &&
               prefixEntry == exp.at(prefixKeyWithArea)) {
-            XLOG(DBG2) << fmt::format(
+            XLOGF(
+                DBG2,
                 "Advertising of prefix: {} in area: {} received",
                 prefixKeyWithArea.first,
                 prefixKeyWithArea.second);
@@ -1880,7 +1882,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - v4Prefix_ will be advertised as `min_supporting_route=1`;
   //  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
   //
-  XLOG(DBG1) << "Starting test step 1...";
+  XLOG(DBG1, "Starting test step 1...");
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicastEntryV4);
@@ -1957,7 +1959,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - # of supporting prefix for v4Prefix_ won't change;
   //  - # of supporting prefix for v6Prefix_ won't change;
   //
-  XLOG(DBG1) << "Starting test step 2...";
+  XLOG(DBG1, "Starting test step 2...");
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicastEntryV4_2);
@@ -2013,7 +2015,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - v6Prefix_ will be advertised to `KvStore` as `min_supporting_route=2`
   //  - v6Prefix_ will NOT be advertised to `Decision` as `install_to_fib=false`
   //
-  XLOG(DBG1) << "Starting test step 3...";
+  XLOG(DBG1, "Starting test step 3...");
   {
     DecisionRouteUpdate routeUpdate;
     // ATTN: change ribEntry attributes to make sure no impact on ref-count
@@ -2083,7 +2085,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   //  - `Decision` won't receive routeUpdate for `v6Prefix_`
   //    since it has `install_to_fib=false`;
   //
-  XLOG(DBG1) << "Starting test step 4...";
+  XLOG(DBG1, "Starting test step 4...");
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);

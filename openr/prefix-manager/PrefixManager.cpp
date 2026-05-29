@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <fmt/ostream.h>
 #include <folly/IPAddress.h>
 #include <folly/futures/Future.h>
 #include <folly/logging/xlog.h>
@@ -45,18 +46,18 @@ PrefixManager::PrefixManager(
 
   // Always add RIB type prefixes, since Fib routes updates are always expected
   // in OpenR initialization procedure.
-  XLOG(INFO) << "[Initialization] PrefixManager should wait for RIB updates.";
+  XLOG(INFO, "[Initialization] PrefixManager should wait for RIB updates.");
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
 
   if (config->isVipServiceEnabled()) {
-    XLOG(INFO)
-        << "[Initialization] PrefixManager should wait for VIP prefixes.";
+    XLOG(INFO, "[Initialization] PrefixManager should wait for VIP prefixes.");
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
   }
 
   if (config->getConfig().originated_prefixes()) {
-    XLOG(INFO)
-        << "[Initialization] PrefixManager should wait for CONFIG prefixes.";
+    XLOG(
+        INFO,
+        "[Initialization] PrefixManager should wait for CONFIG prefixes.");
     uninitializedPrefixTypes_.emplace(thrift::PrefixType::CONFIG);
   }
 
@@ -102,7 +103,7 @@ PrefixManager::PrefixManager(
       buildOriginatedPrefixes(*prefixes);
 
       // Trigger initial prefix sync in KvStore.
-      XLOG(INFO) << "[Initialization] Processed CONFIG type prefixes.";
+      XLOG(INFO, "[Initialization] Processed CONFIG type prefixes.");
       uninitializedPrefixTypes_.erase(thrift::PrefixType::CONFIG);
       triggerInitialPrefixDbSync();
     }
@@ -110,7 +111,7 @@ PrefixManager::PrefixManager(
 
   // Schedule fiber to read prefix updates messages
   addFiberTask([q = std::move(prefixUpdatesQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting prefix-updates processing task";
+    XLOG(DBG1, "Starting prefix-updates processing task");
     while (true) {
       auto maybeUpdate = q.get(); // perform read
       if (maybeUpdate.hasError()) {
@@ -143,7 +144,8 @@ PrefixManager::PrefixManager(
 
         if (uninitializedPrefixTypes_.erase(update.type)) {
           // Received initial prefixes of certain type during initialization
-          XLOG(INFO) << fmt::format(
+          XLOGF(
+              INFO,
               "[Initialization] Received {} prefixes of type {}.",
               update.prefixes.size() + update.prefixEntries.size(),
               apache::thrift::util::enumNameSafe<thrift::PrefixType>(
@@ -177,16 +179,18 @@ PrefixManager::PrefixManager(
             update.type, update.prefixes, dstAreas, update.policyName);
         break;
       default:
-        XLOG(ERR) << "Unknown command received. "
-                  << static_cast<int>(update.eventType);
+        XLOGF(
+            ERR,
+            "Unknown command received. {}",
+            static_cast<int>(update.eventType));
       }
     }
-    XLOG(DBG1) << "[Exit] Prefix-updates processing task finished.";
+    XLOG(DBG1, "[Exit] Prefix-updates processing task finished.");
   });
 
   // Fiber to process route updates from Fib.
   addFiberTask([q = std::move(fibRouteUpdatesQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting fib route-update processing task";
+    XLOG(DBG1, "Starting fib route-update processing task");
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
       if (maybeThriftObj.hasError()) {
@@ -199,18 +203,18 @@ PrefixManager::PrefixManager(
 #ifndef NO_FOLLY_EXCEPTION_TRACER
         // collect stack strace then fail the process
         for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
-          XLOG(ERR) << exInfo;
+          XLOGF(ERR, "{}", fmt::streamed(exInfo));
         }
 #endif
         throw;
       }
     }
-    XLOG(DBG1) << "[Exit] Fib route-updates processing task finished.";
+    XLOG(DBG1, "[Exit] Fib route-updates processing task finished.");
   });
 
   // Fiber to process publication from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting kvStore-updates processing task";
+    XLOG(DBG1, "Starting kvStore-updates processing task");
     while (true) {
       auto maybePub = q.get(); // perform read
       if (maybePub.hasError()) {
@@ -227,7 +231,7 @@ PrefixManager::PrefixManager(
             [](thrift::InitializationEvent&& /* unused */) { return; });
       }
     }
-    XLOG(DBG1) << "[Exit] KvStore-updates processing task finished.";
+    XLOG(DBG1, "[Exit] KvStore-updates processing task finished.");
   });
 }
 
@@ -257,7 +261,8 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
           continue;
         }
 
-        XLOG(DBG1) << fmt::format(
+        XLOGF(
+            DBG1,
             "[Prefix Update]: Area: {}, {} updated inside KvStore",
             area,
             keyStr);
@@ -270,15 +275,20 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
         syncKvStoreThrottled_->operator()();
       }
     } catch (const std::exception& ex) {
-      XLOG(ERR) << "Failed to deserialize corresponding value for key "
-                << keyStr << ". Exception: " << folly::exceptionStr(ex);
+      XLOGF(
+          ERR,
+          "Failed to deserialize corresponding value for key {}. Exception: {}",
+          keyStr,
+          folly::exceptionStr(ex));
     }
   } // for
 }
 
 PrefixManager::~PrefixManager() {
-  XLOG(DBG1) << fmt::format(
-      "[Exit] Send termination signals to stop {} tasks.", getFiberTaskNum());
+  XLOGF(
+      DBG1,
+      "[Exit] Send termination signals to stop {} tasks.",
+      getFiberTaskNum());
 
   // - If EventBase is stopped or it is within the evb thread, run immediately;
   // - Otherwise, will wait the EventBase to run;
@@ -287,7 +297,7 @@ PrefixManager::~PrefixManager() {
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "[Exit] Succeessfully stopped PrefixManager eventbase.";
+  XLOG(DBG1, "[Exit] Succeessfully stopped PrefixManager eventbase.");
 }
 
 thrift::PrefixEntry
@@ -485,10 +495,13 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
 
       // policy reject prefix, nothing to do.
       if (!postPolicyTPrefixEntry) {
-        XLOG(DBG2) << "[Area Policy] " << *policy
-                   << " rejected prefix: " << "(Type, PrefixEntry): ("
-                   << toString(type) << ", " << toString(*tPrefixEntry, true)
-                   << "), hit term (" << hitPolicyName << ")";
+        XLOGF(
+            DBG2,
+            "[Area Policy] {} rejected prefix: (Type, PrefixEntry): ({}, {}), hit term ({})",
+            *policy,
+            toString(type),
+            toString(*tPrefixEntry, true),
+            hitPolicyName);
         fb303::fbData->addStatValue("prefix_manager.rejected", 1, fb303::SUM);
         fb303::fbData->addStatValue(
             fmt::format("prefix_manager.rejected.{}", toArea), 1, fb303::SUM);
@@ -496,11 +509,14 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
       }
 
       // policy accept prefix, go ahread with prefix announcement.
-      XLOG(DBG2) << "[Area Policy] " << *policy
-                 << " accepted/modified prefix: " << "(Type, PrefixEntry): ("
-                 << toString(type) << ", " << toString(*tPrefixEntry, true)
-                 << "), PostPolicyEntry: (" << toString(*postPolicyTPrefixEntry)
-                 << "), hit term (" << hitPolicyName << ")";
+      XLOGF(
+          DBG2,
+          "[Area Policy] {} accepted/modified prefix: (Type, PrefixEntry): ({}, {}), PostPolicyEntry: ({}), hit term ({})",
+          *policy,
+          toString(type),
+          toString(*tPrefixEntry, true),
+          toString(*postPolicyTPrefixEntry),
+          hitPolicyName);
     } else {
       postPolicyTPrefixEntry = tPrefixEntry;
     }
@@ -521,10 +537,13 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
         fmt::format("prefix_manager.route_advertisements.{}", toArea),
         1,
         fb303::SUM);
-    XLOG(DBG1) << "[Prefix Advertisement] " << "Area: " << toArea << ", "
-               << "Type: " << toString(type) << ", "
-               << toString(*postPolicyTPrefixEntry->prefix())
-               << toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2));
+    XLOGF(
+        DBG1,
+        "[Prefix Advertisement] Area: {}, Type: {}, {}{}",
+        toArea,
+        toString(type),
+        toString(*postPolicyTPrefixEntry->prefix()),
+        toString(*postPolicyTPrefixEntry, VLOG_IS_ON(2)));
     areasToUpdate.emplace(toArea);
   }
   return areasToUpdate;
@@ -575,8 +594,11 @@ PrefixManager::deleteKvStoreKeyHelper(
         true);
     kvRequestQueue_.push(std::move(unsetPrefixRequest));
 
-    XLOG(DBG1) << "[Prefix Withdraw] " << "Area: " << area << ", "
-               << toString(*entry.prefix());
+    XLOGF(
+        DBG1,
+        "[Prefix Withdraw] Area: {}, {}",
+        area,
+        toString(*entry.prefix()));
     fb303::fbData->addStatValue(
         "prefix_manager.route_withdraws", 1, fb303::SUM);
   }
@@ -615,8 +637,10 @@ PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
 
 void
 PrefixManager::syncKvStore() {
-  XLOG(DBG1) << "[KvStore Sync] Syncing " << pendingUpdates_.size()
-             << " pending updates.";
+  XLOGF(
+      DBG1,
+      "[KvStore Sync] Syncing {} pending updates.",
+      pendingUpdates_.size());
 
   DecisionRouteUpdate routeUpdatesForDecision;
   size_t receivedPrefixCnt = 0;
@@ -627,7 +651,8 @@ PrefixManager::syncKvStore() {
   for (auto const& prefix : pendingUpdates_.getChangedPrefixes()) {
     auto it = prefixMap_.find(prefix);
     if (it == prefixMap_.end()) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "Deleting key: {} since it has been withdrawn.",
           folly::IPAddress::networkToString(prefix));
 
@@ -655,7 +680,8 @@ PrefixManager::syncKvStore() {
 
     if (readyToBeAdvertised) {
       if (hasPrefixUpdate) {
-        XLOG(DBG1) << fmt::format(
+        XLOGF(
+            DBG1,
             "Adding/updating key: {} with best entry: {} to area: {}",
             folly::IPAddress::networkToString(prefix),
             toString(*bestEntry.tPrefixEntry, true),
@@ -668,7 +694,8 @@ PrefixManager::syncKvStore() {
       // The prefix is awaiting to be advertised.
       ++awaitingPrefixCnt;
 
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "Skip advertising key: {} since it is not ready to be advertised",
           folly::IPAddress::networkToString(prefix));
 
@@ -680,7 +707,8 @@ PrefixManager::syncKvStore() {
       const auto& it = advertiseStatus_.find(prefix);
       if (advertiseStatus_.cend() != it &&
           (!prefixEntryReadyToBeAdvertised(it->second.advertisedBestEntry))) {
-        XLOG(DBG1) << fmt::format(
+        XLOGF(
+            DBG1,
             "Deleting previously advertised key: {} from area: {}",
             folly::IPAddress::networkToString(prefix),
             folly::join(",", it->second.areas));
@@ -699,7 +727,8 @@ PrefixManager::syncKvStore() {
     staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
   }
 
-  XLOG(DBG1) << fmt::format(
+  XLOGF(
+      DBG1,
       "[KvStore Sync] Updated {} prefixes in KvStore; {} more awaiting FIB-ACK.",
       syncedPrefixCnt,
       awaitingPrefixCnt);
@@ -1178,7 +1207,8 @@ PrefixManager::applyOriginationPolicy(
         prefix.policyActionData,
         prefix.policyMatchData);
     if (postPolicyTPrefixEntry) {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "Prefixes {} : accepted/modified by origination policy {}",
           folly::IPAddress::networkToString(prefix.network),
           policyName);
@@ -1188,7 +1218,8 @@ PrefixManager::applyOriginationPolicy(
           std::move(dstAreasCp),
           std::move(prefix.nexthops));
     } else {
-      XLOG(DBG1) << fmt::format(
+      XLOGF(
+          DBG1,
           "Not processing prefixes {} : denied by origination policy {}",
           folly::IPAddress::networkToString(prefix.network),
           policyName);
@@ -1356,7 +1387,7 @@ PrefixManager::syncPrefixesByTypeImpl(
     const std::vector<thrift::PrefixEntry>& tPrefixEntries,
     const folly::F14FastSet<std::string>& dstAreas,
     const std::optional<std::string>& policyName) {
-  XLOG(DBG1) << "Syncing prefixes of type " << toString(type);
+  XLOGF(DBG1, "Syncing prefixes of type {}", toString(type));
   // building these lists so we can call add and remove and get detailed
   // logging
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
@@ -1413,10 +1444,11 @@ PrefixManager::aggregatesToAdvertise(const folly::CIDRNetwork& prefix) {
       continue;
     }
 
-    XLOG(DBG1) << "[Route Origination] Adding supporting route "
-               << folly::IPAddress::networkToString(prefix)
-               << " for originated route "
-               << folly::IPAddress::networkToString(network);
+    XLOGF(
+        DBG1,
+        "[Route Origination] Adding supporting route {} for originated route {}",
+        folly::IPAddress::networkToString(prefix),
+        folly::IPAddress::networkToString(network));
 
     // reverse mapping: RIB prefixEntry -> OriginatedPrefixes
     ribPrefixIt->second.emplace_back(network);
@@ -1440,10 +1472,11 @@ PrefixManager::aggregatesToWithdraw(const folly::CIDRNetwork& prefix) {
     CHECK(originatedPrefixIt != originatedPrefixDb_.end());
     auto& route = originatedPrefixIt->second;
 
-    XLOG(DBG1) << "[Route Origination] Removing supporting route "
-               << folly::IPAddress::networkToString(prefix)
-               << " for originated route "
-               << folly::IPAddress::networkToString(network);
+    XLOGF(
+        DBG1,
+        "[Route Origination] Removing supporting route {} for originated route {}",
+        folly::IPAddress::networkToString(prefix),
+        folly::IPAddress::networkToString(network));
 
     route.supportingRoutes.erase(prefix);
   }
@@ -1470,16 +1503,20 @@ PrefixManager::processOriginatedPrefixes() {
           *route.originatedPrefix.install_to_fib()) {
         advertisedPrefixes.back().nexthops = route.unicastEntry.nexthops;
       }
-      XLOG(INFO) << "[Route Origination] Advertising originated route "
-                 << folly::IPAddress::networkToString(network);
+      XLOGF(
+          INFO,
+          "[Route Origination] Advertising originated route {}",
+          folly::IPAddress::networkToString(network));
     }
 
     if (route.shouldWithdraw()) {
       route.isAdvertised = false; // mark as withdrawn
       withdrawnPrefixes.emplace_back(
           createPrefixEntry(toIpPrefix(network), thrift::PrefixType::CONFIG));
-      XLOG(DBG1) << "[Route Origination] Withdrawing originated route "
-                 << folly::IPAddress::networkToString(network);
+      XLOGF(
+          DBG1,
+          "[Route Origination] Withdrawing originated route {}",
+          folly::IPAddress::networkToString(network));
     } else {
       // In OpenR initialization process, PrefixManager publishes unicast
       // routes for config originated prefixes with `install_to_fib=true`
@@ -1520,7 +1557,7 @@ PrefixManager::processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate) {
 
   if (type == DecisionRouteUpdate::FULL_SYNC &&
       uninitializedPrefixTypes_.erase(thrift::PrefixType::RIB)) {
-    XLOG(INFO) << "[Initialization] Received initial RIB type routes.";
+    XLOG(INFO, "[Initialization] Received initial RIB type routes.");
     triggerInitialPrefixDbSync();
   }
 }
