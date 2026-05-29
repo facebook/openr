@@ -55,7 +55,7 @@ Watchdog::addQueue(messaging::ReplicateQueueBase& q, const std::string& qName) {
   if (monitoredQs_.find(qName) == monitoredQs_.end()) {
     monitoredQs_.emplace(qName, std::ref(q));
   } else {
-    XLOG(INFO) << "Queue " << qName << " is already registered.";
+    XLOGF(INFO, "Queue {} is already registered.", qName);
   }
 }
 
@@ -74,7 +74,8 @@ Watchdog::monitorMemory() {
     return;
   }
   if (memInUse_.value() / 1e6 > maxMemoryMB_) {
-    XLOG(WARNING) << fmt::format(
+    XLOGF(
+        WARNING,
         "[Mem Detector] Critical memory usage: {} bytes. Memory limit: {} MB.",
         memInUse_.value(),
         maxMemoryMB_);
@@ -111,11 +112,15 @@ Watchdog::monitorThreadStatus() {
     auto const& lastTs = evb->getTimestamp();
     auto timeDiff =
         std::chrono::duration_cast<std::chrono::seconds>(now - lastTs);
-    XLOG(DBG4) << "Thread " << name << ", " << (now - lastTs).count()
-               << " seconds ever since last thread activity";
+    XLOGF(
+        DBG4,
+        "Thread {}, {} seconds ever since last thread activity",
+        name,
+        (now - lastTs).count());
 
     if (timeDiff > threadTimeout_) {
-      XLOG(WARNING) << fmt::format(
+      XLOGF(
+          WARNING,
           "[Dead Thread Detector] {} thread detected to be dead. Time since last activity: {}",
           name,
           timeDiff.count());
@@ -133,7 +138,7 @@ Watchdog::monitorThreadStatus() {
   }
 
   if ((!stuckThreads.size()) && isDeadThreadDetected_) {
-    XLOG(INFO) << "[Dead Thread Detector] Threads seem to have recovered.";
+    XLOG(INFO, "[Dead Thread Detector] Threads seem to have recovered.");
   }
 
   isDeadThreadDetected_ = (stuckThreads.size() ? true : false);

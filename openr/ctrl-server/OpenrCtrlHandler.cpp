@@ -63,13 +63,13 @@ OpenrCtrlHandler::OpenrCtrlHandler(
     CHECK_NOTNULL(dispatcher_);
     auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
         [q = std::move(dispatcher_->getReader()), this]() mutable noexcept {
-          XLOG(INFO) << "Starting Dispatcher updates processing fiber";
+          XLOG(INFO, "Starting Dispatcher updates processing fiber");
           while (true) {
             auto maybePub = q.get(); // perform read
-            XLOG(DBG2) << "Received publication from Dispatcher";
+            XLOG(DBG2, "Received publication from Dispatcher");
             if (maybePub.hasError()) {
-              XLOG(INFO)
-                  << "Terminating Dispatcher publications processing fiber";
+              XLOG(
+                  INFO, "Terminating Dispatcher publications processing fiber");
               break;
             }
 
@@ -82,7 +82,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
                   // skip the processing of initialization event
                 });
           }
-          XLOG(INFO) << "Dispatcher updates processing fiber stopped";
+          XLOG(INFO, "Dispatcher updates processing fiber stopped");
         });
 
     workers_.push_back(std::move(taskFutureKvStore));
@@ -92,13 +92,12 @@ OpenrCtrlHandler::OpenrCtrlHandler(
   if (fib_) {
     auto taskFutureFib = ctrlEvb->addFiberTaskFuture(
         [q = std::move(fib_->getFibUpdatesReader()), this]() mutable noexcept {
-          XLOG(INFO) << "Starting Fib updates processing fiber";
+          XLOG(INFO, "Starting Fib updates processing fiber");
           while (true) {
             auto maybeUpdate = q.get(); // perform read
-            XLOG(DBG2) << "Received DecisionRouteUpdate from Fib";
+            XLOG(DBG2, "Received DecisionRouteUpdate from Fib");
             if (maybeUpdate.hasError()) {
-              XLOG(INFO)
-                  << "Terminating Fib RouteDatabaseDelta processing fiber";
+              XLOG(INFO, "Terminating Fib RouteDatabaseDelta processing fiber");
               break;
             }
 
@@ -127,7 +126,7 @@ OpenrCtrlHandler::OpenrCtrlHandler(
                   }
                 });
           }
-          XLOG(INFO) << "Fib updates processing fiber stopped";
+          XLOG(INFO, "Fib updates processing fiber stopped");
         });
 
     workers_.push_back(std::move(taskFutureFib));
@@ -138,11 +137,11 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   closeKvStorePublishers();
   closeFibPublishers();
 
-  XLOG(INFO) << "[Exit] Cleanup all pending request(s).";
+  XLOG(INFO, "[Exit] Cleanup all pending request(s).");
   longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
 
   folly::collectAll(workers_.begin(), workers_.end()).get();
-  XLOG(INFO) << "[Exit] Successfully stopped OpenrCtrlHandler.";
+  XLOG(INFO, "[Exit] Successfully stopped OpenrCtrlHandler.");
 }
 
 // NOTE: We're intentionally creating list of publishers to and then invoke
@@ -159,7 +158,8 @@ OpenrCtrlHandler::closeKvStorePublishers() {
       publishers.emplace_back(std::move(publisher));
     }
   });
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[Exit] Terminating {} active KvStore snoop stream(s).",
       publishers.size());
   for (auto& publisher : publishers) {
@@ -181,7 +181,8 @@ OpenrCtrlHandler::closeFibPublishers() {
       fibPublishers_close.emplace_back(std::move(fibPublisher));
     }
   });
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[Exit] Terminating {} active Fib snoop stream(s).",
       fibPublishers_close.size());
   for (auto& fibPublisher : fibPublishers_close) {
@@ -211,7 +212,7 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
 
     // "adj:*" key has changed. Update local collection
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
-      XLOG(DBG3) << "Adj key: " << key << " change received";
+      XLOGF(DBG3, "Adj key: {} change received", key);
       isAdjChanged = true;
       break;
     }
@@ -236,9 +237,11 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
         auto& p = req.first;
         auto& timeStamp = req.second;
         if (now - timeStamp >= Constants::kLongPollReqHoldTime.count()) {
-          XLOG(INFO) << "Elapsed time: " << now - timeStamp
-                     << " is over hold limit: "
-                     << Constants::kLongPollReqHoldTime.count();
+          XLOGF(
+              INFO,
+              "Elapsed time: {} is over hold limit: {}",
+              now - timeStamp,
+              Constants::kLongPollReqHoldTime.count());
           reqsToClean.emplace_back(clientId);
           p.setValue(false);
         }
@@ -277,7 +280,7 @@ OpenrCtrlHandler::authorizeConnection() {
         "peer_address", connContext->getPeerAddress()->getAddressStr());
     sample.addString("peer_common_name", peerCommonName);
 
-    XLOG(INFO) << "Authorizing request with issues: " << sample.toJson();
+    XLOGF(INFO, "Authorizing request with issues: {}", sample.toJson());
     return;
   }
 
@@ -757,8 +760,7 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
+  XLOGF(DBG5, "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
 
   thrift::KeyGetParams params;
   params.keys() = std::move(*filterKeys);
@@ -779,7 +781,8 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*filter.get()),
@@ -807,7 +810,8 @@ folly::SemiFuture<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*filter.get()),
@@ -823,7 +827,8 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*setParams.get()),
@@ -839,7 +844,8 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_persistSelfOriginatedKey(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*setParams.get()),
@@ -855,7 +861,8 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_unsetSelfOriginatedKey(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*setParams.get()),
@@ -871,7 +878,8 @@ folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
 OpenrCtrlHandler::semifuture_setKvStoreKeyValues(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*setParams.get()),
@@ -929,18 +937,18 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
   }
 
   if (thriftPub->keyVals()->size() > 0) {
-    XLOG(DBG3) << "AdjKey has been added/modified. Notify immediately";
+    XLOG(DBG3, "AdjKey has been added/modified. Notify immediately");
     p.setValue(true);
   } else if (
       thriftPub->tobeUpdatedKeys().has_value() &&
       thriftPub->tobeUpdatedKeys().value().size() > 0) {
-    XLOG(DBG3) << "AdjKey has been deleted/expired. Notify immediately";
+    XLOG(DBG3, "AdjKey has been deleted/expired. Notify immediately");
     p.setValue(true);
   } else {
     // Client provided data is consistent with KvStore.
     // Store req for future processing when there is publication
     // from KvStore.
-    XLOG(DBG3) << "No adj change detected. Store req as pending request";
+    XLOG(DBG3, "No adj change detected. Store req as pending request");
     longPollReqs_.withWLock([&](auto& longPollReq) {
       longPollReq[*area].emplace(
           requestId, std::make_pair(std::move(p), timeStamp));
@@ -1023,7 +1031,7 @@ OpenrCtrlHandler::semifuture_getSubscriberInfo(int64_t type) {
         }
       });
     } else {
-      XLOG(INFO) << "Invalid type input. Specify type as KVstore or FIB";
+      XLOG(INFO, "Invalid type input. Specify type as KVstore or FIB");
     }
     stream_sessions.setValue(
         std::make_unique<std::vector<thrift::StreamSubscriberInfo>>(
@@ -1045,11 +1053,12 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
           [this, clientToken]() {
             kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
               if (kvStorePublishers_.erase(clientToken)) {
-                XLOG(INFO) << "KvStore snoop stream-" << clientToken
-                           << " ended.";
+                XLOGF(INFO, "KvStore snoop stream-{} ended.", clientToken);
               } else {
-                XLOG(ERR) << "Can't remove unknown KvStore snoop stream-"
-                          << clientToken;
+                XLOGF(
+                    ERR,
+                    "Can't remove unknown KvStore snoop stream-{}",
+                    clientToken);
               }
               fb303::fbData->setCounter(
                   "subscribers.kvstore", kvStorePublishers_.size());
@@ -1058,8 +1067,11 @@ OpenrCtrlHandler::subscribeKvStoreFilter(
 
   kvStorePublishers_.withWLock([&](auto& kvStorePublishers_) {
     assert(kvStorePublishers_.count(clientToken) == 0);
-    XLOG(INFO) << "KvStore snoop stream-" << clientToken
-               << " started for areas: " << folly::join(", ", *selectAreas);
+    XLOGF(
+        INFO,
+        "KvStore snoop stream-{} started for areas: {}",
+        clientToken,
+        folly::join(", ", *selectAreas));
     auto kvStorePublisher = std::make_unique<KvStorePublisher>(
         *selectAreas,
         std::move(*filter),
@@ -1137,10 +1149,12 @@ OpenrCtrlHandler::subscribeFib() {
           [this, clientToken]() {
             fibPublishers_.withWLock([&clientToken](auto& fibPublishers) {
               if (fibPublishers.erase(clientToken)) {
-                XLOG(INFO) << "Fib snoop stream-" << clientToken << " ended.";
+                XLOGF(INFO, "Fib snoop stream-{} ended.", clientToken);
               } else {
-                XLOG(ERR) << "Can't remove unknown Fib snoop stream-"
-                          << clientToken;
+                XLOGF(
+                    ERR,
+                    "Can't remove unknown Fib snoop stream-{}",
+                    clientToken);
               }
               fb303::fbData->setCounter(
                   "subscribers.fib", fibPublishers.size());
@@ -1150,7 +1164,7 @@ OpenrCtrlHandler::subscribeFib() {
   fibPublishers_.withWLock([&clientToken,
                             &streamAndPublisher](auto& fibPublishers) {
     assert(fibPublishers.count(clientToken) == 0);
-    XLOG(INFO) << "Fib snoop stream-" << clientToken << " started.";
+    XLOGF(INFO, "Fib snoop stream-{} started.", clientToken);
     fibPublishers.emplace(clientToken, std::move(streamAndPublisher.second));
     fb303::fbData->setCounter("subscribers.fib", fibPublishers.size());
   });
@@ -1183,10 +1197,12 @@ OpenrCtrlHandler::subscribeFibDetail() {
       thrift::RouteDatabaseDeltaDetail>::createPublisher([this, clientToken]() {
     fibDetailSubscribers_.withWLock([&clientToken](auto& fibDetailSubscribers) {
       if (fibDetailSubscribers.erase(clientToken)) {
-        XLOG(INFO) << "Fib detail snoop stream-" << clientToken << " ended.";
+        XLOGF(INFO, "Fib detail snoop stream-{} ended.", clientToken);
       } else {
-        XLOG(ERR) << "Can't remove unknown Fib detail snoop stream-"
-                  << clientToken;
+        XLOGF(
+            ERR,
+            "Can't remove unknown Fib detail snoop stream-{}",
+            clientToken);
       }
       fb303::fbData->setCounter(
           "subscribers.fibDetail", fibDetailSubscribers.size());
@@ -1196,7 +1212,7 @@ OpenrCtrlHandler::subscribeFibDetail() {
   fibDetailSubscribers_.withWLock(
       [&clientToken, &streamAndPublisher](auto& fibDetailSubscribers) {
         assert(fibDetailSubscribers.count(clientToken) == 0);
-        XLOG(INFO) << "Fib detail snoop stream-" << clientToken << " started.";
+        XLOGF(INFO, "Fib detail snoop stream-{} started.", clientToken);
         auto publisher = std::make_unique<apache::thrift::ServerStreamPublisher<
             thrift::RouteDatabaseDeltaDetail>>(
             std::move(streamAndPublisher.second));
@@ -1439,8 +1455,7 @@ folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
   auto area = "getKvStoreKeyVals";
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
+  XLOGF(DBG5, "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
 
   thrift::KeyGetParams params;
   params.keys() = std::move(*filterKeys);
@@ -1455,8 +1470,7 @@ folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
+  XLOGF(DBG5, "{} for keys: {}", __FUNCTION__, toString(*filterKeys.get()));
 
   thrift::KeyGetParams params;
   params.keys() = std::move(*filterKeys);
@@ -1471,7 +1485,8 @@ folly::coro::Task<void>
 OpenrCtrlHandler::co_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*setParams.get()),
@@ -1487,8 +1502,7 @@ folly::coro::Task<void>
 OpenrCtrlHandler::co_persistSelfOriginatedKey(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*setParams.get()));
+  XLOGF(DBG5, "{} for keys: {}", __FUNCTION__, toString(*setParams.get()));
 
   XCHECK(kvStore_) << "no kvstore initialized";
 
@@ -1500,8 +1514,7 @@ folly::coro::Task<void>
 OpenrCtrlHandler::co_unsetSelfOriginatedKey(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
-      "{} for keys: {}", __FUNCTION__, toString(*setParams.get()));
+  XLOGF(DBG5, "{} for keys: {}", __FUNCTION__, toString(*setParams.get()));
 
   XCHECK(kvStore_) << "no kvstore initialized";
 
@@ -1513,7 +1526,8 @@ folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*filter.get()),
@@ -1539,7 +1553,8 @@ folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*filter.get()),
@@ -1556,7 +1571,8 @@ folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
 OpenrCtrlHandler::co_setKvStoreKeyValues(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  XLOG(DBG5) << fmt::format(
+  XLOGF(
+      DBG5,
       "{} for keys: {}; area: {}",
       __FUNCTION__,
       toString(*setParams.get()),

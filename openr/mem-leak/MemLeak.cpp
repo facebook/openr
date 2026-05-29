@@ -21,16 +21,16 @@ void
 startMemoryLeakThread() {
   /* sleep override */
   std::thread([]() {
-    XLOG(INFO) << "Starting memory leak thread...";
+    XLOG(INFO, "Starting memory leak thread...");
     uint64_t loopCount = 0;
     while (true) {
       loopCount++;
-      XLOG(INFO) << "Memory leak thread loop count: " << loopCount;
+      XLOGF(INFO, "Memory leak thread loop count: {}", loopCount);
       // Allocate 100 MB of memory using new
       char* leak = new char[100 * 1024 * 1024];
       // Use the allocated memory to ensure it is committed
       std::fill(leak, leak + (100 * 1024 * 1024), 0);
-      XLOG(INFO) << "Address of leak variable: " << static_cast<void*>(leak);
+      XLOGF(INFO, "Address of leak variable: {}", static_cast<void*>(leak));
       // Sleep for 10 seconds
       /* sleep override */
       std::this_thread::sleep_for(std::chrono::seconds(10));

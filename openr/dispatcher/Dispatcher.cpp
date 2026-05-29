@@ -29,7 +29,7 @@ Dispatcher::Dispatcher(
     : kvStorePublicationsQueue_(kvStorePublicationsQueue) {
   // fiber to process publications from KvStore
   addFiberTask([q = std::move(kvStoreUpdatesQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting kvStore-updates processing task";
+    XLOG(DBG1, "Starting kvStore-updates processing task");
     while (true) {
       auto maybePub = q.get(); // perform read
 
@@ -40,7 +40,7 @@ Dispatcher::Dispatcher(
       // push the KvStore publication into the queues for replication/filtering
       kvStorePublicationsQueue_.push(std::move(maybePub).value());
     }
-    XLOG(DBG1) << "[Exit] KvStore-updates processing task finished.";
+    XLOG(DBG1, "[Exit] KvStore-updates processing task finished.");
   });
 }
 
@@ -48,7 +48,7 @@ void
 Dispatcher::stop() {
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "[Exit] Successfully stopped Dispatcher eventbase.";
+  XLOG(DBG1, "[Exit] Successfully stopped Dispatcher eventbase.");
 }
 
 messaging::RQueue<KvStorePublication>

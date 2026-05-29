@@ -80,9 +80,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   // create and start config-store thread
   configStore_ = std::make_unique<PersistentStore>(config_);
   std::thread configStoreThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " ConfigStore running.";
+    XLOGF(DBG1, "{} ConfigStore running.", nodeId_);
     configStore_->run();
-    XLOG(DBG1) << nodeId_ << " ConfigStore stopped.";
+    XLOGF(DBG1, "{} ConfigStore stopped.", nodeId_);
   });
   configStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(configStoreThread));
@@ -96,9 +96,9 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       config_->getAreaIds(),
       config_->toThriftKvStoreConfig());
   std::thread kvStoreThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " KvStore running.";
+    XLOGF(DBG1, "{} KvStore running.", nodeId_);
     kvStore_->run();
-    XLOG(DBG1) << nodeId_ << " KvStore stopped.";
+    XLOGF(DBG1, "{} KvStore stopped.", nodeId_);
   });
   kvStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(kvStoreThread));
@@ -186,73 +186,73 @@ OpenrWrapper<Serializer>::run() {
 
   // start monitor thread
   std::thread monitorThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " Monitor running.";
+    XLOGF(DBG1, "{} Monitor running.", nodeId_);
     monitor_->run();
-    XLOG(DBG1) << nodeId_ << " Monitor stopped.";
+    XLOGF(DBG1, "{} Monitor stopped.", nodeId_);
   });
   monitor_->waitUntilRunning();
   allThreads_.emplace_back(std::move(monitorThread));
 
   // Spawn a PrefixManager thread
   std::thread prefixManagerThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " PrefixManager running.";
+    XLOGF(DBG1, "{} PrefixManager running.", nodeId_);
     prefixManager_->run();
-    XLOG(DBG1) << nodeId_ << " PrefixManager stopped.";
+    XLOGF(DBG1, "{} PrefixManager stopped.", nodeId_);
   });
   prefixManager_->waitUntilRunning();
   allThreads_.emplace_back(std::move(prefixManagerThread));
 
   // start spark thread
   std::thread sparkThread([this]() {
-    XLOG(DBG1) << nodeId_ << " Spark running.";
+    XLOGF(DBG1, "{} Spark running.", nodeId_);
     spark_->run();
-    XLOG(DBG1) << nodeId_ << " Spark stopped.";
+    XLOGF(DBG1, "{} Spark stopped.", nodeId_);
   });
   spark_->waitUntilRunning();
   allThreads_.emplace_back(std::move(sparkThread));
 
   // start link monitor
   std::thread linkMonitorThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " LinkMonitor running.";
+    XLOGF(DBG1, "{} LinkMonitor running.", nodeId_);
     linkMonitor_->setAsMockMode();
     linkMonitor_->run();
-    XLOG(DBG1) << nodeId_ << " LinkMonitor stopped.";
+    XLOGF(DBG1, "{} LinkMonitor stopped.", nodeId_);
   });
   linkMonitor_->waitUntilRunning();
   allThreads_.emplace_back(std::move(linkMonitorThread));
 
   // start decision
   std::thread decisionThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " Decision running.";
+    XLOGF(DBG1, "{} Decision running.", nodeId_);
     decision_->run();
-    XLOG(DBG1) << nodeId_ << " Decision stopped.";
+    XLOGF(DBG1, "{} Decision stopped.", nodeId_);
   });
   decision_->waitUntilRunning();
   allThreads_.emplace_back(std::move(decisionThread));
 
   // start fib
   std::thread fibThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " FIB running.";
+    XLOGF(DBG1, "{} FIB running.", nodeId_);
     fib_->run();
-    XLOG(DBG1) << nodeId_ << " FIB stopped.";
+    XLOGF(DBG1, "{} FIB stopped.", nodeId_);
   });
   fib_->waitUntilRunning();
   allThreads_.emplace_back(std::move(fibThread));
 
   // start watchdog
   std::thread watchdogThread([this]() noexcept {
-    XLOG(DBG1) << nodeId_ << " watchdog running.";
+    XLOGF(DBG1, "{} watchdog running.", nodeId_);
     watchdog->run();
-    XLOG(DBG1) << nodeId_ << " watchdog stopped.";
+    XLOGF(DBG1, "{} watchdog stopped.", nodeId_);
   });
   watchdog->waitUntilRunning();
   allThreads_.emplace_back(std::move(watchdogThread));
 
   // start eventBase_
   allThreads_.emplace_back([&]() {
-    XLOG(DBG1) << nodeId_ << " Starting eventBase_";
+    XLOGF(DBG1, "{} Starting eventBase_", nodeId_);
     eventBase_.run();
-    XLOG(DBG1) << nodeId_ << " Stopping eventBase_";
+    XLOGF(DBG1, "{} Stopping eventBase_", nodeId_);
   });
 }
 

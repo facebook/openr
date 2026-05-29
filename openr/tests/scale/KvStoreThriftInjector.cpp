@@ -218,7 +218,8 @@ KvStoreThriftInjector::injectTopology(
     return 0;
   }
 
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[KVSTORE-INJECTOR] Injecting topology: {} routers, {} adjacencies, {} prefixes",
       topology.getRouterCount(),
       topology.getTotalAdjacencyCount(),
@@ -227,7 +228,8 @@ KvStoreThriftInjector::injectTopology(
   auto keyVals = buildKeyVals(topology);
   size_t keyCount = keyVals.size();
 
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[KVSTORE-INJECTOR] Built {} key-value pairs, sending to area '{}'...",
       keyCount,
       areaName);
@@ -268,7 +270,8 @@ KvStoreThriftInjector::injectKeyVals(
   }
 
   size_t keyCount = keyVals.size();
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[KVSTORE-INJECTOR] Injecting {} pre-built key-value pairs to area '{}'...",
       keyCount,
       areaName);
@@ -343,8 +346,10 @@ KvStoreThriftInjector::removeNode(
     return;
   }
 
-  XLOG(INFO) << fmt::format(
-      "[KVSTORE-INJECTOR] Removing node {} (simulating failure)", nodeName);
+  XLOGF(
+      INFO,
+      "[KVSTORE-INJECTOR] Removing node {} (simulating failure)",
+      nodeName);
 
   thrift::AdjacencyDatabase adjDb;
   adjDb.thisNodeName() = nodeName;
@@ -373,8 +378,7 @@ KvStoreThriftInjector::removeNode(
 
   try {
     client_->sync_setKvStoreKeyVals(params, areaName);
-    XLOG(INFO)
-        << fmt::format("[KVSTORE-INJECTOR] SUCCESS: Removed node {}", nodeName);
+    XLOGF(INFO, "[KVSTORE-INJECTOR] SUCCESS: Removed node {}", nodeName);
   } catch (const std::exception& e) {
     XLOGF(
         ERR,

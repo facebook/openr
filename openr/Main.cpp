@@ -11,6 +11,7 @@ namespace fs = std::filesystem;
 #include <fstream>
 #include <stdexcept>
 
+#include <fmt/ostream.h>
 #include <folly/container/F14Set.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
@@ -91,27 +92,27 @@ main(int argc, char** argv) {
 
   // Export and log build information
   BuildInfo::exportBuildInfo();
-  XLOG(INFO) << ss.str();
+  XLOGF(INFO, "{}", ss.str());
 
   // init sodium security library
   if (::sodium_init() == -1) {
-    XLOG(ERR) << "Failed initializing sodium";
+    XLOG(ERR, "Failed initializing sodium");
     return 1;
   }
 
   // start config module
   std::shared_ptr<Config> config;
   try {
-    XLOG(INFO) << "Reading config from " << FLAGS_config;
+    XLOGF(INFO, "Reading config from {}", FLAGS_config);
     config = std::make_shared<Config>(FLAGS_config);
   } catch (const thrift::ConfigError&) {
 #ifndef NO_FOLLY_EXCEPTION_TRACER
     // collect stack strace then fail the process
     for (auto& exInfo : folly::exception_tracer::getCurrentExceptions()) {
-      XLOG(ERR) << exInfo;
+      XLOGF(ERR, "{}", fmt::streamed(exInfo));
     }
 #endif
-    XLOG(FATAL) << "Failed to start OpenR. Invalid configuration.";
+    XLOG(FATAL, "Failed to start OpenR. Invalid configuration.");
   }
   SYSLOG(INFO) << config->getRunningConfig();
 
@@ -126,10 +127,10 @@ main(int argc, char** argv) {
 
   // Starting signalHandler eventbase to receive system signal
   std::thread signalHandlerEvbThread([&]() noexcept {
-    XLOG(INFO) << "Starting openr signal handler evb...";
+    XLOG(INFO, "Starting openr signal handler evb...");
     folly::setThreadName("openr-signal");
     signalHandlerEvb.loopForever();
-    XLOG(INFO) << "Signal handler evb stopped.";
+    XLOG(INFO, "Signal handler evb stopped.");
   });
   signalHandlerEvb.waitUntilRunning();
 
@@ -264,9 +265,9 @@ main(int argc, char** argv) {
           auto fibHandler = std::make_shared<NetlinkFibHandler>(nlSock.get());
           netlinkFibServer->setInterface(std::move(fibHandler));
 
-          XLOG(INFO) << "Starting NetlinkFib server...";
+          XLOG(INFO, "Starting NetlinkFib server...");
           netlinkFibServer->serve();
-          XLOG(INFO) << "NetlinkFib server got stopped.";
+          XLOG(INFO, "NetlinkFib server got stopped.");
         });
   }
 
@@ -485,10 +486,10 @@ main(int argc, char** argv) {
   // Start the thrift server
   auto server = setUpThriftServer(config, ctrlHandler, sslContext);
   std::thread serverThread = std::thread([&]() {
-    XLOG(INFO) << "Starting ThriftCtrlServer thread ...";
+    XLOG(INFO, "Starting ThriftCtrlServer thread ...");
     folly::setThreadName("openr-ThriftCtrlServer");
     server->serve();
-    XLOG(INFO) << "ThriftCtrlServer thread got stopped.";
+    XLOG(INFO, "ThriftCtrlServer thread got stopped.");
   });
 
   waitTillStart(server);

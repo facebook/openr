@@ -32,7 +32,7 @@ TEST(MemLeakTest, StartMemoryLeakThread) {
   auto memUsage = ru.ru_maxrss * 1024; // Convert from kilobytes to bytes
   EXPECT_GT(memUsage, 300 * 1024 * 1024); // Expect at least 300 MB of memory
   // usage
-  XLOG(INFO) << "Process memory usage: " << memUsage << " bytes";
+  XLOGF(INFO, "Process memory usage: {} bytes", memUsage);
 }
 
 int

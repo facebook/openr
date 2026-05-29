@@ -475,7 +475,8 @@ co_validateNodeKey(
   while (events != node->dumpAll(kTestingAreaName)) {
     auto curWaitTime = std::chrono::steady_clock::now() - startTime;
     if (curWaitTime > std::chrono::seconds(timeoutSec)) {
-      XLOG(FATAL) << fmt::format(
+      XLOGF(
+          FATAL,
           "exceed wait time {} seconds. expected size: {}, actual size: {} for node {}",
           timeoutSec,
           events.size(),
