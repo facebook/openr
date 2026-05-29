@@ -232,6 +232,7 @@ add_library(openrlib
   openr/common/MainUtil.cpp
   openr/common/NetworkUtil.cpp
   openr/common/OpenrEventBase.cpp
+  openr/common/OpenrProfiler.cpp
   openr/common/Types.cpp
   openr/common/Util.cpp
   openr/config/Config.cpp
@@ -239,6 +240,8 @@ add_library(openrlib
   openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
+  openr/decision/FabricHelper.cpp
+  openr/decision/Link.cpp
   openr/decision/LinkState.cpp
   openr/decision/PrefixState.cpp
   openr/decision/RibPolicy.cpp
