@@ -65,6 +65,21 @@ class Session {
     return dutMonitor_;
   }
 
+  // For tests only. In real code use getStatus() or listNodes().
+
+  // The simulated fabric topology, with the DUT patched in by start().
+  // Pre-start: matches the topology built from config. Post-start: also
+  // contains the DUT as a router with neighbor->DUT adjacencies.
+  const Topology&
+  topology() const {
+    return topology_;
+  }
+  // The DUT's node name. Empty until start() succeeds.
+  const std::string&
+  dutNodeName() const {
+    return dutNodeName_;
+  }
+
  private:
   void onTimerTick();
   void bumpFakeKeys();

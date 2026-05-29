@@ -21,6 +21,36 @@ TEST(SessionTest, ConstructorPopulatesTopology) {
   EXPECT_FALSE(names.empty());
 }
 
+TEST(SessionTest, DutNotResolvedBeforeStart) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  EXPECT_TRUE(s.dutNodeName().empty())
+      << "dutNodeName should not be resolved before start()";
+}
+
+TEST(SessionTest, StartPatchesDutIntoTopology) {
+  const char* host = std::getenv("OPENR_FAKE_DUT_HOST");
+  if (!host) {
+    GTEST_SKIP() << "OPENR_FAKE_DUT_HOST not set";
+  }
+  auto cfg = test::MakeTestConfig();
+  cfg.dut()->host() = host;
+  Session s(cfg, 0);
+  const size_t preRouterCount = s.topology().routers.size();
+  s.start();
+  // For dutRole=SPINE the patch is a pure +1 router (the DUT itself).
+  // listNodesUnlocked excludes the DUT from the public listing.
+  EXPECT_FALSE(s.dutNodeName().empty());
+  EXPECT_GT(s.topology().routers.count(s.dutNodeName()), 0u)
+      << "DUT node not found in topology after start()";
+  EXPECT_EQ(s.topology().routers.size(), preRouterCount + 1)
+      << "expected +1 router (the DUT) for dutRole=SPINE";
+  auto names = s.listNodesUnlocked();
+  EXPECT_TRUE(
+      std::find(names.begin(), names.end(), s.dutNodeName()) == names.end())
+      << "listNodesUnlocked should exclude the DUT";
+}
+
 TEST(SessionTest, StartThrowsDutUnreachable) {
   thrift::ScaleTestConfig cfg = test::MakeTestConfig();
   // Use a port that reliably refuses connection so injector_->connect() fails.

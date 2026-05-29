@@ -1,0 +1,157 @@
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
+
+#include <gtest/gtest.h>
+
+#include <openr/tests/scale/DutPatcher.h>
+#include <openr/tests/scale/TopologyGenerator.h>
+
+namespace openr {
+namespace {
+
+constexpr int kNumSpines = 4;
+constexpr int kNumLeaves = 8;
+constexpr int kNumSuperSpines = 2;
+constexpr int kNumPods = 2;
+constexpr int kNumSites = 0;
+constexpr int kNumPrefixesPerNode = 1;
+constexpr int kEcmpWidth = 2;
+
+thrift::ScaleTestConfig
+makeConfig(thrift::DutRole role) {
+  thrift::ScaleTestConfig cfg;
+  cfg.topology()->dutRole() = role;
+  cfg.topology()->numSpines() = kNumSpines;
+  cfg.topology()->numLeaves() = kNumLeaves;
+  cfg.topology()->numSuperSpines() = kNumSuperSpines;
+  cfg.topology()->numPods() = kNumPods;
+  cfg.topology()->numSites() = kNumSites;
+  cfg.topology()->numPrefixesPerNode() = kNumPrefixesPerNode;
+  cfg.topology()->ecmpWidth() = kEcmpWidth;
+  return cfg;
+}
+
+Topology
+makeTopology() {
+  return TopologyGenerator::createBbfSimple(
+      kNumSpines,
+      kNumLeaves,
+      kNumSuperSpines,
+      kEcmpWidth,
+      kNumPrefixesPerNode,
+      kNumSites);
+}
+
+} // namespace
+
+TEST(DutPatcherTest, BuildDutNeighborNamesForSpineLists_LeavesAndControl) {
+  auto cfg = makeConfig(thrift::DutRole::SPINE);
+  const std::vector<std::string> expected{
+      "leaf-0",
+      "leaf-1",
+      "leaf-2",
+      "leaf-3",
+      "leaf-4",
+      "leaf-5",
+      "leaf-6",
+      "leaf-7",
+      "control-0",
+      "control-1",
+  };
+  EXPECT_EQ(DutPatcher::buildDutNeighborNames(cfg), expected);
+}
+
+TEST(DutPatcherTest, BuildDutNeighborNamesForLeafLists_Spines) {
+  auto cfg = makeConfig(thrift::DutRole::LEAF);
+  cfg.topology()->numSites() = 0;
+  const std::vector<std::string> expected{
+      "spine-0",
+      "spine-1",
+      "spine-2",
+      "spine-3",
+  };
+  EXPECT_EQ(DutPatcher::buildDutNeighborNames(cfg), expected);
+}
+
+TEST(DutPatcherTest, BuildDutNeighborNamesForLeafIncludesSiteWhenConfigured) {
+  auto cfg = makeConfig(thrift::DutRole::LEAF);
+  cfg.topology()->numSites() = 4;
+  const std::vector<std::string> expected{
+      "spine-0",
+      "spine-1",
+      "spine-2",
+      "spine-3",
+      "eb-site-0",
+  };
+  EXPECT_EQ(DutPatcher::buildDutNeighborNames(cfg), expected);
+}
+
+TEST(DutPatcherTest, StripReplacedLeafRemovesLeafZeroAndItsReferences) {
+  auto topo = makeTopology();
+  ASSERT_GT(topo.routers.count("leaf-0"), 0u);
+  // Pick any spine that should be peered with leaf-0 in BBF topology.
+  const auto& someSpine = topo.routers.at("spine-0");
+  const auto preAdjCount = someSpine.adjacencies.size();
+
+  DutPatcher::stripReplacedLeaf(topo);
+
+  EXPECT_EQ(topo.routers.count("leaf-0"), 0u)
+      << "leaf-0 should be removed from routers";
+  for (const auto& [name, router] : topo.routers) {
+    for (const auto& adj : router.adjacencies) {
+      EXPECT_NE(adj.remoteRouterName, "leaf-0")
+          << "router " << name << " still references leaf-0";
+    }
+  }
+  EXPECT_LT(topo.routers.at("spine-0").adjacencies.size(), preAdjCount)
+      << "spine-0's adj count should have dropped after leaf-0 removal";
+}
+
+TEST(DutPatcherTest, StripReplacedLeafIsNoOpWhenLeafZeroAbsent) {
+  Topology topo;
+  // No leaf-0 present; should not throw or modify anything.
+  EXPECT_NO_THROW(DutPatcher::stripReplacedLeaf(topo));
+  EXPECT_TRUE(topo.routers.empty());
+}
+
+TEST(DutPatcherTest, PatchDutAddsDutRouterAndAdjacenciesPerInterface) {
+  auto topo = makeTopology();
+  const auto preCount = topo.routers.size();
+  const std::vector<std::string> neighbors{"leaf-0", "leaf-1", "leaf-2"};
+  const std::vector<std::string> ifaces{"eth0.1", "eth0.2"};
+
+  DutPatcher::patchDutIntoTopology(topo, "rsw1.test", neighbors, ifaces);
+
+  EXPECT_EQ(topo.routers.size(), preCount + 1) << "DUT not added to routers";
+  ASSERT_GT(topo.routers.count("rsw1.test"), 0u);
+
+  // Each named neighbor should now carry an adjacency pointing at the DUT.
+  for (const auto& name : neighbors) {
+    bool found = false;
+    for (const auto& adj : topo.routers.at(name).adjacencies) {
+      if (adj.remoteRouterName == "rsw1.test") {
+        found = true;
+        EXPECT_EQ(adj.localIfName, fmt::format("{}-to-dut", name));
+        break;
+      }
+    }
+    EXPECT_TRUE(found) << name << " has no adjacency to DUT";
+  }
+}
+
+TEST(DutPatcherTest, PatchDutNoOpAdjacenciesWhenInterfacesEmpty) {
+  auto topo = makeTopology();
+  DutPatcher::patchDutIntoTopology(
+      topo, "rsw1.test", {"leaf-0"}, /*interfaces=*/{});
+  // DUT router still inserted, but no neighbor adjacency was added.
+  EXPECT_GT(topo.routers.count("rsw1.test"), 0u);
+  for (const auto& adj : topo.routers.at("leaf-0").adjacencies) {
+    EXPECT_NE(adj.remoteRouterName, "rsw1.test");
+  }
+}
+
+} // namespace openr

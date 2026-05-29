@@ -7,6 +7,8 @@
 
 #include <openr/tests/scale/Session.h>
 
+#include <openr/tests/scale/DutPatcher.h>
+
 #include <fmt/format.h>
 
 namespace openr {
@@ -173,6 +175,25 @@ Session::start() {
     failDutUnreachable("getDutNodeName() returned empty after connect");
   }
   XLOGF(INFO, "[Session] Connected to DUT: {}", dutNodeName_);
+
+  // Patch the DUT into topology_. This is the only mutation of
+  // topology_ in the Session lifecycle.
+  const bool dutIsSpine =
+      (*config_.topology()->dutRole() == thrift::DutRole::SPINE);
+  if (!dutIsSpine) {
+    DutPatcher::stripReplacedLeaf(topology_);
+  }
+  const auto dutNeighborNames = DutPatcher::buildDutNeighborNames(config_);
+  DutPatcher::patchDutIntoTopology(
+      topology_,
+      dutNodeName_,
+      dutNeighborNames,
+      config_.injection()->interfaces().value_or(std::vector<std::string>{}));
+  XLOGF(
+      INFO,
+      "[Session] topology_: {} routers, {} adjacencies after DUT patch",
+      topology_.getRouterCount(),
+      topology_.getTotalAdjacencyCount());
 }
 
 std::vector<std::string>
