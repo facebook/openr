@@ -44,6 +44,7 @@
 #include <openr/tests/scale/RealSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
 #include <openr/tests/scale/TopologyGenerator.h>
+#include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
 
 DEFINE_string(dut_host, "192.168.1.1", "DUT hostname or IP address");
 
@@ -483,7 +484,7 @@ main(int argc, char** argv) {
   openr::Topology topology;
 
   if (FLAGS_topology_type == "bbf-simple") {
-    topology = openr::TopologyGenerator::createBbfSimple(
+    topology = openr::BbfTopologyGenerator::createBbfSimple(
         FLAGS_num_spines,
         FLAGS_num_leaves,
         FLAGS_num_super_spines,
@@ -491,7 +492,7 @@ main(int argc, char** argv) {
         FLAGS_num_prefixes_per_node,
         FLAGS_num_sites);
   } else if (FLAGS_topology_type == "bbf-full") {
-    topology = openr::TopologyGenerator::createBbf(
+    topology = openr::BbfTopologyGenerator::createBbf(
         FLAGS_num_spines,
         FLAGS_num_leaves,
         FLAGS_num_super_spines,

@@ -14,6 +14,7 @@
 #include <openr/tests/scale/FakeKvStoreManager.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/TopologyGenerator.h>
+#include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
 
 namespace openr {
 
@@ -24,7 +25,7 @@ class FakeKvStoreTest : public ::testing::Test {
     /*
      * Create a simple BBF topology for testing
      */
-    topology_ = TopologyGenerator::createBbfSimple(
+    topology_ = BbfTopologyGenerator::createBbfSimple(
         numSpines_,
         numLeafs_,
         numPodsPerLeaf_,

@@ -35,6 +35,7 @@
 #include <openr/tests/mocks/MockIoProvider.h>
 #include <openr/tests/scale/KvStoreBulkInjector.h>
 #include <openr/tests/scale/TopologyGenerator.h>
+#include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
 
 using namespace openr;
 using apache::thrift::CompactSerializer;
@@ -218,7 +219,7 @@ TEST_F(DutScaleTestFixture, SmallTopologyInjection) {
    * Step 1: Generate small BBF topology (4 spines + 4 leaves)
    * DUT is leaf-0, so it will have routes to all other nodes
    */
-  auto topology = TopologyGenerator::createBbfSimple(
+  auto topology = BbfTopologyGenerator::createBbfSimple(
       4, /* numSpines */
       4, /* numLeaves */
       0, /* numControlNodes */
@@ -291,7 +292,7 @@ TEST_F(DutScaleTestFixture, ProductionBbfTopologyInjection) {
   /*
    * Generate topology FIRST before starting DUT
    */
-  auto topology = TopologyGenerator::createBbfSimple(
+  auto topology = BbfTopologyGenerator::createBbfSimple(
       64, /* numSpines */
       252, /* numLeaves */
       4, /* numControlNodes */
@@ -379,7 +380,7 @@ TEST_F(DutScaleTestFixture, TopologyEventLinkFailure) {
   /*
    * Step 1: Generate small topology
    */
-  auto topology = TopologyGenerator::createBbfSimple(
+  auto topology = BbfTopologyGenerator::createBbfSimple(
       4, /* numSpines */
       4, /* numLeaves */
       0, /* numControlNodes */

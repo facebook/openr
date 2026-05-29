@@ -37,6 +37,7 @@
 #include <openr/tests/scale/KvStoreBulkInjector.h>
 #include <openr/tests/scale/SparkFaker.h>
 #include <openr/tests/scale/TopologyGenerator.h>
+#include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
 
 using namespace openr;
 using apache::thrift::CompactSerializer;
@@ -312,7 +313,7 @@ TEST_F(DutWithFakeNeighborsTest, FullStackWithFakeNeighborsAndTopology) {
    * Small topology: 4 spines, 4 leaves
    * DUT is leaf-0
    */
-  auto topology = TopologyGenerator::createBbfSimple(
+  auto topology = BbfTopologyGenerator::createBbfSimple(
       4, /* numSpines */
       4, /* numLeaves */
       0, /* numControlNodes */

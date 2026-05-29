@@ -31,14 +31,6 @@ constexpr int kDefaultRswsPerPod = 48;
 constexpr int kDefaultPrefixesPerRouter = 10;
 
 /*
- * BBF (Backbone Fabric) topology parameters.
- * 2-layer Clos with massive ECMP for backbone connectivity.
- */
-constexpr int kDefaultBbfSpinesPerPlane = 32;
-constexpr int kDefaultBbfLeavesPerPod = 16;
-constexpr int kDefaultBbfEcmpWidth = 16; /* Links per spine-leaf pair */
-
-/*
  * TopologyGenerator creates test topologies for OpenR scale testing.
  *
  * Supports multiple topology types:
@@ -102,78 +94,6 @@ class TopologyGenerator {
   static Topology createRing(int numRouters, int numPrefixesPerNode = 1);
 
   /*
-   * Create a BBF (Backbone Fabric) 2-layer Clos topology.
-   *
-   * This models Meta's disaggregated backbone fabric with massive ECMP:
-   * - Spine layer: High-radix switches at the top
-   * - Leaf layer: Switches connecting to spine with multiple ECMP links
-   *
-   * Key characteristics:
-   * - 2-layer Clos (Spine-Leaf)
-   * - Configurable ECMP width (multiple parallel links per pair)
-   * - Supports 300-4000+ nodes
-   * - High fan-out for realistic backbone simulation
-   *
-   * Topology structure:
-   *   Spine Layer:  [S0] [S1] [S2] ... [Sn]    (numPlanes * spinesPerPlane)
-   *                   |    |    |        |
-   *                   |    |    |        |     (ecmpWidth links each)
-   *                   v    v    v        v
-   *   Leaf Layer:   [L0] [L1] [L2] ... [Lm]    (numPods * leavesPerPod)
-   *
-   * @param numPods Number of leaf pods
-   * @param numPlanes Number of spine planes
-   * @param spinesPerPlane Spines per plane (default: 32)
-   * @param leavesPerPod Leaves per pod (default: 16)
-   * @param ecmpWidth Number of parallel links per spine-leaf pair (default: 16)
-   * @param numPrefixesPerNode Prefixes per router
-   * @return Topology with BBF connectivity
-   */
-  static Topology createBbf(
-      int numPods,
-      int numPlanes,
-      int spinesPerPlane = kDefaultBbfSpinesPerPlane,
-      int leavesPerPod = kDefaultBbfLeavesPerPod,
-      int ecmpWidth = kDefaultBbfEcmpWidth,
-      int numPrefixesPerNode = kDefaultPrefixesPerRouter);
-
-  /*
-   * Create a BBF topology with direct spine/leaf/control node counts.
-   *
-   * This is the simpler API that matches actual BBF hardware:
-   * - numSpines: Total number of spine switches (e.g., 64)
-   * - numLeaves: Total number of leaf switches (e.g., 252)
-   * - numControlNodes: Number of control nodes running OpenR (e.g., 4)
-   * - ecmpWidth: Number of parallel links per spine-leaf pair
-   *
-   * @return Topology with BBF connectivity
-   */
-  static Topology createBbfSimple(
-      int numSpines,
-      int numLeaves,
-      int numControlNodes = 0,
-      int ecmpWidth = kDefaultBbfEcmpWidth,
-      int numPrefixesPerNode = kDefaultPrefixesPerRouter,
-      int numSites = 0);
-
-  /*
-   * Calculate the total number of routers in a BBF topology.
-   */
-  static size_t calculateBbfRouterCount(
-      int numPods, int numPlanes, int spinesPerPlane, int leavesPerPod);
-
-  /*
-   * Calculate the total number of adjacencies (links) in a BBF topology.
-   * This includes ECMP links counted as separate adjacencies.
-   */
-  static size_t calculateBbfAdjacencyCount(
-      int numPods,
-      int numPlanes,
-      int spinesPerPlane,
-      int leavesPerPod,
-      int ecmpWidth);
-
-  /*
    * Load topology from a JSON file.
    *
    * JSON format:
@@ -200,8 +120,6 @@ class TopologyGenerator {
    */
   static std::string getGridNodeName(int row, int col, int n);
   static std::string getFabricNodeName(uint8_t swMarker, int podId, int swId);
-  static std::string getBbfSpineName(int planeId, int spineId);
-  static std::string getBbfLeafName(int podId, int leafId);
 
   /*
    * Calculate the total number of routers in a fabric topology.
@@ -209,9 +127,10 @@ class TopologyGenerator {
   static size_t calculateFabricRouterCount(
       int numPods, int numPlanes, int numSswsPerPlane, int numRswsPerPod);
 
- private:
   /*
-   * Helper to create adjacencies between two routers.
+   * Add bidirectional adjacency between two routers. Public so topology
+   * generators in subdirectories (e.g. facebook/BbfTopologyGenerator) can
+   * reuse it.
    */
   static void addBidirectionalAdjacency(
       VirtualRouter& router1,
@@ -233,6 +152,7 @@ class TopologyGenerator {
   static std::string getIfName(
       const std::string& localNode, const std::string& remoteNode);
 
+ private:
   /*
    * Fabric topology helpers.
    */
@@ -261,41 +181,6 @@ class TopologyGenerator {
       int numRswsPerPod,
       int numPrefixesPerNode,
       PrefixGenerator& prefixGen);
-
-  /*
-   * BBF topology helpers.
-   */
-  static void createBbfSpines(
-      Topology& topo,
-      int numPlanes,
-      int spinesPerPlane,
-      int numPrefixesPerNode,
-      PrefixGenerator& prefixGen);
-
-  static void createBbfLeaves(
-      Topology& topo,
-      int numPods,
-      int leavesPerPod,
-      int numPrefixesPerNode,
-      PrefixGenerator& prefixGen);
-
-  static void createBbfEcmpLinks(
-      Topology& topo,
-      int numPods,
-      int numPlanes,
-      int spinesPerPlane,
-      int leavesPerPod,
-      int ecmpWidth);
-
-  /*
-   * Helper to add ECMP adjacencies with unique interface names per link.
-   */
-  static void addEcmpAdjacencies(
-      VirtualRouter& router1,
-      VirtualRouter& router2,
-      int ecmpWidth,
-      int32_t metric = 1,
-      int32_t latencyMs = 1);
 };
 
 } // namespace openr
