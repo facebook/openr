@@ -9,6 +9,13 @@ project(openr)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# GCC < 12 has internal compiler errors (ICEs) with C++20 coroutines.
+# Folly now requires C++20 and enables coroutines by default, which triggers
+# these ICEs. Disable folly coroutines on older GCC versions.
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU" AND CMAKE_CXX_COMPILER_VERSION VERSION_LESS "12")
+  add_compile_definitions(FOLLY_CFG_NO_COROUTINES)
+endif()
+
 # Disable all warnings. Warnings can vary across toolchains. We rely on
 # internaly configured CI (lint and compile) to raise the warnings we find
 # useful
