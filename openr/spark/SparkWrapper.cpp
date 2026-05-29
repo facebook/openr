@@ -57,9 +57,9 @@ SparkWrapper::~SparkWrapper() {
 void
 SparkWrapper::run() {
   thread_ = std::make_unique<std::thread>([this]() {
-    XLOG(DBG1) << "Spark running.";
+    XLOG(DBG1, "Spark running.");
     spark_->run();
-    XLOG(DBG1) << "Spark stopped.";
+    XLOG(DBG1, "Spark stopped.");
   });
   spark_->waitUntilRunning();
 }
@@ -108,7 +108,7 @@ SparkWrapper::recvNeighborEvent(
   if (auto* events = std::get_if<NeighborEvents>(&val)) {
     return std::move(*events);
   }
-  XLOG(WARNING) << "recvNeighborEvent: unexpected variant type in queue";
+  XLOG(WARNING, "recvNeighborEvent: unexpected variant type in queue");
   return std::nullopt;
 }
 
@@ -123,8 +123,10 @@ SparkWrapper::waitForEvents(
     // check if it is beyond procTimeout
     auto endTime = std::chrono::steady_clock::now();
     if (endTime - startTime > procTimeout.value()) {
-      XLOG(ERR) << "Timeout receiving event. Time limit: "
-                << procTimeout.value().count();
+      XLOGF(
+          ERR,
+          "Timeout receiving event. Time limit: {}",
+          procTimeout.value().count());
       break;
     }
     if (auto maybeEvents = recvNeighborEvent(rcvdTimeout)) {
@@ -171,7 +173,7 @@ SparkWrapper::recvInitializationEvent(
   if (auto* event = std::get_if<thrift::InitializationEvent>(&val)) {
     return *event;
   }
-  XLOG(WARNING) << "recvInitializationEvent: unexpected variant type in queue";
+  XLOG(WARNING, "recvInitializationEvent: unexpected variant type in queue");
   return std::nullopt;
 }
 
@@ -202,8 +204,10 @@ SparkWrapper::waitForInitializationEvent(
     // Check if we've been trying beyond procTimeout.
     auto endTime = std::chrono::steady_clock::now();
     if (endTime - startTime > procTimeout.value()) {
-      XLOG(ERR) << "Timeout receiving event. Time limit: "
-                << procTimeout.value().count();
+      XLOGF(
+          ERR,
+          "Timeout receiving event. Time limit: {}",
+          procTimeout.value().count());
       break;
     }
     if (expectEmptyNeighborEvent) {

@@ -167,9 +167,10 @@ IoProvider::recvMessage(
 
       // sanity check
       DCHECK(recvTs >= kernelRecvTs) << "Time anomaly";
-      XLOG(DBG4) << "Got kernel-timestamp. It took "
-                 << (recvTs - kernelRecvTs).count()
-                 << " us for the packet to get from kernel to user space";
+      XLOGF(
+          DBG4,
+          "Got kernel-timestamp. It took {} us for the packet to get from kernel to user space",
+          (recvTs - kernelRecvTs).count());
       recvTs = kernelRecvTs;
     }
   } // for
