@@ -108,8 +108,11 @@ NetlinkFibHandler::semifuture_addUnicastRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Adding/Updating unicast routes of client "
-             << getClientName(clientId) << ", numRoutes=" << routes->size();
+  XLOGF(
+      INFO,
+      "Adding/Updating unicast routes of client {}, numRoutes={}",
+      getClientName(clientId),
+      routes->size());
 
   // Add routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -128,8 +131,11 @@ NetlinkFibHandler::semifuture_deleteUnicastRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Deleting unicast routes of client " << getClientName(clientId)
-             << ", numRoutes=" << prefixes->size();
+  XLOGF(
+      INFO,
+      "Deleting unicast routes of client {}, numRoutes={}",
+      getClientName(clientId),
+      prefixes->size());
 
   // Delete routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -152,8 +158,11 @@ NetlinkFibHandler::semifuture_addMplsRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Adding/Updating mpls routes of client "
-             << getClientName(clientId) << ", numRoutes=" << routes->size();
+  XLOGF(
+      INFO,
+      "Adding/Updating mpls routes of client {}, numRoutes={}",
+      getClientName(clientId),
+      routes->size());
 
   // Add routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -173,8 +182,11 @@ NetlinkFibHandler::semifuture_deleteMplsRoutes(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Deleting mpls routes of client " << getClientName(clientId)
-             << ", numRoutes=" << topLabels->size();
+  XLOGF(
+      INFO,
+      "Deleting mpls routes of client {}, numRoutes={}",
+      getClientName(clientId),
+      topLabels->size());
 
   // Delete routes and return a collected semifuture
   std::vector<folly::SemiFuture<int>> result;
@@ -198,8 +210,11 @@ NetlinkFibHandler::semifuture_syncFib(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Syncing unicast FIB for client " << getClientName(clientId)
-             << ", numRoutes=" << unicastRoutes->size();
+  XLOGF(
+      INFO,
+      "Syncing unicast FIB for client {}, numRoutes={}",
+      getClientName(clientId),
+      unicastRoutes->size());
 
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
@@ -243,10 +258,13 @@ NetlinkFibHandler::semifuture_syncFib(
       continue;
     }
     if (it != existingRoutes.end()) {
-      XLOG(INFO) << "Updating unicast-route " << "\n[OLD] " << it->second.str()
-                 << "\n[NEW] " << nlRoute.str();
+      XLOGF(
+          INFO,
+          "Updating unicast-route \n[OLD] {}\n[NEW] {}",
+          it->second.str(),
+          nlRoute.str());
     } else {
-      XLOG(INFO) << "Adding unicast-route \n[NEW]" << nlRoute.str();
+      XLOGF(INFO, "Adding unicast-route \n[NEW]{}", nlRoute.str());
     }
     // Add new route or replace existing one
     result.emplace_back(nlSock_->addRoute(nlRoute));
@@ -259,8 +277,10 @@ NetlinkFibHandler::semifuture_syncFib(
       continue;
     }
     // Delete stale route
-    XLOG(INFO) << "Deleting unicast-route "
-               << folly::IPAddress::networkToString(prefix);
+    XLOGF(
+        INFO,
+        "Deleting unicast-route {}",
+        folly::IPAddress::networkToString(prefix));
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
@@ -280,8 +300,11 @@ NetlinkFibHandler::semifuture_syncMplsFib(
     return createSemiFutureWithClientIdError<folly::Unit>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Syncing mpls FIB for client " << getClientName(clientId)
-             << ", numRoutes=" << mplsRoutes->size();
+  XLOGF(
+      INFO,
+      "Syncing mpls FIB for client {}, numRoutes={}",
+      getClientName(clientId),
+      mplsRoutes->size());
 
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
@@ -310,10 +333,13 @@ NetlinkFibHandler::semifuture_syncMplsFib(
       continue;
     }
     if (it != existingRoutes.end()) {
-      XLOG(INFO) << "Updating mpls-route " << "\n[OLD] " << it->second.str()
-                 << "\n[NEW] " << nlRoute.str();
+      XLOGF(
+          INFO,
+          "Updating mpls-route \n[OLD] {}\n[NEW] {}",
+          it->second.str(),
+          nlRoute.str());
     } else {
-      XLOG(INFO) << "Adding mpls-route \n[NEW]" << nlRoute.str();
+      XLOGF(INFO, "Adding mpls-route \n[NEW]{}", nlRoute.str());
     }
     // Add new route or replace existing one
     result.emplace_back(nlSock_->addRoute(nlRoute));
@@ -326,7 +352,7 @@ NetlinkFibHandler::semifuture_syncMplsFib(
       continue;
     }
     // Delete stale route
-    XLOG(INFO) << "Deleting mpls-route " << *nlRoute.getMplsLabel();
+    XLOGF(INFO, "Deleting mpls-route {}", *nlRoute.getMplsLabel());
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
@@ -358,7 +384,7 @@ NetlinkFibHandler::semifuture_getRouteTableByClient(int16_t clientId) {
         std::unique_ptr<std::vector<openr::thrift::UnicastRoute>>>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Get unicast routes for client " << getClientName(clientId);
+  XLOGF(INFO, "Get unicast routes for client {}", getClientName(clientId));
 
   auto v4Routes = nlSock_->getIPv4Routes(protocol.value(), routeTable_);
   auto v6Routes = nlSock_->getIPv6Routes(protocol.value(), routeTable_);
@@ -394,7 +420,7 @@ NetlinkFibHandler::semifuture_getMplsRouteTableByClient(int16_t clientId) {
         std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>();
   }
   CHECK(protocol.has_value());
-  XLOG(INFO) << "Get mpls routes for client " << getClientName(clientId);
+  XLOGF(INFO, "Get mpls routes for client {}", getClientName(clientId));
 
   return nlSock_->getMplsRoutes(protocol.value(), routeTable_)
       .deferValue(
@@ -592,9 +618,10 @@ void
 NetlinkFibHandler::checkIfIndex(const int ifIndex) {
   char indexName[IF_NAMESIZE];
   if (if_indextoname(ifIndex, indexName) == nullptr) {
-    XLOG(INFO)
-        << "ifIndex " << ifIndex
-        << " is invalid, setting flag to reload ifIndex cache on next request";
+    XLOGF(
+        INFO,
+        "ifIndex {} is invalid, setting flag to reload ifIndex cache on next request",
+        ifIndex);
     cacheInvalid_ = true;
   }
 }
@@ -679,7 +706,7 @@ void
 NetlinkFibHandler::initializeInterfaceCache() noexcept {
   auto result = nlSock_->getAllLinks().get();
   if (result.hasError()) {
-    XLOG(ERR) << "Failed to get links for interface cache initialization";
+    XLOG(ERR, "Failed to get links for interface cache initialization");
     return;
   }
   auto links = std::move(result).value();
@@ -706,10 +733,10 @@ NetlinkFibHandler::sendNeighborDownInfo(
     std::unique_ptr<std::vector<std::string>> neighborIps) {
   std::lock_guard<std::mutex> g(listenersMutex_);
   for (auto& listener : listeners_.accessAllThreads()) {
-    XLOG(INFO) << "Sending notification to bgpD";
+    XLOG(INFO, "Sending notification to bgpD");
     listener.eventBase->runInEventBaseThread(
         [this, neighborIps = std::move(*neighborIps), listenerPtr = &listener] {
-          XLOG(INFO) << "firing off notification";
+          XLOG(INFO, "firing off notification");
           invokeNeighborListeners(listenerPtr, neighborIps, false);
         });
   }
@@ -732,7 +759,7 @@ NetlinkFibHandler::invokeNeighborListeners(
         thrift::NeighborListenerClientForFibagentAsyncClient::
             recv_neighborsChanged(state);
       } catch (const std::exception& ex) {
-        XLOG(ERR) << "Exception in neighbor listener: " << ex.what();
+        XLOGF(ERR, "Exception in neighbor listener: {}", ex.what());
         brokenClients_.push_back(client.first);
       }
     };

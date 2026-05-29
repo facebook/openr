@@ -26,15 +26,15 @@ void
 logFibUpdateError(thrift::PlatformFibUpdateError const& error) {
   fb303::fbData->addStatValue(
       "fib.thrift.failure.fib_update_error", 1, fb303::COUNT);
-  XLOG(ERR) << "Partially failed to update/delete following in FIB.";
+  XLOG(ERR, "Partially failed to update/delete following in FIB.");
   for (auto& [_, prefixes] : *error.vrf2failedAddUpdatePrefixes()) {
     for (auto& prefix : prefixes) {
-      XLOG(ERR) << "  > " << toString(prefix) << " add/update";
+      XLOGF(ERR, "  > {} add/update", toString(prefix));
     }
   }
   for (auto& [_, prefixes] : *error.vrf2failedDeletePrefixes()) {
     for (auto& prefix : prefixes) {
-      XLOG(ERR) << "  > " << toString(prefix) << " delete";
+      XLOGF(ERR, "  > {} delete", toString(prefix));
     }
   }
 }
@@ -63,9 +63,9 @@ Fib::Fib(
   // Start RetryRoute fiber with stop signal.
   //
   addFiberTask([this]() mutable noexcept {
-    XLOG(DBG1) << "Starting retryRoutes task";
+    XLOG(DBG1, "Starting retryRoutes task");
     retryRoutesTask(retryRoutesStopSignal_);
-    XLOG(DBG1) << "[Exit] RetryRoutes task finished";
+    XLOG(DBG1, "[Exit] RetryRoutes task finished");
   });
 
   //
@@ -75,14 +75,14 @@ Fib::Fib(
   // - SemiFuture is passed to fiber for awaiting
   //
   addFiberTask([this]() mutable noexcept {
-    XLOG(DBG1) << "Starting keepAlive task";
+    XLOG(DBG1, "Starting keepAlive task");
     keepAliveTask(keepAliveStopSignal_);
-    XLOG(DBG1) << "[Exit] KeepAlive task finished";
+    XLOG(DBG1, "[Exit] KeepAlive task finished");
   });
 
   // Fiber to process route updates from Decision
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting route-update task";
+    XLOG(DBG1, "Starting route-update task");
     while (true) {
       auto maybeThriftObj = q.get(); // perform read
       if (maybeThriftObj.hasError()) {
@@ -91,7 +91,7 @@ Fib::Fib(
       fb303::fbData->addStatValue("fib.process_route_db", 1, fb303::COUNT);
       processDecisionRouteUpdate(std::move(maybeThriftObj).value());
     }
-    XLOG(DBG1) << "[Exit] Route-update task finished";
+    XLOG(DBG1, "[Exit] Route-update task finished");
   });
 
   // Initialize stats keys
@@ -111,8 +111,10 @@ Fib::Fib(
 
 void
 Fib::stop() {
-  XLOG(DBG1) << fmt::format(
-      "[Exit] Send terminiation signals to stop {} tasks.", getFiberTaskNum());
+  XLOGF(
+      DBG1,
+      "[Exit] Send terminiation signals to stop {} tasks.",
+      getFiberTaskNum());
 
   /*
    * Send stop signal to internal fibers.
@@ -149,11 +151,11 @@ Fib::stop() {
   // Close socket/client created
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
       [this]() { client_.reset(); });
-  XLOG(DBG1) << "[Exit] Closed client connection towards platform agent.";
+  XLOG(DBG1, "[Exit] Closed client connection towards platform agent.");
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(DBG1) << "[Exit] Successfully stopped Fib eventbase.";
+  XLOG(DBG1, "[Exit] Successfully stopped Fib eventbase.");
 }
 
 std::optional<folly::CIDRNetwork>
@@ -277,7 +279,7 @@ Fib::getUnicastRoutesFiltered(std::vector<std::string> prefixes) {
     const auto maybePrefix =
         folly::IPAddress::tryCreateNetwork(prefixStr, -1, true);
     if (maybePrefix.hasError()) {
-      XLOG(ERR) << "Invalid IP address as prefix: " << prefixStr;
+      XLOGF(ERR, "Invalid IP address as prefix: {}", prefixStr);
       return retRouteVec;
     }
     const auto inputPrefix = maybePrefix.value();
@@ -456,8 +458,10 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   auto iter = routeUpdate.unicastRoutesToUpdate.cbegin();
   while (iter != routeUpdate.unicastRoutesToUpdate.cend()) {
     if (iter->second.doNotInstall) {
-      XLOG(INFO) << "Not installing route for prefix "
-                 << folly::IPAddress::networkToString(iter->first);
+      XLOGF(
+          INFO,
+          "Not installing route for prefix {}",
+          folly::IPAddress::networkToString(iter->first));
       iter = routeUpdate.unicastRoutesToUpdate.erase(iter);
     } else {
       ++iter;
@@ -489,12 +493,13 @@ Fib::printUnicastRoutesAddUpdate(
   }
 
   for (auto const& route : unicastRoutesToUpdate) {
-    XLOG(DBG1) << fmt::format(
+    XLOGF(
+        DBG1,
         "> {}, NextHopsCount = {}",
         toString(*route.dest()),
         route.nextHops()->size());
     for (auto const& nh : *route.nextHops()) {
-      XLOG(DBG2) << fmt::format(" {}", toString(nh));
+      XLOGF(DBG2, " {}", toString(nh));
     }
   }
 }
@@ -519,23 +524,26 @@ Fib::updateUnicastRoutes(
     for (auto& prefix : routeUpdate.unicastRoutesToDelete) {
       const auto [itr, _] = routeState_.dirtyPrefixes.insert_or_assign(
           prefix, currentTime + routeDeleteDelay_);
-      XLOG(INFO) << "Will delete unicast route "
-                 << folly::IPAddress::networkToString(prefix) << " after "
-                 << std::chrono::duration_cast<std::chrono::milliseconds>(
-                        itr->second - currentTime)
-                        .count()
-                 << "ms";
+      XLOGF(
+          INFO,
+          "Will delete unicast route {} after {}ms",
+          folly::IPAddress::networkToString(prefix),
+          std::chrono::duration_cast<std::chrono::milliseconds>(
+              itr->second - currentTime)
+              .count());
     }
   }
 
   if (unicastRoutesToDelete.size()) {
-    XLOG(INFO) << "Deleting " << unicastRoutesToDelete.size()
-               << " unicast routes in FIB";
+    XLOGF(
+        INFO,
+        "Deleting {} unicast routes in FIB",
+        unicastRoutesToDelete.size());
     for (auto const& prefix : unicastRoutesToDelete) {
-      XLOG(DBG1) << "> " << toString(prefix);
+      XLOGF(DBG1, "> {}", toString(prefix));
     }
     if (dryrun_) {
-      XLOG(INFO) << "Skipping deletion of unicast routes in dryrun ... ";
+      XLOG(INFO, "Skipping deletion of unicast routes in dryrun ... ");
     } else {
       try {
         createFibClient(*getEvb(), client_, thriftPort_);
@@ -545,8 +553,10 @@ Fib::updateUnicastRoutes(
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-        XLOG(ERR) << "Failed to delete unicast routes from FIB. Error: "
-                  << folly::exceptionStr(e);
+        XLOGF(
+            ERR,
+            "Failed to delete unicast routes from FIB. Error: {}",
+            folly::exceptionStr(e));
         // Marked all routes to be deleted as dirty. So we try to remove them
         // again from FIB.
         for (const auto& prefix : routeUpdate.unicastRoutesToDelete) {
@@ -562,11 +572,13 @@ Fib::updateUnicastRoutes(
   //
   auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate();
   if (unicastRoutesToUpdate.size()) {
-    XLOG(INFO) << "Adding/Updating " << unicastRoutesToUpdate.size()
-               << " unicast routes in FIB";
+    XLOGF(
+        INFO,
+        "Adding/Updating {} unicast routes in FIB",
+        unicastRoutesToUpdate.size());
     printUnicastRoutesAddUpdate(unicastRoutesToUpdate);
     if (dryrun_) {
-      XLOG(INFO) << "Skipping add/update of unicast routes in dryrun ... ";
+      XLOG(INFO, "Skipping add/update of unicast routes in dryrun ... ");
     } else {
       try {
         createFibClient(*getEvb(), client_, thriftPort_);
@@ -583,8 +595,10 @@ Fib::updateUnicastRoutes(
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.add_del_route", 1, fb303::COUNT);
-        XLOG(ERR) << "Failed to add/update unicast routes in FIB. Error: "
-                  << folly::exceptionStr(e);
+        XLOGF(
+            ERR,
+            "Failed to add/update unicast routes in FIB. Error: {}",
+            folly::exceptionStr(e));
         // Mark routes we failed to update as dirty for retry. Also declare
         // these routes as deleted to client, because we failed to update them
         // Next retry should restore, but meanwhile clients can take appropriate
@@ -616,15 +630,15 @@ Fib::updateRoutes(
   DecisionRouteUpdate routeUpdate;
   if (maybeRouteUpdate.has_value()) {
     routeUpdate = std::move(*maybeRouteUpdate);
-    XLOG(INFO) << "Processing route update from Decision";
+    XLOG(INFO, "Processing route update from Decision");
   } else {
     routeUpdate = routeState_.createUpdate();
-    XLOG(INFO) << "Retry programming of dirty route entries";
+    XLOG(INFO, "Retry programming of dirty route entries");
   }
 
   // Return if empty
   if (routeUpdate.empty()) {
-    XLOG(INFO) << "No entries in route update";
+    XLOG(INFO, "No entries in route update");
     return true;
   }
 
@@ -639,11 +653,11 @@ Fib::updateRoutes(
   // incremental route programming in AWAITING or SYNCED state. In SYNCING
   // state we let `syncRoutes` do the work instead.
   if (routeState_.state == RouteState::SYNCING) {
-    XLOG(INFO) << "Skip route programming in SYNCING state";
+    XLOG(INFO, "Skip route programming in SYNCING state");
     return true;
   }
 
-  XLOG(INFO) << "Updating routes in FIB";
+  XLOG(INFO, "Updating routes in FIB");
   auto const currentTime = std::chrono::steady_clock::now();
   auto const retryAt =
       currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
@@ -659,8 +673,7 @@ Fib::updateRoutes(
   // Log statistics
   const auto elapsedTime = std::chrono::ceil<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - currentTime);
-  XLOG(INFO) << fmt::format(
-      "It took {} ms to update routes in FIB", elapsedTime.count());
+  XLOGF(INFO, "It took {} ms to update routes in FIB", elapsedTime.count());
   fb303::fbData->addStatValue(
       "fib.route_programming.time_ms", elapsedTime.count(), fb303::AVG);
   fb303::fbData->addStatValue(
@@ -699,8 +712,7 @@ Fib::syncRoutes() {
   //
   // Sync Unicast routes
   //
-  XLOG(INFO)
-      << fmt::format("Syncing {} unicast routes in FIB", unicastRoutes.size());
+  XLOGF(INFO, "Syncing {} unicast routes in FIB", unicastRoutes.size());
 
   printUnicastRoutesAddUpdate(unicastRoutes);
 
@@ -719,17 +731,21 @@ Fib::syncRoutes() {
         client_.reset();
         fb303::fbData->addStatValue(
             "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
-        XLOG(ERR) << "Failed to sync 0 unicast routes in FIB. Error: "
-                  << folly::exceptionStr(e);
+        XLOGF(
+            ERR,
+            "Failed to sync 0 unicast routes in FIB. Error: {}",
+            folly::exceptionStr(e));
         return false;
       }
       // set one-time flag once
       isUnicastRoutesCleared_ = true;
 
-      XLOG(INFO) << "Synced 0 unicast routes to clean up the stale routes.";
+      XLOG(INFO, "Synced 0 unicast routes to clean up the stale routes.");
     } else {
-      XLOG(INFO) << fmt::format(
-          "Skipping programming of {} unicast routes.", unicastRoutes.size());
+      XLOGF(
+          INFO,
+          "Skipping programming of {} unicast routes.",
+          unicastRoutes.size());
     }
   } else {
     CHECK(!isUnicastRoutesCleared_)
@@ -748,8 +764,10 @@ Fib::syncRoutes() {
       client_.reset();
       fb303::fbData->addStatValue(
           "fib.thrift.failure.sync_fib", 1, fb303::COUNT);
-      XLOG(ERR) << "Failed to sync unicast routes in FIB. Error: "
-                << folly::exceptionStr(e);
+      XLOGF(
+          ERR,
+          "Failed to sync unicast routes in FIB. Error: {}",
+          folly::exceptionStr(e));
       return false;
     }
   }
@@ -758,7 +776,7 @@ Fib::syncRoutes() {
   // value of last sync duration
   const auto elapsedTime = std::chrono::ceil<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - currentTime);
-  XLOG(INFO) << "It took " << elapsedTime.count() << "ms to sync routes in FIB";
+  XLOGF(INFO, "It took {}ms to sync routes in FIB", elapsedTime.count());
   fb303::fbData->setCounter("fib.route_sync.time_ms", elapsedTime.count());
 
   // Publish route update. We'll do so only if sync is successful.
@@ -793,7 +811,7 @@ Fib::retryRoutesTask(folly::fibers::Baton& stopSignal) noexcept {
     // Add async sleep signal for next invocation. Add only if non zero wait
     if (routeState_.needsRetry()) {
       auto retryDuration = nextRetryDuration();
-      XLOG(INFO) << "Scheduling timer after " << retryDuration.count() << "ms";
+      XLOGF(INFO, "Scheduling timer after {}ms", retryDuration.count());
       timeout->scheduleTimeout(retryDuration);
     }
   } // while
@@ -805,7 +823,8 @@ Fib::retryRoutes() noexcept {
   bool success{false};
   retryRoutesExpBackoff_.reportError(); // We increase backoff on every retry
 
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Increasing backoff {}ms",
       retryRoutesExpBackoff_.getCurrentBackoff().count());
 
@@ -840,7 +859,7 @@ Fib::retryRoutes() noexcept {
 
   // Clear backoff if programming is successful
   if (success) {
-    XLOG(INFO) << "Clearing backoff";
+    XLOG(INFO, "Clearing backoff");
     retryRoutesExpBackoff_.reportSuccess();
   }
 
@@ -873,15 +892,18 @@ Fib::keepAlive() noexcept {
       fb303::fbData->addStatValue(
           "fib.thrift.failure.keepalive", 1, fb303::COUNT);
       client_.reset();
-      XLOG(ERR) << "Failed to make thrift call to Switch Agent. Error: "
-                << folly::exceptionStr(e);
+      XLOGF(
+          ERR,
+          "Failed to make thrift call to Switch Agent. Error: {}",
+          folly::exceptionStr(e));
     }
   }
   // Check if switch agent has restarted or not. Applicable only if we have
   // initialized alive-since
   if (latestAliveSince_ != 0 && aliveSince != latestAliveSince_) {
-    XLOG(WARNING) << "FibAgent seems to have restarted. "
-                  << "Performing full route DB sync ...";
+    XLOG(
+        WARNING,
+        "FibAgent seems to have restarted. Performing full route DB sync ...");
     // FibAgent has restarted. Enforce full sync
     transitionRouteState(RouteState::FIB_CONNECTED);
     retryRoutesExpBackoff_.reportSuccess();
@@ -983,9 +1005,11 @@ Fib::transitionRouteState(const RouteState::Event event) {
   const auto nextState = stateMap.at(prevState).at(event);
   CHECK(nextState.has_value()) << "Next state is 'UNDEFINED'";
   if (prevState != nextState) {
-    XLOG(INFO) << "Route state transitions from "
-               << routeState_.toStr(prevState) << " to "
-               << routeState_.toStr(nextState.value());
+    XLOGF(
+        INFO,
+        "Route state transitions from {} to {}",
+        routeState_.toStr(prevState),
+        routeState_.toStr(nextState.value()));
   }
 
   // Update current state
