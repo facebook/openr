@@ -50,7 +50,7 @@ Config::Config(const std::string& configFile) {
   std::string contents;
   if (!FileUtil::readFileToString(configFile, contents)) {
     auto errStr = fmt::format("Could not read config file: {}", configFile);
-    XLOG(ERR) << errStr;
+    XLOGF(ERR, "{}", errStr);
     throw thrift::ConfigError(errStr);
   }
 
@@ -60,7 +60,7 @@ Config::Config(const std::string& configFile) {
   } catch (const std::exception& ex) {
     auto errStr = fmt::format(
         "Could not parse OpenrConfig struct: {}", folly::exceptionStr(ex));
-    XLOG(ERR) << errStr;
+    XLOGF(ERR, "{}", errStr);
     throw thrift::ConfigError(errStr);
   }
   populateInternalDb();
@@ -73,7 +73,7 @@ Config::getRunningConfig() const {
   try {
     jsonSerializer.serialize(config_, &contents);
   } catch (const std::exception& ex) {
-    XLOG(ERR) << "Could not serialize config: " << folly::exceptionStr(ex);
+    XLOGF(ERR, "Could not serialize config: {}", folly::exceptionStr(ex));
   }
 
   return contents;

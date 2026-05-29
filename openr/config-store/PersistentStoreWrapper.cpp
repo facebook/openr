@@ -14,7 +14,7 @@ namespace openr {
 
 PersistentStoreWrapper::PersistentStoreWrapper(const unsigned long tid)
     : filePath(fmt::format("/tmp/openr_persistent_store_test_{}", tid)) {
-  XLOG(DBG1) << "PersistentStoreWrapper: Creating PersistentStore.";
+  XLOG(DBG1, "PersistentStoreWrapper: Creating PersistentStore.");
   auto tConfig = getBasicOpenrConfig();
   tConfig.persistent_config_store_path() = filePath;
   auto config = std::make_shared<Config>(tConfig);
