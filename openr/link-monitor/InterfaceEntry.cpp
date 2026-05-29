@@ -89,7 +89,9 @@ InterfaceEntry::updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid) {
     isUpdated |= (((info_.networks.erase(ipNetwork) == 1)) ? 1 : 0);
   }
 
-  XLOG_IF(DBG1, isUpdated) << fmt::format(
+  XLOGF_IF(
+      DBG1,
+      isUpdated,
       "{} {}/{} on interface {}, status: {}",
       isValid ? "Adding" : "Deleting",
       ipNetwork.first.str(),

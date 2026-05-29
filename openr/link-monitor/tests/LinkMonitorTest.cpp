@@ -481,9 +481,9 @@ class LinkMonitorTestFixture : public testing::Test {
       return std::nullopt;
     }
 
-    XLOG(DBG1) << "Received publication with keys in area " << *pub.area();
+    XLOGF(DBG1, "Received publication with keys in area {}", *pub.area());
     for (auto const& kv : *pub.keyVals()) {
-      XLOG(DBG1) << "  " << kv.first;
+      XLOGF(DBG1, "  {}", kv.first);
     }
 
     auto kv = pub.keyVals()->find(key);
@@ -1793,10 +1793,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
     }
   }
 
-  XLOG(DBG2) << "*** start link flaps ***";
+  XLOG(DBG2, "*** start link flaps ***");
 
   // Bringing up the interface
-  XLOG(DBG2) << "*** bring up 2 interfaces ***";
+  XLOG(DBG2, "*** bring up 2 interfaces ***");
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
@@ -1815,7 +1815,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
         links->interfaceDetails()->at(ifName).linkFlapBackOffMs().has_value());
   }
 
-  XLOG(DBG2) << "*** bring down 2 interfaces ***";
+  XLOG(DBG2, "*** bring down 2 interfaces ***");
   auto linkDownTs = std::chrono::steady_clock::now();
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
@@ -1848,7 +1848,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
     }
   }
 
-  XLOG(DBG2) << "*** bring up 2 interfaces ***";
+  XLOG(DBG2, "*** bring up 2 interfaces ***");
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,
@@ -1888,10 +1888,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
       EXPECT_EQ(0, res.at(ifName).v6LinkLocalAddrsMinCount);
     }
   }
-  XLOG(DBG2) << "*** end link flaps ***";
+  XLOG(DBG2, "*** end link flaps ***");
 
   // Bringing down the interfaces
-  XLOG(DBG2) << "*** bring down 2 interfaces ***";
+  XLOG(DBG2, "*** bring down 2 interfaces ***");
   linkDownTs = std::chrono::steady_clock::now();
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
@@ -1930,7 +1930,7 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
   }
 
   // Bringing up the interfaces
-  XLOG(DBG2) << "*** bring up 2 interfaces ***";
+  XLOG(DBG2, "*** bring up 2 interfaces ***");
   nlEventsInjector->sendLinkEvent(
       linkX /* link name */,
       kTestVethIfIndex[0] /* ifIndex */,

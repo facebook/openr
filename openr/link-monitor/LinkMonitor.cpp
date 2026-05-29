@@ -37,31 +37,34 @@ getRttMetric(int64_t rttUs) {
 void
 printLinkMonitorState(openr::thrift::LinkMonitorState const& state) {
   // Hard-drain state
-  XLOG(DBG1) << fmt::format(
+  XLOGF(
+      DBG1,
       "[Drain Status] Node Overloaded: {}",
       (*state.isOverloaded() ? "true" : "false"));
   if (!state.overloadedLinks()->empty()) {
-    XLOG(DBG1) << fmt::format(
+    XLOGF(
+        DBG1,
         "[Drain Status] Overloaded Links: {}",
         folly::join(",", *state.overloadedLinks()));
   }
 
   // Soft-drain state
-  XLOG(DBG1) << fmt::format(
+  XLOGF(
+      DBG1,
       "[Drain Status] Node Metric Increment: {}",
       *state.nodeMetricIncrementVal());
   if (!state.linkMetricIncrementMap()->empty()) {
-    XLOG(DBG1) << fmt::format("[Drain Status] Link Metric Increment:");
+    XLOG(DBG1, "[Drain Status] Link Metric Increment:");
     for (auto const& [key, val] : *state.linkMetricIncrementMap()) {
-      XLOG(DBG1) << fmt::format("\t{}: {}", key, val);
+      XLOGF(DBG1, "\t{}: {}", key, val);
     }
   }
 
   // [TO BE DEPRECATED]
   if (!state.linkMetricOverrides()->empty()) {
-    XLOG(DBG1) << "\tlinkMetricOverrides: ";
+    XLOG(DBG1, "\tlinkMetricOverrides: ");
     for (auto const& [key, val] : *state.linkMetricOverrides()) {
-      XLOG(DBG1) << "\t\t" << key << ": " << val;
+      XLOGF(DBG1, "\t\t{}: {}", key, val);
     }
   }
 }
@@ -153,12 +156,12 @@ LinkMonitor::LinkMonitor(
     enableInitOptimization_ = *enableInitOptimization;
   }
   if (enableInitOptimization_) {
-    XLOG(INFO) << "[Initialization] Init Optimization enabled";
+    XLOG(INFO, "[Initialization] Init Optimization enabled");
   }
 
   // Schedule callback to advertise the initial set of adjacencies and prefixes
   adjHoldTimer_ = folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
-    XLOG(INFO) << "Hold time expired. Advertising adjacencies and addresses";
+    XLOG(INFO, "Hold time expired. Advertising adjacencies and addresses");
     // Advertise adjacencies and addresses after hold-timeout
     advertiseAdjacencies();
     advertiseRedistAddrs();
@@ -208,7 +211,7 @@ LinkMonitor::LinkMonitor(
    *                            instance will add metric to the adj database;
    */
   if (state.hasValue()) {
-    XLOG(INFO) << "Successfully loaded link-monitor state from disk.";
+    XLOG(INFO, "Successfully loaded link-monitor state from disk.");
     state_ = state.value();
     printLinkMonitorState(state_);
   } else {
@@ -228,22 +231,20 @@ LinkMonitor::LinkMonitor(
       // ATTN: node should NOT be soft and hard drained at the same time
       state_.isOverloaded() = false;
 
-      XLOG(INFO)
-          << "[Drain Status] Failed to load persistent store from file system. "
-          << fmt::format(
-                 "Set node soft-drain increment value: {}",
-                 *state_.nodeMetricIncrementVal());
+      XLOGF(
+          INFO,
+          "[Drain Status] Failed to load persistent store from file system. Set node soft-drain increment value: {}",
+          *state_.nodeMetricIncrementVal());
     } else {
       state_.isOverloaded() = assumeDrained;
 
       // ATTN: node should NOT be soft and hard drained at the same time
       state_.nodeMetricIncrementVal() = 0;
 
-      XLOG(INFO)
-          << "[Drain Status] Failed to load persistent store from file system. "
-          << fmt::format(
-                 "Set node hard-drain state: {}",
-                 *state_.isOverloaded() ? "DRAINED" : "UNDRAINED");
+      XLOGF(
+          INFO,
+          "[Drain Status] Failed to load persistent store from file system. Set node hard-drain state: {}",
+          *state_.isOverloaded() ? "DRAINED" : "UNDRAINED");
     }
   }
 
@@ -267,7 +268,8 @@ LinkMonitor::LinkMonitor(
         // ATTN: node should NOT be soft and hard drained at the same time
         state_.isOverloaded() = false;
 
-        XLOG(INFO) << fmt::format(
+        XLOGF(
+            INFO,
             "[Drain Status] Override node soft-drain increment value: {}",
             nodeInc);
       } else {
@@ -276,7 +278,7 @@ LinkMonitor::LinkMonitor(
 
         state_.isOverloaded() = true;
 
-        XLOG(INFO) << "[Drain Status] Override node hard-drain state: DRAINED";
+        XLOG(INFO, "[Drain Status] Override node hard-drain state: DRAINED");
       }
     }
   }
@@ -302,8 +304,9 @@ LinkMonitor::LinkMonitor(
           [this](thrift::InitializationEvent&& event) {
             if (event == thrift::InitializationEvent::KVSTORE_SYNCED) {
               if (enableInitOptimization_) {
-                XLOG(INFO)
-                    << "Advertise adjacencies upon receiving KVSTORE_SYNCED";
+                XLOG(
+                    INFO,
+                    "Advertise adjacencies upon receiving KVSTORE_SYNCED");
 
                 /**
                  * If KVSTORE_SYNCED was received after hold timer expired
@@ -323,7 +326,7 @@ LinkMonitor::LinkMonitor(
 
   // Add fiber to process the neighbor events
   addFiberTask([q = std::move(neighborUpdatesQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting neighbor-event processing task";
+    XLOG(DBG1, "Starting neighbor-event processing task");
     while (true) {
       auto maybeEvent = q.get();
       if (maybeEvent.hasError()) {
@@ -361,12 +364,12 @@ LinkMonitor::LinkMonitor(
             peerUpdatesQueue_.push(std::move(peerEvent));
           });
     }
-    XLOG(DBG1) << "[Exit] Neighbor-event processing task finished.";
+    XLOG(DBG1, "[Exit] Neighbor-event processing task finished.");
   });
 
   // Add fiber to process the LINK/ADDR events from platform
   addFiberTask([q = std::move(netlinkEventsQueue), this]() mutable noexcept {
-    XLOG(DBG1) << "Starting netlink event processing task";
+    XLOG(DBG1, "Starting netlink event processing task");
 
     NetlinkEventProcessor visitor(*this);
     while (true) {
@@ -377,14 +380,14 @@ LinkMonitor::LinkMonitor(
       std::visit(visitor, std::move(*maybeEvent));
     }
 
-    XLOG(DBG1) << "[Exit] Netlink-event processing task finished.";
+    XLOG(DBG1, "[Exit] Netlink-event processing task finished.");
   });
 
   // Add fiber to process interfaceDb syning from netlink platform
   addFiberTask([this]() mutable noexcept {
-    XLOG(DBG1) << "Starting interface syncing task";
+    XLOG(DBG1, "Starting interface syncing task");
     syncInterfaceTask();
-    XLOG(DBG1) << "[Exit] Interface-syncing task finished.";
+    XLOG(DBG1, "[Exit] Interface-syncing task finished.");
   });
 
   // Initialize stats keys
@@ -399,15 +402,17 @@ LinkMonitor::LinkMonitor(
 
 void
 LinkMonitor::stop() {
-  XLOG(DBG1) << fmt::format(
-      "[Exit] Send termination signals to stop {} tasks.", getFiberTaskNum());
+  XLOGF(
+      DBG1,
+      "[Exit] Send termination signals to stop {} tasks.",
+      getFiberTaskNum());
 
   // Send stop signal for internal fibers
   syncInterfaceStopSignal_.post();
 
   // Invoke stop method of super class
   OpenrEventBase::stop();
-  XLOG(INFO) << "[Exit] Successfully stopped LinkMonitor eventbase.";
+  XLOG(INFO, "[Exit] Successfully stopped LinkMonitor eventbase.");
 }
 
 void
@@ -615,8 +620,12 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
   int32_t newRttMetric = getRttMetric(rttUs);
   const auto& area = event.area;
 
-  XLOG(DBG1) << "Metric value changed for neighbor " << remoteNodeName
-             << " on interface: " << localIfName << " to " << newRttMetric;
+  XLOGF(
+      DBG1,
+      "Metric value changed for neighbor {} on interface: {} to {}",
+      remoteNodeName,
+      localIfName,
+      newRttMetric);
 
   auto areaAdjIt = adjacencies_.find(area);
   if (areaAdjIt != adjacencies_.end()) {
@@ -682,18 +691,20 @@ LinkMonitor::updateKvStorePeerNeighborDown(
   // find kvstore peer for adj
   const auto& areaPeers = peers_.find(area);
   if (areaPeers == peers_.end()) {
-    XLOG(WARNING) << "No previous established KvStorePeer found for neighbor "
-                  << remoteNodeName
-                  << ". Skip updateKvStorePeer for interface down event on "
-                  << adjId.second;
+    XLOGF(
+        WARNING,
+        "No previous established KvStorePeer found for neighbor {}. Skip updateKvStorePeer for interface down event on {}",
+        remoteNodeName,
+        adjId.second);
     return;
   }
   const auto& peerVal = areaPeers->second.find(remoteNodeName);
   if (peerVal == areaPeers->second.end()) {
-    XLOG(WARNING) << "No previous established KvStorePeer found for neighbor "
-                  << remoteNodeName
-                  << ". Skip updateKvStorePeer for interface down event on "
-                  << adjId.second;
+    XLOGF(
+        WARNING,
+        "No previous established KvStorePeer found for neighbor {}. Skip updateKvStorePeer for interface down event on {}",
+        remoteNodeName,
+        adjId.second);
     return;
   }
 
@@ -764,7 +775,8 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
   // Extract information from `adjacencies_`
   auto adjDb = buildAdjacencyDatabase(area);
 
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "Updating adjacency database in KvStore with {} entries in area: {}",
       adjDb.adjacencies()->size(),
       area);
@@ -818,8 +830,8 @@ LinkMonitor::advertiseIfaceAddr() {
   // once their backoff is clear.
   if (retryTime.count() != 0) {
     advertiseIfaceAddrTimer_->scheduleTimeout(retryTime);
-    XLOG(DBG2) << fmt::format(
-        "advertiseIfaceAddr timer scheduled in {}ms", retryTime.count());
+    XLOGF(
+        DBG2, "advertiseIfaceAddr timer scheduled in {}ms", retryTime.count());
   }
 }
 
@@ -865,7 +877,8 @@ LinkMonitor::advertiseRedistAddrs() {
   for (auto& [_, interface] : interfaces_) {
     // Ignore in-active interfaces
     if (!interface.isActive()) {
-      XLOG(DBG2) << fmt::format(
+      XLOGF(
+          DBG2,
           "Interface: {} is NOT active. Skip advertising.",
           interface.getIfName());
       continue;
@@ -917,7 +930,8 @@ LinkMonitor::advertiseRedistAddrs() {
   for (auto const& [prefix, areas] : prefixesToAdvertise) {
     toAdvertise[areas].emplace_back(std::move(prefixMap.at(prefix)));
 
-    XLOG(DBG1) << fmt::format(
+    XLOGF(
+        DBG1,
         "Advertise LOOPBACK prefix: {} within areas: [{}]",
         folly::IPAddress::networkToString(prefix),
         folly::join(",", areas));
@@ -934,7 +948,8 @@ LinkMonitor::advertiseRedistAddrs() {
     prefixEntry.type() = thrift::PrefixType::LOOPBACK;
     toWithdraw.emplace_back(std::move(prefixEntry));
 
-    XLOG(DBG1) << fmt::format(
+    XLOGF(
+        DBG1,
         "Withdraw LOOPBACK prefix: {} within areas: [{}]",
         folly::IPAddress::networkToString(prefix),
         folly::join(",", areas));
@@ -973,8 +988,11 @@ LinkMonitor::getRetryTimeOnUnstableInterfaces() {
 
     const auto& curRemainMs = interface.getBackoffDuration();
     if (curRemainMs.count() > 0) {
-      XLOG(DBG2) << "Interface " << interface.getIfName()
-                 << " is in backoff state for " << curRemainMs.count() << "ms";
+      XLOGF(
+          DBG2,
+          "Interface {} is in backoff state for {}ms",
+          interface.getIfName(),
+          curRemainMs.count());
       minRemainMs = std::min(linkflapMaxBackoff_, curRemainMs);
     }
   }
@@ -1114,7 +1132,8 @@ LinkMonitor::syncInterfaceTask() noexcept {
       expBackoff_.reportSuccess();
       timeout = std::chrono::milliseconds(Constants::kPlatformSyncInterval);
 
-      XLOG(DBG2) << fmt::format(
+      XLOGF(
+          DBG2,
           "[Interface Sync] Successfully synced interfaceDb. Schedule next sync in {}ms",
           timeout.count());
     } else {
@@ -1125,7 +1144,8 @@ LinkMonitor::syncInterfaceTask() noexcept {
       fb303::fbData->addStatValue(
           "link_monitor.sync_interface.failure", 1, fb303::SUM);
 
-      XLOG(ERR) << fmt::format(
+      XLOGF(
+          ERR,
           "[Interface Sync] Failed to sync interfaceDb, apply exp backoff and retry in {}ms",
           timeout.count());
     }
@@ -1139,15 +1159,15 @@ LinkMonitor::syncInterfaces() {
   try {
     maybeIfDb = semifuture_getAllLinks().getTry(Constants::kReadTimeout);
     if (!maybeIfDb.hasValue()) {
-      XLOG(ERR) << fmt::format(
+      XLOGF(
+          ERR,
           "[Interface Sync] Failed to sync interfaceDb. Exception: {}",
           folly::exceptionStr(maybeIfDb.exception()));
 
       return false;
     }
   } catch (const folly::FutureTimeout&) {
-    XLOG(ERR)
-        << "[Interface Sync] Timeout retrieving links. Retry in a moment.";
+    XLOG(ERR, "[Interface Sync] Timeout retrieving links. Retry in a moment.");
 
     return false;
   }
@@ -1156,11 +1176,12 @@ LinkMonitor::syncInterfaces() {
   // retrying to retrieve data from underneath platform.
   InterfaceDatabase ifDb = std::move(maybeIfDb).value();
   if (ifDb.empty()) {
-    XLOG(ERR) << "[Interface Sync] No interface found. Retry in a moment.";
+    XLOG(ERR, "[Interface Sync] No interface found. Retry in a moment.");
     return false;
   }
 
-  XLOG(INFO) << fmt::format(
+  XLOGF(
+      INFO,
       "[Interface Sync] Successfully retrieved {} links from netlink.",
       ifDb.size());
 
@@ -1217,7 +1238,7 @@ LinkMonitor::syncInterfaces() {
 
 void
 LinkMonitor::processLinkEvent(fbnl::Link&& link) {
-  XLOG(DBG3) << "Received Link Event from NetlinkProtocolSocket...";
+  XLOG(DBG3, "Received Link Event from NetlinkProtocolSocket...");
 
   auto ifName = link.getLinkName();
   auto ifIndex = link.getIfIndex();
@@ -1248,7 +1269,7 @@ LinkMonitor::processLinkEvent(fbnl::Link&& link) {
 
 void
 LinkMonitor::processAddressEvent(fbnl::IfAddress&& addr) {
-  XLOG(DBG3) << "Received Address Event from NetlinkProtocolSocket...";
+  XLOG(DBG3, "Received Address Event from NetlinkProtocolSocket...");
 
   auto ifIndex = addr.getIfIndex();
   auto prefix = addr.getPrefix(); // std::optional<folly::CIDRNetwork>
@@ -1257,8 +1278,7 @@ LinkMonitor::processAddressEvent(fbnl::IfAddress&& addr) {
   // Check for interface name
   auto it = ifIndexToName_.find(ifIndex);
   if (it == ifIndexToName_.end()) {
-    XLOG(ERR)
-        << fmt::format("Address event for unknown iface index: {}", ifIndex);
+    XLOGF(ERR, "Address event for unknown iface index: {}", ifIndex);
     return;
   }
 
@@ -1279,12 +1299,16 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
     const auto& remoteNodeName = event.remoteNodeName;
     const auto& area = event.area;
 
-    XLOG(DBG1) << "Received neighbor event for " << remoteNodeName << " from "
-               << remoteIfName << " at " << localIfName << " with addrs "
-               << toString(neighborAddrV6) << " and "
-               << (enableV4_ ? toString(neighborAddrV4) : "")
-               << " Area:" << area
-               << " Event Type: " << toString(event.eventType);
+    XLOGF(
+        DBG1,
+        "Received neighbor event for {} from {} at {} with addrs {} and {} Area:{} Event Type: {}",
+        remoteNodeName,
+        remoteIfName,
+        localIfName,
+        toString(neighborAddrV6),
+        (enableV4_ ? toString(neighborAddrV4) : ""),
+        area,
+        toString(event.eventType));
 
     switch (event.eventType) {
     case NeighborEventType::NEIGHBOR_UP:
@@ -1320,7 +1344,7 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
       break;
     }
     default:
-      XLOG(ERR) << "Unknown event type " << (int32_t)event.eventType;
+      XLOGF(ERR, "Unknown event type {}", (int32_t)event.eventType);
     }
   } // for
 }
@@ -1335,8 +1359,11 @@ LinkMonitor::semifuture_setNodeOverload(bool isOverloaded) {
     std::string cmd =
         isOverloaded ? "SET_NODE_OVERLOAD" : "UNSET_NODE_OVERLOAD";
     if (*state_.isOverloaded() == isOverloaded) {
-      XLOG(INFO) << "Skip cmd: [" << cmd << "]. Node already in target state: ["
-                 << (isOverloaded ? "OVERLOADED" : "NOT OVERLOADED") << "]";
+      XLOGF(
+          INFO,
+          "Skip cmd: [{}]. Node already in target state: [{}]",
+          cmd,
+          (isOverloaded ? "OVERLOADED" : "NOT OVERLOADED"));
     } else {
       state_.isOverloaded() = isOverloaded;
       SYSLOG(INFO) << EventTag() << (isOverloaded ? "Setting" : "Unsetting")
@@ -1358,24 +1385,31 @@ LinkMonitor::semifuture_setInterfaceOverload(
         std::string cmd =
             isOverloaded ? "SET_LINK_OVERLOAD" : "UNSET_LINK_OVERLOAD";
         if (0 == interfaces_.count(interfaceName)) {
-          XLOG(ERR) << "Skip cmd: [" << cmd
-                    << "] due to unknown interface: " << interfaceName;
+          XLOGF(
+              ERR,
+              "Skip cmd: [{}] due to unknown interface: {}",
+              cmd,
+              interfaceName);
           p.setValue();
           return;
         }
 
         if (isOverloaded && state_.overloadedLinks()->count(interfaceName)) {
-          XLOG(INFO) << "Skip cmd: [" << cmd
-                     << "]. Interface: " << interfaceName
-                     << " is already overloaded";
+          XLOGF(
+              INFO,
+              "Skip cmd: [{}]. Interface: {} is already overloaded",
+              cmd,
+              interfaceName);
           p.setValue();
           return;
         }
 
         if (!isOverloaded && !state_.overloadedLinks()->count(interfaceName)) {
-          XLOG(INFO) << "Skip cmd: [" << cmd
-                     << "]. Interface: " << interfaceName
-                     << " is currently NOT overloaded";
+          XLOGF(
+              INFO,
+              "Skip cmd: [{}]. Interface: {} is currently NOT overloaded",
+              cmd,
+              interfaceName);
           p.setValue();
           return;
         }
@@ -1405,49 +1439,58 @@ LinkMonitor::semifuture_setLinkMetric(
     std::string interfaceName, std::optional<int32_t> overrideMetric) {
   folly::Promise<folly::Unit> p;
   auto sf = p.getSemiFuture();
-  runInEventBaseThread(
-      [this, p = std::move(p), interfaceName, overrideMetric]() mutable {
-        std::string cmd = overrideMetric.has_value() ? "SET_LINK_METRIC"
-                                                     : "UNSET_LINK_METRIC";
-        if (0 == interfaces_.count(interfaceName)) {
-          XLOG(ERR) << "Skip cmd: [" << cmd
-                    << "] due to unknown interface: " << interfaceName;
-          p.setValue();
-          return;
-        }
+  runInEventBaseThread([this,
+                        p = std::move(p),
+                        interfaceName,
+                        overrideMetric]() mutable {
+    std::string cmd =
+        overrideMetric.has_value() ? "SET_LINK_METRIC" : "UNSET_LINK_METRIC";
+    if (0 == interfaces_.count(interfaceName)) {
+      XLOGF(
+          ERR,
+          "Skip cmd: [{}] due to unknown interface: {}",
+          cmd,
+          interfaceName);
+      p.setValue();
+      return;
+    }
 
-        if (overrideMetric.has_value() &&
-            state_.linkMetricOverrides()->count(interfaceName) &&
-            state_.linkMetricOverrides()[interfaceName] ==
-                overrideMetric.value()) {
-          XLOG(INFO) << "Skip cmd: " << cmd
-                     << ". Overridden metric: " << overrideMetric.value()
-                     << " already set for interface: " << interfaceName;
-          p.setValue();
-          return;
-        }
+    if (overrideMetric.has_value() &&
+        state_.linkMetricOverrides()->count(interfaceName) &&
+        state_.linkMetricOverrides()[interfaceName] == overrideMetric.value()) {
+      XLOGF(
+          INFO,
+          "Skip cmd: {}. Overridden metric: {} already set for interface: {}",
+          cmd,
+          overrideMetric.value(),
+          interfaceName);
+      p.setValue();
+      return;
+    }
 
-        if (!overrideMetric.has_value() &&
-            !state_.linkMetricOverrides()->count(interfaceName)) {
-          XLOG(INFO) << "Skip cmd: " << cmd
-                     << ". No overridden metric found for interface: "
-                     << interfaceName;
-          p.setValue();
-          return;
-        }
+    if (!overrideMetric.has_value() &&
+        !state_.linkMetricOverrides()->count(interfaceName)) {
+      XLOGF(
+          INFO,
+          "Skip cmd: {}. No overridden metric found for interface: {}",
+          cmd,
+          interfaceName);
+      p.setValue();
+      return;
+    }
 
-        if (overrideMetric.has_value()) {
-          state_.linkMetricOverrides()[interfaceName] = overrideMetric.value();
-          SYSLOG(INFO) << "Overriding metric for interface " << interfaceName
-                       << " to " << overrideMetric.value();
-        } else {
-          state_.linkMetricOverrides()->erase(interfaceName);
-          SYSLOG(INFO) << "Removing metric override for interface "
-                       << interfaceName;
-        }
-        scheduleAdvertiseAdjAllArea();
-        p.setValue();
-      });
+    if (overrideMetric.has_value()) {
+      state_.linkMetricOverrides()[interfaceName] = overrideMetric.value();
+      SYSLOG(INFO) << "Overriding metric for interface " << interfaceName
+                   << " to " << overrideMetric.value();
+    } else {
+      state_.linkMetricOverrides()->erase(interfaceName);
+      SYSLOG(INFO) << "Removing metric override for interface "
+                   << interfaceName;
+    }
+    scheduleAdvertiseAdjAllArea();
+    p.setValue();
+  });
   return sf;
 }
 
@@ -1480,8 +1523,12 @@ LinkMonitor::semifuture_setAdjacencyMetric(
     }
     // Invalid adj encountered, ignoring.
     if (unknownAdj) {
-      XLOG(ERR) << "Skip cmd: [" << cmd << "] due to unknown adj: ["
-                << adjNodeName << ":" << interfaceName << "]";
+      XLOGF(
+          ERR,
+          "Skip cmd: [{}] due to unknown adj: [{}:{}]",
+          cmd,
+          adjNodeName,
+          interfaceName);
       p.setValue();
       return;
     }
@@ -1489,18 +1536,25 @@ LinkMonitor::semifuture_setAdjacencyMetric(
     if (overrideMetric.has_value() &&
         state_.adjMetricOverrides()->count(adjKey) &&
         state_.adjMetricOverrides()[adjKey] == overrideMetric.value()) {
-      XLOG(INFO) << "Skip cmd: " << cmd
-                 << ". Overridden metric: " << overrideMetric.value()
-                 << " already set for: [" << adjNodeName << ":" << interfaceName
-                 << "]";
+      XLOGF(
+          INFO,
+          "Skip cmd: {}. Overridden metric: {} already set for: [{}:{}]",
+          cmd,
+          overrideMetric.value(),
+          adjNodeName,
+          interfaceName);
       p.setValue();
       return;
     }
 
     if (!overrideMetric.has_value() &&
         !state_.adjMetricOverrides()->count(adjKey)) {
-      XLOG(INFO) << "Skip cmd: " << cmd << ". No overridden metric found for: ["
-                 << adjNodeName << ":" << interfaceName << "]";
+      XLOGF(
+          INFO,
+          "Skip cmd: {}. No overridden metric found for: [{}:{}]",
+          cmd,
+          adjNodeName,
+          interfaceName);
       p.setValue();
       return;
     }
@@ -1527,8 +1581,9 @@ LinkMonitor::semifuture_unsetNodeInterfaceMetricIncrement() {
   runInEventBaseThread([this, p = std::move(p)]() mutable {
     if (0 == state_.nodeMetricIncrementVal()) {
       // the increment value already applied
-      XLOG(INFO) << "Skip cmd: unsetNodeInterfaceMetricIncrement."
-                 << "\n  Already set this node-level metric increment to 0";
+      XLOG(
+          INFO,
+          "Skip cmd: unsetNodeInterfaceMetricIncrement.\n  Already set this node-level metric increment to 0");
       p.setValue();
       return;
     }
@@ -1549,26 +1604,28 @@ LinkMonitor::semifuture_setNodeInterfaceMetricIncrement(
   runInEventBaseThread([this, p = std::move(p), metricIncrementVal]() mutable {
     // invalid increment input
     if (metricIncrementVal <= 0) {
-      XLOG(ERR)
-          << "Skip cmd: setNodeInterfaceMetricIncrement."
-          << "\n  Parameter `metricIncrementVal` should be a positive integer.";
+      XLOG(
+          ERR,
+          "Skip cmd: setNodeInterfaceMetricIncrement.\n  Parameter `metricIncrementVal` should be a positive integer.");
       p.setValue();
       return;
     }
 
     if (metricIncrementVal == *state_.nodeMetricIncrementVal()) {
       // the increment value already applied
-      XLOG(INFO) << "Skip cmd: setNodeInterfaceMetricIncrement"
-                 << "\n  Already set this node-level metric increment value: "
-                 << metricIncrementVal;
+      XLOGF(
+          INFO,
+          "Skip cmd: setNodeInterfaceMetricIncrement\n  Already set this node-level metric increment value: {}",
+          metricIncrementVal);
       p.setValue();
       return;
     }
 
-    XLOG(INFO)
-        << "Set the node-level static metric increment value:"
-        << "\n  Old increment value: " << *state_.nodeMetricIncrementVal()
-        << "\n  Setting new increment value: " << metricIncrementVal;
+    XLOGF(
+        INFO,
+        "Set the node-level static metric increment value:\n  Old increment value: {}\n  Setting new increment value: {}",
+        *state_.nodeMetricIncrementVal(),
+        metricIncrementVal);
 
     // set the state
     state_.nodeMetricIncrementVal() = metricIncrementVal;
@@ -1590,16 +1647,18 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
                         metricIncrementVal]() mutable {
     // invalid increment input
     if (metricIncrementVal <= 0) {
-      XLOG(ERR)
-          << "Skip cmd: setInterfaceMetricIncrement."
-          << "\n   Parameter `metricIncrementVal` should be a positive integer.";
+      XLOG(
+          ERR,
+          "Skip cmd: setInterfaceMetricIncrement.\n   Parameter `metricIncrementVal` should be a positive integer.");
       p.setValue();
       return;
     }
 
     if (0 == interfaces_.count(interfaceName)) {
-      XLOG(ERR) << "Skip cmd: setInterfaceMetricIncrement."
-                << "due to unknown interface: " << interfaceName;
+      XLOGF(
+          ERR,
+          "Skip cmd: setInterfaceMetricIncrement.due to unknown interface: {}",
+          interfaceName);
       p.setValue();
       return;
     }
@@ -1607,9 +1666,11 @@ LinkMonitor::semifuture_setInterfaceMetricIncrement(
     auto it = state_.linkMetricIncrementMap()->find(interfaceName);
     if (it != state_.linkMetricIncrementMap()->end() &&
         it->second == metricIncrementVal) {
-      XLOG(INFO) << "Skip cmd: setInterfaceMetricIncrement."
-                 << "\n  Increment metric: " << metricIncrementVal
-                 << " already set for interface: " << interfaceName;
+      XLOGF(
+          INFO,
+          "Skip cmd: setInterfaceMetricIncrement.\n  Increment metric: {} already set for interface: {}",
+          metricIncrementVal,
+          interfaceName);
       p.setValue();
       return;
     }
@@ -1640,9 +1701,9 @@ LinkMonitor::semifuture_setInterfaceMetricIncrementMulti(
                         metricIncrementVal]() mutable {
     // invalid increment input
     if (metricIncrementVal <= 0) {
-      XLOG(ERR)
-          << "Skip cmd: setInterfaceMetricIncrement."
-          << "\n   Parameter `metricIncrementVal` should be a positive integer.";
+      XLOG(
+          ERR,
+          "Skip cmd: setInterfaceMetricIncrement.\n   Parameter `metricIncrementVal` should be a positive integer.");
       p.setValue();
       return;
     }
@@ -1674,8 +1735,11 @@ LinkMonitor::setInterfaceMetricIncrementHelper(
 
   for (const auto& interfaceName : interfaces) {
     if (0 == interfaces_.count(interfaceName)) {
-      XLOG(ERR) << "Skip cmd: " << command
-                << " due to unknown interface: " << interfaceName;
+      XLOGF(
+          ERR,
+          "Skip cmd: {} due to unknown interface: {}",
+          command,
+          interfaceName);
       p.setValue();
       return;
     }
@@ -1686,9 +1750,12 @@ LinkMonitor::setInterfaceMetricIncrementHelper(
     auto oldMetric =
         folly::get_default(*state_.linkMetricIncrementMap(), interfaceName, 0);
     if (oldMetric == metrics) {
-      XLOG(INFO) << "Skip cmd: " << command
-                 << "\n  Increment metric: " << metrics
-                 << " already set for interface: " << interfaceName;
+      XLOGF(
+          INFO,
+          "Skip cmd: {}\n  Increment metric: {} already set for interface: {}",
+          command,
+          metrics,
+          interfaceName);
       continue;
     }
 
@@ -1717,17 +1784,20 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
   auto sf = p.getSemiFuture();
   runInEventBaseThread([this, p = std::move(p), interfaceName]() mutable {
     if (0 == interfaces_.count(interfaceName)) {
-      XLOG(ERR) << "Skip cmd: [unsetInterfaceMetricIncrement]."
-                << "due to unknown interface: " << interfaceName;
+      XLOGF(
+          ERR,
+          "Skip cmd: [unsetInterfaceMetricIncrement].due to unknown interface: {}",
+          interfaceName);
       p.setValue();
       return;
     }
 
     auto it = state_.linkMetricIncrementMap()->find(interfaceName);
     if (it == state_.linkMetricIncrementMap()->end()) {
-      XLOG(INFO) << "Skip cmd: [unsetInterfaceMetricIncrement]."
-                 << "due the interface " << interfaceName
-                 << "didn't set the link-level metric increment before.";
+      XLOGF(
+          INFO,
+          "Skip cmd: [unsetInterfaceMetricIncrement].due the interface {}didn't set the link-level metric increment before.",
+          interfaceName);
       p.setValue();
       return;
     }
@@ -1744,8 +1814,7 @@ LinkMonitor::semifuture_unsetInterfaceMetricIncrement(
 
 folly::SemiFuture<std::unique_ptr<thrift::DumpLinksReply>>
 LinkMonitor::semifuture_getInterfaces() {
-  XLOG(DBG2)
-      << fmt::format("Dump links requested with {} links", interfaces_.size());
+  XLOGF(DBG2, "Dump links requested with {} links", interfaces_.size());
 
   folly::Promise<std::unique_ptr<thrift::DumpLinksReply>> p;
   auto sf = p.getSemiFuture();
@@ -1799,8 +1868,7 @@ LinkMonitor::semifuture_getInterfaces() {
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
 LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
-  XLOG(DBG2) << "Dump adj requested, reply with " << getTotalAdjacencies()
-             << " adjs";
+  XLOGF(DBG2, "Dump adj requested, reply with {} adjs", getTotalAdjacencies());
 
   folly::Promise<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>> p;
   auto sf = p.getSemiFuture();
@@ -1824,8 +1892,7 @@ LinkMonitor::semifuture_getAdjacencies(thrift::AdjacenciesFilter filter) {
 folly::SemiFuture<std::unique_ptr<
     std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
 LinkMonitor::semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter) {
-  XLOG(DBG2) << "Dump adj requested, reply with " << getTotalAdjacencies()
-             << " adjs";
+  XLOGF(DBG2, "Dump adj requested, reply with {} adjs", getTotalAdjacencies());
 
   folly::Promise<std::unique_ptr<
       std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
@@ -1851,7 +1918,7 @@ LinkMonitor::semifuture_getAreaAdjacencies(thrift::AdjacenciesFilter filter) {
 
 folly::SemiFuture<InterfaceDatabase>
 LinkMonitor::semifuture_getAllLinks() {
-  XLOG(DBG2) << "Querying all links and their addresses from system";
+  XLOG(DBG2, "Querying all links and their addresses from system");
   return collectAll(nlSock_->getAllLinks(), nlSock_->getAllIfAddresses())
       .deferValue(
           [](std::tuple<
