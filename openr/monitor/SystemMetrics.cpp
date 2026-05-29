@@ -41,9 +41,10 @@ getMemBytes(const std::string& memoryType) {
       }
     }
   } catch (const std::exception& ex) {
-    XLOG(ERR)
-        << "Fail to read the \"/proc/self/status\" of current process to get the memory usage: "
-        << ex.what();
+    XLOGF(
+        ERR,
+        "Fail to read the \"/proc/self/status\" of current process to get the memory usage: {}",
+        ex.what());
   }
   return rss;
 }

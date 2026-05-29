@@ -46,47 +46,51 @@ MonitorBase::MonitorBase(
   }
 
   // Fiber task to read the LogSample from queue and publish
-  addFiberTask(
-      [q = std::move(logSampleQueue), config, this]() mutable noexcept {
-        XLOG(INFO) << "Starting log sample updates processing fiber "
-                   << "with isLogSubmissionEnable() flag: "
-                   << config->isLogSubmissionEnabled();
-        while (true) {
-          // perform read log from the queue
-          auto maybeLog = q.get();
-          XLOG(DBG2) << "Received log sample update";
-          if (maybeLog.hasError()) {
-            XLOG(INFO) << "Terminating log sample updates processing fiber";
-            break;
-          }
+  addFiberTask([q = std::move(logSampleQueue),
+                config,
+                this]() mutable noexcept {
+    XLOGF(
+        INFO,
+        "Starting log sample updates processing fiber with isLogSubmissionEnable() flag: {:d}",
+        config->isLogSubmissionEnabled());
+    while (true) {
+      // perform read log from the queue
+      auto maybeLog = q.get();
+      XLOG(DBG2, "Received log sample update");
+      if (maybeLog.hasError()) {
+        XLOG(INFO, "Terminating log sample updates processing fiber");
+        break;
+      }
 
-          // validate, process and publish the event logs
-          try {
-            auto inputLog = maybeLog.value();
-            // add common attributes
-            inputLog.addString("node_name", config->getNodeName());
+      // validate, process and publish the event logs
+      try {
+        auto inputLog = maybeLog.value();
+        // add common attributes
+        inputLog.addString("node_name", config->getNodeName());
 
-            // throws std::invalid_argument if not exist
-            inputLog.getString("event");
+        // throws std::invalid_argument if not exist
+        inputLog.getString("event");
 
-            // add to recent log list
-            if (recentLog_.size() >= maxLogEvents_) {
-              recentLog_.pop_front();
-            }
-            recentLog_.emplace_back(inputLog.toJson());
-
-            // publish the log if enable log submission
-            if (config->isLogSubmissionEnabled()) {
-              processEventLog(inputLog);
-            }
-          } catch (const std::exception& e) {
-            fb303::fbData->addStatValue(
-                "monitor.log.publish.failure", 1, fb303::COUNT);
-            XLOG(ERR) << "Failed to publish the log. Error: "
-                      << folly::exceptionStr(e);
-          }
+        // add to recent log list
+        if (recentLog_.size() >= maxLogEvents_) {
+          recentLog_.pop_front();
         }
-      });
+        recentLog_.emplace_back(inputLog.toJson());
+
+        // publish the log if enable log submission
+        if (config->isLogSubmissionEnabled()) {
+          processEventLog(inputLog);
+        }
+      } catch (const std::exception& e) {
+        fb303::fbData->addStatValue(
+            "monitor.log.publish.failure", 1, fb303::COUNT);
+        XLOGF(
+            ERR,
+            "Failed to publish the log. Error: {}",
+            folly::exceptionStr(e));
+      }
+    }
+  });
 }
 
 std::list<std::string>

@@ -14,14 +14,15 @@ namespace openr {
 void
 Monitor::processEventLog(LogSample const& eventLog) {
   // publish log message
-  XLOG(INFO) << "Get a " << category_ << " event log: " << eventLog.toJson();
+  XLOGF(INFO, "Get a {} event log: {}", category_, eventLog.toJson());
   // NOTE: Could add your own implementation to push logs to your database.
 }
 
 void
 Monitor::dumpHeapProfile() {
-  XLOG(INFO)
-      << "Please add your own implementation to dump the heap memory profile.";
+  XLOG(
+      INFO,
+      "Please add your own implementation to dump the heap memory profile.");
 }
 
 } // namespace openr
