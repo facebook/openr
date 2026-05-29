@@ -56,7 +56,7 @@ DualStateMachine::processEvent(DualEvent event, bool fc) {
     break;
   }
   default: {
-    XLOG(ERR) << "unknown state";
+    XLOG(ERR, "unknown state");
     break;
   }
   }
@@ -113,8 +113,13 @@ Dual::routeAffected() {
   auto dmin = getMinDistance();
   if (info_.distance != dmin) {
     // distance changed
-    XLOG(DBG2) << rootId << "::" << nodeId << ": distance changed "
-               << info_.distance << " -> " << dmin;
+    XLOGF(
+        DBG2,
+        "{}::{}: distance changed {} -> {}",
+        rootId,
+        nodeId,
+        info_.distance,
+        dmin);
     return true;
   }
 
@@ -138,8 +143,13 @@ Dual::routeAffected() {
   if (!nexthops.count(*info_.nexthop)) {
     // nextHop changed
     auto oldnh = info_.nexthop.has_value() ? *info_.nexthop : "none";
-    XLOG(DBG2) << rootId << "::" << nodeId << ": nexthop changed " << oldnh
-               << " -> " << folly::join(",", nexthops);
+    XLOGF(
+        DBG2,
+        "{}::{}: nexthop changed {} -> {}",
+        rootId,
+        nodeId,
+        oldnh,
+        folly::join(",", nexthops));
     return true;
   }
   return false;
@@ -156,8 +166,14 @@ Dual::meetFeasibleCondition(std::string& nexthop, int64_t& distance) {
     }
     const auto& rd = info_.neighborInfos[neighbor].reportDistance;
     if (rd < info_.feasibleDistance && addDistances(ld, rd) == dmin) {
-      XLOG(DBG2) << rootId << "::" << nodeId << ": meet FC: " << neighbor
-                 << ", " << rd << ", " << dmin;
+      XLOGF(
+          DBG2,
+          "{}::{}: meet FC: {}, {}, {}",
+          rootId,
+          nodeId,
+          neighbor,
+          rd,
+          dmin);
       nexthop = neighbor;
       distance = dmin;
       return true;
@@ -273,7 +289,7 @@ Dual::tryLocalOrDiffusing(
       // send reply back before starting diffusing
       sendReply(msgsToSend);
     }
-    XLOG(DBG2) << rootId << "::" << nodeId << ": start diffusing";
+    XLOGF(DBG2, "{}::{}: start diffusing", rootId, nodeId);
     bool success = diffusingComputation(msgsToSend);
     if (success) {
       info_.sm.processEvent(event, false);
@@ -321,8 +337,8 @@ Dual::getCounters() const noexcept {
 void
 Dual::clearCounters(const std::string& neighbor) noexcept {
   if (!counters_.count(neighbor)) {
-    XLOG(WARNING) << "clearCounters called on non-existing neighbor "
-                  << neighbor;
+    XLOGF(
+        WARNING, "clearCounters called on non-existing neighbor {}", neighbor);
     return;
   }
   counters_[neighbor] = thrift::DualPerRootCounters();
@@ -331,7 +347,7 @@ Dual::clearCounters(const std::string& neighbor) noexcept {
 void
 Dual::addChild(const std::string& child) noexcept {
   if (children_.count(child)) {
-    XLOG(WARNING) << rootId << ": adding an existing child " << child;
+    XLOGF(WARNING, "{}: adding an existing child {}", rootId, child);
     return;
   }
   children_.emplace(child);
@@ -340,7 +356,7 @@ Dual::addChild(const std::string& child) noexcept {
 void
 Dual::removeChild(const std::string& child) noexcept {
   if (!children_.count(child)) {
-    XLOG(WARNING) << rootId << ": removing an non-existing child " << child;
+    XLOGF(WARNING, "{}: removing an non-existing child {}", rootId, child);
     return;
   }
   children_.erase(child);
@@ -398,8 +414,13 @@ Dual::peerUp(
     const std::string& neighbor,
     int64_t cost,
     folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend) {
-  XLOG(INFO) << rootId << "::" << nodeId << ": LINK UP event from (" << neighbor
-             << ", " << cost << ")";
+  XLOGF(
+      INFO,
+      "{}::{}: LINK UP event from ({}, {})",
+      rootId,
+      nodeId,
+      neighbor,
+      cost);
 
   // reset parent, if I chose this neighbor as parent before, but I didn't
   // receive peer-down event(non-graceful shutdown), reset nexthop and distance
@@ -462,8 +483,7 @@ void
 Dual::peerDown(
     const std::string& neighbor,
     folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend) {
-  XLOG(INFO) << rootId << "::" << nodeId << ": LINK DOWN event from "
-             << neighbor;
+  XLOGF(INFO, "{}::{}: LINK DOWN event from {}", rootId, nodeId, neighbor);
   // clear counters
   clearCounters(neighbor);
 
@@ -506,8 +526,13 @@ Dual::processUpdate(
       << " != my-root-id: " << rootId;
 
   const auto& rd = *update.distance();
-  XLOG(DBG2) << rootId << "::" << nodeId << ": received UPDATE from ("
-             << neighbor << ", " << rd << ")";
+  XLOGF(
+      DBG2,
+      "{}::{}: received UPDATE from ({}, {})",
+      rootId,
+      nodeId,
+      neighbor,
+      rd);
   (*counters_[neighbor].updateRecv())++;
   (*counters_[neighbor].totalRecv())++;
 
@@ -573,8 +598,13 @@ Dual::processQuery(
       << " != my-root-id: " << rootId;
 
   const auto& rd = *query.distance();
-  XLOG(DBG2) << rootId << "::" << nodeId << ": received QUERY from ("
-             << neighbor << ", " << rd << ")";
+  XLOGF(
+      DBG2,
+      "{}::{}: received QUERY from ({}, {})",
+      rootId,
+      nodeId,
+      neighbor,
+      rd);
   (*counters_[neighbor].queryRecv())++;
   (*counters_[neighbor].totalRecv())++;
 
@@ -612,8 +642,13 @@ Dual::processReply(
       << " != my-root-id: " << rootId;
 
   const auto& reportDistance = *reply.distance();
-  XLOG(DBG2) << rootId << "::" << nodeId << ": received REPLY from ("
-             << neighbor << ", " << reportDistance << ")";
+  XLOGF(
+      DBG2,
+      "{}::{}: received REPLY from ({}, {})",
+      rootId,
+      nodeId,
+      neighbor,
+      reportDistance);
   (*counters_[neighbor].replyRecv())++;
   (*counters_[neighbor].totalRecv())++;
 
@@ -621,8 +656,12 @@ Dual::processReply(
     // received a reply when I don't expect to receive a reply from it
     // this is OK, this can happen when I detect link-down event before I
     // receive the reply, just ignore it.
-    XLOG(DBG2) << rootId << "::" << nodeId << " recv REPLY from " << neighbor
-               << " while I dont expect a reply, ignore it";
+    XLOGF(
+        DBG2,
+        "{}::{} recv REPLY from {} while I dont expect a reply, ignore it",
+        rootId,
+        nodeId,
+        neighbor);
     return;
   }
 
@@ -796,7 +835,7 @@ DualNode::processDualMessages(const thrift::DualMessages& messages) {
       break;
     }
     default: {
-      XLOG(ERR) << "unknown dual message type";
+      XLOG(ERR, "unknown dual message type");
       break;
     }
     }
@@ -876,8 +915,8 @@ DualNode::getCounters() const noexcept {
 void
 DualNode::clearCounters(const std::string& neighbor) noexcept {
   if (!counters_.count(neighbor)) {
-    XLOG(WARNING) << "clearCounters called on non-existing neighbor "
-                  << neighbor;
+    XLOGF(
+        WARNING, "clearCounters called on non-existing neighbor {}", neighbor);
     return;
   }
   counters_[neighbor] = thrift::DualPerNeighborCounters();
@@ -897,7 +936,7 @@ DualNode::sendAllDualMessages(
     // set srcId = myNodeId
     msgs.srcId() = nodeId;
     if (!sendDualMessages(neighbor, msgs)) {
-      XLOG(ERR) << "failed to send dual messages to " << kv.first;
+      XLOGF(ERR, "failed to send dual messages to {}", kv.first);
       continue;
     }
     (*counters_[neighbor].pktSent())++;

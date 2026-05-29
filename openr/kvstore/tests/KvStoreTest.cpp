@@ -2165,11 +2165,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   LOG(INFO) << "Waiting for full sync to complete.";
   for (auto& store : stores_) {
     folly::F14FastSet<std::string> keys;
-    XLOG(DBG3) << "Store " << store->getNodeId() << " received keys.";
+    XLOGF(DBG3, "Store {} received keys.", store->getNodeId());
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {
-        XLOG(DBG3) << "\tkey: " << key << ", value: " << val.value().value();
+        XLOGF(DBG3, "\tkey: {}, value: {}", key, val.value().value());
         keys.insert(key);
       }
     }
@@ -2213,11 +2213,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Receive 16 updates from each store
   for (auto& store : stores_) {
     folly::F14FastSet<std::string> keys;
-    XLOG(DBG3) << "Store " << store->getNodeId() << " received keys.";
+    XLOGF(DBG3, "Store {} received keys.", store->getNodeId());
     while (keys.size() < kNumStores) {
       auto publication = store->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {
-        XLOG(DBG3) << "\tkey: " << key << ", value: " << val.value().value();
+        XLOGF(DBG3, "\tkey: {}, value: {}", key, val.value().value());
         keys.insert(key);
       }
     }
@@ -2264,7 +2264,7 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Receive publication from each store as one update is atleast expected
   {
     for (auto& store : stores_) {
-      XLOG(DBG2) << "Receiving publication from " << store->getNodeId();
+      XLOGF(DBG2, "Receiving publication from {}", store->getNodeId());
       store->recvPublication();
     }
   }
@@ -2497,13 +2497,13 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
   // key-value updates from each store over PUB socket.
   LOG(INFO) << "Waiting for full sync to complete.";
   {
-    XLOG(DBG3) << "Store " << myStore->getNodeId() << " received keys.";
+    XLOGF(DBG3, "Store {} received keys.", myStore->getNodeId());
 
     folly::F14FastSet<std::string> keys;
     while (keys.size() < kNumStores) {
       auto publication = myStore->recvPublication();
       for (auto const& [key, val] : *publication.keyVals()) {
-        XLOG(DBG3) << "\tkey: " << key << ", value: " << val.value().value();
+        XLOGF(DBG3, "\tkey: {}, value: {}", key, val.value().value());
         keys.insert(key);
       }
     }

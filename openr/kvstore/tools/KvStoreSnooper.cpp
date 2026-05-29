@@ -43,13 +43,16 @@ main(int argc, char** argv) {
       std::string /* area */,
       std::unordered_map<std::string /* key */, openr::thrift::Value>>
       areaKeyVals;
-  XLOG(INFO) << "Stream is connected, updates will follow";
+  XLOG(INFO, "Stream is connected, updates will follow");
   for (auto const& pub : response.response) {
-    XLOG(INFO) << "Received " << pub.keyVals()->size()
-               << " entries in initial dump for area: " << *pub.area();
+    XLOGF(
+        INFO,
+        "Received {} entries in initial dump for area: {}",
+        pub.keyVals()->size(),
+        *pub.area());
     areaKeyVals[*pub.area()] = *pub.keyVals();
   }
-  XLOG(INFO) << "";
+  XLOG(INFO, "");
 
   auto subscription =
       std::move(response.stream)
@@ -58,7 +61,7 @@ main(int argc, char** argv) {
               [areaKeyVals = std::move(areaKeyVals)](
                   folly::Try<openr::thrift::Publication>&& maybePub) mutable {
                 if (maybePub.hasException()) {
-                  XLOG(ERR) << maybePub.exception().what();
+                  XLOGF(ERR, "{}", maybePub.exception().what());
                   return;
                 }
                 auto& pub = maybePub.value();

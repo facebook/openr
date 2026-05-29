@@ -254,8 +254,13 @@ class DualTestNode final : public DualNode {
       const std::optional<std::string>& newNh) noexcept override {
     std::string oldNhStr = oldNh.has_value() ? *oldNh : "none";
     std::string newNhStr = newNh.has_value() ? *newNh : "none";
-    XLOG(DBG1) << "node: " << nodeId << " at root: " << rootId << " nexthop"
-               << " change " << oldNhStr << " -> " << newNhStr;
+    XLOGF(
+        DBG1,
+        "node: {} at root: {} nexthop change {} -> {}",
+        nodeId,
+        rootId,
+        oldNhStr,
+        newNhStr);
   }
 
   // event base loop
@@ -271,9 +276,9 @@ class DualBaseFixture : public ::testing::Test {
   SetUp() override {
     evb = std::make_shared<folly::EventBase>();
     thread = std::thread([&]() {
-      XLOG(DBG1) << "evb starting";
+      XLOG(DBG1, "evb starting");
       evb->loopForever();
-      XLOG(DBG1) << "evb stopped";
+      XLOG(DBG1, "evb stopped");
     });
   }
 
@@ -281,7 +286,7 @@ class DualBaseFixture : public ::testing::Test {
   TearDown() override {
     evb->terminateLoopSoon();
     thread.join();
-    XLOG(DBG1) << "evb thread stopped";
+    XLOG(DBG1, "evb thread stopped");
   }
 
   void
@@ -290,7 +295,7 @@ class DualBaseFixture : public ::testing::Test {
     nodes.emplace(nodeId, node);
     vertices.emplace_back(Vertex{nodeId, true});
     if (isRoot) {
-      XLOG(DBG1) << "add root " << nodeId;
+      XLOGF(DBG1, "add root {}", nodeId);
       rootIds.emplace_back(nodeId);
     }
   }
@@ -632,7 +637,7 @@ class DualBaseFixture : public ::testing::Test {
     getResults(infos, status);
 
     if (rootIds.empty()) {
-      XLOG(DBG1) << "validate no-root case";
+      XLOG(DBG1, "validate no-root case");
       if (!validateNoRoot(infos)) {
         LOG(ERROR) << "validate no root failed";
         printStatus(status);
@@ -642,7 +647,7 @@ class DualBaseFixture : public ::testing::Test {
     }
 
     for (const auto& rootId : rootIds) {
-      XLOG(DBG1) << "validate root " << rootId;
+      XLOGF(DBG1, "validate root {}", rootId);
       if (!validateOnRoot(rootId, infos)) {
         LOG(ERROR) << "validate root " << rootId << " failed";
         printStatus(status, rootId);
@@ -665,8 +670,7 @@ class DualBaseFixture : public ::testing::Test {
     for (auto& edge : edges) {
       if (flap) {
         // flap link test
-        XLOG(DBG1) << "===> link (" << edge.name1 << ", " << edge.name2
-                   << ") flap";
+        XLOGF(DBG1, "===> link ({}, {}) flap", edge.name1, edge.name2);
         linkFlap(edge.name1, edge.name2, edge.weight);
 
         /* sleep override */
@@ -680,8 +684,7 @@ class DualBaseFixture : public ::testing::Test {
       }
 
       // bring edge down and validate
-      XLOG(DBG1) << "===> link (" << edge.name1 << ", " << edge.name2
-                 << ") down";
+      XLOGF(DBG1, "===> link ({}, {}) down", edge.name1, edge.name2);
       peerDown(edge.name1, edge.name2);
 
       /* sleep override */
@@ -693,7 +696,7 @@ class DualBaseFixture : public ::testing::Test {
       }
 
       // bring edge back up and validate
-      XLOG(DBG1) << "===> link (" << edge.name1 << ", " << edge.name2 << ") up";
+      XLOGF(DBG1, "===> link ({}, {}) up", edge.name1, edge.name2);
       peerUp(edge.name1, edge.name2, edge.weight);
 
       /* sleep override */
@@ -723,7 +726,7 @@ class DualBaseFixture : public ::testing::Test {
       }
       if (flap) {
         // flap node test
-        XLOG(DBG1) << "===> node (" << vertex.name << ") flap";
+        XLOGF(DBG1, "===> node ({}) flap", vertex.name);
         nodeFlap(vertex.name);
 
         /* sleep override */
@@ -736,7 +739,7 @@ class DualBaseFixture : public ::testing::Test {
       }
 
       // bring node down and validate
-      XLOG(DBG1) << "===> node (" << vertex.name << ") down";
+      XLOGF(DBG1, "===> node ({}) down", vertex.name);
       nodeDown(vertex.name);
 
       /* sleep override */
@@ -747,7 +750,7 @@ class DualBaseFixture : public ::testing::Test {
       }
 
       // bring node up and validate
-      XLOG(DBG1) << "===> node (" << vertex.name << ") up";
+      XLOGF(DBG1, "===> node ({}) up", vertex.name);
       nodeUp(vertex.name);
       /* sleep override */
       std::this_thread::sleep_for(syncms);
@@ -775,8 +778,7 @@ class DualBaseFixture : public ::testing::Test {
       // flap test
       // flap all chosen edges
       for (const auto& edge : links) {
-        XLOG(DBG1) << "===> link (" << edge.name1 << ", " << edge.name2
-                   << ") flap";
+        XLOGF(DBG1, "===> link ({}, {}) flap", edge.name1, edge.name2);
         linkFlap(edge.name1, edge.name2, edge.weight);
       }
 
@@ -791,8 +793,7 @@ class DualBaseFixture : public ::testing::Test {
 
     // bring down links
     for (const auto& edge : links) {
-      XLOG(DBG1) << "===> link (" << edge.name1 << ", " << edge.name2
-                 << ") down";
+      XLOGF(DBG1, "===> link ({}, {}) down", edge.name1, edge.name2);
       peerDown(edge.name1, edge.name2);
     }
 
@@ -805,7 +806,7 @@ class DualBaseFixture : public ::testing::Test {
 
     // bring links back up
     for (const auto& edge : links) {
-      XLOG(DBG1) << "===> link (" << edge.name1 << ", " << edge.name2 << ") up";
+      XLOGF(DBG1, "===> link ({}, {}) up", edge.name1, edge.name2);
       peerUp(edge.name1, edge.name2, edge.weight);
     }
 
@@ -885,7 +886,7 @@ TEST_P(DualFixture, CircularTest) {
   const auto& param = GetParam();
   const auto& totalRoots = param.totalRoots;
   const auto& flap = param.flap;
-  XLOG(DBG1) << "test params: " << totalRoots << ", " << flap;
+  XLOGF(DBG1, "test params: {}, {:d}", totalRoots, flap);
 
   int numNodes = 4;
   // add nodes
@@ -920,7 +921,7 @@ TEST_P(DualFixture, FabricTest) {
   const auto& param = GetParam();
   const auto& totalRoots = param.totalRoots;
   const auto& flap = param.flap;
-  XLOG(DBG1) << "test params: " << totalRoots << ", " << flap;
+  XLOGF(DBG1, "test params: {}, {:d}", totalRoots, flap);
 
   int m = 2;
   int n = 4;
@@ -952,7 +953,7 @@ TEST_P(DualFixture, FullMeshTest) {
   const auto& param = GetParam();
   const auto& totalRoots = param.totalRoots;
   const auto& flap = param.flap;
-  XLOG(DBG1) << "test params: " << totalRoots << ", " << flap;
+  XLOGF(DBG1, "test params: {}, {:d}", totalRoots, flap);
 
   int numNodes = 4;
   // add nodes
@@ -987,7 +988,7 @@ TEST_P(DualFixture, GridTest) {
   const auto& param = GetParam();
   const auto& totalRoots = param.totalRoots;
   const auto& flap = param.flap;
-  XLOG(DBG1) << "test params: " << totalRoots << ", " << flap;
+  XLOGF(DBG1, "test params: {}, {:d}", totalRoots, flap);
 
   int m = 2;
   int n = 3;

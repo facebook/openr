@@ -59,8 +59,11 @@ isValidTtlAndLog(
     thrift::KvStoreMergeResult& stats) {
   bool result = detail::isValidTtl(*value.ttl());
   if (!result) {
-    XLOG(DBG4) << fmt::format(
-        "(mergeKeyValues) key: {} has invalid ttl: {}", key, *value.ttl());
+    XLOGF(
+        DBG4,
+        "(mergeKeyValues) key: {} has invalid ttl: {}",
+        key,
+        *value.ttl());
 
     stats.noMergeKeyVals()->emplace(
         std::make_pair(key, thrift::KvStoreNoMergeReason::INVALID_TTL));
@@ -74,8 +77,8 @@ noNeedUpdateAndLog(
     const std::string& key,
     thrift::KvStoreMergeResult& result) {
   if (mergeType == MergeType::NO_UPDATE_NEEDED) {
-    XLOG(DBG3) << fmt::format(
-        "(mergeKeyValues) no need to update anything for key: '{}'", key);
+    XLOGF(
+        DBG3, "(mergeKeyValues) no need to update anything for key: '{}'", key);
     result.noMergeKeyVals()->emplace(
         key, thrift::KvStoreNoMergeReason::NO_NEED_TO_UPDATE);
     return true;
@@ -89,8 +92,7 @@ isInconsistentAndLog(
     const std::string& key,
     thrift::KvStoreMergeResult& result) {
   if (mergeType == MergeType::RESYNC_NEEDED) {
-    XLOG(DBG3) << fmt::format(
-        "(mergeKeyValues) Inconsistency detected for key: '{}'", key);
+    XLOGF(DBG3, "(mergeKeyValues) Inconsistency detected for key: '{}'", key);
     result.noMergeKeyVals()->emplace(
         key, thrift::KvStoreNoMergeReason::INCONSISTENCY_DETECTED);
     result.inconsistencyDetetectedWithOriginator() = true;
@@ -107,7 +109,8 @@ isValidVersionAndLog(
     thrift::KvStoreMergeResult& stats) {
   bool result = detail::isValidVersion(myVersion, value);
   if (!result) {
-    XLOG(DBG4) << fmt::format(
+    XLOGF(
+        DBG4,
         "(mergeKeyValues) key: {} has invalid/old version: {}, local version: {}",
         key,
         *value.version(),
@@ -126,7 +129,8 @@ isKeyMatchAndLog(
     const thrift::Value& value,
     thrift::KvStoreMergeResult& stats) {
   if (filters.has_value() && !filters->keyMatch(key, value)) {
-    XLOG(DBG4) << fmt::format(
+    XLOGF(
+        DBG4,
         "(mergeKeyValues) key: {} does NOT matching the fiter: {}",
         key,
         filters->str());
@@ -182,41 +186,39 @@ isResyncNeeded(
     /*
      * Case 1: received ttl update with a missing k-v pair
      */
-    XLOG(ERR) << "(mergeKeyValues) Detected ttl update from a non-existing "
-              << fmt::format(
-                     "key: {}, version: {}, originator: {}, ttlVersion: {}",
-                     key,
-                     *value.version(),
-                     *value.originatorId(),
-                     *value.ttlVersion());
+    XLOGF(
+        ERR,
+        "(mergeKeyValues) Detected ttl update from a non-existing key: {}, version: {}, originator: {}, ttlVersion: {}",
+        key,
+        *value.version(),
+        *value.originatorId(),
+        *value.ttlVersion());
 
     inconsistencyDetected = true;
   } else if (*value.version() != *curValue->version()) {
     /*
      * Case 2: received ttl update with a different version
      */
-    XLOG(ERR)
-        << "(mergeKeyValues) Detected version inconsistency with ttl update. "
-        << fmt::format(
-               "key: {}, version: {}, originator: {} with local version: {}",
-               key,
-               *value.version(),
-               *value.originatorId(),
-               *curValue->version());
+    XLOGF(
+        ERR,
+        "(mergeKeyValues) Detected version inconsistency with ttl update. key: {}, version: {}, originator: {} with local version: {}",
+        key,
+        *value.version(),
+        *value.originatorId(),
+        *curValue->version());
 
     inconsistencyDetected = true;
   } else if (*value.originatorId() != *curValue->originatorId()) {
     /*
      * Case 3: received ttl update with a different originatorId
      */
-    XLOG(ERR)
-        << "(mergeKeyValues) Detected originatorId inconsistency with ttl update. "
-        << fmt::format(
-               "key: {}, version: {}, originator: {} with local originatorId: {}",
-               key,
-               *value.version(),
-               *value.originatorId(),
-               *curValue->originatorId());
+    XLOGF(
+        ERR,
+        "(mergeKeyValues) Detected originatorId inconsistency with ttl update. key: {}, version: {}, originator: {} with local originatorId: {}",
+        key,
+        *value.version(),
+        *value.originatorId(),
+        *curValue->originatorId());
 
     inconsistencyDetected = true;
   }
@@ -322,7 +324,8 @@ getMergeType(
        * Case 4: key exists, same version, same originatorId.
        */
       if (XLOG_IS_ON(DBG4)) {
-        XLOG(DBG4) << fmt::format(
+        XLOGF(
+            DBG4,
             "(mergeKeyValues) Update ttl key: {} with higher ttlVersion: {}, old one: {}",
             key,
             *value.ttlVersion(),
@@ -350,7 +353,8 @@ getMergeType(
        * ATTN: for newVersion < myVersion case, util::isValidVersionAndLog()
        * has already guarded against that case. :)
        */
-      XLOG(DBG4) << fmt::format(
+      XLOGF(
+          DBG4,
           "(mergeKeyValues) Update key: {} with higher version: {}, old one: {}",
           key,
           *value.version(),
@@ -361,7 +365,8 @@ getMergeType(
       /*
        * [2nd tie-breaker] originatorId - prefer higher
        */
-      XLOG(INFO) << fmt::format(
+      XLOGF(
+          INFO,
           "(mergeKeyValues) Update key: {} with higher originatorId: {}, old one: {}",
           key,
           *value.originatorId(),
@@ -387,8 +392,7 @@ getMergeType(
 
       if (rc > 0) {
         // versions and orginatorIds are same but value is higher
-        XLOG(DBG4) << fmt::format(
-            "(mergeKeyValues) Update key: {} with higher value", key);
+        XLOGF(DBG4, "(mergeKeyValues) Update key: {} with higher value", key);
 
         return MergeType::UPDATE_ALL_NEEDED;
       } else if (rc == 0) {
@@ -396,7 +400,8 @@ getMergeType(
          * [4th tie-breaker] ttlVersion - prefer higher
          */
         if (*value.ttlVersion() > *curValue->ttlVersion()) {
-          XLOG(DBG4) << fmt::format(
+          XLOGF(
+              DBG4,
               "(mergeKeyValues) Update key: {} with higher ttlVersion: {}, old one: {}",
               key,
               *value.ttlVersion(),
@@ -429,7 +434,8 @@ printKeyValInArea(
     const std::string& areaTag,
     const std::string& key,
     const thrift::Value& val) {
-  XLOG(DBG1) << fmt::format(
+  XLOGF(
+      DBG1,
       "{}{} [key: {}, v: {}, originatorId: {}, ttlVersion: {}, ttl: {}]",
       areaTag,
       logStr,
@@ -485,7 +491,8 @@ mergeKeyValues(
       auto localTtlVersion = curValue ? *curValue->ttlVersion() : -1;
       std::string localOriginatorId =
           curValue ? *curValue->originatorId() : "null";
-      XLOG(DBG3) << fmt::format(
+      XLOGF(
+          DBG3,
           "Updating key: {}\n  Version: {} -> {}\n  Originator: {} -> {}\n  TtlVersion: {} -> {}\n  Ttl: {} -> {}",
           key,
           localVersion,
@@ -509,7 +516,8 @@ mergeKeyValues(
     result.keyVals()->emplace(key, value);
   }
 
-  XLOG(DBG3) << fmt::format(
+  XLOGF(
+      DBG3,
       "({}) updating {} keyvals. ValueUpdates: {}, TtlUpdates: {}",
       __FUNCTION__,
       result.keyVals()->size(),

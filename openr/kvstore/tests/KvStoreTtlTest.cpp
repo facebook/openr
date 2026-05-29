@@ -84,7 +84,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     CHECK_EQ(kNumStores, adjacencyList.size()) << "Incomplete adjacencies.";
 
     // Create and start stores
-    XLOG(DBG1) << "Creating and starting stores ...";
+    XLOG(DBG1, "Creating and starting stores ...");
     for (unsigned int i = 0; i < kNumStores; ++i) {
       const auto nodeId = buildNodeId(kOriginBase, i);
       LOG(INFO) << "Creating store " << nodeId;
@@ -190,9 +190,10 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
           EXPECT_EQ(expectedKeyVals, receivedKeyVals);
 
           // Print for debugging.
-          XLOG(DBG4) << "Store " << store->getNodeId() << " received keys.";
+          XLOGF(DBG4, "Store {} received keys.", store->getNodeId());
           for (auto const& [key, val] : receivedKeyVals) {
-            XLOG(DBG4) << fmt::format(
+            XLOGF(
+                DBG4,
                 "\tkey: {},  value: {}, version: {}",
                 key,
                 val.value() ? *val.value() : "",
@@ -215,15 +216,18 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         // wait for all keys to expire
         size_t iter{0};
         while (true) {
-          XLOG(DBG2) << "Checking for empty stores. Iter#" << ++iter;
+          XLOGF(DBG2, "Checking for empty stores. Iter#{}", ++iter);
           bool allStoreEmpty = true;
           for (auto& store : stores_) {
             auto keyVals = store->dumpAll(kTestingAreaName);
             if (!keyVals.empty()) {
-              XLOG(DBG2) << store->getNodeId() << " still has "
-                         << keyVals.size() << " keys remaining";
+              XLOGF(
+                  DBG2,
+                  "{} still has {} keys remaining",
+                  store->getNodeId(),
+                  keyVals.size());
               for (auto& [key, val] : keyVals) {
-                XLOG(DBG2) << "  " << key << ", ttl: " << *val.ttl();
+                XLOGF(DBG2, "  {}, ttl: {}", key, *val.ttl());
               }
               allStoreEmpty = false;
               break;
@@ -304,9 +308,9 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
       {7, 5},
   };
 
-  XLOG(DBG1) << "Adjacency list: ";
+  XLOG(DBG1, "Adjacency list: ");
   for (const auto&& [index, set] : adjacencyList | ranges::views::enumerate) {
-    XLOG(DBG1) << index << ": " << fmt::format("{}", folly::join(", ", set));
+    XLOGF(DBG1, "{}: {}", index, folly::join(", ", set));
   }
   performKvStoreSyncTest(
       adjacencyList, "kv_store_graph::store", kNumStores, kNumStores + 1);

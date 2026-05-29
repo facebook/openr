@@ -128,16 +128,18 @@ dumpAllWithThriftClientFromMultiple(
         }) |
         folly::gen::as<std::vector<std::string>>();
 
-    XLOG(DBG2) << "Dump kvStore key-vals from: " << folly::join(",", addrStrs)
-               << ". Required SSL secure connection: " << std::boolalpha
-               << (sslContext != nullptr);
+    XLOGF(
+        DBG2,
+        "Dump kvStore key-vals from: {}. Required SSL secure connection: {}",
+        folly::join(",", addrStrs),
+        (sslContext != nullptr));
   }
 
   auto startTime = std::chrono::steady_clock::now();
   for (auto const& sockAddr : sockAddrs) {
     std::unique_ptr<ClientType> client{nullptr};
     if (sslContext) {
-      XLOG(DBG3) << "Try to connect Open/R SSL secure client.";
+      XLOG(DBG3, "Try to connect Open/R SSL secure client.");
       try {
         client = getOpenrCtrlSecureClient<ClientType>(
             evb,
@@ -158,7 +160,7 @@ dumpAllWithThriftClientFromMultiple(
 
     // Cannot connect to Open/R via secure client. Try plain-text client
     if (!client) {
-      XLOG(DBG3) << "Try to connect Open/R plain-text client.";
+      XLOG(DBG3, "Try to connect Open/R plain-text client.");
       try {
         client = getOpenrCtrlPlainTextClient<ClientType>(
             evb,
@@ -182,8 +184,10 @@ dumpAllWithThriftClientFromMultiple(
       continue;
     }
 
-    XLOG(DBG3) << "Successfully connected to Open/R with addr: "
-               << sockAddr.getAddressStr();
+    XLOGF(
+        DBG3,
+        "Successfully connected to Open/R with addr: {}",
+        sockAddr.getAddressStr());
 
     calls.emplace_back(
         area ? client->semifuture_getKvStoreKeyValsFilteredArea(params, *area)
@@ -195,28 +199,33 @@ dumpAllWithThriftClientFromMultiple(
     return std::make_pair(std::nullopt, unreachableAddrs);
   }
 
-  folly::collectAll(calls).via(&evb).thenValue(
-      [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
-        XLOG(DBG1) << "Merge key-vals from " << results.size()
-                   << " different Open/R instances.";
+  folly::collectAll(calls).via(&evb).thenValue([&](std::vector<folly::Try<
+                                                       openr::thrift::
+                                                           Publication>>&&
+                                                       results) {
+    XLOGF(
+        DBG1,
+        "Merge key-vals from {} different Open/R instances.",
+        results.size());
 
-        // loop semifuture collection to merge all values
-        for (auto& result : results) {
-          // folly::Try will contain either value or exception
-          if (result.hasException()) {
-            LOG(ERROR) << "Exception: "
-                       << folly::exceptionStr(result.exception());
-          } else if (result.hasValue()) {
-            auto keyVals = *result.value().keyVals();
-            const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
+    // loop semifuture collection to merge all values
+    for (auto& result : results) {
+      // folly::Try will contain either value or exception
+      if (result.hasException()) {
+        LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
+      } else if (result.hasValue()) {
+        auto keyVals = *result.value().keyVals();
+        const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
 
-            XLOG(DBG3) << "Received kvstore publication with: "
-                       << keyVals.size() << " key-vals. Incurred "
-                       << deltaPub.size() << " key-val updates.";
-          }
-        }
-        evb.terminateLoopSoon();
-      });
+        XLOGF(
+            DBG3,
+            "Received kvstore publication with: {} key-vals. Incurred {} key-val updates.",
+            keyVals.size(),
+            deltaPub.size());
+      }
+    }
+    evb.terminateLoopSoon();
+  });
 
   // magic happens here
   evb.loopForever();
@@ -227,7 +236,7 @@ dumpAllWithThriftClientFromMultiple(
           std::chrono::steady_clock::now() - startTime)
           .count();
 
-  XLOG(DBG1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+  XLOGF(DBG1, "Took: {}ms to retrieve KvStore snapshot", elapsedTime);
 
   return std::make_pair(merged, unreachableAddrs);
 }
@@ -266,9 +275,11 @@ dumpAllWithThriftClientFromMultiple(
       auto keyVals = *result.value().keyVals();
       const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
 
-      XLOG(DBG3) << "Received kvstore publication with: " << keyVals.size()
-                 << " key-vals. Incurred " << deltaPub.size()
-                 << " key-val updates.";
+      XLOGF(
+          DBG3,
+          "Received kvstore publication with: {} key-vals. Incurred {} key-val updates.",
+          keyVals.size(),
+          deltaPub.size());
     }
     ++clientIdx;
   }
@@ -279,7 +290,7 @@ dumpAllWithThriftClientFromMultiple(
           std::chrono::steady_clock::now() - startTime)
           .count();
 
-  XLOG(DBG1) << "Took: " << elapsedTime << "ms to retrieve KvStore snapshot";
+  XLOGF(DBG1, "Took: {}ms to retrieve KvStore snapshot", elapsedTime);
 
   return {merged, std::move(failedClients)};
 }

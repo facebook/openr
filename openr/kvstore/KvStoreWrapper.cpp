@@ -46,9 +46,9 @@ void
 KvStoreWrapper<ClientType>::run() noexcept {
   // Start kvstore
   kvStoreThread_ = std::thread([this]() {
-    XLOG(DBG1) << "KvStore " << nodeId_ << " running.";
+    XLOGF(DBG1, "KvStore {} running.", nodeId_);
     kvStore_->run();
-    XLOG(DBG1) << "KvStore " << nodeId_ << " stopped.";
+    XLOGF(DBG1, "KvStore {} stopped.", nodeId_);
   });
   kvStore_->waitUntilRunning();
 
@@ -73,7 +73,7 @@ KvStoreWrapper<ClientType>::stop() {
     return;
   }
 
-  XLOG(DBG1) << fmt::format("Stopping kvStore: {}", nodeId_);
+  XLOGF(DBG1, "Stopping kvStore: {}", nodeId_);
 
   // Close queue
   kvStoreUpdatesQueue_.close();
@@ -88,7 +88,7 @@ KvStoreWrapper<ClientType>::stop() {
   // Stop kvstore. Destructor will automatically be called when out-of-scope
   kvStore_->stop();
   kvStoreThread_.join();
-  XLOG(DBG1) << fmt::format("Successfully stopped kvStore: {}", nodeId_);
+  XLOGF(DBG1, "Successfully stopped kvStore: {}", nodeId_);
 }
 
 template <class ClientType>
@@ -106,7 +106,7 @@ KvStoreWrapper<ClientType>::setKey(
   try {
     kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
   } catch (std::exception const& e) {
-    XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
+    XLOGF(ERR, "Exception to set key in kvstore: {}", folly::exceptionStr(e));
     return false;
   }
   return true;
@@ -129,12 +129,13 @@ KvStoreWrapper<ClientType>::setKeys(
     auto result =
         kvStore_->semifuture_setKvStoreKeyValues(area, std::move(params)).get();
     if (result->noMergeReasons()->size() != 0) {
-      XLOG(ERR) << fmt::format(
+      XLOGF(
+          ERR,
           "Error when merging key-value with size: {}",
           result->noMergeReasons()->size());
     }
   } catch (std::exception const& e) {
-    XLOG(ERR) << "Exception to set key in kvstore: " << folly::exceptionStr(e);
+    XLOGF(ERR, "Exception to set key in kvstore: {}", folly::exceptionStr(e));
     return false;
   }
   return true;
@@ -147,8 +148,10 @@ KvStoreWrapper<ClientType>::injectThriftFailure(
   try {
     kvStore_->semifuture_injectThriftFailure(area, peerName);
   } catch (std::exception const& e) {
-    XLOG(ERR) << "Exception to thrift failure injection: "
-              << folly::exceptionStr(e);
+    XLOGF(
+        ERR,
+        "Exception to thrift failure injection: {}",
+        folly::exceptionStr(e));
     return false;
   }
 
@@ -181,14 +184,16 @@ KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string key) {
     if (maybeGetKey.hasValue()) {
       pub = *(maybeGetKey.value());
     } else {
-      XLOG(ERR) << "Failed to retrieve key from KvStore. Key: " << key;
+      XLOGF(ERR, "Failed to retrieve key from KvStore. Key: {}", key);
       return std::nullopt;
     }
   } catch (const folly::FutureTimeout&) {
-    XLOG(ERR) << "Timed out retrieving key: " << key;
+    XLOGF(ERR, "Timed out retrieving key: {}", key);
   } catch (std::exception const& e) {
-    XLOG(WARNING) << "Exception to get key from kvstore: "
-                  << folly::exceptionStr(e);
+    XLOGF(
+        WARNING,
+        "Exception to get key from kvstore: {}",
+        folly::exceptionStr(e));
     return std::nullopt; // No value found
   }
 
@@ -349,7 +354,7 @@ KvStoreWrapper<ClientType>::addPeers(
   try {
     kvStore_->semifuture_addUpdateKvStorePeers(area, peers).get();
   } catch (std::exception const& e) {
-    XLOG(ERR) << "Failed to add peers: " << folly::exceptionStr(e);
+    XLOGF(ERR, "Failed to add peers: {}", folly::exceptionStr(e));
     return false;
   }
   return true;
@@ -361,7 +366,7 @@ KvStoreWrapper<ClientType>::delPeer(AreaId const& area, std::string peerName) {
   try {
     kvStore_->semifuture_deleteKvStorePeers(area, {peerName}).get();
   } catch (std::exception const& e) {
-    XLOG(ERR) << "Failed to delete peers: " << folly::exceptionStr(e);
+    XLOGF(ERR, "Failed to delete peers: {}", folly::exceptionStr(e));
     return false;
   }
   return true;
