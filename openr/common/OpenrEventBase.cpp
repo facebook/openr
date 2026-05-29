@@ -31,9 +31,9 @@ EventBaseStopSignalHandler::EventBaseStopSignalHandler(folly::EventBase* evb)
 
 void
 EventBaseStopSignalHandler::signalReceived(int signal) noexcept {
-  XLOG(INFO) << "Caught signal: " << signal << ". Stopping openr event-base...";
+  XLOGF(INFO, "Caught signal: {}. Stopping openr event-base...", signal);
   getEventBase()->terminateLoopSoon();
-  XLOG(INFO) << "Openr event-base stopped";
+  XLOG(INFO, "Openr event-base stopped");
 }
 
 OpenrEventBase::OpenrEventHandler::OpenrEventHandler(

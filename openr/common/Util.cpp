@@ -41,7 +41,7 @@ logInitializationEvent(
   if (message.has_value()) {
     logMsg = logMsg + fmt::format(", message: {}", message.value());
   }
-  XLOG(INFO) << logMsg;
+  XLOGF(INFO, "{}", logMsg);
 
   // Log OpenR initialization event to fb303::fbData.
   facebook::fb303::fbData->setCounter(
@@ -182,8 +182,10 @@ getThreadBytesImpl(bool isAllocated) {
   try {
     folly::mallctlRead(cmd, &bytes);
   } catch (const std::exception& ex) {
-    XLOG(ERR) << "Failed to read thread allocated/de-allocated bytes: "
-              << ex.what();
+    XLOGF(
+        ERR,
+        "Failed to read thread allocated/de-allocated bytes: {}",
+        ex.what());
   }
   return bytes;
 }

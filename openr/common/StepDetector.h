@@ -81,8 +81,11 @@ class StepDetector {
       if (diff <= loThreshold_) {
         // falling edge
         inTransit_ = false;
-        XLOG(DBG4) << "Step detected at time: " << now.count()
-                   << ", new mean: " << fastAvg;
+        XLOGF(
+            DBG4,
+            "Step detected at time: {}, new mean: {}",
+            now.count(),
+            fastAvg);
         // report fast average since slow average may not have caught up with
         // new mean yet
         stepCb_(fastAvg);
@@ -101,8 +104,11 @@ class StepDetector {
     // only check when time series is stable, e.g., slow and fast mean are close
     if (diff <= loThreshold_ && lastAvgInit_ &&
         std::abs(slowAvg - lastAvg_) >= absThreshold_) {
-      XLOG(DBG4) << "Step detected at time: " << now.count()
-                 << ", new mean: " << slowAvg;
+      XLOGF(
+          DBG4,
+          "Step detected at time: {}, new mean: {}",
+          now.count(),
+          slowAvg);
       // report slow average because it's more accurate
       stepCb_(slowAvg);
       lastAvg_ = slowAvg;

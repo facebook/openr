@@ -30,8 +30,7 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
     }
     // sleep override
     std::this_thread::sleep_for(std::chrono::seconds(1));
-    XLOG(INFO)
-        << fmt::format("Waiting for FibService to come up via port: {}", port);
+    XLOGF(INFO, "Waiting for FibService to come up via port: {}", port);
   }
 
   // signalHandlerEvb is terminated. Prepare for exit.
@@ -39,16 +38,14 @@ waitForFibService(const folly::EventBase& signalHandlerEvb, int port) {
     auto timeElapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
                            std::chrono::steady_clock::now() - waitForFibStart)
                            .count();
-    XLOG(INFO) << fmt::format(
-        "Termination signal received. Waited for {}ms", timeElapsed);
+    XLOGF(INFO, "Termination signal received. Waited for {}ms", timeElapsed);
     return false;
   }
 
   auto waitMs = std::chrono::duration_cast<std::chrono::milliseconds>(
                     std::chrono::steady_clock::now() - waitForFibStart)
                     .count();
-  XLOG(INFO) << fmt::format(
-      "FibService is up on port {}. Waited for {}ms", port, waitMs);
+  XLOGF(INFO, "FibService is up on port {}. Waited for {}ms", port, waitMs);
 
   return true;
 }

@@ -46,7 +46,7 @@ void
 ExponentialBackoff<Duration>::reportError() {
   lastErrorTime_ = std::chrono::steady_clock::now();
   if (currentBackoff_ >= maxBackoff_ && isAbortAtMax_) {
-    XLOG(ERR) << "Max back-off reached, isAbortAtMax true! Abort! Abort!";
+    XLOG(ERR, "Max back-off reached, isAbortAtMax true! Abort! Abort!");
     ::abort();
   }
   if (currentBackoff_ == Duration(0)) {

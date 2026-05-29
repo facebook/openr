@@ -822,8 +822,10 @@ selectRoutes(
   case thrift::RouteSelectionAlgorithm::PER_AREA_SHORTEST_DISTANCE:
     return selectShortestDistancePerArea(prefixEntries, nodeAreaSet);
   default:
-    XLOG(INFO) << "Unsupported route selection algorithm "
-               << apache::thrift::util::enumNameSafe(algorithm);
+    XLOGF(
+        INFO,
+        "Unsupported route selection algorithm {}",
+        apache::thrift::util::enumNameSafe(algorithm));
     break;
   }
 

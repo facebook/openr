@@ -20,10 +20,10 @@ FileUtil::readFileToString(const std::string& path, std::string& contents) {
   // "../../../etc/passwd".
   std::array<char, PATH_MAX + 1> resolvedPath;
   if (realpath(path.c_str(), resolvedPath.data()) == nullptr) {
-    XLOG(ERR) << "Failed to resolve path: " << path;
+    XLOGF(ERR, "Failed to resolve path: {}", path);
     return false;
   }
-  XLOG(INFO) << "Read the file: " << resolvedPath.data();
+  XLOGF(INFO, "Read the file: {}", resolvedPath.data());
 
   // read the file
   return folly::readFile(resolvedPath.data(), contents);

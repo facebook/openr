@@ -40,10 +40,10 @@ startEventBase(
 
   // Start a thread
   allThreads.emplace_back(std::thread([evb = evb.get(), name]() noexcept {
-    XLOG(INFO) << fmt::format("Starting {} thread ...", name);
+    XLOGF(INFO, "Starting {} thread ...", name);
     folly::setThreadName(name);
     evb->run();
-    XLOG(INFO) << fmt::format("[Exit] Successfully stopped {} thread.", name);
+    XLOGF(INFO, "[Exit] Successfully stopped {} thread.", name);
   }));
   evb->waitUntilRunning();
 
