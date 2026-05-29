@@ -18,6 +18,7 @@
 #include <openr/config/Config.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/kvstore/KvStoreUtil.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
@@ -1280,9 +1281,17 @@ TEST_F(KvStoreTestFixture, ConvergenceProfilerPerfEventsStamping) {
     EXPECT_EQ(nodeId, *events[i].nodeName());
   }
 
-  EXPECT_TRUE(
-      fb303::fbData->getCounters().contains(
-          "kvstore.recv_to_advertise_ms.avg"));
+  const auto counters = fb303::fbData->getCounters();
+  EXPECT_TRUE(counters.contains("kvstore.recv_to_advertise_ms.avg"));
+  // Max is published as a plain counter (not a stat), so the bare key is
+  // present and non-negative after at least one observation.
+  ASSERT_TRUE(counters.contains("kvstore.recv_to_advertise_max_ms"));
+  EXPECT_GE(counters.at("kvstore.recv_to_advertise_max_ms"), 0);
+
+  // Reset drops the sticky max back to zero.
+  resetRecvToAdvertiseMaxMs();
+  EXPECT_EQ(
+      0, fb303::fbData->getCounters().at("kvstore.recv_to_advertise_max_ms"));
 }
 
 //

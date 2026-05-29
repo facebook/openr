@@ -253,6 +253,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::SemiFuture<folly::Unit> semifuture_clearProfilerStats() override;
 
+  folly::SemiFuture<folly::Unit> semifuture_resetRecvToAdvertiseMax() override;
+
   // Subscriber Info API
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>

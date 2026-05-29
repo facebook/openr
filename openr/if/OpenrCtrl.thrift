@@ -778,4 +778,11 @@ service OpenrCtrl extends KvStore.KvStoreService {
    * Clear all profiler statistics.
    */
   void clearProfilerStats();
+
+  /**
+   * Reset the sticky max for the kvstore.recv_to_advertise_max_ms counter to
+   * zero. Call before a specific event (link down/up, peer add) so the max
+   * read afterwards reflects only convergence triggered by that event.
+   */
+  void resetRecvToAdvertiseMax();
 }

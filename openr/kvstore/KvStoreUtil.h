@@ -324,6 +324,20 @@ void updatePublicationTtl(
     const bool removeAboutToExpire = true);
 
 std::string getAreaTypeByAreaName(const std::string& area);
+
+/*
+ * Receive-to-advertise latency tracking.
+ *
+ * KvStore computes a per-publication latency (RECV_PUB on a remote node ->
+ * after peer flood dispatch on this node) and publishes it as the
+ * kvstore.recv_to_advertise_ms fb303 AVG stat. AVG hides outliers, so we
+ * also track a process-wide max published as kvstore.recv_to_advertise_max_ms.
+ * The max is sticky until reset, so operators can clear it before a specific
+ * event (link down/up, peer add) and read the worst observation that followed.
+ */
+void recordRecvToAdvertiseLatencyMs(int64_t latencyMs);
+void resetRecvToAdvertiseMaxMs();
+
 } // namespace openr
 
 #include <openr/kvstore/KvStoreUtil-inl.h>

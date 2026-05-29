@@ -3380,10 +3380,7 @@ KvStoreDb<ClientType>::floodPublication(
       return *e.eventDescr() == "RECV_PUB";
     });
     if (it != events.end()) {
-      fb303::fbData->addStatValue(
-          "kvstore.recv_to_advertise_ms",
-          getUnixTimeStampMs() - *it->unixTs(),
-          fb303::AVG);
+      recordRecvToAdvertiseLatencyMs(getUnixTimeStampMs() - *it->unixTs());
     }
     addPerfEvent(
         *publication.perfEvents(), kvParams_.nodeId, "PEER_FLOOD_COMPLETE");

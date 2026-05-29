@@ -5,6 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <atomic>
+
+#include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 #include <re2/re2.h>
 
@@ -12,6 +15,41 @@
 #include <openr/kvstore/KvStoreUtil.h>
 
 namespace openr {
+namespace {
+
+constexpr std::string_view kRecvToAdvertiseAvg = "kvstore.recv_to_advertise_ms";
+constexpr std::string_view kRecvToAdvertiseMax =
+    "kvstore.recv_to_advertise_max_ms";
+
+std::atomic<int64_t>&
+recvToAdvertiseMax() {
+  static std::atomic<int64_t> value{0};
+  return value;
+}
+
+} // namespace
+
+void
+recordRecvToAdvertiseLatencyMs(int64_t latencyMs) {
+  facebook::fb303::fbData->addStatValue(
+      std::string(kRecvToAdvertiseAvg), latencyMs, facebook::fb303::AVG);
+
+  auto& maxRef = recvToAdvertiseMax();
+  int64_t prev = maxRef.load(std::memory_order_relaxed);
+  while (latencyMs > prev &&
+         !maxRef.compare_exchange_weak(
+             prev, latencyMs, std::memory_order_relaxed)) {
+  }
+  facebook::fb303::fbData->setCounter(
+      std::string(kRecvToAdvertiseMax), maxRef.load(std::memory_order_relaxed));
+}
+
+void
+resetRecvToAdvertiseMaxMs() {
+  recvToAdvertiseMax().store(0, std::memory_order_relaxed);
+  facebook::fb303::fbData->setCounter(std::string(kRecvToAdvertiseMax), 0);
+}
+
 namespace {
 
 bool

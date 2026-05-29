@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/OpenrProfiler.h>
 #include <openr/common/Util.h>
+#include <openr/kvstore/KvStoreUtil.h>
 #include <openr/monitor/LogSample.h>
 
 namespace fb303 = facebook::fb303;
@@ -733,6 +734,12 @@ OpenrCtrlHandler::semifuture_getProfilerStats() {
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_clearProfilerStats() {
   OpenrProfiler::getInstance()->clearStats();
+  return folly::makeSemiFuture(folly::Unit{});
+}
+
+folly::SemiFuture<folly::Unit>
+OpenrCtrlHandler::semifuture_resetRecvToAdvertiseMax() {
+  resetRecvToAdvertiseMaxMs();
   return folly::makeSemiFuture(folly::Unit{});
 }
 
