@@ -10,8 +10,8 @@ permissions:
 
 jobs:
   build:
-    runs-on: 8-core-ubuntu-22.04
-    timeout-minutes: 60
+    runs-on: 4-core-ubuntu-24.04
+    timeout-minutes: 120
     env:
       SCCACHE_GHA_ENABLED: "on"
     steps:
