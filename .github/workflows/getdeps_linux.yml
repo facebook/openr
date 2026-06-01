@@ -87,6 +87,9 @@ jobs:
     - name: Fetch snappy
       if: ${{ steps.paths.outputs.snappy_SOURCE }}
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests snappy
+    - name: Patch snappy to restore RTTI (google/snappy#184)
+      if: ${{ steps.paths.outputs.snappy_SOURCE }}
+      run: sed -i 's/-fno-rtti//g' ${{ steps.paths.outputs.snappy_SOURCE }}/CMakeLists.txt
     - name: Fetch range-v3
       if: ${{ steps.paths.outputs.range-v3_SOURCE }}
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests range-v3
