@@ -51,6 +51,7 @@ find_package(FBThrift REQUIRED)
 find_package(wangle REQUIRED)
 find_package(Threads REQUIRED)
 find_library(ZSTD zstd)
+find_package(Snappy REQUIRED)
 find_library(BENCHMARK follybenchmark PATHS)
 find_package(range-v3 REQUIRED)
 find_package(Xxhash REQUIRED)
@@ -304,6 +305,7 @@ target_link_libraries(openrlib
   ${FOLLY_EXCEPTION_TRACER}
   ${SODIUM}
   ${RE2}
+  Snappy::snappy
   ${Boost_LIBRARIES}
   -lpthread
   -lcrypto
