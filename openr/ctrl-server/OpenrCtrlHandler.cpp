@@ -1535,11 +1535,13 @@ OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
 
   XCHECK(kvStore_) << "kvstore not initialized";
 
-  auto pubs =
-      co_await kvStore_->co_dumpKvStoreKeys(std::move(*filter), {*area});
-  thrift::Publication pub =
-      pubs->empty() ? thrift::Publication{} : std::move(*pubs->begin());
-  co_return std::make_unique<thrift::Publication>(std::move(pub));
+  std::set<std::string> areas = {*area};
+  auto pubs = co_await kvStore_->co_dumpKvStoreKeys(
+      std::move(*filter), std::move(areas));
+  if (pubs->empty()) {
+    co_return std::make_unique<thrift::Publication>();
+  }
+  co_return std::make_unique<thrift::Publication>(std::move(*pubs->begin()));
 }
 
 folly::coro::Task<std::unique_ptr<thrift::Publication>>

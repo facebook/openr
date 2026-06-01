@@ -11,6 +11,11 @@
 
 #include <fmt/format.h>
 
+#if __has_include("openr/tests/scale/facebook/BbfTopologyGenerator.h")
+#include "openr/tests/scale/facebook/BbfTopologyGenerator.h"
+#define OPENR_HAS_BBF_TOPOLOGY 1
+#endif
+
 namespace openr {
 
 namespace {
@@ -89,8 +94,9 @@ Topology
 buildTopology(const thrift::ScaleTestConfig& cfg) {
   validateConfig(cfg);
   const auto& t = *cfg.topology();
+#ifdef OPENR_HAS_BBF_TOPOLOGY
   if (*t.type() == "bbf-simple") {
-    return TopologyGenerator::createBbfSimple(
+    return BbfTopologyGenerator::createBbfSimple(
         *t.numSpines(),
         *t.numLeaves(),
         *t.numSuperSpines(),
@@ -98,14 +104,20 @@ buildTopology(const thrift::ScaleTestConfig& cfg) {
         *t.numPrefixesPerNode(),
         *t.numSites());
   }
-  // validateConfig guarantees type is either "bbf-simple" or "bbf-full".
-  return TopologyGenerator::createBbf(
+  return BbfTopologyGenerator::createBbf(
       *t.numPods(),
-      *t.numSpines(), // numPlanes
+      *t.numSpines(),
       kDefaultBbfSpinesPerPlane,
       kDefaultBbfLeavesPerPod,
       *t.ecmpWidth(),
       *t.numPrefixesPerNode());
+#else
+  thrift::SetupError se;
+  se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+  se.message() = fmt::format(
+      "Topology type '{}' is not available in this build", *t.type());
+  throw se;
+#endif
 }
 
 } // namespace

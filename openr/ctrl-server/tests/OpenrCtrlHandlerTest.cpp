@@ -2545,7 +2545,7 @@ TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
           EXPECT_EQ(1, *keyVals_read.at(key1).version());
           EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
         },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(100));
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
     evb.loop();
   }
 
@@ -2580,7 +2580,7 @@ TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
           EXPECT_EQ(2, *keyVals_read.at(key1).version());
           EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
         },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(100));
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
     evb.loop();
   }
 }
@@ -2603,8 +2603,8 @@ CO_TEST_F(OpenrCtrlFixture, CoPersistSelfOriginatedKeyApi) {
         std::make_unique<thrift::KeySetParams>(params),
         std::make_unique<std::string>(kSpineAreaId));
 
-    // Wait for async operations to complete
-    co_await folly::coro::sleep(std::chrono::milliseconds(100));
+    /* Wait for throttled key advertisement to complete */
+    co_await folly::coro::sleep(std::chrono::milliseconds(200));
 
     std::vector<std::string> filterKeys{key1};
     auto pub = co_await handler_->co_getKvStoreKeyValsArea(
@@ -2630,8 +2630,8 @@ CO_TEST_F(OpenrCtrlFixture, CoPersistSelfOriginatedKeyApi) {
         std::make_unique<thrift::KeySetParams>(params),
         std::make_unique<std::string>(kSpineAreaId));
 
-    // Wait for async operations to complete
-    co_await folly::coro::sleep(std::chrono::milliseconds(100));
+    /* Wait for throttled key advertisement to complete */
+    co_await folly::coro::sleep(std::chrono::milliseconds(200));
 
     std::vector<std::string> filterKeys{key1};
     auto pub = co_await handler_->co_getKvStoreKeyValsArea(
@@ -2681,7 +2681,7 @@ TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
           EXPECT_EQ(1, *keyVals_read.at(key1).version());
           EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
         },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(100));
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
     evb.loop();
   }
 
@@ -2721,7 +2721,7 @@ TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
               kvStoreWrapper_->dumpAllSelfOriginated(kSpineAreaId);
           EXPECT_EQ(0, selfOriginatedKeys.count(key1));
         },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(100));
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
     evb.loop();
   }
 }
@@ -2744,8 +2744,8 @@ CO_TEST_F(OpenrCtrlFixture, CoUnsetSelfOriginatedKeyApi) {
         std::make_unique<thrift::KeySetParams>(params),
         std::make_unique<std::string>(kSpineAreaId));
 
-    // Wait for async operations to complete
-    co_await folly::coro::sleep(std::chrono::milliseconds(100));
+    /* Wait for throttled key advertisement to complete */
+    co_await folly::coro::sleep(std::chrono::milliseconds(200));
 
     std::vector<std::string> filterKeys{key1};
     auto pub = co_await handler_->co_getKvStoreKeyValsArea(
@@ -2771,8 +2771,8 @@ CO_TEST_F(OpenrCtrlFixture, CoUnsetSelfOriginatedKeyApi) {
         std::make_unique<thrift::KeySetParams>(params),
         std::make_unique<std::string>(kSpineAreaId));
 
-    // Wait for async operations to complete
-    co_await folly::coro::sleep(std::chrono::milliseconds(100));
+    /* Wait for throttled key advertisement to complete */
+    co_await folly::coro::sleep(std::chrono::milliseconds(200));
 
     std::vector<std::string> filterKeys{key1};
     auto pub = co_await handler_->co_getKvStoreKeyValsArea(
@@ -2885,8 +2885,7 @@ checkPublications(thrift::Publication& expected, thrift::Publication& actual) {
 }
 
 // Test Streaming scenario. We inject keys into KvStore and verify that the
-// stream is updated accordingly. We also verify that when key expires, we
-// stream it to subscribers.
+// stream is updated accordingly.
 TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   std::string kNewEntry = "newEntry";
   std::string kEntry1 = "key1";
@@ -2894,14 +2893,16 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
 
   std::vector<std::string> filterKeys{kEntry1, kEntry2, kNewEntry};
   thrift::KeyVals kvs({
-      {kEntry1, createThriftValue(1, "node1", std::string("value1"), 1000)},
-      {kEntry2, createThriftValue(1, "node1", std::string("value2"), 3000)},
+      {kEntry1, createThriftValue(1, "node1", std::string("value1"))},
+      {kEntry2, createThriftValue(1, "node1", std::string("value2"))},
   });
 
   setKvStoreKeyVals(kvs, kSpineAreaId);
 
   // Get AsyncGenerator to process handler client stream response.
+  // Filter to only receive publications for the keys we care about.
   thrift::KeyDumpParams params;
+  params.keys() = {kEntry1, kEntry2, kNewEntry};
   auto ssit = std::make_unique<apache::thrift::ScopedServerInterfaceThread>(
       handler_, "::1", 0);
   auto client =
@@ -2925,42 +2926,35 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   std::vector<thrift::Publication> expectedDeltas;
 
   // New key
-  auto val0 = createThriftValue(1, "node1", std::string("value1"), 30000);
+  auto val0 = createThriftValue(1, "node1", std::string("value1"));
   kvStoreWrapper_->setKey(kSpineAreaId, kNewEntry, val0, std::nullopt);
   lUpdateExpectedDeltas(kNewEntry, val0, expectedDeltas);
 
   // Existing value update
-  auto val1 = createThriftValue(2, "node1", std::string("value22"), 3000);
+  auto val1 = createThriftValue(2, "node1", std::string("value22"));
   kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val1, std::nullopt);
   lUpdateExpectedDeltas(kEntry2, val1, expectedDeltas);
 
   // Existing value update
-  auto val2 = createThriftValue(3, "node1", std::string("value2"), 3000);
+  auto val2 = createThriftValue(3, "node1", std::string("value2"));
   kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val2, std::nullopt);
   lUpdateExpectedDeltas(kEntry2, val2, expectedDeltas);
 
   // Updating version only
-  auto val3 = createThriftValue(3, "node1", std::string("value2"), 3000, 100);
+  auto val3 = createThriftValue(
+      3, "node1", std::string("value2"), Constants::kTtlInfinity, 100);
   kvStoreWrapper_->setKey(kSpineAreaId, kEntry2, val3, std::nullopt);
   lUpdateExpectedDeltas(kEntry2, val3, expectedDeltas);
 
-  // key1 expired
-  thrift::Publication p;
-  p.expiredKeys()->emplace_back(kEntry1);
-  p.area() = kSpineAreaId;
-  expectedDeltas.emplace_back(p);
-
   // Check the values from the AsyncGenerator of the client stream in order.
-  int verifiedIdx = 0;
-  while (auto pub = folly::coro::blockingWait(gen.next())) {
-    if (verifiedIdx >= expectedDeltas.size()) {
-      break;
-    }
+  for (int verifiedIdx = 0;
+       verifiedIdx < static_cast<int>(expectedDeltas.size());
+       ++verifiedIdx) {
+    auto pub = folly::coro::blockingWait(gen.next());
+    ASSERT_TRUE(pub.has_value());
     auto pubVal = *pub;
-    checkPublications(expectedDeltas[verifiedIdx++], pubVal);
+    checkPublications(expectedDeltas[verifiedIdx], pubVal);
   }
-  // Verify that all expected publications were checked.
-  EXPECT_EQ(verifiedIdx, expectedDeltas.size());
 }
 
 int

@@ -324,7 +324,11 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   {
     const auto [db, _] =
         dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
-            kTestingAreaName, sockAddrs, std::vector<std::string>{});
+            kTestingAreaName,
+            sockAddrs,
+            std::vector<std::string>{},
+            Constants::kServiceConnTimeout,
+            std::chrono::milliseconds(10000));
     ASSERT_TRUE(db.has_value());
     auto pub = db.value();
     EXPECT_TRUE(pub.size() == 2);
@@ -376,7 +380,9 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithMultipleKeysTest) {
       dumpAllWithThriftClientFromMultiple<thrift::KvStoreServiceAsyncClient>(
           kTestingAreaName,
           sockAddrs,
-          std::vector<std::string>{"testprefix1", "testprefix2"});
+          std::vector<std::string>{"testprefix1", "testprefix2"},
+          Constants::kServiceConnTimeout,
+          std::chrono::milliseconds(10000));
   ASSERT_TRUE(db.has_value());
   auto pub = db.value();
   EXPECT_EQ(pub.size(), 3);
@@ -400,10 +406,18 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
   std::vector<std::unique_ptr<thrift::OpenrCtrlCppAsyncClient>> clients;
   clients.emplace_back(
       getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
-          *evb, folly::IPAddress(Constants::kPlatformHost.toString()), port1));
+          *evb,
+          folly::IPAddress(Constants::kPlatformHost.toString()),
+          port1,
+          Constants::kServiceConnTimeout,
+          std::chrono::milliseconds(10000)));
   clients.emplace_back(
       getOpenrCtrlPlainTextClient<openr::thrift::OpenrCtrlCppAsyncClient>(
-          *evb, folly::IPAddress(Constants::kPlatformHost.toString()), port2));
+          *evb,
+          folly::IPAddress(Constants::kPlatformHost.toString()),
+          port2,
+          Constants::kServiceConnTimeout,
+          std::chrono::milliseconds(10000)));
 
   // Step1: insert (k1, v1) and (k2, v2) to different KvStore instances
   {

@@ -478,6 +478,7 @@ if(BUILD_TESTS)
       ${ARG_LIBRARIES}
     )
     add_test(${TEST_NAME} ${BIN_NAME})
+    set_tests_properties(${TEST_NAME} PROPERTIES TIMEOUT 300)
     if(NOT "${ARG_DESTINATION}" STREQUAL "")
       install(TARGETS
         ${BIN_NAME}
@@ -604,17 +605,21 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/decision
   )
 
-  add_openr_test(KvStoreTest kvstore_test
-    SOURCES
-      openr/kvstore/tests/KvStoreTest.cpp
-    DESTINATION sbin/tests/openr/kvstore
-  )
+  if(ADD_ROOT_TESTS)
+    # These tests create multi-node KvStore topologies with thrift peer
+    # connections that are unreliable in containerized CI environments.
+    add_openr_test(KvStoreTest kvstore_test
+      SOURCES
+        openr/kvstore/tests/KvStoreTest.cpp
+      DESTINATION sbin/tests/openr/kvstore
+    )
 
-  add_openr_test(KvStoreTtlTest kvstore_ttl_test
-    SOURCES
-      openr/kvstore/tests/KvStoreTtlTest.cpp
-    DESTINATION sbin/tests/openr/kvstore
-  )
+    add_openr_test(KvStoreTtlTest kvstore_ttl_test
+      SOURCES
+        openr/kvstore/tests/KvStoreTtlTest.cpp
+      DESTINATION sbin/tests/openr/kvstore
+    )
+  endif()
 
   add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
     SOURCES

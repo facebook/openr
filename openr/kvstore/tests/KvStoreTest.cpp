@@ -352,8 +352,9 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   try {
     thrift::KeyDumpParams params;
     params.keys() = {prefixRegex};
+    std::set<std::string> areas = {kTestingAreaName.t};
     auto pub = co_await kvStore_->getKvStore()->co_dumpKvStoreKeys(
-        std::move(params), {kTestingAreaName.t});
+        std::move(params), areas);
     maybeKeysAfterInsert = *pub->begin()->keyVals();
   } catch (const std::exception&) {
     maybeKeysAfterInsert = std::nullopt;
@@ -371,8 +372,9 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   try {
     thrift::KeyDumpParams params;
     params.keys() = {badPrefixRegex};
+    std::set<std::string> badAreas = {kTestingAreaName.t};
     auto pub = co_await kvStore_->getKvStore()->co_dumpKvStoreKeys(
-        std::move(params), {kTestingAreaName.t});
+        std::move(params), badAreas);
     maybeKeysAfterInsert = *pub->begin()->keyVals();
   } catch (const std::exception&) {
     maybeKeysAfterInsert = std::nullopt;
