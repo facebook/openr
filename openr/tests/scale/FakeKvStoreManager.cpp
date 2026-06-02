@@ -127,7 +127,17 @@ FakeKvStoreManager::start() {
           "[FAKE-KVSTORE-MGR] Server for '{}' starting on port {}",
           ns.neighborName,
           ns.port);
-      ns.server->serve();
+      try {
+        ns.server->serve();
+      } catch (const std::exception& ex) {
+        XLOGF(
+            ERR,
+            "[FAKE-KVSTORE-MGR] Server for '{}' on port {} terminated: {}",
+            ns.neighborName,
+            ns.port,
+            ex.what());
+        return;
+      }
       XLOGF(
           INFO, "[FAKE-KVSTORE-MGR] Server for '{}' stopped", ns.neighborName);
     });
