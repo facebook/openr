@@ -680,6 +680,7 @@ if(BUILD_TESTS)
       openr/tests/mocks/MockIoProviderUtils.cpp
     DESTINATION sbin/tests/openr/spark
   )
+  set_tests_properties(SparkTest PROPERTIES TIMEOUT 600)
 
   add_openr_test(MockIoProviderTest mock_io_provider_test
     SOURCES
