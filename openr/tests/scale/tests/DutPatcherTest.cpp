@@ -173,4 +173,22 @@ TEST(DutPatcherTest, PatchDutNoOpAdjacenciesWhenInterfacesEmpty) {
   }
 }
 
+TEST(DutPatcherTest, MissingNeighborsReportsNamesAbsentFromTopology) {
+  // A neighbor-name scheme that does not match the topology (e.g. BBF leaf-N
+  // names against a topology that lacks them) must be reported, preserving
+  // input order, so the caller can fail loudly instead of operating on a
+  // neighbor set inconsistent with the topology.
+  auto topo = makeTopology(); // spine-0, leaf-0, leaf-1, leaf-2
+  const std::vector<std::string> neighbors{
+      "leaf-0", "spine-9", "leaf-2", "leaf-99"};
+  const std::vector<std::string> expectedMissing{"spine-9", "leaf-99"};
+  EXPECT_EQ(DutPatcher::missingNeighbors(topo, neighbors), expectedMissing);
+}
+
+TEST(DutPatcherTest, MissingNeighborsEmptyWhenAllPresent) {
+  auto topo = makeTopology();
+  const std::vector<std::string> neighbors{"spine-0", "leaf-0", "leaf-1"};
+  EXPECT_TRUE(DutPatcher::missingNeighbors(topo, neighbors).empty());
+}
+
 } // namespace openr

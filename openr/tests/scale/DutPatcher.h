@@ -48,6 +48,15 @@ class DutPatcher {
       const std::string& dutNodeName,
       const std::vector<std::string>& dutNeighborNames,
       const std::vector<std::string>& interfaces);
+
+  // Returns the subset of dutNeighborNames that are NOT present as routers in
+  // topo, preserving input order. A non-empty result means the DUT-neighbor
+  // naming scheme does not match the topology type (e.g. generic
+  // fabric/ring/grid node names vs. the BBF leaf-N / spine-N scheme that
+  // buildDutNeighborNames emits), so the caller can fail loudly instead of
+  // operating on a neighbor set inconsistent with the topology.
+  static std::vector<std::string> missingNeighbors(
+      const Topology& topo, const std::vector<std::string>& dutNeighborNames);
 };
 
 } // namespace openr

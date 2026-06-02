@@ -128,4 +128,16 @@ DutPatcher::patchDutIntoTopology(
   }
 }
 
+std::vector<std::string>
+DutPatcher::missingNeighbors(
+    const Topology& topo, const std::vector<std::string>& dutNeighborNames) {
+  std::vector<std::string> missing;
+  for (const auto& name : dutNeighborNames) {
+    if (topo.routers.find(name) == topo.routers.end()) {
+      missing.push_back(name);
+    }
+  }
+  return missing;
+}
+
 } // namespace openr

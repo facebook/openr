@@ -158,14 +158,49 @@ Session::start() {
       topology_.getRouterCount(),
       topology_.getTotalAdjacencyCount());
 
-  // One per-neighbor Thrift server backed by shared immutable KV data.
-  // DUT's own adj key is omitted (LinkMonitor owns it on the DUT side).
-  // Note: the catch only handles sync failures; port-bind happens in
-  // per-neighbor threads inside start().
   if (kvManager_) {
+    /*
+     * The fake KvStore neighbor set must match the simulated topology: every
+     * DUT neighbor (from buildDutNeighborNames, which uses the BBF leaf-N /
+     * spine-N naming scheme) must be a real router in topology_. Generic
+     * topologies (fabric/ring/grid) name nodes differently, so a topology-type
+     * vs. neighbor-scheme mismatch would otherwise spin up phantom servers for
+     * nodes that patchDutIntoTopology already WARN-skipped. Fail loudly here.
+     * Thrown before the try below so it surfaces as TOPOLOGY_INVALID rather
+     * than being remapped to INTERNAL.
+     */
+    if (auto missing =
+            DutPatcher::missingNeighbors(topology_, dutNeighborNames);
+        !missing.empty()) {
+      std::string joined;
+      for (const auto& name : missing) {
+        if (!joined.empty()) {
+          joined += ", ";
+        }
+        joined += name;
+      }
+      thrift::SetupError se;
+      se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+      se.message() = fmt::format(
+          "FakeKvStoreManager: {} DUT neighbor(s) absent from topology type "
+          "'{}' (neighbor-name scheme mismatch): {}",
+          missing.size(),
+          *config_.topology()->type(),
+          joined);
+      throw se;
+    }
+
+    /*
+     * One per-neighbor Thrift server backed by shared immutable KV data. The
+     * catch only handles synchronous failures (e.g. addNeighbor throwing);
+     * per-neighbor port-bind happens in threads inside
+     * FakeKvStoreManager::start() and is logged there, not surfaced here.
+     */
     try {
       auto allKeyVals = KvStoreThriftInjector::buildKeyVals(
           topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
+      // LinkMonitor owns adj:<dut> on the real DUT; injecting it from the
+      // test side would conflict with the DUT's own writes.
       allKeyVals.erase(fmt::format("adj:{}", dutNodeName_));
       auto sharedKeyVals =
           std::make_shared<const thrift::KeyVals>(std::move(allKeyVals));
