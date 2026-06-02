@@ -51,6 +51,19 @@ TEST(SessionTest, StartPatchesDutIntoTopology) {
       << "listNodesUnlocked should exclude the DUT";
 }
 
+TEST(SessionTest, ConstructorDoesNotCrashWhenFakeKvStoreEnabled) {
+  // Verify the FakeKvStoreManager member is constructed cleanly when
+  // enableFakeKvStore=true. The kvManager_ ctor is gated on BOTH
+  // enableFakeKvStore AND simulateNeighbors (matches legacy behavior),
+  // so both must be true to exercise the construction path.
+  auto cfg = test::MakeTestConfig();
+  cfg.injection()->enableFakeKvStore() = true;
+  cfg.injection()->simulateNeighbors() = true;
+  cfg.injection()->fakeKvStoreBasePort() = 26300;
+  Session s(cfg, 0);
+  EXPECT_NO_THROW({ (void)s.listNodesUnlocked(); });
+}
+
 TEST(SessionTest, StartThrowsDutUnreachable) {
   thrift::ScaleTestConfig cfg = test::MakeTestConfig();
   // Use a port that reliably refuses connection so injector_->connect() fails.

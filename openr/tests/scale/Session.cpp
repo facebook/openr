@@ -80,7 +80,11 @@ Session::Session(const thrift::ScaleTestConfig& cfg, int basePortOverride)
           std::make_shared<DutMonitor>(
               *cfg.dut()->host(), static_cast<uint16_t>(*cfg.dut()->port()))),
       kvManager_(
-          cfg.injection()->enableFakeKvStore().value_or(false)
+          // Matches legacy ScaleTestServer.cpp: kvManager is only useful when
+          // SparkFaker is also active (the simulated neighbors drive the
+          // per-neighbor KvStore servers).
+          (cfg.injection()->enableFakeKvStore().value_or(false) &&
+           cfg.injection()->simulateNeighbors().value_or(false))
               ? std::make_unique<FakeKvStoreManager>(
                     static_cast<uint16_t>(
                         basePortOverride > 0
@@ -153,6 +157,34 @@ Session::start() {
       "[Session] topology_: {} routers, {} adjacencies after DUT patch",
       topology_.getRouterCount(),
       topology_.getTotalAdjacencyCount());
+
+  // One per-neighbor Thrift server backed by shared immutable KV data.
+  // DUT's own adj key is omitted (LinkMonitor owns it on the DUT side).
+  // Note: the catch only handles sync failures; port-bind happens in
+  // per-neighbor threads inside start().
+  if (kvManager_) {
+    try {
+      auto allKeyVals = KvStoreThriftInjector::buildKeyVals(
+          topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
+      allKeyVals.erase(fmt::format("adj:{}", dutNodeName_));
+      auto sharedKeyVals =
+          std::make_shared<const thrift::KeyVals>(std::move(allKeyVals));
+      for (const auto& name : dutNeighborNames) {
+        kvManager_->addNeighbor(name, sharedKeyVals);
+      }
+      kvManager_->start();
+    } catch (const std::exception& ex) {
+      thrift::SetupError se;
+      se.reason() = thrift::SetupErrorReason::INTERNAL;
+      se.message() =
+          fmt::format("FakeKvStoreManager setup failed: {}", ex.what());
+      throw se;
+    }
+    XLOGF(
+        INFO,
+        "[Session] FakeKvStoreManager started with {} neighbors",
+        kvManager_->getNeighborCount());
+  }
 }
 
 std::vector<std::string>
