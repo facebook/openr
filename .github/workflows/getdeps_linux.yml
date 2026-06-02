@@ -87,6 +87,12 @@ jobs:
     - name: Fetch snappy
       if: ${{ steps.paths.outputs.snappy_SOURCE }}
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests snappy
+    - name: Patch snappy to restore RTTI (google/snappy#184)
+      if: ${{ steps.paths.outputs.snappy_SOURCE }}
+      run: |
+        cmake_file=$(find ${{ steps.paths.outputs.snappy_SOURCE }} -maxdepth 2 -name CMakeLists.txt | head -1)
+        if [ -z "$cmake_file" ]; then echo "ERROR: snappy CMakeLists.txt not found" >&2; exit 1; fi
+        sed -i 's/-fno-rtti//g' "$cmake_file"
     - name: Fetch range-v3
       if: ${{ steps.paths.outputs.range-v3_SOURCE }}
       run: python3 build/fbcode_builder/getdeps.py fetch --no-tests range-v3
