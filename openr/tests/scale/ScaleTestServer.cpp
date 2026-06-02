@@ -43,8 +43,7 @@
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 #include <openr/tests/scale/RealSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
-#include <openr/tests/scale/TopologyGenerator.h>
-#include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
+#include <openr/tests/scale/TopologyFactory.h>
 
 DEFINE_string(dut_host, "192.168.1.1", "DUT hostname or IP address");
 
@@ -77,7 +76,7 @@ DEFINE_int32(
 DEFINE_string(
     topology_type,
     "bbf-simple",
-    "Topology type: bbf-simple, bbf-full, or custom");
+    "Topology type, e.g. fabric, ring, or grid (build-specific types may also be available)");
 
 DEFINE_bool(
     inject_topology, true, "Inject the full topology into DUT's KvStore");
@@ -481,28 +480,21 @@ main(int argc, char** argv) {
    * Generate topology
    */
   XLOG(INFO, "Generating topology...");
-  openr::Topology topology;
-
-  if (FLAGS_topology_type == "bbf-simple") {
-    topology = openr::BbfTopologyGenerator::createBbfSimple(
-        FLAGS_num_spines,
-        FLAGS_num_leaves,
-        FLAGS_num_super_spines,
-        FLAGS_num_pods,
-        FLAGS_num_prefixes_per_node,
-        FLAGS_num_sites);
-  } else if (FLAGS_topology_type == "bbf-full") {
-    topology = openr::BbfTopologyGenerator::createBbf(
-        FLAGS_num_spines,
-        FLAGS_num_leaves,
-        FLAGS_num_super_spines,
-        FLAGS_num_pods,
-        openr::kDefaultBbfEcmpWidth,
-        FLAGS_num_prefixes_per_node);
-  } else {
+  auto maybeTopology = openr::createScaleTopologyFromParams(
+      openr::ScaleTopologyParams{
+          .type = FLAGS_topology_type,
+          .numSpines = FLAGS_num_spines,
+          .numLeaves = FLAGS_num_leaves,
+          .numSuperSpines = FLAGS_num_super_spines,
+          .numPods = FLAGS_num_pods,
+          .numPrefixesPerNode = FLAGS_num_prefixes_per_node,
+          .numSites = FLAGS_num_sites,
+      });
+  if (!maybeTopology.has_value()) {
     XLOGF(ERR, "Unknown topology type: {}", FLAGS_topology_type);
     return 1;
   }
+  openr::Topology topology = std::move(*maybeTopology);
 
   XLOGF(
       INFO,

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fmt/format.h>
 #include <gtest/gtest.h>
 
 #include <openr/tests/scale/DutPatcher.h>
@@ -35,15 +36,33 @@ makeConfig(thrift::DutRole role) {
   return cfg;
 }
 
+/*
+ * Builds a minimal spine/leaf fixture inline from public primitives (no
+ * dependency on any specific topology generator) with the node names DutPatcher
+ * operates on: a single spine-0 connected to leaf-0, leaf-1, and leaf-2.
+ */
 Topology
 makeTopology() {
-  return TopologyGenerator::createBbfSimple(
-      kNumSpines,
-      kNumLeaves,
-      kNumSuperSpines,
-      kEcmpWidth,
-      kNumPrefixesPerNode,
-      kNumSites);
+  Topology topo;
+  auto addRouter = [&](const std::string& name, int id) {
+    VirtualRouter router;
+    router.nodeName = name;
+    router.nodeId = id;
+    topo.routerNames.push_back(name);
+    topo.routers.emplace(name, std::move(router));
+  };
+
+  addRouter("spine-0", 0);
+  for (int i = 0; i < 3; ++i) {
+    const auto leaf = fmt::format("leaf-{}", i);
+    addRouter(leaf, i + 1);
+    TopologyGenerator::addBidirectionalAdjacency(
+        topo.routers.at(leaf),
+        topo.routers.at("spine-0"),
+        fmt::format("{}-to-spine-0", leaf),
+        fmt::format("spine-0-to-{}", leaf));
+  }
+  return topo;
 }
 
 } // namespace

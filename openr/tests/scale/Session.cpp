@@ -8,13 +8,9 @@
 #include <openr/tests/scale/Session.h>
 
 #include <openr/tests/scale/DutPatcher.h>
+#include <openr/tests/scale/TopologyFactory.h>
 
 #include <fmt/format.h>
-
-#if __has_include("openr/tests/scale/facebook/BbfTopologyGenerator.h")
-#include "openr/tests/scale/facebook/BbfTopologyGenerator.h"
-#define OPENR_HAS_BBF_TOPOLOGY 1
-#endif
 
 namespace openr {
 
@@ -22,9 +18,11 @@ namespace {
 
 constexpr int kFakeKvStoreIoThreads = 32;
 
-// Throws thrift::SetupError if any required field of ScaleTestConfig is unset.
-// All scale knobs and side-effecting bools are optional in the IDL so the
-// server can distinguish "unset" from zero/false and reject both.
+// Throws thrift::SetupError if any topology-independent field of
+// ScaleTestConfig required by the Session runtime is unset. All scale knobs and
+// side-effecting bools are optional in the IDL so the server can distinguish
+// "unset" from zero/false and reject both. Topology-specific fields (type,
+// node counts, ecmpWidth, ...) are validated by createScaleTopology().
 void
 validateConfig(const thrift::ScaleTestConfig& cfg) {
   auto fail = [](std::string msg) {
@@ -45,38 +43,9 @@ validateConfig(const thrift::ScaleTestConfig& cfg) {
             "DutConnection.port must be positive (got {})",
             *cfg.dut()->port()));
   }
-  const auto& t = *cfg.topology();
-  // topology.type has an IDL default; validate it's one we recognise so we
-  // fail at the validation boundary instead of falling through buildTopology.
-  if (*t.type() != "bbf-simple" && *t.type() != "bbf-full") {
-    fail(
-        fmt::format(
-            "TopologyConfig.type must be 'bbf-simple' or 'bbf-full' (got '{}')",
-            *t.type()));
-  }
-  if (!t.numSpines().has_value()) {
-    fail("TopologyConfig.numSpines must be set");
-  }
-  if (!t.numLeaves().has_value()) {
-    fail("TopologyConfig.numLeaves must be set");
-  }
-  if (!t.numSuperSpines().has_value()) {
-    fail("TopologyConfig.numSuperSpines must be set");
-  }
-  if (!t.numPods().has_value()) {
-    fail("TopologyConfig.numPods must be set");
-  }
-  if (!t.numSites().has_value()) {
-    fail("TopologyConfig.numSites must be set");
-  }
-  if (!t.numPrefixesPerNode().has_value()) {
-    fail("TopologyConfig.numPrefixesPerNode must be set");
-  }
-  if (!t.dutRole().has_value()) {
+  // dutRole steers how start() patches the DUT into the built topology.
+  if (!cfg.topology()->dutRole().has_value()) {
     fail("TopologyConfig.dutRole must be set");
-  }
-  if (!t.ecmpWidth().has_value()) {
-    fail("TopologyConfig.ecmpWidth must be set");
   }
   const auto& inj = *cfg.injection();
   if (!inj.injectTopology().has_value()) {
@@ -90,41 +59,19 @@ validateConfig(const thrift::ScaleTestConfig& cfg) {
   }
 }
 
+// Validates the runtime config then builds the topology via the
+// createScaleTopology seam (implementation selected per build).
 Topology
-buildTopology(const thrift::ScaleTestConfig& cfg) {
+validateAndBuildTopology(const thrift::ScaleTestConfig& cfg) {
   validateConfig(cfg);
-  const auto& t = *cfg.topology();
-#ifdef OPENR_HAS_BBF_TOPOLOGY
-  if (*t.type() == "bbf-simple") {
-    return BbfTopologyGenerator::createBbfSimple(
-        *t.numSpines(),
-        *t.numLeaves(),
-        *t.numSuperSpines(),
-        *t.ecmpWidth(),
-        *t.numPrefixesPerNode(),
-        *t.numSites());
-  }
-  return BbfTopologyGenerator::createBbf(
-      *t.numPods(),
-      *t.numSpines(),
-      kDefaultBbfSpinesPerPlane,
-      kDefaultBbfLeavesPerPod,
-      *t.ecmpWidth(),
-      *t.numPrefixesPerNode());
-#else
-  thrift::SetupError se;
-  se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
-  se.message() = fmt::format(
-      "Topology type '{}' is not available in this build", *t.type());
-  throw se;
-#endif
+  return createScaleTopology(cfg);
 }
 
 } // namespace
 
 Session::Session(const thrift::ScaleTestConfig& cfg, int basePortOverride)
     : config_(cfg),
-      topology_(buildTopology(cfg)),
+      topology_(validateAndBuildTopology(cfg)),
       startedAt_(std::chrono::steady_clock::now()),
       injector_(
           std::make_unique<KvStoreThriftInjector>(
