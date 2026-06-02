@@ -24,6 +24,15 @@ jobs:
 
     - uses: actions/checkout@v6
 
+    - name: Pin unpinned deps to compatible versions
+      run: |
+        mkdir -p build/deps/github_hashes/facebook build/deps/github_hashes/facebookincubator
+        # These deps are transitively required but not yet synced by CodeSync.
+        # Remove this step once D107286362 lands and ShipIt syncs their rev.txt files.
+        [ -f build/deps/github_hashes/facebook/mvfst-rev.txt ] || echo "Subproject commit 318e941a96cc0da7c83f50dc0ee050d656167903" > build/deps/github_hashes/facebook/mvfst-rev.txt
+        [ -f build/deps/github_hashes/facebookincubator/fizz-rev.txt ] || echo "Subproject commit 2e23c1de4c8679f369c8a78675bde3b3b0fb9607" > build/deps/github_hashes/facebookincubator/fizz-rev.txt
+        [ -f build/deps/github_hashes/facebook/fb303-rev.txt ] || echo "Subproject commit 6d127ca7d746fa48fb7824418226d6faf2e1829f" > build/deps/github_hashes/facebook/fb303-rev.txt
+
     - name: Set up sccache
       uses: mozilla-actions/sccache-action@v0.0.9
       with:
