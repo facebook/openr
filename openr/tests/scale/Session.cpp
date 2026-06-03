@@ -431,7 +431,39 @@ void
 Session::upLink(const std::string&, const std::string&) {}
 thrift::TestStatus
 Session::getStatus() const {
-  return {};
+  std::lock_guard<std::mutex> g(mutationMutex_);
+  thrift::TestStatus s;
+  s.running() = true;
+  s.activeConfig() = config_;
+  for (const auto& n : downedNodes_) {
+    s.downedNodes()->push_back(n);
+  }
+  for (const auto& [a, b] : downedLinks_) {
+    /*
+     * Per the TestStatus contract, links subsumed by a downed node are reported
+     * via downedNodes, not duplicated here.
+     */
+    if (downedNodes_.count(a) || downedNodes_.count(b)) {
+      continue;
+    }
+    thrift::LinkRef lr;
+    lr.localNode() = a;
+    lr.remoteNode() = b;
+    s.downedLinks()->push_back(std::move(lr));
+  }
+  s.dutConnected() = injector_ && injector_->isConnected();
+  s.elapsedSec() = std::chrono::duration_cast<std::chrono::seconds>(
+                       std::chrono::steady_clock::now() - startedAt_)
+                       .count();
+  /*
+   * neighborCount is optional and, per the IDL, must stay unset when
+   * simulateNeighbors=false (sparkFaker_ is null) so a client can distinguish
+   * "0 neighbors" from "neighbor simulation disabled".
+   */
+  if (sparkFaker_) {
+    s.neighborCount() = static_cast<int32_t>(sparkFaker_->getNeighborCount());
+  }
+  return s;
 }
 void
 Session::onTimerTick() {

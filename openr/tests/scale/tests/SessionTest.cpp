@@ -72,6 +72,24 @@ TEST(SessionTest, SimulateNeighborsRequiresInterfaces) {
   EXPECT_THROW(s.start(), thrift::SetupError);
 }
 
+TEST(SessionTest, GetStatusReportsConfigAndNotConnected) {
+  // Pre-start: no DUT connection, no spark, no downed state.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, 0);
+  auto st = s.getStatus();
+  EXPECT_TRUE(*st.running());
+  EXPECT_FALSE(*st.dutConnected());
+  EXPECT_TRUE(st.downedNodes()->empty());
+  EXPECT_TRUE(st.downedLinks()->empty());
+  ASSERT_TRUE(st.activeConfig().has_value());
+  EXPECT_EQ(*st.activeConfig(), cfg);
+  ASSERT_TRUE(st.elapsedSec().has_value());
+  EXPECT_GE(*st.elapsedSec(), 0);
+  // MakeTestConfig sets simulateNeighbors=false, so per the TestStatus IDL the
+  // optional neighborCount must be unset (distinct from a present 0).
+  EXPECT_FALSE(st.neighborCount().has_value());
+}
+
 TEST(SessionTest, StartThrowsDutUnreachable) {
   thrift::ScaleTestConfig cfg = test::MakeTestConfig();
   // Use a port that reliably refuses connection so injector_->connect() fails.
