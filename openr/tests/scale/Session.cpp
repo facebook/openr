@@ -8,6 +8,8 @@
 #include <openr/tests/scale/Session.h>
 
 #include <openr/tests/scale/DutPatcher.h>
+#include <openr/tests/scale/NetInterfaceUtils.h>
+#include <openr/tests/scale/SparkNeighborDistribution.h>
 #include <openr/tests/scale/TopologyFactory.h>
 
 #include <fmt/format.h>
@@ -18,11 +20,13 @@ namespace {
 
 constexpr int kFakeKvStoreIoThreads = 32;
 
-// Throws thrift::SetupError if any topology-independent field of
-// ScaleTestConfig required by the Session runtime is unset. All scale knobs and
-// side-effecting bools are optional in the IDL so the server can distinguish
-// "unset" from zero/false and reject both. Topology-specific fields (type,
-// node counts, ecmpWidth, ...) are validated by createScaleTopology().
+/*
+ * Throws thrift::SetupError if any topology-independent field of
+ * ScaleTestConfig required by the Session runtime is unset. All scale knobs and
+ * side-effecting bools are optional in the IDL so the server can distinguish
+ * "unset" from zero/false and reject both. Topology-specific fields (type,
+ * node counts, ecmpWidth, ...) are validated by createScaleTopology().
+ */
 void
 validateConfig(const thrift::ScaleTestConfig& cfg) {
   auto fail = [](std::string msg) {
@@ -35,8 +39,10 @@ validateConfig(const thrift::ScaleTestConfig& cfg) {
   if (!d.host().has_value() || d.host()->empty()) {
     fail("DutConnection.host must be set and non-empty");
   }
-  // dut.port has an IDL default so it is always present; reject obviously
-  // invalid values defensively.
+  /*
+   * dut.port has an IDL default so it is always present; reject obviously
+   * invalid values defensively.
+   */
   if (*cfg.dut()->port() <= 0) {
     fail(
         fmt::format(
@@ -59,8 +65,10 @@ validateConfig(const thrift::ScaleTestConfig& cfg) {
   }
 }
 
-// Validates the runtime config then builds the topology via the
-// createScaleTopology seam (implementation selected per build).
+/*
+ * Validates the runtime config then builds the topology via the
+ * createScaleTopology seam (implementation selected per build).
+ */
 Topology
 validateAndBuildTopology(const thrift::ScaleTestConfig& cfg) {
   validateConfig(cfg);
@@ -80,9 +88,11 @@ Session::Session(const thrift::ScaleTestConfig& cfg, int basePortOverride)
           std::make_shared<DutMonitor>(
               *cfg.dut()->host(), static_cast<uint16_t>(*cfg.dut()->port()))),
       kvManager_(
-          // Matches legacy ScaleTestServer.cpp: kvManager is only useful when
-          // SparkFaker is also active (the simulated neighbors drive the
-          // per-neighbor KvStore servers).
+          /*
+           * Matches legacy ScaleTestServer.cpp: kvManager is only useful when
+           * SparkFaker is also active (the simulated neighbors drive the
+           * per-neighbor KvStore servers).
+           */
           (cfg.injection()->enableFakeKvStore().value_or(false) &&
            cfg.injection()->simulateNeighbors().value_or(false))
               ? std::make_unique<FakeKvStoreManager>(
@@ -107,6 +117,35 @@ Session::~Session() = default;
 
 void
 Session::start() {
+  validateSparkInterfaces();
+  connectToDut();
+  const auto dutNeighborNames = patchDut();
+  if (kvManager_) {
+    setupFakeKvStore(dutNeighborNames);
+  }
+  if (sparkFaker_) {
+    setupSparkFaker(dutNeighborNames);
+  }
+}
+
+void
+Session::validateSparkInterfaces() const {
+  /*
+   * Validate injection config early so misconfiguration fails fast, before any
+   * network I/O.
+   */
+  if (sparkFaker_ &&
+      (!config_.injection()->interfaces().has_value() ||
+       config_.injection()->interfaces()->empty())) {
+    thrift::SetupError se;
+    se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+    se.message() = "simulateNeighbors=true requires at least one interface";
+    throw se;
+  }
+}
+
+void
+Session::connectToDut() {
   auto failDutUnreachable = [&](std::string detail) {
     thrift::SetupError se;
     se.reason() = thrift::SetupErrorReason::DUT_UNREACHABLE;
@@ -118,9 +157,10 @@ Session::start() {
     throw se;
   };
 
-  // Connect to the DUT. KvStoreThriftInjector::connect() and
-  // DutMonitor::connect() both return false on failure; some lower-level paths
-  // may also throw.
+  /*
+   * KvStoreThriftInjector::connect() and DutMonitor::connect() both return
+   * false on failure; some lower-level paths may also throw.
+   */
   bool ok = false;
   std::string failMsg;
   try {
@@ -138,15 +178,20 @@ Session::start() {
     failDutUnreachable("getDutNodeName() returned empty after connect");
   }
   XLOGF(INFO, "[Session] Connected to DUT: {}", dutNodeName_);
+}
 
-  // Patch the DUT into topology_. This is the only mutation of
-  // topology_ in the Session lifecycle.
+std::vector<std::string>
+Session::patchDut() {
+  /*
+   * Patch the DUT into topology_. This is the only mutation of topology_ in the
+   * Session lifecycle.
+   */
   const bool dutIsSpine =
       (*config_.topology()->dutRole() == thrift::DutRole::SPINE);
   if (!dutIsSpine) {
     DutPatcher::stripReplacedLeaf(topology_);
   }
-  const auto dutNeighborNames = DutPatcher::buildDutNeighborNames(config_);
+  auto dutNeighborNames = DutPatcher::buildDutNeighborNames(config_);
   DutPatcher::patchDutIntoTopology(
       topology_,
       dutNodeName_,
@@ -157,69 +202,161 @@ Session::start() {
       "[Session] topology_: {} routers, {} adjacencies after DUT patch",
       topology_.getRouterCount(),
       topology_.getTotalAdjacencyCount());
+  return dutNeighborNames;
+}
 
-  if (kvManager_) {
-    /*
-     * The fake KvStore neighbor set must match the simulated topology: every
-     * DUT neighbor (from buildDutNeighborNames, which uses the BBF leaf-N /
-     * spine-N naming scheme) must be a real router in topology_. Generic
-     * topologies (fabric/ring/grid) name nodes differently, so a topology-type
-     * vs. neighbor-scheme mismatch would otherwise spin up phantom servers for
-     * nodes that patchDutIntoTopology already WARN-skipped. Fail loudly here.
-     * Thrown before the try below so it surfaces as TOPOLOGY_INVALID rather
-     * than being remapped to INTERNAL.
-     */
-    if (auto missing =
-            DutPatcher::missingNeighbors(topology_, dutNeighborNames);
-        !missing.empty()) {
-      std::string joined;
-      for (const auto& name : missing) {
-        if (!joined.empty()) {
-          joined += ", ";
-        }
-        joined += name;
+void
+Session::setupFakeKvStore(const std::vector<std::string>& dutNeighborNames) {
+  /*
+   * The fake KvStore neighbor set must match the simulated topology: every DUT
+   * neighbor (from buildDutNeighborNames, which uses the BBF leaf-N / spine-N
+   * naming scheme) must be a real router in topology_. Generic topologies
+   * (fabric/ring/grid) name nodes differently, so a topology-type vs.
+   * neighbor-scheme mismatch would otherwise spin up phantom servers for nodes
+   * that patchDutIntoTopology already WARN-skipped. Fail loudly here. Thrown
+   * before the try below so it surfaces as TOPOLOGY_INVALID rather than being
+   * remapped to INTERNAL.
+   */
+  if (auto missing = DutPatcher::missingNeighbors(topology_, dutNeighborNames);
+      !missing.empty()) {
+    std::string joined;
+    for (const auto& name : missing) {
+      if (!joined.empty()) {
+        joined += ", ";
       }
+      joined += name;
+    }
+    thrift::SetupError se;
+    se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+    se.message() = fmt::format(
+        "FakeKvStoreManager: {} DUT neighbor(s) absent from topology type "
+        "'{}' (neighbor-name scheme mismatch): {}",
+        missing.size(),
+        *config_.topology()->type(),
+        joined);
+    throw se;
+  }
+
+  /*
+   * One per-neighbor Thrift server backed by shared immutable KV data. The
+   * catch only handles synchronous failures (e.g. addNeighbor throwing);
+   * per-neighbor port-bind happens in threads inside
+   * FakeKvStoreManager::start() and is logged there, not surfaced here.
+   */
+  try {
+    auto allKeyVals = KvStoreThriftInjector::buildKeyVals(
+        topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
+    /*
+     * LinkMonitor owns adj:<dut> on the real DUT; injecting it from the test
+     * side would conflict with the DUT's own writes.
+     */
+    allKeyVals.erase(fmt::format("adj:{}", dutNodeName_));
+    auto sharedKeyVals =
+        std::make_shared<const thrift::KeyVals>(std::move(allKeyVals));
+    for (const auto& name : dutNeighborNames) {
+      kvManager_->addNeighbor(name, sharedKeyVals);
+    }
+    kvManager_->start();
+  } catch (const std::exception& ex) {
+    thrift::SetupError se;
+    se.reason() = thrift::SetupErrorReason::INTERNAL;
+    se.message() =
+        fmt::format("FakeKvStoreManager setup failed: {}", ex.what());
+    throw se;
+  }
+  XLOGF(
+      INFO,
+      "[Session] FakeKvStoreManager started with {} neighbors",
+      kvManager_->getNeighborCount());
+}
+
+void
+Session::setupSparkFaker(const std::vector<std::string>& dutNeighborNames) {
+  /*
+   * SparkFaker: send real UDP Spark packets so the DUT believes it has live
+   * neighbors, then delegate the neighbor->interface distribution to
+   * distributeSparkNeighbors().
+   *
+   * Every configured interface MUST be usable (resolvable ifIndex + a
+   * link-local source address); we fail hard rather than skipping unusable
+   * ones. This keeps the Spark distribution on the exact same interface set
+   * that DutPatcher::patchDutIntoTopology used for the neighbor->DUT
+   * adjacencies — otherwise the injected topology and the real Spark packets
+   * would disagree on which interface each neighbor lives on. It also avoids
+   * silently starting SparkFaker with a degraded interface set.
+   */
+  std::vector<UsableInterface> usable;
+  usable.reserve(config_.injection()->interfaces()->size());
+  for (const auto& ifName : *config_.injection()->interfaces()) {
+    const int ifIndex = resolveIfIndex(ifName);
+    if (ifIndex < 0) {
       thrift::SetupError se;
       se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
       se.message() = fmt::format(
-          "FakeKvStoreManager: {} DUT neighbor(s) absent from topology type "
-          "'{}' (neighbor-name scheme mismatch): {}",
-          missing.size(),
-          *config_.topology()->type(),
-          joined);
+          "Interface {} not found (no ifIndex) — cannot simulate neighbors",
+          ifName);
       throw se;
     }
-
-    /*
-     * One per-neighbor Thrift server backed by shared immutable KV data. The
-     * catch only handles synchronous failures (e.g. addNeighbor throwing);
-     * per-neighbor port-bind happens in threads inside
-     * FakeKvStoreManager::start() and is logged there, not surfaced here.
-     */
-    try {
-      auto allKeyVals = KvStoreThriftInjector::buildKeyVals(
-          topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
-      // LinkMonitor owns adj:<dut> on the real DUT; injecting it from the
-      // test side would conflict with the DUT's own writes.
-      allKeyVals.erase(fmt::format("adj:{}", dutNodeName_));
-      auto sharedKeyVals =
-          std::make_shared<const thrift::KeyVals>(std::move(allKeyVals));
-      for (const auto& name : dutNeighborNames) {
-        kvManager_->addNeighbor(name, sharedKeyVals);
-      }
-      kvManager_->start();
-    } catch (const std::exception& ex) {
+    auto addrs = lookupLinkLocalAddrs(ifName);
+    if (addrs.empty()) {
       thrift::SetupError se;
-      se.reason() = thrift::SetupErrorReason::INTERNAL;
-      se.message() =
-          fmt::format("FakeKvStoreManager setup failed: {}", ex.what());
+      se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+      se.message() = fmt::format(
+          "Interface {} has no link-local address — cannot simulate neighbors",
+          ifName);
       throw se;
     }
-    XLOGF(
-        INFO,
-        "[Session] FakeKvStoreManager started with {} neighbors",
-        kvManager_->getNeighborCount());
+    usable.push_back(
+        {ifName, ifIndex, addrs.front(), ipv4FromVlanIfName(ifName)});
   }
+
+  for (const auto& iface : usable) {
+    sparkIo_->addInterface(iface.ifName, iface.ifIndex);
+  }
+  for (const auto& placement :
+       distributeSparkNeighbors(usable, dutNeighborNames)) {
+    sparkFaker_->addNeighbor(
+        placement.neighborName,
+        placement.neighborIfName,
+        placement.hostIfIndex,
+        placement.v6Addr,
+        placement.hostIfName,
+        placement.hostIfIndex,
+        placement.v4Addr);
+    if (kvManager_) {
+      sparkFaker_->setNeighborCtrlPort(
+          placement.neighborName, kvManager_->getPort(placement.neighborName));
+    }
+  }
+  sparkIo_->startReceiving();
+  /*
+   * RealSparkIo::startReceiving() logs and skips interfaces whose receive
+   * socket fails to bind / join multicast, so a positive neighbor count alone
+   * does not mean the DUT is reachable. Require one started receiver per unique
+   * host ifIndex; otherwise the simulated neighbors would be silently
+   * nonfunctional.
+   */
+  std::set<int> expectedIfIndexes;
+  for (const auto& iface : usable) {
+    expectedIfIndexes.insert(iface.ifIndex);
+  }
+  if (const size_t started = sparkIo_->numActiveReceivers();
+      started < expectedIfIndexes.size()) {
+    thrift::SetupError se;
+    se.reason() = thrift::SetupErrorReason::INTERNAL;
+    se.message() = fmt::format(
+        "SparkFaker: only {} of {} interface receive sockets started "
+        "(bind/multicast-join failure — see [REAL-SPARK-IO] logs)",
+        started,
+        expectedIfIndexes.size());
+    throw se;
+  }
+  sparkFaker_->start();
+  XLOGF(
+      INFO,
+      "[Session] SparkFaker started with {} neighbors across {} interfaces",
+      sparkFaker_->getNeighborCount(),
+      usable.size());
 }
 
 std::vector<std::string>

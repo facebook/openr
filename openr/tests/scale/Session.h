@@ -81,6 +81,14 @@ class Session {
   }
 
  private:
+  // start() phases, in order. Each performs one step of side-effecting init and
+  // throws thrift::SetupError on failure.
+  void validateSparkInterfaces() const; // pre-flight guard for SparkFaker
+  void connectToDut(); // connect injector_/dutMonitor_, resolve dutNodeName_
+  std::vector<std::string> patchDut(); // splice DUT in, return its neighbors
+  void setupFakeKvStore(const std::vector<std::string>& dutNeighborNames);
+  void setupSparkFaker(const std::vector<std::string>& dutNeighborNames);
+
   void onTimerTick();
   void bumpFakeKeys();
 

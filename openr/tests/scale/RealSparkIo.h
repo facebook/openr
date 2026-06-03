@@ -68,6 +68,13 @@ class RealSparkIo : public SparkIoInterface {
    */
   void setMulticastAddress(const folly::IPAddressV6& addr, uint16_t port);
 
+  /*
+   * Number of receive sockets successfully created by startReceiving() (one per
+   * unique physical ifIndex). Compare against the expected interface count to
+   * detect silent socket bind / multicast-join failures.
+   */
+  size_t numActiveReceivers() const;
+
  private:
   /*
    * Create and bind a UDP socket for an interface.
@@ -84,7 +91,7 @@ class RealSparkIo : public SparkIoInterface {
   /*
    * Mutex for thread safety
    */
-  std::mutex mutex_;
+  mutable std::mutex mutex_;
 
   /*
    * Interface name <-> index mappings

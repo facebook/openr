@@ -264,6 +264,12 @@ RealSparkIo::startReceiving() {
   }
 }
 
+size_t
+RealSparkIo::numActiveReceivers() const {
+  std::lock_guard<std::mutex> lock(mutex_);
+  return ifIndexToSockFd_.size();
+}
+
 void
 RealSparkIo::stopReceiving() {
   if (!running_.exchange(false)) {

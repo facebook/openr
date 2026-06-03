@@ -64,6 +64,14 @@ TEST(SessionTest, ConstructorDoesNotCrashWhenFakeKvStoreEnabled) {
   EXPECT_NO_THROW({ (void)s.listNodesUnlocked(); });
 }
 
+TEST(SessionTest, SimulateNeighborsRequiresInterfaces) {
+  auto cfg = test::MakeTestConfig();
+  cfg.injection()->simulateNeighbors() = true;
+  cfg.injection()->interfaces() = {}; // empty — should fail validation
+  Session s(cfg, 0);
+  EXPECT_THROW(s.start(), thrift::SetupError);
+}
+
 TEST(SessionTest, StartThrowsDutUnreachable) {
   thrift::ScaleTestConfig cfg = test::MakeTestConfig();
   // Use a port that reliably refuses connection so injector_->connect() fails.
