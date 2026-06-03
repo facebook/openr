@@ -8,6 +8,7 @@
 #include <openr/tests/scale/Session.h>
 
 #include <openr/tests/scale/DutPatcher.h>
+#include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/NetInterfaceUtils.h>
 #include <openr/tests/scale/SparkNeighborDistribution.h>
 #include <openr/tests/scale/TopologyFactory.h>
@@ -420,11 +421,157 @@ Session::listNodes() const {
   return listNodesUnlocked();
 }
 
-// Stubs for Step 3.
 void
-Session::downNode(const std::string&) {}
+Session::downNode(const std::string& name) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  /*
+   * The downNode/upNode IDL only declares UnknownNodeError and NotRunningError,
+   * so UnknownNodeError is deliberately overloaded below to also mean "node is
+   * known but cannot be acted on" (it is the DUT, or it is already in the
+   * requested state). The message disambiguates; add a dedicated NodeStateError
+   * to the IDL if clients ever need to distinguish these programmatically.
+   */
+  if (name == dutNodeName_) {
+    thrift::UnknownNodeError e;
+    e.message() = "cannot manipulate the DUT directly";
+    throw e;
+  }
+  if (topology_.routers.count(name) == 0) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Unknown node: {}", name);
+    throw e;
+  }
+  if (downedNodes_.count(name)) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Node {} is already down", name);
+    throw e;
+  }
+
+  if (sparkFaker_ && sparkFaker_->failNeighbor(name)) {
+    XLOGF(INFO, "[CMD] Spark: failed neighbor {}", name);
+  }
+
+  const int64_t removeVersion = cmdVersion_.fetch_add(1) + 1;
+
+  /*
+   * Remove the downed node's own adj DB. Pass removeVersion so the fake KvStore
+   * removal shares cmdVersion_ with the matching upNode restore; otherwise the
+   * two would run on separate version streams and a later removal could lose
+   * KvStore version arbitration on repeated down/up flaps.
+   */
+  if (kvManager_) {
+    kvManager_->simulateNodeRemoval(name, removeVersion);
+  }
+  if (injector_ && injector_->isConnected()) {
+    injector_->removeNode(name, removeVersion);
+  }
+  XLOGF(INFO, "[CMD] KvStore: removed adj:{}", name);
+
+  /*
+   * Update adj DBs of all neighbors of the downed node to drop their
+   * adjacency to it. In reality, those neighbors would detect the link
+   * failure and update their own adj DBs.
+   */
+  const auto& downedRouter = topology_.getRouter(name);
+  thrift::KeyVals neighborKeyVals;
+  for (const auto& adj : downedRouter.adjacencies) {
+    if (topology_.routers.count(adj.remoteRouterName) == 0) {
+      continue;
+    }
+    if (adj.remoteRouterName == dutNodeName_) {
+      continue; // we don't manage the DUT's adj DB
+    }
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
+        topology_.getRouter(adj.remoteRouterName), topology_, name, v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    neighborKeyVals.emplace(std::move(key), std::move(value));
+  }
+  if (injector_ && injector_->isConnected() && !neighborKeyVals.empty()) {
+    injector_->injectKeyVals(neighborKeyVals);
+    XLOGF(
+        INFO,
+        "[CMD] KvStore: updated {} neighbor adj DBs",
+        neighborKeyVals.size());
+  }
+
+  downedNodes_.insert(name);
+  XLOGF(INFO, "[CMD] {} is now DOWN", name);
+}
+
 void
-Session::upNode(const std::string&) {}
+Session::upNode(const std::string& name) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  /*
+   * UnknownNodeError is overloaded for DUT / wrong-state cases here too; see
+   * the rationale in downNode().
+   */
+  if (name == dutNodeName_) {
+    thrift::UnknownNodeError e;
+    e.message() = "cannot manipulate the DUT directly";
+    throw e;
+  }
+  if (topology_.routers.count(name) == 0) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Unknown node: {}", name);
+    throw e;
+  }
+  if (!downedNodes_.count(name)) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Node {} is not down", name);
+    throw e;
+  }
+
+  if (sparkFaker_ && sparkFaker_->recoverNeighbor(name)) {
+    XLOGF(INFO, "[CMD] Spark: recovered neighbor {}", name);
+  }
+
+  // Restore the downed node's full adj DB.
+  thrift::KeyVals allKeyVals;
+  {
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValue(
+        topology_.getRouter(name), topology_, v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    allKeyVals.emplace(std::move(key), std::move(value));
+  }
+  XLOGF(INFO, "[CMD] KvStore: restored adj:{}", name);
+
+  // Restore adj DBs of all neighbors to include the recovered node.
+  const auto& recoveredRouter = topology_.getRouter(name);
+  for (const auto& adj : recoveredRouter.adjacencies) {
+    if (topology_.routers.count(adj.remoteRouterName) == 0) {
+      continue;
+    }
+    if (adj.remoteRouterName == dutNodeName_) {
+      continue; // we don't manage the DUT's adj DB
+    }
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValue(
+        topology_.getRouter(adj.remoteRouterName), topology_, v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    allKeyVals.emplace(std::move(key), std::move(value));
+  }
+  if (injector_ && injector_->isConnected()) {
+    injector_->injectKeyVals(allKeyVals);
+    XLOGF(
+        INFO,
+        "[CMD] KvStore: updated {} adj DBs (node + neighbors)",
+        allKeyVals.size());
+  }
+
+  downedNodes_.erase(name);
+  XLOGF(INFO, "[CMD] {} is now UP", name);
+}
+
 void
 Session::downLink(const std::string&, const std::string&) {}
 void

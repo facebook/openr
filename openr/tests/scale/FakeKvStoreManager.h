@@ -9,6 +9,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -160,8 +161,16 @@ class FakeKvStoreManager {
   /*
    * Simulate node removal: inject an overloaded, empty adj DB
    * for the node, propagated to all neighbors.
+   *
+   * Pass an explicit `version` to keep the removal on the caller's monotonic
+   * version stream (e.g. Session's cmdVersion_, which also versions the
+   * corresponding restore). When omitted, an internal per-key counter is used,
+   * which can produce a stale removal version after an externally-versioned
+   * restore.
    */
-  void simulateNodeRemoval(const std::string& routerName);
+  void simulateNodeRemoval(
+      const std::string& routerName,
+      std::optional<int64_t> version = std::nullopt);
 
   /*
    * Simulate node overload: set the overload bit on the router's

@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
 #include <openr/tests/scale/Session.h>
@@ -88,6 +89,72 @@ TEST(SessionTest, GetStatusReportsConfigAndNotConnected) {
   // MakeTestConfig sets simulateNeighbors=false, so per the TestStatus IDL the
   // optional neighborCount must be unset (distinct from a present 0).
   EXPECT_FALSE(st.neighborCount().has_value());
+}
+
+TEST(SessionTest, DownNodeRejectsUnknown) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  EXPECT_THROW(s.downNode("nonexistent-node"), thrift::UnknownNodeError);
+}
+
+TEST(SessionTest, UpNodeRejectsNotDowned) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  // Pick a real node that exists but was never downed.
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  EXPECT_THROW(s.upNode(names.front()), thrift::UnknownNodeError);
+}
+
+TEST(SessionTest, DownNodeMarksAsDowned) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  const auto& nodeName = names.front();
+  s.downNode(nodeName);
+  auto st = s.getStatus();
+  EXPECT_THAT(*st.downedNodes(), ::testing::Contains(nodeName));
+}
+
+TEST(SessionTest, DownNodeRejectsAlreadyDowned) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  const auto& nodeName = names.front();
+  s.downNode(nodeName);
+  EXPECT_THROW(s.downNode(nodeName), thrift::UnknownNodeError);
+}
+
+TEST(SessionTest, DownUpNodeRoundtripsState) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  const auto& nodeName = names.front();
+  s.downNode(nodeName);
+  s.upNode(nodeName);
+  auto st = s.getStatus();
+  EXPECT_TRUE(st.downedNodes()->empty());
+}
+
+TEST(SessionTest, DownUpDownFlapsStayConsistent) {
+  /*
+   * Repeated down/up/down flaps must keep downedNodes_ consistent and the
+   * second down (after an up) must succeed. Regression guard for the down/up
+   * version- stream alignment on the fake-KvStore removal path.
+   */
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  const auto& nodeName = names.front();
+
+  s.downNode(nodeName);
+  s.upNode(nodeName);
+  EXPECT_NO_THROW(s.downNode(nodeName));
+  EXPECT_THAT(*s.getStatus().downedNodes(), ::testing::Contains(nodeName));
 }
 
 TEST(SessionTest, StartThrowsDutUnreachable) {

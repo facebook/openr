@@ -319,12 +319,15 @@ FakeKvStoreManager::simulateLinkFlap(
 }
 
 void
-FakeKvStoreManager::simulateNodeRemoval(const std::string& routerName) {
+FakeKvStoreManager::simulateNodeRemoval(
+    const std::string& routerName, std::optional<int64_t> version) {
   XLOGF(INFO, "[FAKE-KVSTORE-MGR] Simulating node removal: {}", routerName);
 
-  int64_t version = getNextVersion(fmt::format("adj:{}", routerName));
+  const int64_t v = version.has_value()
+      ? *version
+      : getNextVersion(fmt::format("adj:{}", routerName));
   auto [key, value] =
-      KvStoreDataBuilder::buildRemovedNodeAdjKeyValue(routerName, version);
+      KvStoreDataBuilder::buildRemovedNodeAdjKeyValue(routerName, v);
 
   propagateKeyUpdate(key, std::move(value));
 }
