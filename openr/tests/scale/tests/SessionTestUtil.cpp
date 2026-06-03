@@ -7,6 +7,8 @@
 
 #include <openr/tests/scale/tests/SessionTestUtil.h>
 
+#include <stdexcept>
+
 namespace openr::test {
 
 namespace {
@@ -35,6 +37,19 @@ MakeTestConfig() {
   cfg.topology()->dutRole() = thrift::DutRole::SPINE;
   cfg.topology()->ecmpWidth() = 2;
   return cfg;
+}
+
+std::pair<std::string, std::string>
+FindAdjacentPair(const Session& session) {
+  const auto& topo = session.topology();
+  for (const auto& [name, router] : topo.routers) {
+    for (const auto& adj : router.adjacencies) {
+      if (topo.routers.count(adj.remoteRouterName) > 0) {
+        return {name, adj.remoteRouterName};
+      }
+    }
+  }
+  throw std::runtime_error("FindAdjacentPair: no adjacencies in topology");
 }
 
 } // namespace openr::test

@@ -7,6 +7,8 @@
 
 #include <openr/tests/scale/Session.h>
 
+#include <stdexcept>
+
 #include <openr/tests/scale/DutPatcher.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/NetInterfaceUtils.h>
@@ -74,6 +76,47 @@ Topology
 validateAndBuildTopology(const thrift::ScaleTestConfig& cfg) {
   validateConfig(cfg);
   return createScaleTopology(cfg);
+}
+
+// Returns true iff `topology_` has a router named `a` with an
+// adjacency to `b`. Used to validate downLink/upLink arguments.
+bool
+hasAdjacency(const Topology& topo, const std::string& a, const std::string& b) {
+  auto it = topo.routers.find(a);
+  if (it == topo.routers.end()) {
+    return false;
+  }
+  for (const auto& adj : it->second.adjacencies) {
+    if (adj.remoteRouterName == b) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Links are undirected; sort the endpoint pair so (a,b) and (b,a) hash to
+// the same key in downedLinks_.
+std::pair<std::string, std::string>
+normalizeLinkKey(const std::string& a, const std::string& b) {
+  return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
+}
+
+// Neighbors of `name` whose incident link is currently in `downedLinks`. Used
+// to rebuild name's adj DB with ALL still-downed incident links omitted, so an
+// endpoint with multiple operator-downed links stays symmetric with its peers.
+std::set<std::string>
+downedNeighborsOf(
+    const std::set<std::pair<std::string, std::string>>& downedLinks,
+    const std::string& name) {
+  std::set<std::string> result;
+  for (const auto& [x, y] : downedLinks) {
+    if (x == name) {
+      result.insert(y);
+    } else if (y == name) {
+      result.insert(x);
+    }
+  }
+  return result;
 }
 
 } // namespace
@@ -448,6 +491,13 @@ Session::downNode(const std::string& name) {
     throw e;
   }
 
+  /*
+   * Operator downLink() intent persists across a node flap: we do NOT clear
+   * incident downedLinks_ entries here. While the node is down they are hidden
+   * from getStatus() (subsumed by the downed node); when the node is restored,
+   * upNode() rebuilds its adjacencies with the still-downed links omitted.
+   */
+
   if (sparkFaker_ && sparkFaker_->failNeighbor(name)) {
     XLOGF(INFO, "[CMD] Spark: failed neighbor {}", name);
   }
@@ -483,8 +533,13 @@ Session::downNode(const std::string& name) {
       continue; // we don't manage the DUT's adj DB
     }
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
-    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
-        topology_.getRouter(adj.remoteRouterName), topology_, name, v);
+    // Drop this neighbor's adjacency to the downed node AND keep any of its
+    // OTHER operator-downed links omitted — otherwise rebuilding it here would
+    // silently resurrect those links.
+    auto omit = downedNeighborsOf(downedLinks_, adj.remoteRouterName);
+    omit.insert(name);
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+        topology_.getRouter(adj.remoteRouterName), topology_, omit, v);
     if (kvManager_) {
       kvManager_->propagateKeyUpdate(key, value);
     }
@@ -530,12 +585,24 @@ Session::upNode(const std::string& name) {
     XLOGF(INFO, "[CMD] Spark: recovered neighbor {}", name);
   }
 
-  // Restore the downed node's full adj DB.
+  /*
+   * Operator downLink() intent persists across the node flap: any link still in
+   * downedLinks_ that is incident on this node must remain DOWN after the node
+   * is restored. Restore the node's adj DB with those still-downed neighbors
+   * omitted, and for each such neighbor restore its adj DB with this node
+   * omitted; neighbors whose link is up get a full restore.
+   */
+  const std::set<std::string> stillDownNeighbors =
+      downedNeighborsOf(downedLinks_, name);
+
   thrift::KeyVals allKeyVals;
   {
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
-    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValue(
-        topology_.getRouter(name), topology_, v);
+    auto [key, value] = stillDownNeighbors.empty()
+        ? KvStoreDataBuilder::buildAdjKeyValue(
+              topology_.getRouter(name), topology_, v)
+        : KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+              topology_.getRouter(name), topology_, stillDownNeighbors, v);
     if (kvManager_) {
       kvManager_->propagateKeyUpdate(key, value);
     }
@@ -543,7 +610,9 @@ Session::upNode(const std::string& name) {
   }
   XLOGF(INFO, "[CMD] KvStore: restored adj:{}", name);
 
-  // Restore adj DBs of all neighbors to include the recovered node.
+  // Restore adj DBs of all neighbors to include the recovered node, while
+  // keeping every neighbor's own still-downed links omitted (including the link
+  // back to `name` if it is itself still operator-downed).
   const auto& recoveredRouter = topology_.getRouter(name);
   for (const auto& adj : recoveredRouter.adjacencies) {
     if (topology_.routers.count(adj.remoteRouterName) == 0) {
@@ -553,8 +622,15 @@ Session::upNode(const std::string& name) {
       continue; // we don't manage the DUT's adj DB
     }
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
-    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValue(
-        topology_.getRouter(adj.remoteRouterName), topology_, v);
+    // Rebuild this neighbor omitting ALL of ITS still-downed links (this set
+    // already includes `name` when the link to it remains down). Using only the
+    // link to `name` would silently resurrect the neighbor's other downed
+    // links.
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+        topology_.getRouter(adj.remoteRouterName),
+        topology_,
+        downedNeighborsOf(downedLinks_, adj.remoteRouterName),
+        v);
     if (kvManager_) {
       kvManager_->propagateKeyUpdate(key, value);
     }
@@ -568,14 +644,260 @@ Session::upNode(const std::string& name) {
         allKeyVals.size());
   }
 
+  // downedLinks_ entries incident on this node are intentionally NOT cleared:
+  // operator link-down intent persists across the node flap (the links above
+  // were rebuilt as still-down). Only the node itself is marked up.
   downedNodes_.erase(name);
   XLOGF(INFO, "[CMD] {} is now UP", name);
 }
 
 void
-Session::downLink(const std::string&, const std::string&) {}
+Session::downLink(const std::string& a, const std::string& b) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  if (a == dutNodeName_ || b == dutNodeName_) {
+    thrift::UnknownNodeError e;
+    e.message() = "cannot manipulate links to the DUT directly";
+    throw e;
+  }
+  // Drive validation from topology_ — the canonical, never-mutated
+  // source of truth. Unknown endpoint nodes throw UnknownNodeError; missing
+  // adjacency or already-down state throws UnknownAdjacencyError.
+  if (topology_.routers.count(a) == 0) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Unknown node: {}", a);
+    throw e;
+  }
+  if (topology_.routers.count(b) == 0) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Unknown node: {}", b);
+    throw e;
+  }
+  if (!hasAdjacency(topology_, a, b)) {
+    thrift::UnknownAdjacencyError e;
+    e.message() = fmt::format("No adjacency between {} and {}", a, b);
+    throw e;
+  }
+  if (downedNodes_.count(a) || downedNodes_.count(b)) {
+    thrift::UnknownAdjacencyError e;
+    e.message() =
+        fmt::format("endpoint already down ({} or {} in downedNodes_)", a, b);
+    throw e;
+  }
+  const auto link = normalizeLinkKey(a, b);
+  if (downedLinks_.count(link)) {
+    thrift::UnknownAdjacencyError e;
+    e.message() = fmt::format("link {}<->{} already down", a, b);
+    throw e;
+  }
+
+  // Record in downedLinks_ BEFORE building the keys so each endpoint's adj DB
+  // omits ALL of its still-downed incident links (not just this one) — keeping
+  // both sides symmetric when an endpoint already has other operator-downed
+  // links. Also lets dtor / external observers see the in-flight state.
+  downedLinks_.insert(link);
+
+  // One cmdVersion bump per key for monotonicity in the DUT's KvStore. Note:
+  // fetch_add returns the prior value; +1 gives the post-increment value,
+  // matching the monotonic semantics used by downNode/upNode.
+  const int64_t vA = cmdVersion_.fetch_add(1) + 1;
+  const int64_t vB = cmdVersion_.fetch_add(1) + 1;
+  auto keyA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+      topology_.getRouter(a),
+      topology_,
+      downedNeighborsOf(downedLinks_, a),
+      vA);
+  auto keyB = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+      topology_.getRouter(b),
+      topology_,
+      downedNeighborsOf(downedLinks_, b),
+      vB);
+
+  try {
+    thrift::KeyVals kv;
+    kv.emplace(keyA.first, keyA.second);
+    kv.emplace(keyB.first, keyB.second);
+    if (injector_ && injector_->isConnected()) {
+      const size_t injected = injector_->injectKeyVals(kv);
+      if (injected != kv.size()) {
+        /*
+         * injectKeyVals() returns a short count (it does not throw) on
+         * disconnect / RPC failure. Turn a short write into a hard failure so a
+         * half-applied, asymmetric link state on the DUT is never reported as
+         * success. Caught below to trigger rollback.
+         */
+        throw std::runtime_error(
+            fmt::format(
+                "downLink injection incomplete: {} of {} keys written to DUT",
+                injected,
+                kv.size()));
+      }
+    }
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(keyA.first, keyA.second);
+      kvManager_->propagateKeyUpdate(keyB.first, keyB.second);
+    }
+    XLOGF(INFO, "[CMD] Link {}<->{} is now DOWN", a, b);
+  } catch (...) {
+    // Best-effort rollback to BOTH sinks: re-push the full adj keys for both
+    // endpoints to the DUT and the fake KvStore, and drop the in-memory
+    // record. If the rollback push also fails, swallow — stopTest+startTest
+    // provides a clean reset.
+    downedLinks_.erase(link);
+    try {
+      // Rebuild with each endpoint's REMAINING still-downed links preserved
+      // (downedNeighborsOf now excludes the just-erased link), so a failed
+      // downLink does not clobber other operator-downed links on a or b.
+      const int64_t rvA = cmdVersion_.fetch_add(1) + 1;
+      const int64_t rvB = cmdVersion_.fetch_add(1) + 1;
+      auto rollbackA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+          topology_.getRouter(a),
+          topology_,
+          downedNeighborsOf(downedLinks_, a),
+          rvA);
+      auto rollbackB = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+          topology_.getRouter(b),
+          topology_,
+          downedNeighborsOf(downedLinks_, b),
+          rvB);
+      thrift::KeyVals rollbackKv;
+      rollbackKv.emplace(rollbackA.first, rollbackA.second);
+      rollbackKv.emplace(rollbackB.first, rollbackB.second);
+      if (injector_ && injector_->isConnected()) {
+        injector_->injectKeyVals(rollbackKv);
+      }
+      if (kvManager_) {
+        kvManager_->propagateKeyUpdate(rollbackA.first, rollbackA.second);
+        kvManager_->propagateKeyUpdate(rollbackB.first, rollbackB.second);
+      }
+    } catch (...) {
+      // Swallow rollback failures.
+    }
+    throw;
+  }
+}
+
 void
-Session::upLink(const std::string&, const std::string&) {}
+Session::upLink(const std::string& a, const std::string& b) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  if (a == dutNodeName_ || b == dutNodeName_) {
+    thrift::UnknownNodeError e;
+    e.message() = "cannot manipulate links to the DUT directly";
+    throw e;
+  }
+  if (topology_.routers.count(a) == 0) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Unknown node: {}", a);
+    throw e;
+  }
+  if (topology_.routers.count(b) == 0) {
+    thrift::UnknownNodeError e;
+    e.message() = fmt::format("Unknown node: {}", b);
+    throw e;
+  }
+  if (!hasAdjacency(topology_, a, b)) {
+    thrift::UnknownAdjacencyError e;
+    e.message() = fmt::format("No adjacency between {} and {}", a, b);
+    throw e;
+  }
+  if (downedNodes_.count(a) || downedNodes_.count(b)) {
+    thrift::UnknownAdjacencyError e;
+    e.message() = fmt::format(
+        "endpoint is down ({} or {}); upNode first before upLink", a, b);
+    throw e;
+  }
+  const auto link = normalizeLinkKey(a, b);
+  if (!downedLinks_.count(link)) {
+    thrift::UnknownAdjacencyError e;
+    e.message() = fmt::format("link {}<->{} is not down", a, b);
+    throw e;
+  }
+
+  // Rebuild both endpoints' adj keys restoring the a<->b edge, but keeping any
+  // OTHER still-downed links incident on a or b omitted (so bringing one link
+  // up doesn't silently resurrect the endpoint's other operator-downed links).
+  // downedNeighborsOf still includes the link being brought up, so exclude it.
+  auto aStillDown = downedNeighborsOf(downedLinks_, a);
+  aStillDown.erase(b);
+  auto bStillDown = downedNeighborsOf(downedLinks_, b);
+  bStillDown.erase(a);
+
+  // One cmdVersion bump per key for monotonicity in the DUT's KvStore. Note:
+  // fetch_add returns the prior value; +1 gives the post-increment value,
+  // matching the monotonic semantics used by downNode/upNode.
+  const int64_t vA = cmdVersion_.fetch_add(1) + 1;
+  const int64_t vB = cmdVersion_.fetch_add(1) + 1;
+  auto keyA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+      topology_.getRouter(a), topology_, aStillDown, vA);
+  auto keyB = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+      topology_.getRouter(b), topology_, bStillDown, vB);
+
+  thrift::KeyVals kv;
+  kv.emplace(keyA.first, keyA.second);
+  kv.emplace(keyB.first, keyB.second);
+  try {
+    if (injector_ && injector_->isConnected()) {
+      const size_t injected = injector_->injectKeyVals(kv);
+      if (injected != kv.size()) {
+        /*
+         * Short write (injectKeyVals does not throw on RPC failure). Fail
+         * loudly so a partially-restored link is not reported as up; caught
+         * below to re-assert a consistent down state.
+         */
+        throw std::runtime_error(
+            fmt::format(
+                "upLink injection incomplete: {} of {} keys written to DUT",
+                injected,
+                kv.size()));
+      }
+    }
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(keyA.first, keyA.second);
+      kvManager_->propagateKeyUpdate(keyB.first, keyB.second);
+    }
+    // Erase from downedLinks_ only after a successful push.
+    downedLinks_.erase(link);
+    XLOGF(INFO, "[CMD] Link {}<->{} is now UP", a, b);
+  } catch (...) {
+    /*
+     * Best-effort rollback to a CONSISTENT down state. The link stays recorded
+     * as down (downedLinks_ was NOT erased), so a partial write that brought
+     * one endpoint up would leave the DUT half-restored and unreconcilable with
+     * the session view. Re-assert the link-down adj keys on BOTH endpoints to
+     * both sinks (downedNeighborsOf still includes the peer, since the link is
+     * still recorded down). Symmetric with downLink's rollback; swallow
+     * rollback failures — stopTest+startTest provides a clean reset.
+     */
+    try {
+      const int64_t rvA = cmdVersion_.fetch_add(1) + 1;
+      const int64_t rvB = cmdVersion_.fetch_add(1) + 1;
+      auto downA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+          topology_.getRouter(a),
+          topology_,
+          downedNeighborsOf(downedLinks_, a),
+          rvA);
+      auto downB = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+          topology_.getRouter(b),
+          topology_,
+          downedNeighborsOf(downedLinks_, b),
+          rvB);
+      thrift::KeyVals rollbackKv;
+      rollbackKv.emplace(downA.first, downA.second);
+      rollbackKv.emplace(downB.first, downB.second);
+      if (injector_ && injector_->isConnected()) {
+        injector_->injectKeyVals(rollbackKv);
+      }
+      if (kvManager_) {
+        kvManager_->propagateKeyUpdate(downA.first, downA.second);
+        kvManager_->propagateKeyUpdate(downB.first, downB.second);
+      }
+    } catch (...) {
+      // Swallow rollback failures.
+    }
+    throw;
+  }
+}
 thrift::TestStatus
 Session::getStatus() const {
   std::lock_guard<std::mutex> g(mutationMutex_);

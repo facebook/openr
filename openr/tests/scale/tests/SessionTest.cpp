@@ -143,7 +143,7 @@ TEST(SessionTest, DownUpDownFlapsStayConsistent) {
   /*
    * Repeated down/up/down flaps must keep downedNodes_ consistent and the
    * second down (after an up) must succeed. Regression guard for the down/up
-   * version- stream alignment on the fake-KvStore removal path.
+   * version-stream alignment on the fake-KvStore removal path.
    */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
@@ -155,6 +155,95 @@ TEST(SessionTest, DownUpDownFlapsStayConsistent) {
   s.upNode(nodeName);
   EXPECT_NO_THROW(s.downNode(nodeName));
   EXPECT_THAT(*s.getStatus().downedNodes(), ::testing::Contains(nodeName));
+}
+
+TEST(SessionTest, DownLinkRecordsInDownedLinks) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  s.downLink(a, b);
+  auto st = s.getStatus();
+  // Link endpoints are normalized (sorted) before storage; expect the
+  // smaller name first.
+  thrift::LinkRef expected;
+  expected.localNode() = std::min(a, b);
+  expected.remoteNode() = std::max(a, b);
+  EXPECT_THAT(*st.downedLinks(), ::testing::Contains(expected));
+}
+
+TEST(SessionTest, DownLinkUpLinkRoundtripsState) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  s.downLink(a, b);
+  s.upLink(a, b);
+  auto st = s.getStatus();
+  EXPECT_TRUE(st.downedLinks()->empty());
+}
+
+TEST(SessionTest, DownLinkRejectsIfEndpointAlreadyDowned) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  s.downNode(a);
+  EXPECT_THROW(s.downLink(a, b), thrift::UnknownAdjacencyError);
+}
+
+TEST(SessionTest, NodeFlapPreservesOperatorDownedLink) {
+  // Operator downLink() intent persists across a node flap: downing then
+  // restoring an endpoint must NOT silently bring an operator-downed link back.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  thrift::LinkRef expected;
+  expected.localNode() = std::min(a, b);
+  expected.remoteNode() = std::max(a, b);
+
+  s.downLink(a, b);
+  s.downNode(a);
+  // While endpoint a is down, the incident link is subsumed by the downed node
+  // and hidden from getStatus() (per the TestStatus contract), though the
+  // intent is retained internally.
+  EXPECT_THAT(
+      *s.getStatus().downedLinks(),
+      ::testing::Not(::testing::Contains(expected)));
+  EXPECT_THAT(*s.getStatus().downedNodes(), ::testing::Contains(a));
+
+  s.upNode(a);
+  // Node is back up, but the operator-downed link must still be reported down.
+  auto st = s.getStatus();
+  EXPECT_TRUE(st.downedNodes()->empty());
+  EXPECT_THAT(*st.downedLinks(), ::testing::Contains(expected));
+}
+
+TEST(SessionTest, MultiLinkNodeFlapPreservesNeighborsOtherDownedLink) {
+  // Multi-link case: with edges a-b and b-c, downLink(b, c) then a flap of node
+  // a must NOT clear (b, c) — node a's down/up rebuilds neighbor b, and b must
+  // keep its other operator-downed link (to c) omitted, not silently restored.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  // Find c: a neighbor of b distinct from a.
+  std::string c;
+  for (const auto& adj : s.topology().getRouter(b).adjacencies) {
+    if (adj.remoteRouterName != a &&
+        s.topology().routers.count(adj.remoteRouterName) > 0) {
+      c = adj.remoteRouterName;
+      break;
+    }
+  }
+  ASSERT_FALSE(c.empty()) << "test needs a node b with >= 2 distinct neighbors";
+
+  s.downLink(b, c);
+  s.downNode(a);
+  s.upNode(a);
+
+  thrift::LinkRef bc;
+  bc.localNode() = std::min(b, c);
+  bc.remoteNode() = std::max(b, c);
+  auto st = s.getStatus();
+  EXPECT_TRUE(st.downedNodes()->empty());
+  EXPECT_THAT(*st.downedLinks(), ::testing::Contains(bc));
 }
 
 TEST(SessionTest, StartThrowsDutUnreachable) {

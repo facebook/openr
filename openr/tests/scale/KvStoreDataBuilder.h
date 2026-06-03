@@ -8,6 +8,7 @@
 #pragma once
 
 #include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -116,6 +117,23 @@ class KvStoreDataBuilder {
       const VirtualRouter& router,
       const Topology& topology,
       const std::string& adjToRemove,
+      int64_t version);
+
+  /*
+   * Build an adjacency database with a set of adjacencies removed. Used when a
+   * node is restored (upNode) but some of its incident links remain
+   * operator-downed and must stay omitted.
+   *
+   * @param router The router whose adj DB to modify
+   * @param topology Full topology
+   * @param adjsToRemove Names of the adjacencies to remove (remoteRouterName)
+   * @param version Version number for the key
+   * @return Pair of ("adj:<nodeName>", serialized AdjacencyDatabase)
+   */
+  static std::pair<std::string, thrift::Value> buildAdjKeyValueWithLinksDown(
+      const VirtualRouter& router,
+      const Topology& topology,
+      const std::set<std::string>& adjsToRemove,
       int64_t version);
 
   /*

@@ -77,13 +77,23 @@ KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
     const Topology& topology,
     const std::string& adjToRemove,
     int64_t version) {
+  return buildAdjKeyValueWithLinksDown(
+      router, topology, {adjToRemove}, version);
+}
+
+std::pair<std::string, thrift::Value>
+KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+    const VirtualRouter& router,
+    const Topology& topology,
+    const std::set<std::string>& adjsToRemove,
+    int64_t version) {
   /*
-   * Build adjacency database with one adjacency filtered out.
+   * Build adjacency database with the given adjacencies filtered out.
    */
   std::vector<thrift::Adjacency> adjs;
 
   for (const auto& adj : router.adjacencies) {
-    if (!adj.isUp || adj.remoteRouterName == adjToRemove) {
+    if (!adj.isUp || adjsToRemove.count(adj.remoteRouterName)) {
       continue;
     }
 
