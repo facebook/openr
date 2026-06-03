@@ -27,7 +27,12 @@ constexpr auto kDefaultCounterRegex =
     "decision\\.route_build_ms\\.avg|"
     "fib\\.route_programming\\.time_ms\\.avg|"
     "decision\\.spf_ms\\.avg|"
-    "decision\\.path_build_ms\\.avg";
+    "decision\\.path_build_ms\\.avg|"
+    "fib\\.route_sync\\.time_ms|"
+    "initialization\\.KVSTORE_SYNCED\\.duration_ms|"
+    "initialization\\.INITIALIZED\\.duration_ms|"
+    "decision\\.linkstate\\.up\\.propagation_time_ms|"
+    "decision\\.linkstate\\.down\\.propagation_time_ms";
 
 thrift::NotRunningError
 makeNotRunning() {
