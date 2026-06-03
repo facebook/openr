@@ -88,6 +88,7 @@ class Session {
   std::vector<std::string> patchDut(); // splice DUT in, return its neighbors
   void setupFakeKvStore(const std::vector<std::string>& dutNeighborNames);
   void setupSparkFaker(const std::vector<std::string>& dutNeighborNames);
+  void injectInitialTopology(); // initial bulk KvStore injection into the DUT
 
   void onTimerTick();
   void bumpFakeKeys();

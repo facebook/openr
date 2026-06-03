@@ -126,6 +126,7 @@ Session::start() {
   if (sparkFaker_) {
     setupSparkFaker(dutNeighborNames);
   }
+  injectInitialTopology();
 }
 
 void
@@ -359,6 +360,48 @@ Session::setupSparkFaker(const std::vector<std::string>& dutNeighborNames) {
       usable.size());
 }
 
+void
+Session::injectInitialTopology() {
+  /*
+   * Initial bulk topology injection into the DUT's KvStore. The DUT's own adj
+   * key is owned by LinkMonitor and must be omitted.
+   */
+  if (*config_.injection()->injectTopology()) {
+    try {
+      auto keyVals = KvStoreThriftInjector::buildKeyVals(
+          topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
+      keyVals.erase(fmt::format("adj:{}", dutNodeName_));
+      const size_t expected = keyVals.size();
+      const size_t injected = injector_->injectKeyVals(keyVals);
+      /*
+       * injectKeyVals() returns 0 (it does NOT throw) when the DUT is
+       * disconnected or the setKvStoreKeyVals RPC fails, so the catch below is
+       * not enough on its own. Treat a short write as an explicit failure
+       * rather than letting start() report a healthy session whose DUT never
+       * received the initial topology.
+       */
+      if (injected != expected) {
+        thrift::SetupError se;
+        se.reason() = thrift::SetupErrorReason::INJECTION_FAILED;
+        se.message() = fmt::format(
+            "Topology injection incomplete: injected {} of {} keys into DUT "
+            "KvStore (DUT disconnected or setKvStoreKeyVals RPC failed)",
+            injected,
+            expected);
+        throw se;
+      }
+      XLOGF(INFO, "[Session] Injected {} keys into DUT KvStore", injected);
+    } catch (const thrift::SetupError&) {
+      throw; // already classified; don't re-wrap as a generic failure
+    } catch (const std::exception& ex) {
+      thrift::SetupError se;
+      se.reason() = thrift::SetupErrorReason::INJECTION_FAILED;
+      se.message() = fmt::format("Topology injection failed: {}", ex.what());
+      throw se;
+    }
+  }
+}
+
 std::vector<std::string>
 Session::listNodesUnlocked() const {
   std::vector<std::string> out;
@@ -391,8 +434,29 @@ Session::getStatus() const {
   return {};
 }
 void
-Session::onTimerTick() {}
+Session::onTimerTick() {
+  /*
+   * TODO: drive the periodic fake-key-version bump. Check whether
+   * fakeKeyVersionBumpIntervalSec has elapsed since lastFakeKeyBumpSec_ and, if
+   * so, call bumpFakeKeys(). See ScaleTestServer.cpp:915-947 for the legacy
+   * behavior being ported.
+   */
+}
 void
-Session::bumpFakeKeys() {}
+Session::bumpFakeKeys() {
+  /*
+   * TODO: implement the periodic fake-key-version bump (legacy parity with
+   * ScaleTestServer.cpp:915-947):
+   *   1. ++fakeKeyVersion_
+   *   2. regenerate fake keys for every router via
+   *      KvStoreThriftInjector::createFakeKeyValues(router,
+   *      numFakeKeysPerNode, fakeKeyVersion_)
+   *   3. push to BOTH sinks so their versions stay in sync:
+   *      injector_->injectKeyVals(...) (the DUT) AND
+   *      kvManager_->propagateKeyUpdates(...) (the fake neighbor KvStores)
+   * Scheduling note: prefer a folly::AsyncTimeout on the injector's EventBase
+   * (the bump issues a Thrift RPC) over a FunctionScheduler polling thread.
+   */
+}
 
 } // namespace openr
