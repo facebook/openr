@@ -56,6 +56,15 @@ class ScaleTestServerHandler
       std::unique_ptr<std::vector<thrift::LinkRef>> links) override;
   void sync_upLinks(
       std::unique_ptr<std::vector<thrift::LinkRef>> links) override;
+  void sync_flapLink(
+      std::unique_ptr<std::string> localNode,
+      std::unique_ptr<std::string> remoteNode,
+      int32_t cycles,
+      int32_t intervalMs) override;
+  void sync_flapLinks(
+      std::unique_ptr<std::vector<thrift::LinkRef>> links,
+      int32_t cycles,
+      int32_t intervalMs) override;
   void sync_getDutCounters(
       std::map<std::string, int64_t>& out,
       std::unique_ptr<std::string> regexFilter) override;

@@ -20,6 +20,8 @@ Subcommands:
   up-nodes <n...>         Up multiple nodes atomically.
   down-links <a:b...>     Down multiple adjacencies atomically.
   up-links <a:b...>       Up multiple adjacencies atomically.
+  flap-link <a:b>         Flap a link (fire-and-forget down/up cycles).
+  flap-links <a:b...>     Flap multiple links together (fire-and-forget).
   counters [regex]        Print DUT counters, optionally filtered by regex.
   neighbor-stats          Print simulated Spark-neighbor stats.
   verify-routes           Print the DUT's computed route counts.
@@ -232,6 +234,28 @@ async def _cmd_up_links(client: ScaleTestServer.Async, args: argparse.Namespace)
     return 0
 
 
+async def _cmd_flap_link(
+    client: ScaleTestServer.Async, args: argparse.Namespace
+) -> int:
+    link = _parse_link(args.link)
+    # Fire-and-forget: the server validates then runs the flap in the background.
+    await client.flapLink(link.localNode, link.remoteNode, args.cycles, args.interval)
+    print(f"flap-link started: {args.link} x{args.cycles} @ {args.interval}ms")
+    return 0
+
+
+async def _cmd_flap_links(
+    client: ScaleTestServer.Async, args: argparse.Namespace
+) -> int:
+    links = [_parse_link(t) for t in args.links]
+    await client.flapLinks(links, args.cycles, args.interval)
+    print(
+        f"flap-links started: {', '.join(args.links)} "
+        f"x{args.cycles} @ {args.interval}ms"
+    )
+    return 0
+
+
 async def _cmd_counters(client: ScaleTestServer.Async, args: argparse.Namespace) -> int:
     # Server filters by regex (empty == default counter set).
     counters = await client.getDutCounters(args.regex or "")
@@ -289,6 +313,8 @@ def _get_handlers() -> dict[str, Any]:
         "up-nodes": _cmd_up_nodes,
         "down-links": _cmd_down_links,
         "up-links": _cmd_up_links,
+        "flap-link": _cmd_flap_link,
+        "flap-links": _cmd_flap_links,
         "counters": _cmd_counters,
         "neighbor-stats": _cmd_neighbor_stats,
         "verify-routes": _cmd_verify_routes,
@@ -339,6 +365,26 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p_dls.add_argument("links", nargs="+", help="Links as localNode:remoteNode")
     p_uls = sub.add_parser("up-links", help="Up multiple adjacencies atomically")
     p_uls.add_argument("links", nargs="+", help="Links as localNode:remoteNode")
+
+    p_flk = sub.add_parser(
+        "flap-link", help="Flap a link (fire-and-forget: down/up cycles)"
+    )
+    p_flk.add_argument("link", help="Link as localNode:remoteNode")
+    p_flk.add_argument("--cycles", type=int, default=5, help="Number of down/up cycles")
+    p_flk.add_argument(
+        "--interval", type=int, default=1000, help="Wait between toggles (ms)"
+    )
+
+    p_flks = sub.add_parser(
+        "flap-links", help="Flap multiple links together (fire-and-forget)"
+    )
+    p_flks.add_argument("links", nargs="+", help="Links as localNode:remoteNode")
+    p_flks.add_argument(
+        "--cycles", type=int, default=5, help="Number of down/up cycles"
+    )
+    p_flks.add_argument(
+        "--interval", type=int, default=1000, help="Wait between toggles (ms)"
+    )
 
     p_c = sub.add_parser("counters", help="Print DUT counters")
     p_c.add_argument(

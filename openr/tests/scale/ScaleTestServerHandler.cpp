@@ -217,6 +217,32 @@ ScaleTestServerHandler::sync_upLinks(
 }
 
 void
+ScaleTestServerHandler::sync_flapLink(
+    std::unique_ptr<std::string> localNode,
+    std::unique_ptr<std::string> remoteNode,
+    int32_t cycles,
+    int32_t intervalMs) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  // Fire-and-forget: flapLink validates synchronously then returns immediately.
+  snap->flapLink(*localNode, *remoteNode, cycles, intervalMs);
+}
+
+void
+ScaleTestServerHandler::sync_flapLinks(
+    std::unique_ptr<std::vector<thrift::LinkRef>> links,
+    int32_t cycles,
+    int32_t intervalMs) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  snap->flapLinks(*links, cycles, intervalMs);
+}
+
+void
 ScaleTestServerHandler::sync_getDutCounters(
     std::map<std::string, int64_t>& out,
     std::unique_ptr<std::string> regexFilter) {

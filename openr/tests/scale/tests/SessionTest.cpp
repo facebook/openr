@@ -5,6 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <chrono>
+
+#include <folly/synchronization/Baton.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
@@ -323,6 +326,46 @@ TEST(SessionTest, DownUpLinksRoundtripsState) {
   l.remoteNode() = b;
   s.downLinks({l});
   s.upLinks({l});
+  EXPECT_TRUE(s.getStatus().downedLinks()->empty());
+}
+
+TEST(SessionTest, FlapLinkRejectsUnknownEndpointSynchronously) {
+  // flapLink validates up front (before spawning the worker), so a bad endpoint
+  // throws to the caller and no link is downed.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  EXPECT_THROW(
+      s.flapLink(names[0], "nonexistent-node", /*cycles=*/3, /*intervalMs=*/0),
+      thrift::UnknownNodeError);
+  EXPECT_TRUE(s.getStatus().downedLinks()->empty());
+}
+
+TEST(SessionTest, FlapLinkZeroCyclesIsNoOp) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  EXPECT_NO_THROW(s.flapLink(a, b, /*cycles=*/0, /*intervalMs=*/100));
+  EXPECT_TRUE(s.getStatus().downedLinks()->empty());
+}
+
+TEST(SessionTest, FlapLinkRunsToCompletionInBackground) {
+  // Verify the background flap worker actually runs (down -> up cycles) and
+  // restores the link. Wait deterministically on a baton signalled by the
+  // worker's completion hook — no sleep-based polling.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+
+  folly::Baton<> done;
+  s.setFlapDoneCallbackForTest([&done]() { done.post(); });
+
+  s.flapLink(a, b, /*cycles=*/2, /*intervalMs=*/0);
+
+  ASSERT_TRUE(done.try_wait_for(std::chrono::seconds(30)))
+      << "background flap did not complete";
+  // A completed down/up flap leaves the link restored.
   EXPECT_TRUE(s.getStatus().downedLinks()->empty());
 }
 

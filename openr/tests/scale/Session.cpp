@@ -7,6 +7,7 @@
 
 #include <openr/tests/scale/Session.h>
 
+#include <algorithm>
 #include <stdexcept>
 
 #include <openr/tests/scale/DutPatcher.h>
@@ -22,6 +23,11 @@ namespace openr {
 namespace {
 
 constexpr int kFakeKvStoreIoThreads = 32;
+
+// Thread-pool size for background link-flap workers. A flap occupies one thread
+// for its whole duration, so this caps the number of concurrent flaps; beyond
+// it, additional flaps queue. Plenty for the single-operator scale harness.
+constexpr size_t kFlapThreads = 8;
 
 /*
  * Throws thrift::SetupError if any topology-independent field of
@@ -157,7 +163,20 @@ Session::Session(const thrift::ScaleTestConfig& cfg, int basePortOverride)
                    : nullptr),
       scheduler_(std::make_unique<folly::FunctionScheduler>()) {}
 
-Session::~Session() = default;
+Session::~Session() {
+  // Stop and join any background flap workers BEFORE the runtime members
+  // (injector_/kvManager_/sparkFaker_) are destroyed, so an in-flight flap can
+  // never touch freed state. flapCv_ wakes workers parked in their inter-toggle
+  // wait immediately; join() then waits for all running flap tasks to finish.
+  {
+    std::lock_guard<std::mutex> g(flapMutex_);
+    flapStop_ = true;
+  }
+  flapCv_.notify_all();
+  if (flapExecutor_) {
+    flapExecutor_->join();
+  }
+}
 
 void
 Session::start() {
@@ -1230,6 +1249,138 @@ Session::upLinks(const std::vector<thrift::LinkRef>& links) {
       "[CMD] {} links now UP ({} adj DBs updated)",
       batch.size(),
       kv.size());
+}
+
+void
+Session::setFlapDoneCallbackForTest(std::function<void()> cb) {
+  std::lock_guard<std::mutex> g(flapMutex_);
+  flapDoneCb_ = std::move(cb);
+}
+
+void
+Session::flapLink(
+    const std::string& a, const std::string& b, int cycles, int intervalMs) {
+  thrift::LinkRef l;
+  l.localNode() = a;
+  l.remoteNode() = b;
+  std::vector<thrift::LinkRef> links;
+  links.push_back(std::move(l));
+  flapLinks(links, cycles, intervalMs);
+}
+
+void
+Session::flapLinks(
+    const std::vector<thrift::LinkRef>& links, int cycles, int intervalMs) {
+  if (cycles <= 0 || links.empty()) {
+    return; // nothing to do
+  }
+
+  // Validate the whole set synchronously (same preconditions as downLinks) so
+  // the CALLER gets immediate feedback — the background worker re-validates
+  // each cycle but can only log, not throw back to the RPC.
+  {
+    std::lock_guard<std::mutex> g(mutationMutex_);
+    std::set<std::pair<std::string, std::string>> seen;
+    for (const auto& link : links) {
+      const auto& a = *link.localNode();
+      const auto& b = *link.remoteNode();
+      if (a == dutNodeName_ || b == dutNodeName_) {
+        thrift::UnknownNodeError e;
+        e.message() = "cannot manipulate links to the DUT directly";
+        throw e;
+      }
+      if (topology_.routers.count(a) == 0) {
+        thrift::UnknownNodeError e;
+        e.message() = fmt::format("Unknown node: {}", a);
+        throw e;
+      }
+      if (topology_.routers.count(b) == 0) {
+        thrift::UnknownNodeError e;
+        e.message() = fmt::format("Unknown node: {}", b);
+        throw e;
+      }
+      if (!hasAdjacency(topology_, a, b)) {
+        thrift::UnknownAdjacencyError e;
+        e.message() = fmt::format("No adjacency between {} and {}", a, b);
+        throw e;
+      }
+      if (downedNodes_.count(a) || downedNodes_.count(b)) {
+        thrift::UnknownAdjacencyError e;
+        e.message() = fmt::format("endpoint already down ({} or {})", a, b);
+        throw e;
+      }
+      const auto key = normalizeLinkKey(a, b);
+      if (downedLinks_.count(key) || !seen.insert(key).second) {
+        thrift::UnknownAdjacencyError e;
+        e.message() =
+            fmt::format("link {}<->{} already down / duplicated", a, b);
+        throw e;
+      }
+    }
+  }
+
+  const auto wait = std::chrono::milliseconds(std::max(0, intervalMs));
+
+  std::lock_guard<std::mutex> g(flapMutex_);
+  if (flapStop_) {
+    return; // session is shutting down; don't start new work
+  }
+  // Lazily create the flap thread pool (sessions that never flap pay nothing).
+  // The pool recycles threads, so completed flaps don't accumulate over a long
+  // session; ~Session() join()s it after signalling flapStop_.
+  if (!flapExecutor_) {
+    flapExecutor_ =
+        std::make_unique<folly::CPUThreadPoolExecutor>(kFlapThreads);
+  }
+  // Copy `links` into the worker. Each cycle drives the symmetric bulk
+  // downLinks/upLinks (a flap is bidirectional). Exceptions (e.g. a racing
+  // operator op) abort THIS flap only — they must not escape the task.
+  flapExecutor_->add([this, links, cycles, wait]() {
+    try {
+      for (int i = 0; i < cycles; ++i) {
+        {
+          std::unique_lock<std::mutex> lk(flapMutex_);
+          if (flapStop_) {
+            break;
+          }
+        }
+        downLinks(links);
+        {
+          std::unique_lock<std::mutex> lk(flapMutex_);
+          flapCv_.wait_for(lk, wait, [this]() { return flapStop_; });
+          if (flapStop_) {
+            break;
+          }
+        }
+        upLinks(links);
+        {
+          std::unique_lock<std::mutex> lk(flapMutex_);
+          flapCv_.wait_for(lk, wait, [this]() { return flapStop_; });
+          if (flapStop_) {
+            break;
+          }
+        }
+      }
+    } catch (const std::exception& ex) {
+      XLOGF(ERR, "[flap] aborted ({} links): {}", links.size(), ex.what());
+    }
+    // Test hook: signal completion so tests can wait deterministically (no
+    // sleep-poll). Copy under the lock, invoke outside it. No-op in production.
+    std::function<void()> cb;
+    {
+      std::lock_guard<std::mutex> lk(flapMutex_);
+      cb = flapDoneCb_;
+    }
+    if (cb) {
+      cb();
+    }
+  });
+  XLOGF(
+      INFO,
+      "[CMD] flap started: {} links x{} cycles @ {}ms",
+      links.size(),
+      cycles,
+      wait.count());
 }
 
 thrift::TestStatus

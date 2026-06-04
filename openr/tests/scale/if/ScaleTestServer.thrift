@@ -189,6 +189,41 @@ service ScaleTestServer {
     3: UnknownAdjacencyError unknownAdj,
   );
 
+  // Flap a single link: downLink -> wait intervalMs -> upLink, repeated `cycles`
+  // times. A link flap is bidirectional, so each cycle withdraws/restores BOTH
+  // endpoints' adjacencies (reuses the symmetric downLink/upLink path).
+  //
+  // FIRE-AND-FORGET: the call validates the link synchronously (so bad args /
+  // not-running surface immediately) then runs the flap on a background worker
+  // and returns right away — the operator can keep issuing commands and watch
+  // getTestStatus(), whose downedLinks reflects the in-flight flap. cycles <= 0
+  // is a no-op; a negative intervalMs is treated as 0. The link ends UP after a
+  // clean flap; if the session is stopped mid-flap it may be left down.
+  void flapLink(
+    1: string localNode,
+    2: string remoteNode,
+    3: i32 cycles,
+    4: i32 intervalMs,
+  ) throws (
+    1: NotRunningError notRunning,
+    2: UnknownNodeError unknown,
+    3: UnknownAdjacencyError unknownAdj,
+  );
+
+  // Bulk fire-and-forget flap: flap a SET of links together — each cycle drives
+  // the symmetric bulk downLinks/upLinks so all listed links go down (and back
+  // up) as one coherent wave. Same fire-and-forget / validation semantics as
+  // flapLink.
+  void flapLinks(
+    1: list<LinkRef> links,
+    2: i32 cycles,
+    3: i32 intervalMs,
+  ) throws (
+    1: NotRunningError notRunning,
+    2: UnknownNodeError unknown,
+    3: UnknownAdjacencyError unknownAdj,
+  );
+
   // Empty regex = use the daemon's default counter set.
   map<string, i64> getDutCounters(1: string regexFilter);
 

@@ -9,12 +9,15 @@
 
 #include <atomic>
 #include <chrono>
+#include <condition_variable>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <set>
 #include <string>
 #include <vector>
 
+#include <folly/executors/CPUThreadPoolExecutor.h>
 #include <folly/executors/FunctionScheduler.h>
 
 #include <openr/tests/scale/DutMonitor.h>
@@ -65,6 +68,16 @@ class Session {
   void downLinks(const std::vector<thrift::LinkRef>& links);
   void upLinks(const std::vector<thrift::LinkRef>& links);
 
+  // Fire-and-forget link flap: validate synchronously, then run
+  // downLink(s) -> wait intervalMs -> upLink(s) for `cycles` iterations on a
+  // background worker and return immediately. flapLink is the single-link
+  // convenience wrapper over flapLinks. cycles <= 0 / empty links is a no-op;
+  // a negative intervalMs is treated as 0.
+  void flapLink(
+      const std::string& a, const std::string& b, int cycles, int intervalMs);
+  void flapLinks(
+      const std::vector<thrift::LinkRef>& links, int cycles, int intervalMs);
+
   // Reads.
   std::vector<std::string> listNodes() const;
   std::vector<std::string> listNodesUnlocked() const; // for tests
@@ -99,6 +112,11 @@ class Session {
   // unset / <= 0. Reads topology_ lock-free (immutable after start()). Used by
   // bumpFakeKeys(); exposed so tests can assert the key set without sinks.
   thrift::KeyVals buildFakeKeyVals(int64_t version) const;
+
+  // Test hook: invoked once each background flap worker finishes (all cycles or
+  // abort), so tests can wait on a baton/future instead of sleep-polling for
+  // the async flap. No-op in production (unset).
+  void setFlapDoneCallbackForTest(std::function<void()> cb);
 
  private:
   // start() phases, in order. Each performs one step of side-effecting init and
@@ -152,6 +170,17 @@ class Session {
   std::shared_ptr<RealSparkIo> sparkIo_;
   std::shared_ptr<SparkFaker> sparkFaker_;
   std::unique_ptr<folly::FunctionScheduler> scheduler_;
+
+  // Background fire-and-forget link-flap workers. Flaps run on a recycled
+  // thread pool (created lazily on first flap) so completed flaps don't
+  // accumulate threads over a long session. flapMutex_ guards flapStop_;
+  // flapCv_ makes the inter-toggle waits interruptible so ~Session() can signal
+  // + join the pool promptly (before injector_/kvManager_ are torn down).
+  std::mutex flapMutex_;
+  std::condition_variable flapCv_;
+  bool flapStop_{false};
+  std::unique_ptr<folly::CPUThreadPoolExecutor> flapExecutor_;
+  std::function<void()> flapDoneCb_; // test-only completion hook (see setter)
 };
 
 } // namespace openr
