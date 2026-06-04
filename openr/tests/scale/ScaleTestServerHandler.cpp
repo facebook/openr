@@ -206,4 +206,13 @@ ScaleTestServerHandler::sync_getNeighborStats(thrift::NeighborStats& out) {
   out = snap->getNeighborStats();
 }
 
+void
+ScaleTestServerHandler::sync_verifyRoutes(thrift::RouteCounts& out) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  out = snap->verifyRoutes();
+}
+
 } // namespace openr

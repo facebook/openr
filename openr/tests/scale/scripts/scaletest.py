@@ -17,6 +17,8 @@ Subcommands:
   down-link <a> <b>       Down the adjacency between two nodes.
   up-link <a> <b>         Up the adjacency between two nodes.
   counters [regex]        Print DUT counters, optionally filtered by regex.
+  neighbor-stats          Print simulated Spark-neighbor stats.
+  verify-routes           Print the DUT's computed route counts.
 """
 
 from __future__ import annotations
@@ -219,6 +221,15 @@ async def _cmd_neighbor_stats(
     return 0
 
 
+async def _cmd_verify_routes(
+    client: ScaleTestServer.Async, args: argparse.Namespace
+) -> int:
+    counts = await client.verifyRoutes()
+    print(f"unicastRoutes: {counts.unicastRoutes}")
+    print(f"mplsRoutes: {counts.mplsRoutes}")
+    return 0
+
+
 def _get_handlers() -> dict[str, Any]:
     return {
         "start": _cmd_start,
@@ -231,6 +242,7 @@ def _get_handlers() -> dict[str, Any]:
         "up-link": _cmd_up_link,
         "counters": _cmd_counters,
         "neighbor-stats": _cmd_neighbor_stats,
+        "verify-routes": _cmd_verify_routes,
     }
 
 
@@ -276,6 +288,7 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     )
 
     sub.add_parser("neighbor-stats", help="Print simulated Spark neighbor stats")
+    sub.add_parser("verify-routes", help="Print DUT computed route counts")
 
     return parser.parse_args(argv)
 

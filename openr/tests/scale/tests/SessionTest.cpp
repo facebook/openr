@@ -103,6 +103,16 @@ TEST(SessionTest, NeighborStatsZeroedWhenNoSimulation) {
   EXPECT_TRUE(stats.neighbors()->empty());
 }
 
+TEST(SessionTest, VerifyRoutesReturnsZeroWhenDutNotConnected) {
+  // start() not called, so injector_ is null and verifyRoutes reports zero
+  // counts rather than dereferencing a missing DUT channel.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto rc = s.verifyRoutes();
+  EXPECT_EQ(*rc.unicastRoutes(), 0);
+  EXPECT_EQ(*rc.mplsRoutes(), 0);
+}
+
 TEST(SessionTest, DownNodeRejectsUnknown) {
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);

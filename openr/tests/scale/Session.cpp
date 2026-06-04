@@ -968,6 +968,27 @@ Session::getNeighborStats() const {
   }
   return out;
 }
+thrift::RouteCounts
+Session::verifyRoutes() const {
+  /*
+   * Hold mutationMutex_ across the RPC: injector_ is shared with the mutation
+   * paths (downNode/upNode/down|upLink all call injector_->injectKeyVals), so
+   * serializing here avoids concurrent use of the same Thrift client. The query
+   * is a single RPC; blocking mutations briefly is acceptable for the
+   * single-operator harness.
+   */
+  std::lock_guard<std::mutex> g(mutationMutex_);
+  thrift::RouteCounts rc;
+  rc.unicastRoutes() = 0;
+  rc.mplsRoutes() = 0;
+  if (!injector_ || !injector_->isConnected()) {
+    return rc;
+  }
+  auto routeDb = injector_->getRouteDatabase(dutNodeName_);
+  rc.unicastRoutes() = static_cast<int64_t>(routeDb.unicastRoutes()->size());
+  rc.mplsRoutes() = static_cast<int64_t>(routeDb.mplsRoutes()->size());
+  return rc;
+}
 void
 Session::onTimerTick() {
   /*

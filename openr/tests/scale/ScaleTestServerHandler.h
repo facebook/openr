@@ -52,6 +52,7 @@ class ScaleTestServerHandler
       std::map<std::string, int64_t>& out,
       std::unique_ptr<std::string> regexFilter) override;
   void sync_getNeighborStats(thrift::NeighborStats& out) override;
+  void sync_verifyRoutes(thrift::RouteCounts& out) override;
 
  private:
   // Snapshot the current session under rlock, then release.

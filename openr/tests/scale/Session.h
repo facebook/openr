@@ -63,6 +63,9 @@ class Session {
   // Structured Spark-neighbor report (aggregate stats + per-neighbor table).
   // All-zero / empty when neighbor simulation is disabled (sparkFaker_ null).
   thrift::NeighborStats getNeighborStats() const;
+  // Counts from the DUT's currently computed route database. Zero counts when
+  // the injector channel to the DUT is not connected.
+  thrift::RouteCounts verifyRoutes() const;
   std::shared_ptr<DutMonitor>
   getDutMonitor() const {
     return dutMonitor_;

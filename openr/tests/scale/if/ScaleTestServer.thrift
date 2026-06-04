@@ -81,6 +81,13 @@ struct NeighborStats {
   10: list<SparkNeighborState> neighbors;
 }
 
+// Counts from the DUT's currently computed route database, used to confirm the
+// DUT converged after topology injection.
+struct RouteCounts {
+  1: i64 unicastRoutes;
+  2: i64 mplsRoutes;
+}
+
 struct TestStatus {
   // True iff a session is active (between startTest and stopTest).
   1: bool running;
@@ -165,4 +172,10 @@ service ScaleTestServer {
   // plus the per-neighbor table. All-zero / empty when simulateNeighbors is
   // false for the active session.
   NeighborStats getNeighborStats() throws (1: NotRunningError notRunning);
+
+  // Query the DUT's currently computed route database and return route counts.
+  // Pull-based equivalent of the legacy post-injection route verification; the
+  // operator calls it once the DUT is expected to have converged. Returns zero
+  // counts if the injector's channel to the DUT is not connected.
+  RouteCounts verifyRoutes() throws (1: NotRunningError notRunning);
 }
