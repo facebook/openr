@@ -49,7 +49,7 @@ The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 
 ---
 
-We have tried `OpenR` on Ubuntu-16.04, Ubuntu-18.04 and CentOS 7/8.
+We have tried `OpenR` on Ubuntu 20.04, 22.04 and 24.04 LTS, and CentOS Stream 9.
 OpenR should work on all Linux based platforms.
 
 - Compiler supporting C++17 or higher
