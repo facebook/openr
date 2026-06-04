@@ -197,4 +197,13 @@ ScaleTestServerHandler::sync_getDutCounters(
           : std::string(kDefaultCounterRegex));
 }
 
+void
+ScaleTestServerHandler::sync_getNeighborStats(thrift::NeighborStats& out) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  out = snap->getNeighborStats();
+}
+
 } // namespace openr

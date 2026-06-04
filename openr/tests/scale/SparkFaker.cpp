@@ -693,6 +693,21 @@ SparkFaker::getNeighborStatusReport() const {
   return report;
 }
 
+std::vector<SparkFaker::NeighborView>
+SparkFaker::getNeighborViews() const {
+  std::vector<NeighborView> out;
+  out.reserve(neighbors_.size());
+  for (const auto& neighbor : neighbors_) {
+    out.push_back(
+        NeighborView{
+            neighbor.nodeName,
+            std::string(apache::thrift::util::enumNameSafe(neighbor.state)),
+            neighbor.dutNodeName,
+            neighbor.failed});
+  }
+  return out;
+}
+
 std::string
 SparkFaker::getStatsReport() const {
   return fmt::format(

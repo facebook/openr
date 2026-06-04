@@ -91,6 +91,18 @@ TEST(SessionTest, GetStatusReportsConfigAndNotConnected) {
   EXPECT_FALSE(st.neighborCount().has_value());
 }
 
+TEST(SessionTest, NeighborStatsZeroedWhenNoSimulation) {
+  // MakeTestConfig sets simulateNeighbors=false, so sparkFaker_ is null and
+  // getNeighborStats returns an all-zero / empty struct.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto stats = s.getNeighborStats();
+  EXPECT_EQ(*stats.totalNeighbors(), 0);
+  EXPECT_EQ(*stats.neighborsEstablished(), 0);
+  EXPECT_EQ(*stats.hellosSent(), 0);
+  EXPECT_TRUE(stats.neighbors()->empty());
+}
+
 TEST(SessionTest, DownNodeRejectsUnknown) {
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);

@@ -51,6 +51,7 @@ class ScaleTestServerHandler
   void sync_getDutCounters(
       std::map<std::string, int64_t>& out,
       std::unique_ptr<std::string> regexFilter) override;
+  void sync_getNeighborStats(thrift::NeighborStats& out) override;
 
  private:
   // Snapshot the current session under rlock, then release.

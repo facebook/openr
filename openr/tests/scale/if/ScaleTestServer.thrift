@@ -58,6 +58,29 @@ struct LinkRef {
   2: string remoteNode;
 }
 
+// One simulated Spark neighbor's status.
+struct SparkNeighborState {
+  1: string name;
+  2: string state; // SparkNeighState enum name (e.g. "ESTABLISHED")
+  3: string dutNode; // DUT node name learned from the DUT's packets
+  4: bool failed; // true if the neighbor was failed via downNode/downLink
+}
+
+// Aggregate SparkFaker packet stats plus the per-neighbor table. All counters
+// are zero and neighbors empty when simulateNeighbors=false for the session.
+struct NeighborStats {
+  1: i64 hellosSent;
+  2: i64 hellosReceived;
+  3: i64 handshakesSent;
+  4: i64 handshakesReceived;
+  5: i64 heartbeatsSent;
+  6: i64 heartbeatsReceived;
+  7: i64 parseErrors;
+  8: i32 neighborsEstablished;
+  9: i32 totalNeighbors;
+  10: list<SparkNeighborState> neighbors;
+}
+
 struct TestStatus {
   // True iff a session is active (between startTest and stopTest).
   1: bool running;
@@ -137,4 +160,9 @@ service ScaleTestServer {
 
   // Empty regex = use the daemon's default counter set.
   map<string, i64> getDutCounters(1: string regexFilter);
+
+  // Structured report of the simulated Spark neighbors: aggregate packet stats
+  // plus the per-neighbor table. All-zero / empty when simulateNeighbors is
+  // false for the active session.
+  NeighborStats getNeighborStats() throws (1: NotRunningError notRunning);
 }

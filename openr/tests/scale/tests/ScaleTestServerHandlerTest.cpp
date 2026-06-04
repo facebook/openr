@@ -63,6 +63,11 @@ TEST_F(ScaleTestServerHandlerTest, DownLinkBeforeStartThrows) {
   EXPECT_THROW(client_->sync_downLink("a", "b"), thrift::NotRunningError);
 }
 
+TEST_F(ScaleTestServerHandlerTest, NeighborStatsBeforeStartThrows) {
+  thrift::NeighborStats out;
+  EXPECT_THROW(client_->sync_getNeighborStats(out), thrift::NotRunningError);
+}
+
 TEST_F(ScaleTestServerHandlerTest, GetDutCountersBeforeStartReturnsEmpty) {
   std::map<std::string, int64_t> out;
   client_->sync_getDutCounters(out, "");

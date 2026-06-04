@@ -60,6 +60,9 @@ class Session {
   std::vector<std::string> listNodes() const;
   std::vector<std::string> listNodesUnlocked() const; // for tests
   thrift::TestStatus getStatus() const;
+  // Structured Spark-neighbor report (aggregate stats + per-neighbor table).
+  // All-zero / empty when neighbor simulation is disabled (sparkFaker_ null).
+  thrift::NeighborStats getNeighborStats() const;
   std::shared_ptr<DutMonitor>
   getDutMonitor() const {
     return dutMonitor_;

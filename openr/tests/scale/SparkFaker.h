@@ -290,6 +290,19 @@ class SparkFaker {
   std::string getNeighborStatusReport() const;
 
   /*
+   * Structured per-neighbor view for programmatic consumers (e.g. the Thrift
+   * getNeighborStats RPC). Same data as getNeighborStatusReport(), minus the
+   * formatting; state is pre-stringified via enumNameSafe.
+   */
+  struct NeighborView {
+    std::string name;
+    std::string state;
+    std::string dutNodeName;
+    bool failed{false};
+  };
+  std::vector<NeighborView> getNeighborViews() const;
+
+  /*
    * Get summary stats as formatted string
    */
   std::string getStatsReport() const;

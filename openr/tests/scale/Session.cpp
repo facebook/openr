@@ -934,6 +934,40 @@ Session::getStatus() const {
   }
   return s;
 }
+thrift::NeighborStats
+Session::getNeighborStats() const {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+  thrift::NeighborStats out;
+  if (!sparkFaker_) {
+    // simulateNeighbors=false: all-zero counters, empty neighbor list (the IDL
+    // default-initializes the numeric fields to 0).
+    return out;
+  }
+  /*
+   * Same data the legacy ScaleTestServer.cpp periodic/final stats dump printed,
+   * but structured: aggregate packet counters plus the per-neighbor table.
+   */
+  const auto& s = sparkFaker_->getStats();
+  out.hellosSent() = static_cast<int64_t>(s.hellosSent.load());
+  out.hellosReceived() = static_cast<int64_t>(s.hellosReceived.load());
+  out.handshakesSent() = static_cast<int64_t>(s.handshakesSent.load());
+  out.handshakesReceived() = static_cast<int64_t>(s.handshakesReceived.load());
+  out.heartbeatsSent() = static_cast<int64_t>(s.heartbeatsSent.load());
+  out.heartbeatsReceived() = static_cast<int64_t>(s.heartbeatsReceived.load());
+  out.parseErrors() = static_cast<int64_t>(s.parseErrors.load());
+  out.neighborsEstablished() =
+      static_cast<int32_t>(s.neighborsEstablished.load());
+  out.totalNeighbors() = static_cast<int32_t>(sparkFaker_->getNeighborCount());
+  for (auto& v : sparkFaker_->getNeighborViews()) {
+    thrift::SparkNeighborState n;
+    n.name() = std::move(v.name);
+    n.state() = std::move(v.state);
+    n.dutNode() = std::move(v.dutNodeName);
+    n.failed() = v.failed;
+    out.neighbors()->push_back(std::move(n));
+  }
+  return out;
+}
 void
 Session::onTimerTick() {
   /*

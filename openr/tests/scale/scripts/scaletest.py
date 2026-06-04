@@ -193,6 +193,32 @@ async def _cmd_counters(client: ScaleTestServer.Async, args: argparse.Namespace)
     return 0
 
 
+def _format_neighbor_stats(stats: Any) -> str:
+    lines = [
+        f"hellos:      sent={stats.hellosSent} recv={stats.hellosReceived}",
+        f"handshakes:  sent={stats.handshakesSent} recv={stats.handshakesReceived}",
+        f"heartbeats:  sent={stats.heartbeatsSent} recv={stats.heartbeatsReceived}",
+        f"parseErrors: {stats.parseErrors}",
+        f"established:  {stats.neighborsEstablished} / {stats.totalNeighbors}",
+    ]
+    if stats.neighbors:
+        lines.append("")
+        lines.append(f"{'NEIGHBOR':<20} {'STATE':<15} {'DUT':<20} FAILED")
+        for n in stats.neighbors:
+            dut = n.dutNode or "(unknown)"
+            lines.append(
+                f"{n.name:<20} {n.state:<15} {dut:<20} {'YES' if n.failed else 'no'}"
+            )
+    return "\n".join(lines)
+
+
+async def _cmd_neighbor_stats(
+    client: ScaleTestServer.Async, args: argparse.Namespace
+) -> int:
+    print(_format_neighbor_stats(await client.getNeighborStats()))
+    return 0
+
+
 def _get_handlers() -> dict[str, Any]:
     return {
         "start": _cmd_start,
@@ -204,6 +230,7 @@ def _get_handlers() -> dict[str, Any]:
         "down-link": _cmd_down_link,
         "up-link": _cmd_up_link,
         "counters": _cmd_counters,
+        "neighbor-stats": _cmd_neighbor_stats,
     }
 
 
@@ -247,6 +274,8 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
         default=None,
         help="Optional regex to filter counter keys",
     )
+
+    sub.add_parser("neighbor-stats", help="Print simulated Spark neighbor stats")
 
     return parser.parse_args(argv)
 
