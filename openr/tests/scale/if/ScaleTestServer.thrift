@@ -165,6 +165,30 @@ service ScaleTestServer {
     3: UnknownAdjacencyError unknownAdj,
   );
 
+  // Bulk variants: down/up a SET of nodes (or links) as ONE coherent KvStore
+  // update wave so the DUT sees a single convergence event (e.g. "fail a pod"),
+  // not N sequential ones. Validation is atomic — if ANY member is invalid the
+  // whole batch is rejected and nothing is applied. Each affected neighbor's adj
+  // DB is rebuilt exactly once against the final downed state.
+  void downNodes(1: list<string> nodeNames) throws (
+    1: NotRunningError notRunning,
+    2: UnknownNodeError unknown,
+  );
+  void upNodes(1: list<string> nodeNames) throws (
+    1: NotRunningError notRunning,
+    2: UnknownNodeError unknown,
+  );
+  void downLinks(1: list<LinkRef> links) throws (
+    1: NotRunningError notRunning,
+    2: UnknownNodeError unknown,
+    3: UnknownAdjacencyError unknownAdj,
+  );
+  void upLinks(1: list<LinkRef> links) throws (
+    1: NotRunningError notRunning,
+    2: UnknownNodeError unknown,
+    3: UnknownAdjacencyError unknownAdj,
+  );
+
   // Empty regex = use the daemon's default counter set.
   map<string, i64> getDutCounters(1: string regexFilter);
 

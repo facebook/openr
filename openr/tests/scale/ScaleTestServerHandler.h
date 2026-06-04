@@ -48,6 +48,14 @@ class ScaleTestServerHandler
   void sync_upLink(
       std::unique_ptr<std::string> localNode,
       std::unique_ptr<std::string> remoteNode) override;
+  void sync_downNodes(
+      std::unique_ptr<std::vector<std::string>> nodeNames) override;
+  void sync_upNodes(
+      std::unique_ptr<std::vector<std::string>> nodeNames) override;
+  void sync_downLinks(
+      std::unique_ptr<std::vector<thrift::LinkRef>> links) override;
+  void sync_upLinks(
+      std::unique_ptr<std::vector<thrift::LinkRef>> links) override;
   void sync_getDutCounters(
       std::map<std::string, int64_t>& out,
       std::unique_ptr<std::string> regexFilter) override;

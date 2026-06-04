@@ -16,6 +16,10 @@ Subcommands:
   up <node>               Up a node.
   down-link <a> <b>       Down the adjacency between two nodes.
   up-link <a> <b>         Up the adjacency between two nodes.
+  down-nodes <n...>       Down multiple nodes atomically (one convergence event).
+  up-nodes <n...>         Up multiple nodes atomically.
+  down-links <a:b...>     Down multiple adjacencies atomically.
+  up-links <a:b...>       Up multiple adjacencies atomically.
   counters [regex]        Print DUT counters, optionally filtered by regex.
   neighbor-stats          Print simulated Spark-neighbor stats.
   verify-routes           Print the DUT's computed route counts.
@@ -34,6 +38,7 @@ from openr.tests.scale.ScaleTestServer.thrift_types import (
     DutConnection,
     DutRole,
     InjectionConfig,
+    LinkRef,
     ScaleTestConfig,
     TopologyConfig,
 )
@@ -187,6 +192,46 @@ async def _cmd_up_link(client: ScaleTestServer.Async, args: argparse.Namespace) 
     return 0
 
 
+def _parse_link(token: str) -> LinkRef:
+    """Parse an 'a:b' token into a LinkRef."""
+    if ":" not in token:
+        raise ValueError(f"link must be 'localNode:remoteNode' (got '{token}')")
+    a, b = token.split(":", 1)
+    if not a or not b:
+        raise ValueError(f"link must be 'localNode:remoteNode' (got '{token}')")
+    return LinkRef(localNode=a, remoteNode=b)
+
+
+async def _cmd_down_nodes(
+    client: ScaleTestServer.Async, args: argparse.Namespace
+) -> int:
+    await client.downNodes(args.nodes)
+    print(f"down: {', '.join(args.nodes)}")
+    return 0
+
+
+async def _cmd_up_nodes(client: ScaleTestServer.Async, args: argparse.Namespace) -> int:
+    await client.upNodes(args.nodes)
+    print(f"up: {', '.join(args.nodes)}")
+    return 0
+
+
+async def _cmd_down_links(
+    client: ScaleTestServer.Async, args: argparse.Namespace
+) -> int:
+    links = [_parse_link(t) for t in args.links]
+    await client.downLinks(links)
+    print(f"down-links: {', '.join(args.links)}")
+    return 0
+
+
+async def _cmd_up_links(client: ScaleTestServer.Async, args: argparse.Namespace) -> int:
+    links = [_parse_link(t) for t in args.links]
+    await client.upLinks(links)
+    print(f"up-links: {', '.join(args.links)}")
+    return 0
+
+
 async def _cmd_counters(client: ScaleTestServer.Async, args: argparse.Namespace) -> int:
     # Server filters by regex (empty == default counter set).
     counters = await client.getDutCounters(args.regex or "")
@@ -240,6 +285,10 @@ def _get_handlers() -> dict[str, Any]:
         "up": _cmd_up,
         "down-link": _cmd_down_link,
         "up-link": _cmd_up_link,
+        "down-nodes": _cmd_down_nodes,
+        "up-nodes": _cmd_up_nodes,
+        "down-links": _cmd_down_links,
+        "up-links": _cmd_up_links,
         "counters": _cmd_counters,
         "neighbor-stats": _cmd_neighbor_stats,
         "verify-routes": _cmd_verify_routes,
@@ -278,6 +327,18 @@ def _parse_args(argv: list[str]) -> argparse.Namespace:
     p_ul = sub.add_parser("up-link", help="Up an adjacency")
     p_ul.add_argument("a")
     p_ul.add_argument("b")
+
+    p_dns = sub.add_parser(
+        "down-nodes", help="Down multiple nodes atomically (one convergence event)"
+    )
+    p_dns.add_argument("nodes", nargs="+", help="Node names")
+    p_uns = sub.add_parser("up-nodes", help="Up multiple nodes atomically")
+    p_uns.add_argument("nodes", nargs="+", help="Node names")
+
+    p_dls = sub.add_parser("down-links", help="Down multiple adjacencies atomically")
+    p_dls.add_argument("links", nargs="+", help="Links as localNode:remoteNode")
+    p_uls = sub.add_parser("up-links", help="Up multiple adjacencies atomically")
+    p_uls.add_argument("links", nargs="+", help="Links as localNode:remoteNode")
 
     p_c = sub.add_parser("counters", help="Print DUT counters")
     p_c.add_argument(

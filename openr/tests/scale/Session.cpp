@@ -899,6 +899,339 @@ Session::upLink(const std::string& a, const std::string& b) {
     throw;
   }
 }
+
+std::set<std::string>
+Session::omitSetFor(const std::string& node) const {
+  // Operator-downed links incident on `node` ...
+  std::set<std::string> omit = downedNeighborsOf(downedLinks_, node);
+  // ... plus any adjacent node that is itself currently downed.
+  for (const auto& adj : topology_.getRouter(node).adjacencies) {
+    if (downedNodes_.count(adj.remoteRouterName)) {
+      omit.insert(adj.remoteRouterName);
+    }
+  }
+  return omit;
+}
+
+void
+Session::injectAllOrThrow(const thrift::KeyVals& kv, const char* op) {
+  if (!injector_ || !injector_->isConnected() || kv.empty()) {
+    return;
+  }
+  const size_t injected = injector_->injectKeyVals(kv);
+  if (injected != kv.size()) {
+    // Short write (injectKeyVals does not throw on RPC failure). Surface it so
+    // a partial bulk write to the DUT is never reported to the operator as
+    // success. No rollback for bulk: recover with stopTest + startTest.
+    throw std::runtime_error(
+        fmt::format(
+            "{} injection incomplete: {} of {} keys written to DUT "
+            "(no rollback; recover with stopTest + startTest)",
+            op,
+            injected,
+            kv.size()));
+  }
+}
+
+void
+Session::downNodes(const std::vector<std::string>& names) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  // Validate the whole batch up front; reject atomically (nothing applied).
+  // std::set both dedups repeated names and gives a stable iteration order.
+  std::set<std::string> batch;
+  for (const auto& name : names) {
+    if (name == dutNodeName_) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("cannot manipulate the DUT directly: {}", name);
+      throw e;
+    }
+    if (topology_.routers.count(name) == 0) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Unknown node: {}", name);
+      throw e;
+    }
+    if (downedNodes_.count(name)) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Node {} is already down", name);
+      throw e;
+    }
+    batch.insert(name);
+  }
+  if (batch.empty()) {
+    return;
+  }
+
+  // Apply the new downed state BEFORE rebuilding so omitSetFor() reflects the
+  // final set (a neighbor adjacent to several downed nodes omits all of them).
+  for (const auto& name : batch) {
+    downedNodes_.insert(name);
+  }
+  // Fail the Spark side for any batch members that are direct DUT neighbors.
+  if (sparkFaker_) {
+    for (const auto& name : batch) {
+      sparkFaker_->failNeighbor(name);
+    }
+  }
+  // Remove each downed node's own adj DB from both sinks.
+  for (const auto& name : batch) {
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    if (kvManager_) {
+      kvManager_->simulateNodeRemoval(name, v);
+    }
+    if (injector_ && injector_->isConnected()) {
+      injector_->removeNode(name, v);
+    }
+  }
+  // Rebuild every still-up neighbor of any downed node exactly once, then
+  // inject as a single wave so the DUT processes one convergence event.
+  std::set<std::string> affected;
+  for (const auto& name : batch) {
+    for (const auto& adj : topology_.getRouter(name).adjacencies) {
+      const auto& nbr = adj.remoteRouterName;
+      if (topology_.routers.count(nbr) == 0 || nbr == dutNodeName_ ||
+          downedNodes_.count(nbr)) {
+        continue;
+      }
+      affected.insert(nbr);
+    }
+  }
+  thrift::KeyVals kv;
+  for (const auto& nbr : affected) {
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+        topology_.getRouter(nbr), topology_, omitSetFor(nbr), v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    kv.emplace(std::move(key), std::move(value));
+  }
+  injectAllOrThrow(kv, "downNodes");
+  XLOGF(
+      INFO,
+      "[CMD] {} nodes now DOWN ({} neighbor adj DBs updated)",
+      batch.size(),
+      kv.size());
+}
+
+void
+Session::upNodes(const std::vector<std::string>& names) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  std::set<std::string> batch;
+  for (const auto& name : names) {
+    if (name == dutNodeName_) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("cannot manipulate the DUT directly: {}", name);
+      throw e;
+    }
+    if (topology_.routers.count(name) == 0) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Unknown node: {}", name);
+      throw e;
+    }
+    if (!downedNodes_.count(name)) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Node {} is not down", name);
+      throw e;
+    }
+    batch.insert(name);
+  }
+  if (batch.empty()) {
+    return;
+  }
+
+  // Restore state first so omitSetFor() no longer omits these nodes. Operator
+  // downLink intent persists: links still in downedLinks_ stay omitted below.
+  for (const auto& name : batch) {
+    downedNodes_.erase(name);
+  }
+  if (sparkFaker_) {
+    for (const auto& name : batch) {
+      sparkFaker_->recoverNeighbor(name);
+    }
+  }
+  // Rebuild the restored nodes' own adj DBs AND every still-up neighbor, once
+  // each, against the post-restore state.
+  std::set<std::string> toBuild(batch.begin(), batch.end());
+  for (const auto& name : batch) {
+    for (const auto& adj : topology_.getRouter(name).adjacencies) {
+      const auto& nbr = adj.remoteRouterName;
+      if (topology_.routers.count(nbr) == 0 || nbr == dutNodeName_ ||
+          downedNodes_.count(nbr)) {
+        continue;
+      }
+      toBuild.insert(nbr);
+    }
+  }
+  thrift::KeyVals kv;
+  for (const auto& node : toBuild) {
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto omit = omitSetFor(node);
+    auto [key, value] = omit.empty()
+        ? KvStoreDataBuilder::buildAdjKeyValue(
+              topology_.getRouter(node), topology_, v)
+        : KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+              topology_.getRouter(node), topology_, omit, v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    kv.emplace(std::move(key), std::move(value));
+  }
+  injectAllOrThrow(kv, "upNodes");
+  XLOGF(
+      INFO,
+      "[CMD] {} nodes now UP ({} adj DBs updated)",
+      batch.size(),
+      kv.size());
+}
+
+void
+Session::downLinks(const std::vector<thrift::LinkRef>& links) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  std::set<std::pair<std::string, std::string>> batch;
+  std::set<std::string> endpoints;
+  for (const auto& link : links) {
+    const auto& a = *link.localNode();
+    const auto& b = *link.remoteNode();
+    if (a == dutNodeName_ || b == dutNodeName_) {
+      thrift::UnknownNodeError e;
+      e.message() = "cannot manipulate links to the DUT directly";
+      throw e;
+    }
+    if (topology_.routers.count(a) == 0) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Unknown node: {}", a);
+      throw e;
+    }
+    if (topology_.routers.count(b) == 0) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Unknown node: {}", b);
+      throw e;
+    }
+    if (!hasAdjacency(topology_, a, b)) {
+      thrift::UnknownAdjacencyError e;
+      e.message() = fmt::format("No adjacency between {} and {}", a, b);
+      throw e;
+    }
+    if (downedNodes_.count(a) || downedNodes_.count(b)) {
+      thrift::UnknownAdjacencyError e;
+      e.message() = fmt::format("endpoint already down ({} or {})", a, b);
+      throw e;
+    }
+    const auto key = normalizeLinkKey(a, b);
+    if (downedLinks_.count(key) || !batch.insert(key).second) {
+      thrift::UnknownAdjacencyError e;
+      e.message() = fmt::format("link {}<->{} already down / duplicated", a, b);
+      throw e;
+    }
+    endpoints.insert(a);
+    endpoints.insert(b);
+  }
+  if (batch.empty()) {
+    return;
+  }
+
+  for (const auto& link : batch) {
+    downedLinks_.insert(link);
+  }
+  // Endpoints are all up (validated), so each gets rebuilt once against the
+  // final downed-link state and injected as a single wave.
+  thrift::KeyVals kv;
+  for (const auto& node : endpoints) {
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+        topology_.getRouter(node), topology_, omitSetFor(node), v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    kv.emplace(std::move(key), std::move(value));
+  }
+  injectAllOrThrow(kv, "downLinks");
+  XLOGF(
+      INFO,
+      "[CMD] {} links now DOWN ({} adj DBs updated)",
+      batch.size(),
+      kv.size());
+}
+
+void
+Session::upLinks(const std::vector<thrift::LinkRef>& links) {
+  std::lock_guard<std::mutex> g(mutationMutex_);
+
+  std::set<std::pair<std::string, std::string>> batch;
+  std::set<std::string> endpoints;
+  for (const auto& link : links) {
+    const auto& a = *link.localNode();
+    const auto& b = *link.remoteNode();
+    if (a == dutNodeName_ || b == dutNodeName_) {
+      thrift::UnknownNodeError e;
+      e.message() = "cannot manipulate links to the DUT directly";
+      throw e;
+    }
+    if (topology_.routers.count(a) == 0) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Unknown node: {}", a);
+      throw e;
+    }
+    if (topology_.routers.count(b) == 0) {
+      thrift::UnknownNodeError e;
+      e.message() = fmt::format("Unknown node: {}", b);
+      throw e;
+    }
+    // Mirror singular upLink: a downed-node endpoint must be brought up first.
+    if (downedNodes_.count(a) || downedNodes_.count(b)) {
+      thrift::UnknownAdjacencyError e;
+      e.message() = fmt::format(
+          "endpoint is down ({} or {}); upNode first before upLink", a, b);
+      throw e;
+    }
+    const auto key = normalizeLinkKey(a, b);
+    if (!downedLinks_.count(key)) {
+      thrift::UnknownAdjacencyError e;
+      e.message() = fmt::format("link {}<->{} is not down", a, b);
+      throw e;
+    }
+    if (!batch.insert(key).second) {
+      thrift::UnknownAdjacencyError e;
+      e.message() = fmt::format("duplicate link {}<->{} in request", a, b);
+      throw e;
+    }
+    endpoints.insert(a);
+    endpoints.insert(b);
+  }
+  if (batch.empty()) {
+    return;
+  }
+
+  for (const auto& link : batch) {
+    downedLinks_.erase(link);
+  }
+  // All endpoints are up; rebuild each once against the post-restore state
+  // (other still-downed links/nodes incident on an endpoint stay omitted).
+  thrift::KeyVals kv;
+  for (const auto& node : endpoints) {
+    const int64_t v = cmdVersion_.fetch_add(1) + 1;
+    auto omit = omitSetFor(node);
+    auto [key, value] = omit.empty()
+        ? KvStoreDataBuilder::buildAdjKeyValue(
+              topology_.getRouter(node), topology_, v)
+        : KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+              topology_.getRouter(node), topology_, omit, v);
+    if (kvManager_) {
+      kvManager_->propagateKeyUpdate(key, value);
+    }
+    kv.emplace(std::move(key), std::move(value));
+  }
+  injectAllOrThrow(kv, "upLinks");
+  XLOGF(
+      INFO,
+      "[CMD] {} links now UP ({} adj DBs updated)",
+      batch.size(),
+      kv.size());
+}
+
 thrift::TestStatus
 Session::getStatus() const {
   std::lock_guard<std::mutex> g(mutationMutex_);

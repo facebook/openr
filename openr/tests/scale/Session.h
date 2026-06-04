@@ -56,6 +56,15 @@ class Session {
   void downLink(const std::string& a, const std::string& b);
   void upLink(const std::string& a, const std::string& b);
 
+  // Bulk mutations: apply to a SET of nodes/links as one coherent KvStore
+  // update wave (one DUT convergence event). Validation is atomic — any invalid
+  // member rejects the whole batch with nothing applied. Each affected neighbor
+  // adj DB is rebuilt exactly once against the final downed state.
+  void downNodes(const std::vector<std::string>& names);
+  void upNodes(const std::vector<std::string>& names);
+  void downLinks(const std::vector<thrift::LinkRef>& links);
+  void upLinks(const std::vector<thrift::LinkRef>& links);
+
   // Reads.
   std::vector<std::string> listNodes() const;
   std::vector<std::string> listNodesUnlocked() const; // for tests
@@ -107,6 +116,20 @@ class Session {
   void maybeStartFakeKeyBump();
   void onTimerTick();
   void bumpFakeKeys();
+
+  // Neighbors to omit from `node`'s adj DB given the current downed state: the
+  // union of its operator-downed links (downedLinks_) and any adjacent downed
+  // nodes (downedNodes_). Caller must hold mutationMutex_. This is the single
+  // source of truth the bulk ops use to rebuild an up node's adjacencies once
+  // against the final state.
+  std::set<std::string> omitSetFor(const std::string& node) const;
+
+  // Inject `kv` into the DUT and throw if the write was partial. injectKeyVals
+  // returns a short count (it does NOT throw) on disconnect/RPC failure, so the
+  // bulk ops route their DUT write through this to avoid reporting a partial
+  // write as success. No rollback — a partial bulk write is recovered with
+  // stopTest + startTest (the connection is already broken when this fires).
+  void injectAllOrThrow(const thrift::KeyVals& kv, const char* op);
 
   const thrift::ScaleTestConfig config_;
   std::string dutNodeName_; // resolved during start() via injector_->connect()

@@ -233,6 +233,99 @@ TEST(SessionTest, DownLinkUpLinkRoundtripsState) {
   EXPECT_TRUE(st.downedLinks()->empty());
 }
 
+TEST(SessionTest, DownNodesMarksAllDown) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_GE(names.size(), 2u);
+  s.downNodes({names[0], names[1]});
+  auto st = s.getStatus();
+  EXPECT_THAT(*st.downedNodes(), ::testing::Contains(names[0]));
+  EXPECT_THAT(*st.downedNodes(), ::testing::Contains(names[1]));
+}
+
+TEST(SessionTest, DownNodesRejectsWholeBatchAtomically) {
+  // One valid + one invalid name: the entire batch is rejected up front and
+  // nothing is marked down (atomic validation).
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_FALSE(names.empty());
+  EXPECT_THROW(
+      s.downNodes({names[0], "nonexistent-node"}), thrift::UnknownNodeError);
+  EXPECT_TRUE(s.getStatus().downedNodes()->empty());
+}
+
+TEST(SessionTest, DownUpNodesRoundtripsState) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto names = s.listNodesUnlocked();
+  ASSERT_GE(names.size(), 2u);
+  s.downNodes({names[0], names[1]});
+  s.upNodes({names[0], names[1]});
+  EXPECT_TRUE(s.getStatus().downedNodes()->empty());
+}
+
+TEST(SessionTest, DownLinksRecordsAll) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  // Find a second distinct neighbor c of a for a second link a<->c.
+  std::string c;
+  for (const auto& adj : s.topology().getRouter(a).adjacencies) {
+    if (adj.remoteRouterName != b &&
+        s.topology().routers.count(adj.remoteRouterName) > 0) {
+      c = adj.remoteRouterName;
+      break;
+    }
+  }
+  ASSERT_FALSE(c.empty()) << "test needs a node with >= 2 distinct neighbors";
+
+  thrift::LinkRef l1;
+  l1.localNode() = a;
+  l1.remoteNode() = b;
+  thrift::LinkRef l2;
+  l2.localNode() = a;
+  l2.remoteNode() = c;
+  s.downLinks({l1, l2});
+
+  auto st = s.getStatus();
+  thrift::LinkRef e1;
+  e1.localNode() = std::min(a, b);
+  e1.remoteNode() = std::max(a, b);
+  thrift::LinkRef e2;
+  e2.localNode() = std::min(a, c);
+  e2.remoteNode() = std::max(a, c);
+  EXPECT_THAT(*st.downedLinks(), ::testing::Contains(e1));
+  EXPECT_THAT(*st.downedLinks(), ::testing::Contains(e2));
+}
+
+TEST(SessionTest, DownLinksRejectsWholeBatchAtomically) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  thrift::LinkRef good;
+  good.localNode() = a;
+  good.remoteNode() = b;
+  thrift::LinkRef bad;
+  bad.localNode() = a;
+  bad.remoteNode() = "nonexistent-node";
+  EXPECT_THROW(s.downLinks({good, bad}), thrift::UnknownNodeError);
+  EXPECT_TRUE(s.getStatus().downedLinks()->empty());
+}
+
+TEST(SessionTest, DownUpLinksRoundtripsState) {
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  auto [a, b] = test::FindAdjacentPair(s);
+  thrift::LinkRef l;
+  l.localNode() = a;
+  l.remoteNode() = b;
+  s.downLinks({l});
+  s.upLinks({l});
+  EXPECT_TRUE(s.getStatus().downedLinks()->empty());
+}
+
 TEST(SessionTest, DownLinkRejectsIfEndpointAlreadyDowned) {
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);

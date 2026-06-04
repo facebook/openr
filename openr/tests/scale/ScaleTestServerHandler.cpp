@@ -177,6 +177,46 @@ ScaleTestServerHandler::sync_upLink(
 }
 
 void
+ScaleTestServerHandler::sync_downNodes(
+    std::unique_ptr<std::vector<std::string>> nodeNames) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  snap->downNodes(*nodeNames);
+}
+
+void
+ScaleTestServerHandler::sync_upNodes(
+    std::unique_ptr<std::vector<std::string>> nodeNames) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  snap->upNodes(*nodeNames);
+}
+
+void
+ScaleTestServerHandler::sync_downLinks(
+    std::unique_ptr<std::vector<thrift::LinkRef>> links) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  snap->downLinks(*links);
+}
+
+void
+ScaleTestServerHandler::sync_upLinks(
+    std::unique_ptr<std::vector<thrift::LinkRef>> links) {
+  auto snap = snapshot();
+  if (!snap) {
+    throw makeNotRunning();
+  }
+  snap->upLinks(*links);
+}
+
+void
 ScaleTestServerHandler::sync_getDutCounters(
     std::map<std::string, int64_t>& out,
     std::unique_ptr<std::string> regexFilter) {

@@ -63,6 +63,28 @@ TEST_F(ScaleTestServerHandlerTest, DownLinkBeforeStartThrows) {
   EXPECT_THROW(client_->sync_downLink("a", "b"), thrift::NotRunningError);
 }
 
+TEST_F(ScaleTestServerHandlerTest, DownNodesBeforeStartThrows) {
+  EXPECT_THROW(client_->sync_downNodes({"a", "b"}), thrift::NotRunningError);
+}
+
+TEST_F(ScaleTestServerHandlerTest, UpNodesBeforeStartThrows) {
+  EXPECT_THROW(client_->sync_upNodes({"a", "b"}), thrift::NotRunningError);
+}
+
+TEST_F(ScaleTestServerHandlerTest, DownLinksBeforeStartThrows) {
+  thrift::LinkRef l;
+  l.localNode() = "a";
+  l.remoteNode() = "b";
+  EXPECT_THROW(client_->sync_downLinks({l}), thrift::NotRunningError);
+}
+
+TEST_F(ScaleTestServerHandlerTest, UpLinksBeforeStartThrows) {
+  thrift::LinkRef l;
+  l.localNode() = "a";
+  l.remoteNode() = "b";
+  EXPECT_THROW(client_->sync_upLinks({l}), thrift::NotRunningError);
+}
+
 TEST_F(ScaleTestServerHandlerTest, NeighborStatsBeforeStartThrows) {
   thrift::NeighborStats out;
   EXPECT_THROW(client_->sync_getNeighborStats(out), thrift::NotRunningError);
