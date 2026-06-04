@@ -171,6 +171,7 @@ Session::start() {
     setupSparkFaker(dutNeighborNames);
   }
   injectInitialTopology();
+  maybeStartFakeKeyBump();
 }
 
 void
@@ -989,30 +990,95 @@ Session::verifyRoutes() const {
   rc.mplsRoutes() = static_cast<int64_t>(routeDb.mplsRoutes()->size());
   return rc;
 }
+thrift::KeyVals
+Session::buildFakeKeyVals(int64_t version) const {
+  const int32_t numFakeKeys =
+      config_.injection()->numFakeKeysPerNode().value_or(0);
+  thrift::KeyVals out;
+  if (numFakeKeys <= 0) {
+    return out;
+  }
+  /*
+   * topology_ is written exactly once during start() and never again, so this
+   * read is safe lock-free (the scheduler thread and tests both call here).
+   */
+  for (const auto& [_, router] : topology_.routers) {
+    auto kvs = KvStoreThriftInjector::createFakeKeyValues(
+        router, numFakeKeys, version);
+    for (auto& [key, value] : kvs) {
+      out.emplace(std::move(key), std::move(value));
+    }
+  }
+  return out;
+}
+void
+Session::maybeStartFakeKeyBump() {
+  const int32_t numFakeKeys =
+      config_.injection()->numFakeKeysPerNode().value_or(0);
+  const int32_t intervalSec =
+      config_.injection()->fakeKeyVersionBumpIntervalSec().value_or(0);
+  if (numFakeKeys <= 0 || intervalSec <= 0) {
+    return; // feature disabled
+  }
+  /*
+   * FunctionScheduler fires onTimerTick() on its own thread every intervalSec
+   * (no 1s polling like the legacy main loop — the scheduler gives us the exact
+   * cadence). scheduler_ is declared last among the runtime members, so it is
+   * destroyed FIRST in ~Session(); its dtor joins the worker (waiting for any
+   * in-flight bump to finish) before injector_/kvManager_ are torn down, so the
+   * callback never touches freed state.
+   */
+  scheduler_->addFunction(
+      [this]() { onTimerTick(); },
+      std::chrono::seconds(intervalSec),
+      "fakeKeyBump");
+  scheduler_->start();
+  XLOGF(
+      INFO,
+      "[bump] periodic fake-key bump enabled: {} keys/node every {}s",
+      numFakeKeys,
+      intervalSec);
+}
 void
 Session::onTimerTick() {
-  /*
-   * TODO: drive the periodic fake-key-version bump. Check whether
-   * fakeKeyVersionBumpIntervalSec has elapsed since lastFakeKeyBumpSec_ and, if
-   * so, call bumpFakeKeys(). See ScaleTestServer.cpp:915-947 for the legacy
-   * behavior being ported.
-   */
+  // One scheduler tick == one bump (the interval is enforced by the scheduler).
+  bumpFakeKeys();
 }
 void
 Session::bumpFakeKeys() {
+  const int32_t numFakeKeys =
+      config_.injection()->numFakeKeysPerNode().value_or(0);
+  if (numFakeKeys <= 0) {
+    return;
+  }
+  const int64_t version = ++fakeKeyVersion_;
+
   /*
-   * TODO: implement the periodic fake-key-version bump (legacy parity with
-   * ScaleTestServer.cpp:915-947):
-   *   1. ++fakeKeyVersion_
-   *   2. regenerate fake keys for every router via
-   *      KvStoreThriftInjector::createFakeKeyValues(router,
-   *      numFakeKeysPerNode, fakeKeyVersion_)
-   *   3. push to BOTH sinks so their versions stay in sync:
-   *      injector_->injectKeyVals(...) (the DUT) AND
-   *      kvManager_->propagateKeyUpdates(...) (the fake neighbor KvStores)
-   * Scheduling note: prefer a folly::AsyncTimeout on the injector's EventBase
-   * (the bump issues a Thrift RPC) over a FunctionScheduler polling thread.
+   * Regenerate the fake keys for every router at the new version. Fake keys
+   * (fakekeys{i}:{node}) are independent of the adj: keys that down/up mutate,
+   * so we intentionally bump ALL routers regardless of downed state — matching
+   * the legacy behavior.
    */
+  auto fakeKeyVals = buildFakeKeyVals(version);
+
+  /*
+   * Push to BOTH sinks so their versions stay aligned. Hold mutationMutex_
+   * across the injector_ RPC: the mutation paths (downNode/upNode/down|upLink)
+   * also drive injector_->injectKeyVals, and the injector's Thrift client must
+   * not be used concurrently from two threads.
+   */
+  std::lock_guard<std::mutex> g(mutationMutex_);
+  if (injector_ && injector_->isConnected()) {
+    injector_->injectKeyVals(fakeKeyVals);
+  }
+  if (kvManager_) {
+    kvManager_->propagateKeyUpdates(fakeKeyVals);
+  }
+  XLOGF(
+      INFO,
+      "[bump] fake key versions -> {} ({} keys)",
+      version,
+      fakeKeyVals.size());
 }
 
 } // namespace openr

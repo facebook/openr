@@ -85,6 +85,11 @@ class Session {
   dutNodeName() const {
     return dutNodeName_;
   }
+  // Builds the per-router fake-key KeyVals at the given version (the payload
+  // the periodic bump pushes to both sinks). Empty when numFakeKeysPerNode is
+  // unset / <= 0. Reads topology_ lock-free (immutable after start()). Used by
+  // bumpFakeKeys(); exposed so tests can assert the key set without sinks.
+  thrift::KeyVals buildFakeKeyVals(int64_t version) const;
 
  private:
   // start() phases, in order. Each performs one step of side-effecting init and
@@ -96,6 +101,10 @@ class Session {
   void setupSparkFaker(const std::vector<std::string>& dutNeighborNames);
   void injectInitialTopology(); // initial bulk KvStore injection into the DUT
 
+  // Starts the periodic fake-key-version bump scheduler iff both
+  // numFakeKeysPerNode and fakeKeyVersionBumpIntervalSec are > 0. Called at the
+  // end of start().
+  void maybeStartFakeKeyBump();
   void onTimerTick();
   void bumpFakeKeys();
 
@@ -111,7 +120,6 @@ class Session {
   std::set<std::string> downedNodes_;
   std::set<std::pair<std::string, std::string>> downedLinks_;
   std::atomic<int64_t> cmdVersion_{1};
-  std::atomic<int64_t> lastFakeKeyBumpSec_{0};
   std::atomic<int64_t> fakeKeyVersion_{1};
 
   std::unique_ptr<KvStoreThriftInjector> injector_;

@@ -103,6 +103,36 @@ TEST(SessionTest, NeighborStatsZeroedWhenNoSimulation) {
   EXPECT_TRUE(stats.neighbors()->empty());
 }
 
+TEST(SessionTest, BuildFakeKeyValsVersionsAllRouters) {
+  // The periodic fake-key bump regenerates numFakeKeysPerNode keys for every
+  // router at a new version. Assert the payload shape without needing sinks.
+  auto cfg = test::MakeTestConfig();
+  cfg.injection()->numFakeKeysPerNode() = 3;
+  Session s(cfg, /*basePortOverride=*/0);
+  const auto& routers = s.topology().routers;
+  ASSERT_FALSE(routers.empty());
+
+  auto kv = s.buildFakeKeyVals(/*version=*/7);
+  EXPECT_EQ(kv.size(), 3 * routers.size());
+
+  // Spot-check naming + version for a known router (keys are
+  // fakekeys{i}:{node}).
+  const auto& nodeName = routers.begin()->first;
+  for (int i = 0; i < 3; ++i) {
+    const auto key = "fakekeys" + std::to_string(i) + ":" + nodeName;
+    auto it = kv.find(key);
+    ASSERT_NE(it, kv.end()) << "missing " << key;
+    EXPECT_EQ(*it->second.version(), 7);
+  }
+}
+
+TEST(SessionTest, BuildFakeKeyValsEmptyWhenDisabled) {
+  // numFakeKeysPerNode unset (MakeTestConfig default) -> bump is a no-op.
+  auto cfg = test::MakeTestConfig();
+  Session s(cfg, /*basePortOverride=*/0);
+  EXPECT_TRUE(s.buildFakeKeyVals(/*version=*/5).empty());
+}
+
 TEST(SessionTest, VerifyRoutesReturnsZeroWhenDutNotConnected) {
   // start() not called, so injector_ is null and verifyRoutes reports zero
   // counts rather than dereferencing a missing DUT channel.
