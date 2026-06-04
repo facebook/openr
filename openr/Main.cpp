@@ -303,7 +303,8 @@ main(int argc, char** argv) {
           std::move(kvStoreRequestQueueReader),
           logSampleQueue,
           config->getAreaIds(),
-          config->toThriftKvStoreConfig()));
+          config->toThriftKvStoreConfig(),
+          config->getFabricConfig()));
   watchdog->addQueue(kvStoreUpdatesQueue, "kvStoreUpdatesQueue");
 
   // Start Dispatcher
