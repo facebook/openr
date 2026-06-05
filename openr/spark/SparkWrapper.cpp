@@ -273,6 +273,11 @@ SparkWrapper::processPacket() {
   spark_->processPacket();
 }
 
+void
+SparkWrapper::runInSparkThreadAndWait(folly::Function<void()> fn) {
+  spark_->getEvb()->runInEventBaseThreadAndWait(std::move(fn));
+}
+
 size_t
 SparkWrapper::getInterfaceDbSize() {
   return spark_->interfaceDb_.size();

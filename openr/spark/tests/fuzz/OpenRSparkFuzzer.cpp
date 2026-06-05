@@ -1,4 +1,9 @@
-// Copyright 2004-present Facebook. All Rights Reserved.
+/*
+ * Copyright (c) Meta Platforms, Inc. and affiliates.
+ *
+ * This source code is licensed under the MIT license found in the
+ * LICENSE file in the root directory of this source tree.
+ */
 
 #include <string>
 #include <vector>
@@ -124,9 +129,21 @@ fuzzSparkMessage(uint8_t* data, size_t len) {
           .dstPort = kMockedUdpPort,
           .dstAddrStorage = dstAddrStorage,
       });
-  fixture->mockIoProvider->sendmsg(fixture->testfd, &sendMsg, MSG_DONTWAIT);
-  fixture->mockIoProvider->processMailboxes();
-  fixture->node1->processPacket();
+  /*
+   * Spark runs its own single-threaded event-base in a background thread
+   * (started by SparkWrapper::run()), which fires AsyncTimeout timers and
+   * sends hello/heartbeat packets via the shared MockIoProvider. Injecting
+   * the fuzz packet from this (the libFuzzer) thread would race that event
+   * base, corrupting the timer heap and causing intermittent SEGVs in
+   * folly::AsyncTimeout::libeventCallback. Marshal the whole injection onto
+   * Spark's event-base thread so packet parsing, MockIoProvider access, and
+   * timer callbacks are all serialized on one thread.
+   */
+  fixture->node1->runInSparkThreadAndWait([&]() {
+    fixture->mockIoProvider->sendmsg(fixture->testfd, &sendMsg, MSG_DONTWAIT);
+    fixture->mockIoProvider->processMailboxes();
+    fixture->node1->processPacket();
+  });
 }
 }; // namespace
 

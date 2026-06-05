@@ -89,11 +89,21 @@ class SparkWrapper {
   }
 
   /* Forwarded to the underlying Spark processPacket()
-   * For test purposes, e.g. to manually invoke packet handling
-   * inline on the same thread - bypassing the event-base - as is needed
-   * for fuzzing.
+   * For test purposes, e.g. to manually invoke packet handling.
+   *
+   * NOTE: Spark is a single-threaded OpenrEventBase. Its neighbor state and
+   * AsyncTimeout timers may only be touched from its own event-base thread.
+   * Because the wrapper always starts that thread (see run()), callers that
+   * inject packets must do so on the event-base thread via
+   * runInSparkThreadAndWait() to avoid racing with timer callbacks.
    */
   void processPacket();
+
+  /* Run a function on Spark's event-base thread and block until it completes.
+   * Used by fuzzing to serialize packet injection with Spark's timer
+   * callbacks, since Spark's state is only safe to access from that thread.
+   */
+  void runInSparkThreadAndWait(folly::Function<void()> fn);
 
   // Get the count of all known neighbors to Spark.
   uint64_t getTotalNeighborCount();
