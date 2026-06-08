@@ -56,15 +56,6 @@ find_library(BENCHMARK follybenchmark PATHS)
 find_package(range-v3 REQUIRED)
 find_package(Xxhash REQUIRED)
 
-# folly's StackTrace.cpp references GNU libunwind's arch-specific unwind
-# symbols (e.g. _ULx86_64_init_local), which live in libunwind.so.8. Some
-# toolchains (e.g. clang in the OSS build image) also ship LLVM's libunwind
-# (libunwind.so.1), so a bare -lunwind can resolve to the wrong DSO, leaving
-# the GNU libunwind only transitively referenced via glog -> ld fails with
-# "DSO missing from command line". Resolve the GNU libunwind explicitly so it
-# lands on the link command line. Guarded: a no-op where it is not found.
-find_library(GNU_LIBUNWIND NAMES libunwind.so.8 unwind)
-
 find_path(RE2_INCLUDE_DIR re2/re2.h)
 
 set(FOLLY_EXCEPTION_TRACER)
@@ -321,12 +312,6 @@ target_link_libraries(openrlib
   stdc++fs
   range-v3
 )
-
-# Explicitly link GNU libunwind (see find_library above) so folly's StackTrace
-# unwind symbols resolve at final link. Propagates to openr_bin and tools/tests.
-if (GNU_LIBUNWIND)
-  target_link_libraries(openrlib ${GNU_LIBUNWIND})
-endif()
 
 install(TARGETS
   openrlib
