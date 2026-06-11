@@ -10,6 +10,7 @@ namespace fs = std::filesystem;
 
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
+#include <folly/memory/Malloc.h>
 #include <openr/common/Constants.h>
 #include <openr/common/Util.h>
 
@@ -178,6 +179,13 @@ namespace memory {
 uint64_t
 getThreadBytesImpl(bool isAllocated) {
   uint64_t bytes{0};
+  // thread.allocated/deallocated are jemalloc-only mallctl stats. When the
+  // binary is not linked against jemalloc (e.g. the OSS build), mallctlRead
+  // throws; skip the read and report 0 instead of logging an error on every
+  // watchdog tick for every thread.
+  if (!folly::usingJEMalloc()) {
+    return bytes;
+  }
   const char* cmd = isAllocated ? "thread.allocated" : "thread.deallocated";
   try {
     folly::mallctlRead(cmd, &bytes);
