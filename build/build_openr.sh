@@ -11,7 +11,11 @@ source "$(dirname "$0")/common.sh"
 # "$PYTHON3" "$GETDEPS" --allow-system-packages install-system-deps --recursive openr
 # errorCheck "Failed to install-system-deps for openr"
 
-"$PYTHON3" "$GETDEPS" --allow-system-packages build --no-tests --install-prefix "$INSTALL_PREFIX" \
+# --src-dir=. builds the Open/R sources present in this checkout (the Dockerfile
+# COPYs them into /src and runs this script from there). Without it, getdeps
+# clones the canonical repo from the manifest's repo_url at a pinned revision
+# and ignores the local source, so local changes never get built.
+"$PYTHON3" "$GETDEPS" --allow-system-packages build --src-dir=. --no-tests --install-prefix "$INSTALL_PREFIX" \
 --extra-cmake-defines "$EXTRA_CMAKE_DEFINES" openr
 errorCheck "Failed to build openr"
 

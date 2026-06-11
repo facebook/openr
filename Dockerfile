@@ -11,6 +11,11 @@ RUN mkdir /src
 ADD CMakeLists.txt FBGenCMakeBuildInfo.cmake ThriftLibrary.cmake /src/
 COPY build /src/build
 COPY openr /src/openr
+# OpenR's CMakeLists builds routing_policy.thrift / vip_service_config.thrift
+# from configerator/structs/neteng/config/. These must be present in /src for
+# the --src-dir=. build below; previously they were only available because
+# getdeps cloned the full upstream repo.
+COPY configerator /src/configerator
 COPY example_openr.conf /etc/openr.conf
 
 # Build OpenR + Dependencies via cmake
