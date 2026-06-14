@@ -6,6 +6,8 @@
 
 # pyre-unsafe
 
+from typing import Any
+
 import click
 from fastcli.click import inject_fastcli
 from openr.py.openr.cli.clis import (
@@ -73,7 +75,7 @@ except ImportError:
     "name we deem acceptable to connect to.",
 )
 @click.pass_context
-def cli(ctx: click.Context, *args, **kwargs) -> None:
+def cli(ctx: click.Context, *args: Any, **kwargs: Any) -> None:
     """Command line tools for Open/R."""
 
     # Default config options
