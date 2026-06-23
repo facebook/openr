@@ -38,7 +38,6 @@ set(REQ_BOOST_COMPONENTS ${REQ_BOOST_COMPONENTS} system thread context filesyste
 find_library(ASYNC async PATHS)
 find_package(Boost REQUIRED COMPONENTS ${REQ_BOOST_COMPONENTS})
 find_library(CONCURRENCY concurrency PATHS)
-find_library(DOUBLE-CONVERSION double-conversion)
 find_package(folly REQUIRED)
 find_package(fb303 CONFIG REQUIRED)
 find_package(fizz REQUIRED)
@@ -293,7 +292,6 @@ target_link_libraries(openrlib
   build_info
   ${BENCHMARK}
   ${OPENR_THRIFT_LIBS}
-  ${DOUBLE-CONVERSION}
   glog::glog
   gflags
   FBThrift::thriftcpp2
