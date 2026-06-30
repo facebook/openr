@@ -5,12 +5,16 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <cstdlib>
+#include <iostream>
+
 #include <fb303/ServiceData.h>
 #include <gtest/gtest.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/messaging/ReplicateQueue.h>
 
 #include <folly/init/Init.h>
+#include <folly/synchronization/Baton.h>
 #include <openr/tests/utils/Utils.h>
 #include <openr/watchdog/Watchdog.h>
 
@@ -213,6 +217,63 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
 
   evb.run();
   teardownDummyEvb();
+}
+
+/*
+ * Death test: when the watchdog fires a crash it must invoke the registered
+ * pre-crash callback (used to announce graceful restart to peers) *before* it
+ * aborts -- and abort() must still run so the core dump is produced. We drive
+ * the dead-thread crash path with a registered evb that is never run (so its
+ * heartbeat timestamp never advances) and assert the callback's sentinel
+ * reaches stderr before the process dies via SIGABRT.
+ *
+ * Standalone TEST (not the fixture) so the process is single-threaded when
+ * EXPECT_DEATH fork()s; the watchdog thread is created inside the child.
+ */
+TEST(WatchdogDeathTest, PreCrashCallbackRunsBeforeAbort) {
+  EXPECT_DEATH(
+      {
+        thrift::WatchdogConfig watchdogConf;
+        watchdogConf.interval_s() = 1;
+        watchdogConf.thread_timeout_s() = 1;
+
+        auto tConfig = getBasicOpenrConfig("ted");
+        tConfig.watchdog_config() = watchdogConf;
+        tConfig.enable_watchdog() = true;
+        auto config = std::make_shared<Config>(tConfig);
+
+        auto watchdog = std::make_unique<Watchdog>(config);
+        // Posted from the pre-crash hook so the waiter below blocks only as
+        // long as the watchdog needs to fire -- no fixed sleep.
+        folly::Baton<> preCrashHookRan;
+        watchdog->setPreCrashCallback([&]() {
+          std::cerr << "PRECRASH_HOOK_RAN" << std::endl;
+          preCrashHookRan.post();
+        });
+
+        std::thread watchdogThread([&]() { watchdog->run(); });
+        watchdog->waitUntilRunning();
+
+        // A "stuck" evb: constructed but never run, so its heartbeat timestamp
+        // never advances and the watchdog declares it a dead thread, which
+        // triggers fireCrash() after two monitor cycles.
+        OpenrEventBase stuckEvb;
+        stuckEvb.setEvbName("stuckEvb");
+        watchdog->addEvb(&stuckEvb);
+
+        // Wait only as long as the watchdog needs to detect the dead thread
+        // and run the pre-crash hook (signalled via the baton). If it never
+        // fires within the bound, exit cleanly with a clear message so
+        // EXPECT_DEATH fails fast (no SIGABRT) instead of hanging on join().
+        if (!preCrashHookRan.try_wait_for(std::chrono::seconds(10))) {
+          std::cerr << "watchdog did not fire pre-crash hook within 10s"
+                    << std::endl;
+          std::_Exit(0);
+        }
+        // Hook ran; abort() is imminent and will terminate the process.
+        watchdogThread.join(); // unreached: watchdog aborts first
+      },
+      "PRECRASH_HOOK_RAN");
 }
 
 int

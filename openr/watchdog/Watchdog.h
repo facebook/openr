@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <functional>
+
 #include <folly/Utility.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
@@ -31,6 +33,16 @@ class Watchdog final : public OpenrEventBase,
    * Register a queue with watchdog to be monitored and logged
    */
   void addQueue(messaging::ReplicateQueueBase& q, const std::string& qName);
+
+  /**
+   * Register a best-effort callback invoked once, just before the watchdog
+   * aborts the process (memory or thread-stall crash). Used to announce a
+   * graceful restart to peers (Spark restarting hello) so they retain our
+   * adjacency instead of treating the abrupt crash as a hard-down. The callback
+   * must be time-bounded; any exception it throws is swallowed so it can never
+   * prevent the abort()/core dump.
+   */
+  void setPreCrashCallback(std::function<void()> callback);
 
  private:
   // monitor thread status in case they get stuck
@@ -82,6 +94,10 @@ class Watchdog final : public OpenrEventBase,
       std::string,
       std::reference_wrapper<messaging::ReplicateQueueBase>>
       monitoredQs_;
+
+  // Best-effort hook invoked just before fireCrash() aborts the process, e.g.
+  // to announce graceful restart to peers. See setPreCrashCallback().
+  std::function<void()> preCrashCallback_{nullptr};
 };
 
 } // namespace openr

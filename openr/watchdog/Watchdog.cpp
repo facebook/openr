@@ -166,8 +166,30 @@ Watchdog::updateThreadCounters() {
 }
 
 void
+Watchdog::setPreCrashCallback(std::function<void()> callback) {
+  preCrashCallback_ = std::move(callback);
+}
+
+void
 Watchdog::fireCrash(const std::string& msg) {
   SYSLOG(ERROR) << msg;
+  /*
+   * Before aborting, run the registered pre-crash hook. This does what the
+   * SIGTERM graceful-shutdown path does for neighbors: ask Spark to flood a
+   * graceful-restart ("restarting") hello so peers retain our adjacency for
+   * graceful_restart_time_s instead of treating the abrupt crash as a hard-down
+   * (which triggers SPF and mass route withdrawal/re-advertise). The hook is
+   * best-effort and time-bounded; any exception is swallowed so it can never
+   * prevent the abort() that follows -- abort() is retained so the core dump
+   * needed to debug the memory/thread crash is still produced.
+   */
+  if (preCrashCallback_) {
+    try {
+      preCrashCallback_();
+    } catch (const std::exception& e) {
+      XLOGF(ERR, "[Watchdog] pre-crash callback threw: {}", e.what());
+    }
+  }
   // hell ya!
   abort();
 }
