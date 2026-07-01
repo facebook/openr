@@ -96,4 +96,84 @@ TEST(AreaVerificationTest, AreaMissingFromObservedReportsAllMissing) {
   EXPECT_TRUE(diffs.at("plane").extra.empty());
 }
 
+namespace {
+
+/*
+ * Adds a neighbor->DUT adjacency on `nbr`, exactly as
+ * DutPatcher::patchDutIntoTopology produces for a border node.
+ */
+void
+peerWithDut(Topology& topo, const std::string& nbr, const std::string& dut) {
+  VirtualAdjacency adj;
+  adj.remoteRouterName = dut;
+  adj.localIfName = nbr + "-to-dut";
+  topo.routers.at(nbr).adjacencies.push_back(std::move(adj));
+}
+
+} // namespace
+
+TEST(AreaVerificationTest, ProveAbrBridgesEachAreaWhereDutPeers) {
+  // DUT patched in (area "0", like DutPatcher) with one border peer per area.
+  auto topo = makeTwoAreaTopology();
+  topo.routers.emplace("dut.test", makeRouter("dut.test", 99999, "0"));
+  topo.routerNames.emplace_back("dut.test");
+  peerWithDut(topo, "a", "dut.test"); // pod
+  peerWithDut(topo, "c", "dut.test"); // plane
+
+  auto proof = proveAbr(topo, "dut.test");
+  EXPECT_TRUE(proof.isAbr());
+  EXPECT_THAT(proof.areas, ::testing::UnorderedElementsAre("pod", "plane"));
+  EXPECT_EQ(proof.neighborsPerArea.at("pod"), 1);
+  EXPECT_EQ(proof.neighborsPerArea.at("plane"), 1);
+}
+
+TEST(AreaVerificationTest, ProveAbrCountsBorderNeighborsPerArea) {
+  auto topo = makeTwoAreaTopology();
+  topo.routers.emplace("dut.test", makeRouter("dut.test", 99999, "0"));
+  topo.routerNames.emplace_back("dut.test");
+  peerWithDut(topo, "a", "dut.test"); // pod
+  peerWithDut(topo, "b", "dut.test"); // pod
+  peerWithDut(topo, "c", "dut.test"); // plane
+
+  auto proof = proveAbr(topo, "dut.test");
+  EXPECT_TRUE(proof.isAbr());
+  EXPECT_EQ(proof.neighborsPerArea.at("pod"), 2);
+  EXPECT_EQ(proof.neighborsPerArea.at("plane"), 1);
+}
+
+TEST(AreaVerificationTest, ProveAbrNotAbrWhenDutPeersInOneArea) {
+  auto topo = makeTwoAreaTopology();
+  topo.routers.emplace("dut.test", makeRouter("dut.test", 99999, "0"));
+  topo.routerNames.emplace_back("dut.test");
+  peerWithDut(topo, "a", "dut.test"); // pod only
+  peerWithDut(topo, "b", "dut.test"); // pod only
+
+  auto proof = proveAbr(topo, "dut.test");
+  EXPECT_FALSE(proof.isAbr());
+  EXPECT_THAT(proof.areas, ::testing::UnorderedElementsAre("pod"));
+  EXPECT_EQ(proof.neighborsPerArea.at("pod"), 2);
+}
+
+TEST(AreaVerificationTest, ProveAbrIgnoresDutOwnAdjacencies) {
+  /*
+   * Only the DUT itself holds adjacencies (to a, c); the border nodes do NOT
+   * point back. proveAbr must count the neighbor->DUT direction only, so this
+   * is NOT an ABR — and it must not be tripped up by the DUT's own adjacencies.
+   */
+  auto topo = makeTwoAreaTopology();
+  auto dut = makeRouter("dut.test", 99999, "0");
+  VirtualAdjacency toA;
+  toA.remoteRouterName = "a";
+  dut.adjacencies.push_back(toA);
+  VirtualAdjacency toC;
+  toC.remoteRouterName = "c";
+  dut.adjacencies.push_back(toC);
+  topo.routers.emplace("dut.test", std::move(dut));
+  topo.routerNames.emplace_back("dut.test");
+
+  auto proof = proveAbr(topo, "dut.test");
+  EXPECT_FALSE(proof.isAbr());
+  EXPECT_TRUE(proof.areas.empty());
+}
+
 } // namespace openr

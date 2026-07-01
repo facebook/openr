@@ -18,6 +18,24 @@ areasInTopology(const Topology& topology) {
   return areas;
 }
 
+AbrProof
+proveAbr(const Topology& topology, const std::string& dutName) {
+  AbrProof proof;
+  for (const auto& [name, router] : topology.routers) {
+    if (name == dutName) {
+      continue; // the DUT's own adj DB is owned by its LinkMonitor
+    }
+    for (const auto& adj : router.adjacencies) {
+      if (adj.remoteRouterName == dutName) {
+        proof.areas.insert(router.area);
+        ++proof.neighborsPerArea[router.area];
+        break; // count each border neighbor at most once
+      }
+    }
+  }
+  return proof;
+}
+
 std::map<std::string, AreaKeyDiff>
 diffKeysByArea(
     const std::map<std::string, thrift::KeyVals>& expected,

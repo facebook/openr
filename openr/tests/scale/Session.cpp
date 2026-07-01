@@ -11,6 +11,7 @@
 #include <map>
 #include <stdexcept>
 
+#include <openr/tests/scale/AreaVerification.h>
 #include <openr/tests/scale/DutPatcher.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/NetInterfaceUtils.h>
@@ -277,6 +278,42 @@ Session::patchDut() {
       "[Session] topology_: {} routers, {} adjacencies after DUT patch",
       topology_.getRouterCount(),
       topology_.getTotalAdjacencyCount());
+
+  /*
+   * Multi-area: confirm the DUT patch produced a genuine ABR that bridges every
+   * requested area. When neighbors are simulated, each requested area should
+   * have border nodes peering with the DUT, so a DUT bridging fewer areas than
+   * requested means the multi-area setup is broken (some area would silently
+   * run without the DUT) — fail fast. Inject-only runs add no neighbor->DUT
+   * adjacencies, so ABR-ness cannot be proven from the topology there; only
+   * log.
+   */
+  auto areas = config_.topology()->areas();
+  if (areas.has_value() && areas->size() >= 2) {
+    const auto proof = proveAbr(topology_, dutNodeName_);
+    std::string perArea;
+    for (const auto& [area, count] : proof.neighborsPerArea) {
+      perArea +=
+          fmt::format("{}{}={}", perArea.empty() ? "" : ", ", area, count);
+    }
+    XLOGF(
+        INFO,
+        "[Session] DUT {} bridges {} area(s) [{}]",
+        dutNodeName_,
+        proof.areas.size(),
+        perArea);
+    if (sparkFaker_ && proof.areas.size() < areas->size()) {
+      thrift::SetupError se;
+      se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+      se.message() = fmt::format(
+          "multi-area run requested {} areas but DUT {} bridges only {} "
+          "(DUT-as-ABR patch did not connect the DUT into every area)",
+          areas->size(),
+          dutNodeName_,
+          proof.areas.size());
+      throw se;
+    }
+  }
   return dutNeighborNames;
 }
 
