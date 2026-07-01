@@ -69,6 +69,15 @@ remoteNamesOf(const thrift::Value& value) {
   return remotes;
 }
 
+// Area that an adj:<node> Value's AdjacencyDatabase is tagged with.
+std::string
+areaOf(const thrift::Value& value) {
+  apache::thrift::CompactSerializer serializer;
+  auto adjDb = readThriftObjStr<thrift::AdjacencyDatabase>(
+      value.value().value(), serializer);
+  return *adjDb.area();
+}
+
 } // namespace
 
 TEST(KvStoreDataBuilderTest, BuildAdjKeyValueWithLinksDownOmitsTheWholeSet) {
@@ -98,6 +107,35 @@ TEST(KvStoreDataBuilderTest, BuildAdjKeyValueWithLinkDownDropsExactlyOne) {
   auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
       topo.routers.at("a"), topo, "b", /*version=*/2);
   EXPECT_THAT(remoteNamesOf(value), ::testing::UnorderedElementsAre("c", "d"));
+}
+
+TEST(KvStoreDataBuilderTest, BuildersTagRouterArea) {
+  // adj keys must be tagged with the router's own area so the DUT files them in
+  // the right per-area KvStore.
+  auto topo = makeStarTopology();
+  topo.routers.at("a").area = "pod";
+
+  auto [k1, linksDown] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
+      topo.routers.at("a"), topo, {"b"}, /*version=*/1);
+  EXPECT_EQ(areaOf(linksDown), "pod");
+
+  auto [k2, overloaded] = KvStoreDataBuilder::buildOverloadedAdjKeyValue(
+      topo.routers.at("a"), topo, /*version=*/1);
+  EXPECT_EQ(areaOf(overloaded), "pod");
+}
+
+TEST(KvStoreDataBuilderTest, BuildRemovedNodeAdjKeyValueHonorsArea) {
+  auto [key, value] = KvStoreDataBuilder::buildRemovedNodeAdjKeyValue(
+      "a", /*version=*/9, /*area=*/"plane");
+  EXPECT_EQ(key, "adj:a");
+  EXPECT_EQ(areaOf(value), "plane");
+}
+
+TEST(KvStoreDataBuilderTest, BuildRemovedNodeAdjKeyValueDefaultsToDefaultArea) {
+  // Omitting the area must preserve the historical single-area "0" behavior.
+  auto [key, value] =
+      KvStoreDataBuilder::buildRemovedNodeAdjKeyValue("a", /*version=*/1);
+  EXPECT_EQ(areaOf(value), "0");
 }
 
 } // namespace openr

@@ -141,10 +141,13 @@ class KvStoreDataBuilder {
    *
    * @param routerName Name of the router to mark as removed
    * @param version Version number for the key
+   * @param area OpenR area the adjacency database is tagged with (default "0")
    * @return Pair of ("adj:<routerName>", serialized empty AdjacencyDatabase)
    */
   static std::pair<std::string, thrift::Value> buildRemovedNodeAdjKeyValue(
-      const std::string& routerName, int64_t version);
+      const std::string& routerName,
+      int64_t version,
+      const std::string& area = "0");
 
   /*
    * Build an overloaded adjacency database (node still has adjacencies but

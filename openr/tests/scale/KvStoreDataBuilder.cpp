@@ -121,7 +121,7 @@ KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
       adjs,
       static_cast<int32_t>(router.nodeLabel),
       router.isOverloaded,
-      "0");
+      router.area);
 
   apache::thrift::CompactSerializer serializer;
   std::string key = fmt::format("adj:{}", router.nodeName);
@@ -139,7 +139,7 @@ KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
 
 std::pair<std::string, thrift::Value>
 KvStoreDataBuilder::buildRemovedNodeAdjKeyValue(
-    const std::string& routerName, int64_t version) {
+    const std::string& routerName, int64_t version, const std::string& area) {
   /*
    * Create an empty, overloaded adjacency database.
    * This signals to other routers that this node is down.
@@ -149,7 +149,7 @@ KvStoreDataBuilder::buildRemovedNodeAdjKeyValue(
   adjDb.isOverloaded() = true;
   adjDb.adjacencies() = {};
   adjDb.nodeLabel() = 0;
-  adjDb.area() = "0";
+  adjDb.area() = area;
 
   apache::thrift::CompactSerializer serializer;
   std::string key = fmt::format("adj:{}", routerName);
@@ -198,7 +198,11 @@ KvStoreDataBuilder::buildOverloadedAdjKeyValue(
   }
 
   auto adjDb = createAdjDb(
-      router.nodeName, adjs, static_cast<int32_t>(router.nodeLabel), true, "0");
+      router.nodeName,
+      adjs,
+      static_cast<int32_t>(router.nodeLabel),
+      true,
+      router.area);
 
   apache::thrift::CompactSerializer serializer;
   std::string key = fmt::format("adj:{}", router.nodeName);

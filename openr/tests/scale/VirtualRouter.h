@@ -74,10 +74,12 @@ struct VirtualRouter {
   int nodeId{0};
 
   /*
-   * OpenR area this router belongs to.
-   * Defaults to the standard testing area.
+   * OpenR area this router belongs to. Every key this router originates
+   * (adj:/prefix:) is tagged with this area. Defaults to OpenR's default area
+   * "0" (Constants::kDefaultArea), which a single-area DUT accepts via its
+   * default-area wildcard — so single-area topologies need not set it.
    */
-  std::string area{"area0"};
+  std::string area{"0"};
 
   /*
    * Interfaces on this router.
