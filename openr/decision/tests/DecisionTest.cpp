@@ -1404,6 +1404,71 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   }
 }
 
+/*
+ * Regression: Decision lazily creates one LinkState per distinct area it ever
+ * receives a publication for (keyed by the publication's non-empty area; the
+ * area is NOT validated against the configured areas) and there is no path that
+ * erases an entry. A stream of publications for an ever-growing set of distinct
+ * area names therefore makes the DUT accumulate LinkStates without bound. This
+ * pins that behavior -- it is the in-process proof of the leak that the
+ * openr/tests/scale multi-area harness reproduces against a live DUT. When the
+ * leak is fixed (by rejecting unconfigured areas or erasing stale ones), this
+ * test must be updated to assert the bounded behavior.
+ */
+TEST_F(DecisionTestFixture, AreaLinkStatesAccumulatePerDistinctArea) {
+  const int32_t kNumAreas = 50;
+
+  for (int32_t i = 0; i < kNumAreas; ++i) {
+    const std::string area = fmt::format("transient-area-{}", i);
+    // Each area advertises a unique prefix so every publication changes the DUT
+    // route table and reliably emits a route delta to drain.
+    const auto uniquePrefix =
+        toIpPrefix(fmt::format("2401:db00:{:x}::/64", i + 1));
+    auto publication = createThriftPublication(
+        {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+         {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+         createPrefixKeyValue("2", 1, uniquePrefix, area)},
+        {}, /* expiredKeys */
+        {}, /* nodeIds */
+        {}, /* keysToUpdate */
+        area);
+    sendKvPublication(publication);
+    recvRouteUpdates();
+  }
+
+  // Authoritative evb-synced barrier on the last area's prefix; FIFO processing
+  // guarantees every prior publication is applied before we read decision
+  // state.
+  const auto lastPrefix =
+      toIpPrefix(fmt::format("2401:db00:{:x}::/64", kNumAreas));
+  verifyReceivedRoutes(toIPNetwork(lastPrefix), false /* isRemoved */);
+
+  // One LinkState was created per distinct area and none was ever erased.
+  EXPECT_EQ(static_cast<size_t>(kNumAreas), getAreaLinkStates().size());
+  for (int32_t i = 0; i < kNumAreas; ++i) {
+    EXPECT_EQ(
+        1u, getAreaLinkStates().count(fmt::format("transient-area-{}", i)));
+  }
+
+  /*
+   * Re-injecting into an already-seen area does NOT grow the map: growth is one
+   * LinkState per DISTINCT area, not per publication.
+   */
+  const auto reinjectPrefix = toIpPrefix("2401:dead::/64");
+  auto reinject = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("2", 1, reinjectPrefix, "transient-area-0")},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      "transient-area-0");
+  sendKvPublication(reinject);
+  recvRouteUpdates();
+  verifyReceivedRoutes(toIPNetwork(reinjectPrefix), false /* isRemoved */);
+  EXPECT_EQ(static_cast<size_t>(kNumAreas), getAreaLinkStates().size());
+}
+
 // MultiArea Tology topology is used:
 //  1--- A ---2
 //  |
