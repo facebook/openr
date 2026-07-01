@@ -55,6 +55,27 @@ TEST_F(SparkFakerTest, AddNeighbors) {
 }
 
 /*
+ * Test per-neighbor area: defaults to the OpenR default area and can be
+ * overridden, with lookups on unknown neighbors reported as not-found.
+ */
+TEST_F(SparkFakerTest, PerNeighborArea) {
+  faker_->addNeighbor(
+      "spine-0", "spine-0-to-dut", 100, "fe80::1", "dut-to-spine-0", 1);
+
+  /* Defaults to the OpenR default area "0" to preserve single-area behavior. */
+  ASSERT_TRUE(faker_->getNeighborArea("spine-0").has_value());
+  EXPECT_EQ("0", faker_->getNeighborArea("spine-0").value());
+
+  /* Can be set to a non-default area. */
+  EXPECT_TRUE(faker_->setNeighborArea("spine-0", "pod"));
+  EXPECT_EQ("pod", faker_->getNeighborArea("spine-0").value());
+
+  /* Unknown neighbor: setter returns false, getter returns nullopt. */
+  EXPECT_FALSE(faker_->setNeighborArea("nonexistent", "pod"));
+  EXPECT_FALSE(faker_->getNeighborArea("nonexistent").has_value());
+}
+
+/*
  * Test that we can start and stop the faker
  */
 TEST_F(SparkFakerTest, StartStop) {

@@ -169,6 +169,30 @@ SparkFaker::setNeighborCtrlPort(const std::string& nodeName, uint16_t port) {
   return false;
 }
 
+bool
+SparkFaker::setNeighborArea(
+    const std::string& nodeName, const std::string& area) {
+  for (auto& neighbor : neighbors_) {
+    if (neighbor.nodeName == nodeName) {
+      neighbor.area = area;
+      XLOGF(DBG1, "SparkFaker: Set area for {} to {}", nodeName, area);
+      return true;
+    }
+  }
+  XLOGF(DBG1, "SparkFaker: Neighbor {} not found", nodeName);
+  return false;
+}
+
+std::optional<std::string>
+SparkFaker::getNeighborArea(const std::string& nodeName) const {
+  for (const auto& neighbor : neighbors_) {
+    if (neighbor.nodeName == nodeName) {
+      return neighbor.area;
+    }
+  }
+  return std::nullopt;
+}
+
 thrift::SparkHelloMsg
 SparkFaker::buildHelloMsg(FakeNeighbor& neighbor) {
   thrift::SparkHelloMsg helloMsg;
@@ -224,7 +248,7 @@ SparkFaker::buildHandshakeMsg(
   handshakeMsg.transportAddressV6() = toBinaryAddress(neighbor.v6Addr);
   handshakeMsg.transportAddressV4() = toBinaryAddress(neighbor.v4Addr);
   handshakeMsg.openrCtrlThriftPort() = neighbor.ctrlPort;
-  handshakeMsg.area() = "0"; /* default area */
+  handshakeMsg.area() = neighbor.area;
   handshakeMsg.neighborNodeName() = dutNodeName;
 
   return handshakeMsg;

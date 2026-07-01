@@ -57,6 +57,14 @@ class SparkFaker {
     /* OpenR ctrl thrift port for KvStore sync (default 2018, per-neighbor) */
     uint16_t ctrlPort{2018};
 
+    /*
+     * OpenR area this neighbor belongs to. Advertised in the Spark handshake so
+     * the DUT forms the adjacency in the matching area; the DUT must have area
+     * config that accepts it or it silently drops the neighbor. Defaults to the
+     * OpenR default area ("0") to preserve single-area behavior.
+     */
+    std::string area{"0"};
+
     /* Spark state machine */
     thrift::SparkNeighState state{thrift::SparkNeighState::IDLE};
     uint64_t seqNum{1};
@@ -171,6 +179,26 @@ class SparkFaker {
    * @return true if neighbor was found and updated
    */
   bool setNeighborCtrlPort(const std::string& nodeName, uint16_t port);
+
+  /*
+   * Set the OpenR area advertised in a specific neighbor's Spark handshake, so
+   * the DUT forms that adjacency in the matching area. The DUT must have area
+   * config (interface/neighbor regex) accepting this area, otherwise it
+   * silently drops the neighbor.
+   *
+   * @param nodeName Name of the neighbor
+   * @param area OpenR area name
+   * @return true if neighbor was found and updated
+   */
+  bool setNeighborArea(const std::string& nodeName, const std::string& area);
+
+  /*
+   * Get the OpenR area for a specific neighbor (for testing/verification).
+   *
+   * @param nodeName Name of the neighbor
+   * @return the neighbor's area, or std::nullopt if the neighbor is not found
+   */
+  std::optional<std::string> getNeighborArea(const std::string& nodeName) const;
 
   /*
    * Handle packet from DUT (for testing)
