@@ -161,6 +161,15 @@ class KvStoreThriftInjector {
       const Topology& topology, int32_t numFakeKeysPerNode = 0);
 
   /*
+   * Build thrift::KeyVals bucketed by each router's area, so a multi-area
+   * topology can be injected with one setKvStoreKeyVals RPC per area. Keys are
+   * grouped by `VirtualRouter::area`; a single-area topology yields one bucket.
+   * Public for use by Session's bulk injection path.
+   */
+  static std::map<std::string, thrift::KeyVals> buildKeyValsByArea(
+      const Topology& topology, int32_t numFakeKeysPerNode = 0);
+
+  /*
    * Build thrift::AdjacencyDatabase from VirtualRouter.
    * Public for use by KvStoreDataBuilder.
    */

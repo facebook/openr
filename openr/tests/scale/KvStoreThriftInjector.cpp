@@ -181,20 +181,20 @@ KvStoreThriftInjector::createFakeKeyValues(
   return keyValues;
 }
 
-thrift::KeyVals
-KvStoreThriftInjector::buildKeyVals(
+std::map<std::string, thrift::KeyVals>
+KvStoreThriftInjector::buildKeyValsByArea(
     const Topology& topology, int32_t numFakeKeysPerNode) {
-  thrift::KeyVals keyVals;
+  std::map<std::string, thrift::KeyVals> byArea;
 
   for (const auto& [nodeName, router] : topology.routers) {
     auto [key, value] = createAdjKeyValue(router, topology);
-    keyVals.emplace(std::move(key), std::move(value));
+    byArea[router.area].emplace(std::move(key), std::move(value));
   }
 
   for (const auto& [nodeName, router] : topology.routers) {
     auto prefixKvs = createPrefixKeyValues(router);
     for (auto& [key, value] : prefixKvs) {
-      keyVals.emplace(std::move(key), std::move(value));
+      byArea[router.area].emplace(std::move(key), std::move(value));
     }
   }
 
@@ -202,11 +202,31 @@ KvStoreThriftInjector::buildKeyVals(
     for (const auto& [nodeName, router] : topology.routers) {
       auto fakeKvs = createFakeKeyValues(router, numFakeKeysPerNode);
       for (auto& [key, value] : fakeKvs) {
-        keyVals.emplace(std::move(key), std::move(value));
+        byArea[router.area].emplace(std::move(key), std::move(value));
       }
     }
   }
 
+  return byArea;
+}
+
+thrift::KeyVals
+KvStoreThriftInjector::buildKeyVals(
+    const Topology& topology, int32_t numFakeKeysPerNode) {
+  thrift::KeyVals keyVals;
+  /*
+   * Flatten the per-area buckets into one map. Keys are unique by construction
+   * (adj:<node>, prefix, and fakekeys<i>:<node> all embed the node name, and
+   * replication namespaces node names per area as <area>-<node>), so no key
+   * collides across routers or areas and the flatten order does not matter. The
+   * map key is const, so it is copied, not moved.
+   */
+  for (auto& [area, areaKeyVals] :
+       buildKeyValsByArea(topology, numFakeKeysPerNode)) {
+    for (auto& [key, value] : areaKeyVals) {
+      keyVals.emplace(key, std::move(value));
+    }
+  }
   return keyVals;
 }
 

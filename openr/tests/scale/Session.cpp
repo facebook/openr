@@ -432,15 +432,48 @@ Session::injectInitialTopology() {
    */
   if (*config_.injection()->injectTopology()) {
     try {
-      auto keyVals = KvStoreThriftInjector::buildKeyVals(
-          topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
-      keyVals.erase(fmt::format("adj:{}", dutNodeName_));
-      const size_t expected = keyVals.size();
-      const size_t injected = injector_->injectKeyVals(keyVals);
       /*
-       * injectKeyVals() returns 0 (it does NOT throw) when the DUT is
-       * disconnected or the setKvStoreKeyVals RPC fails, so the catch below is
-       * not enough on its own. Treat a short write as an explicit failure
+       * Bucket keys by area so a multi-area topology is injected with one
+       * setKvStoreKeyVals RPC per area. A single-area topology yields one
+       * bucket (area "0"), identical to the legacy single-RPC injection.
+       */
+      auto keyValsByArea = KvStoreThriftInjector::buildKeyValsByArea(
+          topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
+      /*
+       * LinkMonitor owns adj:<dut> on the real DUT; drop it from every area
+       * bucket so the test side never conflicts with the DUT's own writes.
+       */
+      const auto dutAdjKey = fmt::format("adj:{}", dutNodeName_);
+      size_t expected = 0;
+      size_t injected = 0;
+      size_t injectedAreas = 0;
+      for (auto& [area, keyVals] : keyValsByArea) {
+        keyVals.erase(dutAdjKey);
+        /*
+         * Drop areas whose only key was the DUT's own adj key (nothing to
+         * send) so the logged area count reflects real injectKeyVals RPCs.
+         */
+        if (keyVals.empty()) {
+          continue;
+        }
+        const size_t want = keyVals.size();
+        expected += want;
+        const size_t got = injector_->injectKeyVals(keyVals, area);
+        injected += got;
+        ++injectedAreas;
+        if (got < want) {
+          /*
+           * A short write means the DUT is disconnected or the RPC is failing;
+           * stop hammering it with the remaining areas. The injected !=
+           * expected check below then throws against the first failing area.
+           */
+          break;
+        }
+      }
+      /*
+       * injectKeyVals() returns a short count (it does NOT throw) when the DUT
+       * is disconnected or the setKvStoreKeyVals RPC fails, so the catch below
+       * is not enough on its own. Treat a short write as an explicit failure
        * rather than letting start() report a healthy session whose DUT never
        * received the initial topology.
        */
@@ -454,7 +487,11 @@ Session::injectInitialTopology() {
             expected);
         throw se;
       }
-      XLOGF(INFO, "[Session] Injected {} keys into DUT KvStore", injected);
+      XLOGF(
+          INFO,
+          "[Session] Injected {} keys into DUT KvStore across {} area(s)",
+          injected,
+          injectedAreas);
     } catch (const thrift::SetupError&) {
       throw; // already classified; don't re-wrap as a generic failure
     } catch (const std::exception& ex) {
