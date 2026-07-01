@@ -20,10 +20,9 @@ namespace {
 // it never collides.
 constexpr int kDutNodeId = 99999;
 
-} // namespace
-
+// Role-based DUT neighbor names for a single area (the legacy scheme).
 std::vector<std::string>
-DutPatcher::buildDutNeighborNames(const thrift::ScaleTestConfig& cfg) {
+buildBaseDutNeighborNames(const thrift::ScaleTestConfig& cfg) {
   const auto& t = *cfg.topology();
   const bool dutIsSpine = (*t.dutRole() == thrift::DutRole::SPINE);
   std::vector<std::string> names;
@@ -44,6 +43,31 @@ DutPatcher::buildDutNeighborNames(const thrift::ScaleTestConfig& cfg) {
     // leaf-0 (site index 0).
     if (*t.numSites() > 0) {
       names.emplace_back("eb-site-0");
+    }
+  }
+  return names;
+}
+
+} // namespace
+
+std::vector<std::string>
+DutPatcher::buildDutNeighborNames(const thrift::ScaleTestConfig& cfg) {
+  auto baseNames = buildBaseDutNeighborNames(cfg);
+
+  auto areas = cfg.topology()->areas();
+  if (!areas.has_value() || areas->size() < 2) {
+    return baseNames;
+  }
+  /*
+   * Multi-area: the DUT is an ABR that peers with each area's border nodes.
+   * replicateAcrossAreas namespaces every node as "<area>-<original>", so the
+   * DUT's neighbor set is the base role-based names namespaced per area.
+   */
+  std::vector<std::string> names;
+  names.reserve(baseNames.size() * areas->size());
+  for (const auto& area : *areas) {
+    for (const auto& base : baseNames) {
+      names.push_back(fmt::format("{}-{}", area, base));
     }
   }
   return names;

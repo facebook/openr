@@ -8,6 +8,7 @@
 #include <openr/tests/scale/Session.h>
 
 #include <algorithm>
+#include <map>
 #include <stdexcept>
 
 #include <openr/tests/scale/DutPatcher.h>
@@ -81,7 +82,16 @@ validateConfig(const thrift::ScaleTestConfig& cfg) {
 Topology
 validateAndBuildTopology(const thrift::ScaleTestConfig& cfg) {
   validateConfig(cfg);
-  return createScaleTopology(cfg);
+  auto topo = createScaleTopology(cfg);
+  /*
+   * Multi-area: replicate the base topology into each named area. With < 2
+   * areas the topology is returned unchanged (single-area default).
+   */
+  auto areas = cfg.topology()->areas();
+  if (areas.has_value() && areas->size() >= 2) {
+    topo = TopologyGenerator::replicateAcrossAreas(topo, *areas);
+  }
+  return topo;
 }
 
 // Returns true iff `topology_` has a router named `a` with an
@@ -309,17 +319,48 @@ Session::setupFakeKvStore(const std::vector<std::string>& dutNeighborNames) {
    * FakeKvStoreManager::start() and is logged there, not surfaced here.
    */
   try {
-    auto allKeyVals = KvStoreThriftInjector::buildKeyVals(
-        topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
     /*
+     * Build one immutable store per area and give each neighbor the store for
+     * its own area, so a neighbor never serves another area's keys. A
+     * single-area topology yields one bucket (area "0") shared by all
+     * neighbors, identical to the legacy single-store path.
+     *
      * LinkMonitor owns adj:<dut> on the real DUT; injecting it from the test
-     * side would conflict with the DUT's own writes.
+     * side would conflict with the DUT's own writes, so drop it from every
+     * area bucket.
      */
-    allKeyVals.erase(fmt::format("adj:{}", dutNodeName_));
-    auto sharedKeyVals =
-        std::make_shared<const thrift::KeyVals>(std::move(allKeyVals));
+    auto byArea = KvStoreThriftInjector::buildKeyValsByArea(
+        topology_, config_.injection()->numFakeKeysPerNode().value_or(0));
+    const auto dutAdjKey = fmt::format("adj:{}", dutNodeName_);
+    std::map<std::string, std::shared_ptr<const thrift::KeyVals>> sharedByArea;
+    for (auto& [area, keyVals] : byArea) {
+      keyVals.erase(dutAdjKey);
+      sharedByArea[area] =
+          std::make_shared<const thrift::KeyVals>(std::move(keyVals));
+    }
+    /*
+     * One immutable empty bucket reused for any neighbor whose area produced no
+     * keys, so the per-neighbor loop never allocates a fresh shared_ptr.
+     */
+    static const auto kEmpty = std::make_shared<const thrift::KeyVals>();
     for (const auto& name : dutNeighborNames) {
-      kvManager_->addNeighbor(name, sharedKeyVals);
+      const auto& nbrArea = topology_.getRouter(name).area;
+      auto it = sharedByArea.find(nbrArea);
+      if (it == sharedByArea.end()) {
+        /*
+         * buildKeyValsByArea buckets every router's area, so a DUT neighbor's
+         * area should always be present. Falling back to an empty store means
+         * the topology and injector disagree on areas -- surface it rather than
+         * silently serving nothing.
+         */
+        XLOGF(
+            WARN,
+            "[Session] neighbor '{}' area '{}' has no injector bucket; serving empty store",
+            name,
+            nbrArea);
+      }
+      kvManager_->addNeighbor(
+          name, it != sharedByArea.end() ? it->second : kEmpty, nbrArea);
     }
     kvManager_->start();
   } catch (const std::exception& ex) {
@@ -350,6 +391,34 @@ Session::setupSparkFaker(const std::vector<std::string>& dutNeighborNames) {
    * would disagree on which interface each neighbor lives on. It also avoids
    * silently starting SparkFaker with a degraded interface set.
    */
+
+  /*
+   * Every simulated neighbor is looked up via getRouter below. When
+   * enableFakeKvStore is off, setupFakeKvStore (which runs the same check) is
+   * skipped, so validate here too -- surface a structured TOPOLOGY_INVALID
+   * rather than an unstructured getRouter throw on a neighbor/topology
+   * mismatch.
+   */
+  if (auto missing = DutPatcher::missingNeighbors(topology_, dutNeighborNames);
+      !missing.empty()) {
+    std::string joined;
+    for (const auto& name : missing) {
+      if (!joined.empty()) {
+        joined += ", ";
+      }
+      joined += name;
+    }
+    thrift::SetupError se;
+    se.reason() = thrift::SetupErrorReason::TOPOLOGY_INVALID;
+    se.message() = fmt::format(
+        "SparkFaker: {} DUT neighbor(s) absent from topology type '{}' "
+        "(neighbor-name scheme mismatch): {}",
+        missing.size(),
+        *config_.topology()->type(),
+        joined);
+    throw se;
+  }
+
   std::vector<UsableInterface> usable;
   usable.reserve(config_.injection()->interfaces()->size());
   for (const auto& ifName : *config_.injection()->interfaces()) {
@@ -392,6 +461,13 @@ Session::setupSparkFaker(const std::vector<std::string>& dutNeighborNames) {
       sparkFaker_->setNeighborCtrlPort(
           placement.neighborName, kvManager_->getPort(placement.neighborName));
     }
+    /*
+     * Advertise the neighbor's area in its Spark handshake so the DUT forms the
+     * adjacency in the matching area. Single-area neighbors carry area "0".
+     */
+    sparkFaker_->setNeighborArea(
+        placement.neighborName,
+        topology_.getRouter(placement.neighborName).area);
   }
   sparkIo_->startReceiving();
   /*

@@ -5,6 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <set>
+#include <string>
+#include <vector>
+
 #include <fmt/format.h>
 #include <gtest/gtest.h>
 
@@ -189,6 +193,54 @@ TEST(DutPatcherTest, MissingNeighborsEmptyWhenAllPresent) {
   auto topo = makeTopology();
   const std::vector<std::string> neighbors{"spine-0", "leaf-0", "leaf-1"};
   EXPECT_TRUE(DutPatcher::missingNeighbors(topo, neighbors).empty());
+}
+
+TEST(DutPatcherTest, BuildDutNeighborNamesMultiAreaNamespacesPerArea) {
+  auto cfg = makeConfig(thrift::DutRole::LEAF);
+  cfg.topology()->numSpines() = 2;
+  cfg.topology()->numSites() = 0;
+  cfg.topology()->areas() = std::vector<std::string>{"pod", "plane"};
+  const std::vector<std::string> expected{
+      "pod-spine-0", "pod-spine-1", "plane-spine-0", "plane-spine-1"};
+  EXPECT_EQ(DutPatcher::buildDutNeighborNames(cfg), expected);
+}
+
+TEST(DutPatcherTest, MultiAreaPatchConnectsDutToEachAreasBorderNodes) {
+  // Base single-area topology with the role-based names the patcher expects,
+  // replicated into two areas exactly as Session does for a multi-area run.
+  auto base = makeTopology(); // spine-0, leaf-0..2
+  auto multi = TopologyGenerator::replicateAcrossAreas(base, {"pod", "plane"});
+
+  auto cfg = makeConfig(thrift::DutRole::LEAF);
+  cfg.topology()->numSpines() = 1; // DUT (leaf) peers with spine-0 in each area
+  cfg.topology()->numSites() = 0;
+  cfg.topology()->areas() = std::vector<std::string>{"pod", "plane"};
+
+  auto names = DutPatcher::buildDutNeighborNames(cfg);
+  EXPECT_EQ(names, (std::vector<std::string>{"pod-spine-0", "plane-spine-0"}));
+
+  // Every DUT neighbor exists in the replicated topology.
+  EXPECT_TRUE(DutPatcher::missingNeighbors(multi, names).empty());
+
+  DutPatcher::patchDutIntoTopology(multi, "dut.test", names, {"eth0"});
+  ASSERT_GT(multi.routers.count("dut.test"), 0u);
+
+  // The DUT peers with a node in BOTH areas (it is an ABR), and each
+  // neighbor->DUT adjacency lives on the neighbor's own area-tagged router.
+  std::set<std::string> peerAreas;
+  for (const auto& name : names) {
+    const auto& nbr = multi.routers.at(name);
+    bool toDut = false;
+    for (const auto& adj : nbr.adjacencies) {
+      if (adj.remoteRouterName == "dut.test") {
+        toDut = true;
+        break;
+      }
+    }
+    EXPECT_TRUE(toDut) << name << " has no adjacency to DUT";
+    peerAreas.insert(nbr.area);
+  }
+  EXPECT_EQ(peerAreas, (std::set<std::string>{"pod", "plane"}));
 }
 
 } // namespace openr

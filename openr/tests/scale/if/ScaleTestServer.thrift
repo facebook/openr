@@ -32,6 +32,11 @@ struct TopologyConfig {
   7: optional i32 numSites;
   8: optional i32 numPrefixesPerNode;
   9: optional i32 ecmpWidth;
+  // Multi-area: one area name per area. With >= 2 names the base topology is
+  // replicated into each named area (self-consistent per area) and the DUT is
+  // patched into all of them as an ABR. Unset / empty / a single name keeps the
+  // legacy single-area behavior (default area "0").
+  10: optional list<string> areas;
 }
 
 struct InjectionConfig {
