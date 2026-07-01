@@ -116,6 +116,25 @@ class TopologyGenerator {
   static Topology loadFromFile(const std::string& filePath);
 
   /*
+   * Replicate a single-area topology into N self-consistent per-area copies.
+   *
+   * Each area gets a full copy of `base` whose node names are namespaced as
+   * "<area>-<originalName>", whose routers are tagged with that area, and whose
+   * node ids/labels are offset so they stay unique across copies. Adjacencies
+   * and interface peers are remapped to the namespaced names, so every copy is
+   * self-consistent and NO adjacency ever crosses an area boundary (the DUT,
+   * spliced in later, is the only multi-area node). Prefixes are copied as-is,
+   * so the same prefix is reachable in every area — a realistic ABR scenario.
+   *
+   * @param base Single-area topology to replicate
+   * @param areaNames One area name per desired copy; must be non-empty and
+   *     duplicate-free (throws std::invalid_argument otherwise)
+   * @return Combined topology with base.getRouterCount() * N routers
+   */
+  static Topology replicateAcrossAreas(
+      const Topology& base, const std::vector<std::string>& areaNames);
+
+  /*
    * Generate a unique node name based on topology type.
    */
   static std::string getGridNodeName(int row, int col, int n);
