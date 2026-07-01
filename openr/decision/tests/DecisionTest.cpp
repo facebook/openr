@@ -1469,6 +1469,101 @@ TEST_F(DecisionTestFixture, AreaLinkStatesAccumulatePerDistinctArea) {
   EXPECT_EQ(static_cast<size_t>(kNumAreas), getAreaLinkStates().size());
 }
 
+/*
+ * Stress the multi-area route-event path. The DUT (node "1") holds two live
+ * areas at once -- area A (1--2, node "2" originates pfxA) and area B (1--3,
+ * node "3" originates pfxB). We repeatedly flap the area-A link by republishing
+ * the DUT's area-A adjacency with and without adj12: each transition is a route
+ * event the DUT must recompute against area A's LinkState while leaving area B
+ * untouched. With the link up the DUT reaches both prefixes (2 routes); with it
+ * down only the steady area-B prefix remains (1 route). Run under --stress-runs
+ * this drives the multi-area route recomputation path through many transitions
+ * and asserts the per-area route table converges correctly every cycle.
+ */
+TEST_F(DecisionTestFixture, MultiAreaRouteEventChurn) {
+  const auto pfxA = toIpPrefix("2401:db00:a::/64"); // node "2", area A
+  const auto pfxB = toIpPrefix("2401:db00:b::/64"); // node "3", area B
+
+  // Bring up area A: DUT(1) -- 2, node "2" originates pfxA.
+  sendKvPublication(createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("2", 1, pfxA, kTestingAreaName)},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      kTestingAreaName));
+  recvRouteUpdates();
+
+  /*
+   * Bring up area B: DUT(1) -- 3, node "3" originates pfxB. The DUT now holds
+   * two per-area LinkStates and a steady area-B route for the whole churn.
+   */
+  sendKvPublication(createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj13}, false, 1)},
+       {"adj:3", createAdjValue(serializer, "3", 1, {adj31}, false, 3)},
+       createPrefixKeyValue("3", 1, pfxB, "B")},
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {}, /* keysToUpdate */
+      "B"));
+  recvRouteUpdates();
+
+  /*
+   * Collect the destination prefixes in the DUT's computed unicast route table.
+   * Asserting on the prefixes (not just the count) pins the per-area invariant:
+   * a regression returning the right number of routes for the wrong area (e.g.
+   * a stale area-A route lingering while area B silently dropped) would slip
+   * past a size-only check.
+   */
+  auto routeDests = [this]() {
+    auto routeDb = dumpRouteDb({"1"})["1"];
+    std::vector<thrift::IpPrefix> dests;
+    for (const auto& route : routeDb.unicastRoutes().value()) {
+      dests.push_back(route.dest().value());
+    }
+    return dests;
+  };
+
+  // Steady state: the DUT reaches pfxA (area A) and pfxB (area B).
+  EXPECT_THAT(routeDests(), testing::UnorderedElementsAre(pfxA, pfxB));
+
+  /*
+   * The area-A adjacency version must strictly increase for each republish to
+   * be accepted; area B is never touched, so its route stays up throughout.
+   */
+  int64_t adjVersion = 1;
+  const int32_t kCycles = 20;
+  for (int32_t i = 0; i < kCycles; ++i) {
+    /*
+     * Route event: area-A link down (DUT loses adj12) -> node "2" (pfxA)
+     * unreachable, only the area-B route remains.
+     */
+    sendKvPublication(createThriftPublication(
+        {{"adj:1",
+          createAdjValue(serializer, "1", ++adjVersion, {}, false, 1)}},
+        {}, /* expiredKeys */
+        {}, /* nodeIds */
+        {}, /* keysToUpdate */
+        kTestingAreaName));
+    recvRouteUpdates();
+    // area-A withdrawn -> only the steady area-B prefix remains.
+    EXPECT_THAT(routeDests(), testing::UnorderedElementsAre(pfxB));
+
+    // Route event: area-A link up (DUT regains adj12) -> pfxA reachable again.
+    sendKvPublication(createThriftPublication(
+        {{"adj:1",
+          createAdjValue(serializer, "1", ++adjVersion, {adj12}, false, 1)}},
+        {}, /* expiredKeys */
+        {}, /* nodeIds */
+        {}, /* keysToUpdate */
+        kTestingAreaName));
+    recvRouteUpdates();
+    // area-A restored -> both prefixes reachable again.
+    EXPECT_THAT(routeDests(), testing::UnorderedElementsAre(pfxA, pfxB));
+  }
+}
+
 // MultiArea Tology topology is used:
 //  1--- A ---2
 //  |
