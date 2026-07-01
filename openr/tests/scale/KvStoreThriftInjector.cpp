@@ -438,6 +438,17 @@ KvStoreThriftInjector::getKeys(
   }
 }
 
+std::map<std::string, thrift::KeyVals>
+KvStoreThriftInjector::getKeysByArea(
+    const std::vector<std::string>& areas, const std::string& keyPrefix) {
+  std::map<std::string, thrift::KeyVals> byArea;
+  for (const auto& area : areas) {
+    auto pub = getKeys(keyPrefix, area);
+    byArea[area] = std::move(pub.keyVals().value());
+  }
+  return byArea;
+}
+
 std::map<std::string, thrift::AdjacencyDatabase>
 KvStoreThriftInjector::getAdjacencyDatabases(const std::string& areaName) {
   std::map<std::string, thrift::AdjacencyDatabase> result;

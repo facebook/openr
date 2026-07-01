@@ -127,6 +127,18 @@ class KvStoreThriftInjector {
       const std::string& keyPrefix, const std::string& areaName = "0");
 
   /*
+   * Collect the DUT's keys for several areas, keyed by area. Calls getKeys()
+   * once per area so the result can be diffed against the injected per-area
+   * topology (see AreaVerification). An empty keyPrefix matches all keys.
+   *
+   * @param areas Areas to query (e.g. the areas in the injected topology)
+   * @param keyPrefix Prefix filter applied within each area ("" = all keys)
+   * @return Map of area -> the keys the DUT holds for that area
+   */
+  std::map<std::string, thrift::KeyVals> getKeysByArea(
+      const std::vector<std::string>& areas, const std::string& keyPrefix = "");
+
+  /*
    * Get all adjacency databases from the DUT.
    *
    * @param areaName OpenR area
