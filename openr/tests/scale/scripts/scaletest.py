@@ -74,6 +74,15 @@ def _build_config(doc: Mapping[str, Any]) -> ScaleTestConfig:
         raise ValueError(
             f"topology.dutRole must be 'SPINE' or 'LEAF' (got '{dut_role_str}')"
         )
+    # A bare scalar (e.g. `areas: pod`) would otherwise become list("pod") ==
+    # ["p", "o", "d"]; require an explicit list so typos fail loudly.
+    areas_in = topo_in.get("areas")
+    if areas_in is not None and not isinstance(areas_in, list):
+        raise ValueError(
+            f"topology.areas must be a list of area names "
+            f"(got {type(areas_in).__name__})"
+        )
+    areas = [str(a) for a in areas_in] if areas_in is not None else None
     topology = TopologyConfig(
         type=topo_in.get("type", "bbf-simple"),
         dutRole=DutRole[dut_role_str],
@@ -84,6 +93,9 @@ def _build_config(doc: Mapping[str, Any]) -> ScaleTestConfig:
         numSites=int(_require(topo_in, "numSites", "topology")),
         numPrefixesPerNode=int(_require(topo_in, "numPrefixesPerNode", "topology")),
         ecmpWidth=int(_require(topo_in, "ecmpWidth", "topology")),
+        # Multi-area: >= 2 names replicates the base topology per area and patches
+        # the DUT in as an ABR. Absent keeps single-area (daemon default area "0").
+        areas=areas,
     )
 
     injection = InjectionConfig(
@@ -137,6 +149,8 @@ def _format_status(status: Any) -> str:
             f"spines={cfg.topology.numSpines} leaves={cfg.topology.numLeaves} "
             f"pods={cfg.topology.numPods}"
         )
+        if cfg.topology.areas:
+            lines.append(f"  areas: {', '.join(cfg.topology.areas)}")
     return "\n".join(lines)
 
 

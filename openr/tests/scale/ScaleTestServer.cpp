@@ -27,12 +27,15 @@
 #include <chrono>
 #include <csignal>
 #include <iostream>
+#include <map>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <set>
 #include <thread>
 
 #include <fmt/format.h>
+#include <folly/String.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
 #include <gflags/gflags.h>
@@ -44,6 +47,7 @@
 #include <openr/tests/scale/RealSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
 #include <openr/tests/scale/TopologyFactory.h>
+#include <openr/tests/scale/TopologyGenerator.h>
 
 DEFINE_string(dut_host, "192.168.1.1", "DUT hostname or IP address");
 
@@ -117,6 +121,13 @@ DEFINE_string(
     dut_role,
     "spine",
     "Role of the DUT: 'leaf' (neighbors are spines) or 'spine' (neighbors are leaves + control nodes)");
+
+DEFINE_string(
+    areas,
+    "",
+    "Comma-separated area names. With >= 2 names the base topology is replicated "
+    "into each area and the DUT is patched in as an ABR spanning all of them. "
+    "Empty or a single name keeps single-area behavior (default area \"0\").");
 
 namespace {
 
@@ -408,6 +419,10 @@ main(int argc, char** argv) {
   XLOGF(INFO, "  Super-spines:    {}", FLAGS_num_super_spines);
   XLOGF(INFO, "  Pods:            {}", FLAGS_num_pods);
   XLOGF(INFO, "  EB-Sites:        {}", FLAGS_num_sites);
+  XLOGF(
+      INFO,
+      "  Areas:           {}",
+      FLAGS_areas.empty() ? "(single, area 0)" : FLAGS_areas);
   XLOGF(INFO, "  Prefixes/node:   {}", FLAGS_num_prefixes_per_node);
   XLOGF(
       INFO,
@@ -446,6 +461,25 @@ main(int argc, char** argv) {
   XLOGF(INFO, "Interfaces: {}", FLAGS_interfaces);
 
   /*
+   * Parse area names. parseInterfaces is a generic comma-splitter, reused here.
+   * >= 2 areas turns on multi-area: the base topology is replicated per area
+   * and the DUT is patched in as an ABR. Mirrors the Session (daemon) path.
+   *
+   * Trim each token so "--areas=pod, plane" yields {"pod","plane"}: the area
+   * strings must match the names replicateAcrossAreas assigns
+   * ("<area>-<node>"), so a stray leading space would silently miss the
+   * per-area KV bucket below.
+   */
+  std::vector<std::string> areas;
+  for (const auto& token : parseInterfaces(FLAGS_areas)) {
+    auto area = folly::trimWhitespace(token).str();
+    if (!area.empty()) {
+      areas.push_back(area);
+    }
+  }
+  const bool multiArea = areas.size() >= 2;
+
+  /*
    * Build neighbor list based on DUT role.
    * When the DUT is a leaf, its neighbors are spines.
    * When the DUT is a spine, its neighbors are leaves + control nodes.
@@ -474,6 +508,23 @@ main(int argc, char** argv) {
       dutNeighborNames.push_back(fmt::format("eb-site-{}", dutSite));
     }
   }
+
+  /*
+   * Multi-area: the DUT is an ABR peering with each area's border nodes.
+   * replicateAcrossAreas namespaces every node "<area>-<original>", so the
+   * DUT's neighbor set is the base role-based names namespaced per area.
+   * Mirrors DutPatcher::buildDutNeighborNames (the Session path).
+   */
+  if (multiArea) {
+    std::vector<std::string> namespaced;
+    namespaced.reserve(dutNeighborNames.size() * areas.size());
+    for (const auto& area : areas) {
+      for (const auto& base : dutNeighborNames) {
+        namespaced.push_back(fmt::format("{}-{}", area, base));
+      }
+    }
+    dutNeighborNames = std::move(namespaced);
+  }
   const int numDutNeighbors = static_cast<int>(dutNeighborNames.size());
 
   /*
@@ -495,6 +546,21 @@ main(int argc, char** argv) {
     return 1;
   }
   openr::Topology topology = std::move(*maybeTopology);
+
+  /*
+   * Multi-area: replicate the base topology into each named area
+   * (self-consistent per area, no cross-area links). Mirrors
+   * Session::validateAndBuildTopology.
+   */
+  if (multiArea) {
+    try {
+      topology =
+          openr::TopologyGenerator::replicateAcrossAreas(topology, areas);
+    } catch (const std::invalid_argument& ex) {
+      XLOGF(ERR, "Invalid --areas={}: {}", FLAGS_areas, ex.what());
+      return 1;
+    }
+  }
 
   XLOGF(
       INFO,
@@ -635,24 +701,69 @@ main(int argc, char** argv) {
      * Build shared KV data from topology
      */
     XLOGF(INFO, "Building KV data for {} neighbors...", neighborNames.size());
-    auto allKeyVals = openr::KvStoreThriftInjector::buildKeyVals(
-        topology, FLAGS_num_fake_keys_per_node);
+    if (multiArea) {
+      /*
+       * One immutable store per area; each neighbor serves only its own area's
+       * keys (mirrors Session::setupFakeKvStore). LinkMonitor owns adj:<dut> on
+       * the real DUT, so drop it from every area bucket.
+       */
+      auto byArea = openr::KvStoreThriftInjector::buildKeyValsByArea(
+          topology, FLAGS_num_fake_keys_per_node);
+      const auto dutAdjKey = fmt::format("adj:{}", dutNodeName);
+      std::map<std::string, std::shared_ptr<const openr::thrift::KeyVals>>
+          sharedByArea;
+      for (auto& [area, keyVals] : byArea) {
+        keyVals.erase(dutAdjKey);
+        sharedByArea[area] =
+            std::make_shared<const openr::thrift::KeyVals>(std::move(keyVals));
+      }
+      for (const auto& name : neighborNames) {
+        /*
+         * By construction every neighbor is a router in the generated topology
+         * and its area is one of the replicated --areas, so either lookup
+         * missing is a programming error, not a recoverable state; fail loudly
+         * instead of throwing an unstructured exception or serving empty KVs.
+         */
+        auto routerIt = topology.routers.find(name);
+        if (routerIt == topology.routers.end()) {
+          XLOGF(
+              FATAL,
+              "Neighbor {} is not a router in the generated topology; its name "
+              "must match a replicated --areas node",
+              name);
+        }
+        const auto& nbrArea = routerIt->second.area;
+        auto it = sharedByArea.find(nbrArea);
+        if (it == sharedByArea.end()) {
+          XLOGF(
+              FATAL,
+              "Neighbor {} is in area '{}' with no KV bucket; its area must be "
+              "one of the replicated --areas",
+              name,
+              nbrArea);
+        }
+        kvManager->addNeighbor(name, it->second, nbrArea);
+      }
+    } else {
+      auto allKeyVals = openr::KvStoreThriftInjector::buildKeyVals(
+          topology, FLAGS_num_fake_keys_per_node);
 
-    /*
-     * Remove the DUT's own adj key — LinkMonitor handles that.
-     * We only want spine/leaf adj DBs in the shared data.
-     */
-    allKeyVals.erase(fmt::format("adj:{}", dutNodeName));
+      /*
+       * Remove the DUT's own adj key — LinkMonitor handles that.
+       * We only want spine/leaf adj DBs in the shared data.
+       */
+      allKeyVals.erase(fmt::format("adj:{}", dutNodeName));
 
-    auto sharedKeyVals =
-        std::make_shared<const openr::thrift::KeyVals>(std::move(allKeyVals));
-    XLOGF(INFO, "Built {} shared keys", sharedKeyVals->size());
+      auto sharedKeyVals =
+          std::make_shared<const openr::thrift::KeyVals>(std::move(allKeyVals));
+      XLOGF(INFO, "Built {} shared keys", sharedKeyVals->size());
 
-    /*
-     * Add each neighbor to the manager
-     */
-    for (const auto& name : neighborNames) {
-      kvManager->addNeighbor(name, sharedKeyVals);
+      /*
+       * Add each neighbor to the manager
+       */
+      for (const auto& name : neighborNames) {
+        kvManager->addNeighbor(name, sharedKeyVals);
+      }
     }
 
     XLOGF(
@@ -769,6 +880,16 @@ main(int argc, char** argv) {
           XLOGF(DBG2, "Set ctrlPort for {} to {}", neighborName, ctrlPort);
         }
 
+        /*
+         * Advertise the neighbor's area in its Spark handshake so the DUT forms
+         * the adjacency in the matching area (mirrors
+         * Session::setupSparkFaker).
+         */
+        if (multiArea) {
+          faker->setNeighborArea(
+              neighborName, topology.getRouter(neighborName).area);
+        }
+
         XLOGF(
             DBG1,
             "Added fake neighbor {} on {} ({})",
@@ -794,16 +915,29 @@ main(int argc, char** argv) {
     XLOG(INFO, "Injecting topology into DUT KvStore...");
     auto startTime = std::chrono::steady_clock::now();
 
-    auto keyVals = openr::KvStoreThriftInjector::buildKeyVals(
-        topology, FLAGS_num_fake_keys_per_node);
-
     /*
-     * Remove the DUT's own adj key — LinkMonitor handles that.
-     * Injecting it would conflict with LinkMonitor's version.
+     * Remove the DUT's own adj key from each bucket — LinkMonitor owns it on
+     * the real DUT and injecting it would conflict with LinkMonitor's version.
      */
-    keyVals.erase(fmt::format("adj:{}", dutNodeName));
-
-    size_t keysInjected = injector.injectKeyVals(keyVals);
+    const auto dutAdjKey = fmt::format("adj:{}", dutNodeName);
+    size_t keysInjected = 0;
+    if (multiArea) {
+      /*
+       * One setKvStoreKeyVals RPC per area (mirrors
+       * Session::injectInitialTopology).
+       */
+      auto byArea = openr::KvStoreThriftInjector::buildKeyValsByArea(
+          topology, FLAGS_num_fake_keys_per_node);
+      for (auto& [area, keyVals] : byArea) {
+        keyVals.erase(dutAdjKey);
+        keysInjected += injector.injectKeyVals(keyVals, area);
+      }
+    } else {
+      auto keyVals = openr::KvStoreThriftInjector::buildKeyVals(
+          topology, FLAGS_num_fake_keys_per_node);
+      keyVals.erase(dutAdjKey);
+      keysInjected = injector.injectKeyVals(keyVals);
+    }
 
     auto endTime = std::chrono::steady_clock::now();
     auto durationMs = std::chrono::duration_cast<std::chrono::milliseconds>(
