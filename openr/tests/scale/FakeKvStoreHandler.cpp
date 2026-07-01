@@ -15,24 +15,30 @@
 namespace openr {
 
 FakeKvStoreHandler::FakeKvStoreHandler(
-    std::string neighborName, thrift::KeyVals kvStore)
-    : neighborName_(std::move(neighborName)), ownedStore_(std::move(kvStore)) {
+    std::string neighborName, thrift::KeyVals kvStore, std::string area)
+    : neighborName_(std::move(neighborName)),
+      area_(std::move(area)),
+      ownedStore_(std::move(kvStore)) {
   XLOGF(
       INFO,
-      "[FAKE-KVSTORE] Handler created for neighbor '{}' with {} keys",
+      "[FAKE-KVSTORE] Handler created for neighbor '{}' area '{}' with {} keys",
       neighborName_,
+      area_,
       ownedStore_->size());
 }
 
 FakeKvStoreHandler::FakeKvStoreHandler(
     std::string neighborName,
-    std::shared_ptr<const thrift::KeyVals> sharedKvStore)
+    std::shared_ptr<const thrift::KeyVals> sharedKvStore,
+    std::string area)
     : neighborName_(std::move(neighborName)),
+      area_(std::move(area)),
       sharedStore_(std::move(sharedKvStore)) {
   XLOGF(
       INFO,
-      "[FAKE-KVSTORE] Handler created for neighbor '{}' with {} keys (shared/COW)",
+      "[FAKE-KVSTORE] Handler created for neighbor '{}' area '{}' with {} keys (shared/COW)",
       neighborName_,
+      area_,
       sharedStore_->size());
 }
 
@@ -58,6 +64,23 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
   std::lock_guard<std::mutex> lock(mutex_);
+
+  /*
+   * This handler models a single-area node: it has no KvStoreDb for any other
+   * area, so a query for a different area returns an empty publication, the
+   * same as a real KvStore that does not participate in that area.
+   */
+  if (*area != area_) {
+    XLOGF(
+        DBG2,
+        "[FAKE-KVSTORE] {} getKvStoreKeyValsFilteredArea: area {} != {}, returning empty",
+        neighborName_,
+        *area,
+        area_);
+    auto empty = std::make_unique<thrift::Publication>();
+    empty->area() = *area;
+    return folly::makeSemiFuture(std::move(empty));
+  }
 
   auto pub = std::make_unique<thrift::Publication>();
 
@@ -110,6 +133,17 @@ FakeKvStoreHandler::semifuture_setKvStoreKeyVals(
    */
   std::lock_guard<std::mutex> lock(mutex_);
 
+  /* Ignore writes for an area this node does not participate in. */
+  if (*area != area_) {
+    XLOGF(
+        DBG2,
+        "[FAKE-KVSTORE] {} setKvStoreKeyVals: ignoring write for area {} != {}",
+        neighborName_,
+        *area,
+        area_);
+    return folly::makeSemiFuture(folly::Unit{});
+  }
+
   size_t numKeys = setParams->keyVals()->size();
   XLOGF(
       DBG2,
@@ -147,6 +181,17 @@ FakeKvStoreHandler::semifuture_getKvStoreKeyValsArea(
   auto pub = std::make_unique<thrift::Publication>();
   pub->area() = *area;
 
+  /* No KvStoreDb for a different area: return empty. */
+  if (*area != area_) {
+    XLOGF(
+        DBG2,
+        "[FAKE-KVSTORE] {} getKvStoreKeyValsArea: area {} != {}, returning empty",
+        neighborName_,
+        *area,
+        area_);
+    return folly::makeSemiFuture(std::move(pub));
+  }
+
   for (const auto& key : *filterKeys) {
     auto it = store().find(key);
     if (it != store().end()) {
@@ -178,6 +223,17 @@ FakeKvStoreHandler::semifuture_getKvStoreHashFilteredArea(
    */
   auto pub = std::make_unique<thrift::Publication>();
   pub->area() = *area;
+
+  /* No KvStoreDb for a different area: return no hashes. */
+  if (*area != area_) {
+    XLOGF(
+        DBG2,
+        "[FAKE-KVSTORE] {} getKvStoreHashFilteredArea: area {} != {}, returning no hashes",
+        neighborName_,
+        *area,
+        area_);
+    return folly::makeSemiFuture(std::move(pub));
+  }
 
   for (const auto& [key, value] : store()) {
     thrift::Value hashOnly;

@@ -14,9 +14,24 @@
 #include <openr/tests/scale/FakeKvStoreManager.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/TopologyGenerator.h>
+#include <openr/tests/scale/VirtualRouter.h>
 #include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
 
 namespace openr {
+
+namespace {
+
+VirtualRouter
+makeAreaRouter(const std::string& name, int id, const std::string& area) {
+  VirtualRouter r;
+  r.nodeName = name;
+  r.nodeId = id;
+  r.nodeLabel = id;
+  r.area = area;
+  return r;
+}
+
+} // namespace
 
 class FakeKvStoreTest : public ::testing::Test {
  protected:
@@ -372,6 +387,93 @@ TEST_F(FakeKvStoreTest, ThriftClientCanConnect) {
       client->semifuture_getKvStoreKeyValsFilteredArea(filter, "0").get();
 
   EXPECT_GT(result.keyVals()->size(), 0);
+}
+
+/*
+ * A handler serves keys only for its own area. A sync for any other area gets
+ * an empty publication, modeling a node with no KvStoreDb in that area.
+ */
+TEST_F(FakeKvStoreTest, HandlerServesOnlyItsArea) {
+  auto kvData = KvStoreDataBuilder::buildForNeighbor(topology_);
+  size_t keyCount = kvData.size();
+  ASSERT_GT(keyCount, 0);
+
+  auto handler =
+      std::make_shared<FakeKvStoreHandler>("spine-0", std::move(kvData), "pod");
+  EXPECT_EQ("pod", handler->getArea());
+
+  auto client = apache::thrift::makeTestClient(handler);
+  thrift::KeyDumpParams filter;
+
+  /* Querying the handler's own area returns its keys. */
+  auto inArea =
+      client->semifuture_getKvStoreKeyValsFilteredArea(filter, "pod").get();
+  EXPECT_EQ(keyCount, inArea.keyVals()->size());
+  EXPECT_EQ("pod", *inArea.area());
+
+  /* Querying a different area returns nothing. */
+  auto otherArea =
+      client->semifuture_getKvStoreKeyValsFilteredArea(filter, "plane").get();
+  EXPECT_EQ(0, otherArea.keyVals()->size());
+  EXPECT_EQ("plane", *otherArea.area());
+}
+
+/*
+ * The manager records each neighbor's area and defaults to the default area
+ * when one is not supplied.
+ */
+TEST_F(FakeKvStoreTest, ManagerTracksNeighborArea) {
+  FakeKvStoreManager manager(0, 2);
+
+  manager.addNeighbor(
+      "spine-0", KvStoreDataBuilder::buildForNeighbor(topology_), "pod");
+  EXPECT_EQ("pod", manager.getNeighborArea("spine-0"));
+  auto handler = manager.getHandler("spine-0");
+  ASSERT_NE(handler, nullptr);
+  EXPECT_EQ("pod", handler->getArea());
+
+  /* Default area when unspecified is the default area "0". */
+  manager.addNeighbor(
+      "spine-1", KvStoreDataBuilder::buildForNeighbor(topology_));
+  EXPECT_EQ("0", manager.getNeighborArea("spine-1"));
+
+  EXPECT_THROW(manager.getNeighborArea("nonexistent"), std::runtime_error);
+}
+
+/*
+ * updateTopology rebuilds per area: each neighbor is reset to the store for its
+ * own area, so a pod neighbor never serves a plane neighbor's keys.
+ */
+TEST_F(FakeKvStoreTest, UpdateTopologyIsAreaScoped) {
+  Topology topo;
+  topo.routers.emplace("spine-0", makeAreaRouter("spine-0", 1, "pod"));
+  topo.routers.emplace("spine-1", makeAreaRouter("spine-1", 2, "plane"));
+  topo.routerNames = {"spine-0", "spine-1"};
+
+  FakeKvStoreManager manager(0, 2);
+  manager.addNeighbor("spine-0", thrift::KeyVals{}, "pod");
+  manager.addNeighbor("spine-1", thrift::KeyVals{}, "plane");
+
+  manager.updateTopology(topo, {"spine-0", "spine-1"});
+
+  thrift::KeyDumpParams filter;
+
+  /* The pod neighbor serves its own adj key, not the plane neighbor's. */
+  auto podClient =
+      apache::thrift::makeTestClient(manager.getHandler("spine-0"));
+  auto podPub =
+      podClient->semifuture_getKvStoreKeyValsFilteredArea(filter, "pod").get();
+  EXPECT_NE(podPub.keyVals()->find("adj:spine-0"), podPub.keyVals()->end());
+  EXPECT_EQ(podPub.keyVals()->find("adj:spine-1"), podPub.keyVals()->end());
+
+  /* The plane neighbor serves only the plane adj key. */
+  auto planeClient =
+      apache::thrift::makeTestClient(manager.getHandler("spine-1"));
+  auto planePub =
+      planeClient->semifuture_getKvStoreKeyValsFilteredArea(filter, "plane")
+          .get();
+  EXPECT_NE(planePub.keyVals()->find("adj:spine-1"), planePub.keyVals()->end());
+  EXPECT_EQ(planePub.keyVals()->find("adj:spine-0"), planePub.keyVals()->end());
 }
 
 } // namespace openr

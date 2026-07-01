@@ -38,7 +38,9 @@ FakeKvStoreManager::~FakeKvStoreManager() {
 
 uint16_t
 FakeKvStoreManager::addNeighbor(
-    const std::string& neighborName, thrift::KeyVals kvStore) {
+    const std::string& neighborName,
+    thrift::KeyVals kvStore,
+    const std::string& area) {
   if (running_) {
     throw std::runtime_error("Cannot add neighbors after servers have started");
   }
@@ -52,9 +54,10 @@ FakeKvStoreManager::addNeighbor(
 
   NeighborServer ns;
   ns.neighborName = neighborName;
+  ns.area = area;
   ns.port = port;
-  ns.handler =
-      std::make_shared<FakeKvStoreHandler>(neighborName, std::move(kvStore));
+  ns.handler = std::make_shared<FakeKvStoreHandler>(
+      neighborName, std::move(kvStore), area);
 
   ns.server = std::make_shared<apache::thrift::ThriftServer>();
   ns.server->setInterface(ns.handler);
@@ -66,8 +69,9 @@ FakeKvStoreManager::addNeighbor(
 
   XLOGF(
       INFO,
-      "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {}",
+      "[FAKE-KVSTORE-MGR] Added neighbor '{}' area '{}' on port {}",
       neighborName,
+      area,
       port);
 
   return port;
@@ -76,7 +80,8 @@ FakeKvStoreManager::addNeighbor(
 uint16_t
 FakeKvStoreManager::addNeighbor(
     const std::string& neighborName,
-    std::shared_ptr<const thrift::KeyVals> sharedKvStore) {
+    std::shared_ptr<const thrift::KeyVals> sharedKvStore,
+    const std::string& area) {
   if (running_) {
     throw std::runtime_error("Cannot add neighbors after servers have started");
   }
@@ -90,9 +95,10 @@ FakeKvStoreManager::addNeighbor(
 
   NeighborServer ns;
   ns.neighborName = neighborName;
+  ns.area = area;
   ns.port = port;
   ns.handler = std::make_shared<FakeKvStoreHandler>(
-      neighborName, std::move(sharedKvStore));
+      neighborName, std::move(sharedKvStore), area);
 
   ns.server = std::make_shared<apache::thrift::ThriftServer>();
   ns.server->setInterface(ns.handler);
@@ -104,8 +110,9 @@ FakeKvStoreManager::addNeighbor(
 
   XLOGF(
       INFO,
-      "[FAKE-KVSTORE-MGR] Added neighbor '{}' on port {} (shared/COW)",
+      "[FAKE-KVSTORE-MGR] Added neighbor '{}' area '{}' on port {} (shared/COW)",
       neighborName,
+      area,
       port);
 
   return port;
@@ -197,6 +204,16 @@ FakeKvStoreManager::getPort(const std::string& neighborName) const {
         fmt::format("Neighbor '{}' not found", neighborName));
   }
   return it->second.port;
+}
+
+const std::string&
+FakeKvStoreManager::getNeighborArea(const std::string& neighborName) const {
+  auto it = servers_.find(neighborName);
+  if (it == servers_.end()) {
+    throw std::runtime_error(
+        fmt::format("Neighbor '{}' not found", neighborName));
+  }
+  return it->second.area;
 }
 
 void
@@ -355,14 +372,33 @@ FakeKvStoreManager::updateTopology(
       "[FAKE-KVSTORE-MGR] Updating topology for {} neighbors",
       neighborNames.size());
 
-  auto sharedKvStore = std::make_shared<const thrift::KeyVals>(
-      KvStoreThriftInjector::buildKeyVals(newTopology, numFakeKeysPerNode));
+  /*
+   * Build one immutable store per area and hand each neighbor the store for
+   * its own area, so same-area neighbors keep COW sharing and no neighbor ever
+   * serves another area's keys. A single-area topology yields one bucket, so
+   * every neighbor shares it exactly as before.
+   */
+  auto byArea = KvStoreThriftInjector::buildKeyValsByArea(
+      newTopology, numFakeKeysPerNode);
+  std::map<std::string, std::shared_ptr<const thrift::KeyVals>> sharedByArea;
+  for (auto& [area, keyVals] : byArea) {
+    sharedByArea[area] =
+        std::make_shared<const thrift::KeyVals>(std::move(keyVals));
+  }
 
+  /*
+   * One immutable empty bucket reused for any neighbor whose area produced no
+   * keys, so the loop preserves COW sharing instead of allocating per neighbor.
+   */
+  static const auto kEmpty = std::make_shared<const thrift::KeyVals>();
   for (const auto& name : neighborNames) {
     auto it = servers_.find(name);
-    if (it != servers_.end()) {
-      it->second.handler->resetToShared(sharedKvStore);
+    if (it == servers_.end()) {
+      continue;
     }
+    auto sharedIt = sharedByArea.find(it->second.area);
+    it->second.handler->resetToShared(
+        sharedIt != sharedByArea.end() ? sharedIt->second : kEmpty);
   }
 }
 

@@ -73,10 +73,13 @@ class FakeKvStoreManager {
    *
    * @param neighborName Name of the fake neighbor
    * @param kvStore Initial KV data for this neighbor
+   * @param area OpenR area this neighbor serves (default: the default area "0")
    * @return Port assigned to this neighbor
    */
   uint16_t addNeighbor(
-      const std::string& neighborName, thrift::KeyVals kvStore);
+      const std::string& neighborName,
+      thrift::KeyVals kvStore,
+      const std::string& area = "0");
 
   /*
    * Add a neighbor sharing immutable KV data (COW path).
@@ -86,11 +89,13 @@ class FakeKvStoreManager {
    *
    * @param neighborName Name of the fake neighbor
    * @param sharedKvStore Shared immutable KV data
+   * @param area OpenR area this neighbor serves (default: the default area "0")
    * @return Port assigned to this neighbor
    */
   uint16_t addNeighbor(
       const std::string& neighborName,
-      std::shared_ptr<const thrift::KeyVals> sharedKvStore);
+      std::shared_ptr<const thrift::KeyVals> sharedKvStore,
+      const std::string& area = "0");
 
   /*
    * Start all Thrift servers.
@@ -116,6 +121,12 @@ class FakeKvStoreManager {
    * Throws if neighbor not found.
    */
   uint16_t getPort(const std::string& neighborName) const;
+
+  /*
+   * Get the OpenR area assigned to a neighbor.
+   * Throws if neighbor not found.
+   */
+  const std::string& getNeighborArea(const std::string& neighborName) const;
 
   /*
    * Update a specific neighbor's KV data.
@@ -208,6 +219,7 @@ class FakeKvStoreManager {
  private:
   struct NeighborServer {
     std::string neighborName;
+    std::string area;
     uint16_t port{};
     std::shared_ptr<FakeKvStoreHandler> handler;
     std::shared_ptr<apache::thrift::ThriftServer> server;

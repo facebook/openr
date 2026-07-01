@@ -39,8 +39,12 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
    *
    * @param neighborName The name of this fake neighbor
    * @param kvStore Initial KV data for this neighbor's store
+   * @param area OpenR area this handler serves (default: the default area "0")
    */
-  FakeKvStoreHandler(std::string neighborName, thrift::KeyVals kvStore);
+  FakeKvStoreHandler(
+      std::string neighborName,
+      thrift::KeyVals kvStore,
+      std::string area = "0");
 
   /*
    * Construct a handler sharing immutable KV data (COW path).
@@ -50,10 +54,12 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
    *
    * @param neighborName The name of this fake neighbor
    * @param sharedKvStore Shared immutable KV data
+   * @param area OpenR area this handler serves (default: the default area "0")
    */
   FakeKvStoreHandler(
       std::string neighborName,
-      std::shared_ptr<const thrift::KeyVals> sharedKvStore);
+      std::shared_ptr<const thrift::KeyVals> sharedKvStore,
+      std::string area = "0");
 
   /*
    * 3-way sync step 1+2: DUT sends hashes, we return diff.
@@ -127,6 +133,15 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
   }
 
   /*
+   * Get the OpenR area this handler serves. A read/write RPC for any other area
+   * is treated as empty/no-op, modeling a node with no KvStoreDb there.
+   */
+  const std::string&
+  getArea() const {
+    return area_;
+  }
+
+  /*
    * Get the shared store pointer (nullptr if handler owns a private copy).
    */
   std::shared_ptr<const thrift::KeyVals> getSharedStore() const;
@@ -150,6 +165,7 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
   thrift::KeyVals& mutableStore();
 
   std::string neighborName_;
+  std::string area_;
 
   // COW storage: at most one of these is active at a time.
   // sharedStore_ holds the immutable shared base (COW path).
