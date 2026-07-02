@@ -49,6 +49,8 @@ struct KvStoreParams {
 
   // TLS knob
   bool enable_secure_thrift_client{false};
+  // Pre-compress flood-publication payload once, shared across peers
+  bool enable_flood_pub_pre_compression{false};
   // TLS paths
   std::optional<std::string> x509_cert_path{std::nullopt};
   std::optional<std::string> x509_key_path{std::nullopt};
@@ -80,6 +82,8 @@ struct KvStoreParams {
             std::chrono::milliseconds(*kvStoreConfig.sync_max_backoff_ms())),
         enable_secure_thrift_client(
             *kvStoreConfig.enable_secure_thrift_client()),
+        enable_flood_pub_pre_compression(
+            kvStoreConfig.enable_flood_pub_pre_compression().value_or(false)),
         x509_cert_path(kvStoreConfig.x509_cert_path().to_optional()),
         x509_key_path(kvStoreConfig.x509_key_path().to_optional()),
         x509_ca_path(kvStoreConfig.x509_ca_path().to_optional()),

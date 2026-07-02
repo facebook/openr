@@ -475,6 +475,15 @@ struct KvStoreConfig {
   17: optional i32 self_adjacency_timeout_ms;
   /* configuration of timeout before kvstore considered sync even when no peers learned */
   18: optional i32 kvstore_sync_timeout_ms;
+
+  /**
+   * Knob to pre-compress the flood-publication payload once (shared across all
+   * peers) instead of leaving per-peer compression to the thrift layer.
+   * Optional; the effective default (false) is applied by the consumers
+   * (Config::toThriftKvStoreConfig / KvStoreParams) via value_or(false).
+   * See KvStoreDb::floodPublication.
+   */
+  19: optional bool enable_flood_pub_pre_compression;
 }
 
 /**

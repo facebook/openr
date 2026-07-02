@@ -475,6 +475,8 @@ Config::toThriftKvStoreConfig() const {
   if (auto selfAdjTimeoutMs = oldConfig.self_adjacency_timeout_ms()) {
     config.self_adjacency_timeout_ms() = *oldConfig.self_adjacency_timeout_ms();
   }
+  config.enable_flood_pub_pre_compression() =
+      oldConfig.enable_flood_pub_pre_compression().value_or(false);
   return config;
 }
 

@@ -153,6 +153,30 @@ KvStore<ClientType>::KvStore(
       kvParams_.syncInitialBackoff.count(),
       kvParams_.syncMaxBackoff.count());
 
+  XLOGF(
+      INFO,
+      "[KvStoreParams] nodeId={}, keyTtlMs={}, ttlDecrMs={}, "
+      "syncInitialBackoffMs={}, syncMaxBackoffMs={}, selfAdjSyncTimeoutMs={}, "
+      "kvStoreSyncTimeoutMs={}, ipTos={}, enableSecureThriftClient={}, "
+      "enableFloodPubPreCompression={}, x509CertPath={}, x509KeyPath={}, "
+      "x509CaPath={}, hasFloodRate={}, hasFilters={}, hasFabricConfig={}",
+      kvParams_.nodeId,
+      kvParams_.keyTtl.count(),
+      kvParams_.ttlDecr.count(),
+      kvParams_.syncInitialBackoff.count(),
+      kvParams_.syncMaxBackoff.count(),
+      kvParams_.selfAdjSyncTimeout.count(),
+      kvParams_.kvStoreSyncTimeout.count(),
+      kvParams_.maybeIpTos.value_or(-1),
+      kvParams_.enable_secure_thrift_client,
+      kvParams_.enable_flood_pub_pre_compression,
+      kvParams_.x509_cert_path.value_or("unset"),
+      kvParams_.x509_key_path.value_or("unset"),
+      kvParams_.x509_ca_path.value_or("unset"),
+      kvParams_.floodRate.has_value(),
+      kvParams_.filters.has_value(),
+      kvParams_.fabricConfig.has_value());
+
   {
     auto fiber = addFiberTaskFuture([q = std::move(peerUpdatesQueue),
                                      this]() mutable noexcept {
@@ -3322,9 +3346,18 @@ KvStoreDb<ClientType>::floodPublication(
   // Param representing the whole fabric. Gets created if needed.
   std::unique_ptr<thrift::KeySetParams> fabricParams = nullptr;
 
-  // Buffers to cache serialized + pre-compressed requests for flooding.
-  // Serialized once per protocol type, then compressed in-place with zstd —
-  // shared across all peers to avoid redundant per-peer compression.
+  /*
+   * Whether to pre-compress the flood payload once (shared across peers)
+   * instead of leaving per-peer compression to the thrift layer.
+   */
+  const bool preCompress = kvParams_.enable_flood_pub_pre_compression;
+
+  /*
+   * Buffers to cache serialized (and, when preCompress is set, pre-compressed)
+   * requests for flooding. Serialized once per protocol type and shared across
+   * all peers to avoid redundant per-peer work; compressed in-place with zstd
+   * only when preCompress is enabled.
+   */
   using FloodCacheKey = std::pair<uint16_t, bool>;
   folly::F14NodeMap<
       FloodCacheKey,
@@ -3359,9 +3392,11 @@ KvStoreDb<ClientType>::floodPublication(
     if (!serializedRequest) {
       serializedRequest.emplace(serializeRequest(
           protocolType, isFabricExternal ? *fabricParams : params, area_));
-      serializedRequest->buffer =
-          folly::compression::getCodec(folly::compression::CodecType::ZSTD, 1)
-              ->compress(serializedRequest->buffer.get());
+      if (preCompress) {
+        serializedRequest->buffer =
+            folly::compression::getCodec(folly::compression::CodecType::ZSTD, 1)
+                ->compress(serializedRequest->buffer.get());
+      }
     }
     // record telemetry for flooding publications
     fb303::fbData->addStatValue(
@@ -3373,7 +3408,9 @@ KvStoreDb<ClientType>::floodPublication(
 
     auto startTime = std::chrono::steady_clock::now();
     auto sf = thriftPeer.sendPreSerializedSetKvStoreKeyVals(
-        *serializedRequest->buffer, protocolType, true /* preCompressed */);
+        *serializedRequest->buffer,
+        protocolType,
+        preCompress /* preCompressed */);
     std::move(sf)
         .via(evb_->getEvb())
         .thenValue([startTime](folly::Unit&&) {

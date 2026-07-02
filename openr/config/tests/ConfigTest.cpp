@@ -553,6 +553,19 @@ TEST(ConfigTest, ToThriftKvStoreConfig) {
   auto config = Config(tConfig);
 
   EXPECT_NO_THROW(config.toThriftKvStoreConfig());
+
+  // enable_flood_pub_pre_compression is optional; when unset the effective
+  // default is false (value_or(false) in Config::toThriftKvStoreConfig), and an
+  // explicit value is plumbed through OpenrConfig::KvstoreConfig ->
+  // KvStore.thrift KvStoreConfig.
+  EXPECT_FALSE(
+      *config.toThriftKvStoreConfig().enable_flood_pub_pre_compression());
+
+  auto tConfigEnabled = getBasicOpenrConfig();
+  tConfigEnabled.kvstore_config()->enable_flood_pub_pre_compression() = true;
+  auto configEnabled = Config(tConfigEnabled);
+  EXPECT_TRUE(*configEnabled.toThriftKvStoreConfig()
+                   .enable_flood_pub_pre_compression());
 }
 
 TEST(ConfigTest, NonDefaultVrfConfigGetter) {

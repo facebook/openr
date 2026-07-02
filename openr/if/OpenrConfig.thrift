@@ -91,6 +91,15 @@ struct KvstoreConfig {
 
   /* configuration of timeout before kvstore considered sync even when no peers learned */
   11: optional i32 kvstore_sync_timeout_ms;
+
+  /**
+   * Knob to pre-compress the flood-publication payload once (shared across all
+   * peers) instead of leaving per-peer compression to the thrift layer.
+   * Optional (no thrift default) so it is not serialized into every generated
+   * openr config; the effective default (false) is applied in
+   * Config::toThriftKvStoreConfig via value_or(false).
+   */
+  12: optional bool enable_flood_pub_pre_compression;
 }
 
 /*
