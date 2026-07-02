@@ -313,7 +313,7 @@ TEST(RWQueueTest, CoroTest) {
                         RWQueue<int>& q,
                         size_t count) -> folly::coro::Task<void> {
     for (size_t i = 0; i < count; ++i) {
-      q.push(i);
+      q.push(static_cast<int>(i));
       ++totalWrites;
       // VLOG(1) << "Writer " << writerId << " sending " << i;
     }
@@ -369,4 +369,48 @@ TEST(RQueueTest, ReadTest) {
   EXPECT_EQ(0, rwq->numPendingReads());
   EXPECT_EQ(0, rwq->size());
 #endif
+}
+
+TEST(RWQueueTest, PushTimeCoalescing) {
+  // Coalescer sums the incoming value into the pending tail element.
+  RWQueue<int> q("coalescing", [](int& existing, int& incoming) {
+    existing += incoming;
+    return true;
+  });
+
+  q.push(1); // empty queue -> appended (coalescer only runs when non-empty)
+  q.push(2); // -> merged into tail
+  q.push(3); // -> merged into tail
+  EXPECT_EQ(1, q.size()); // all collapsed into a single pending element
+  EXPECT_EQ(6, q.get().value());
+  EXPECT_EQ(0, q.size());
+}
+
+TEST(RWQueueTest, CoalescingReturnFalseAppends) {
+  // Coalesce only positive increments; a non-positive value starts a new
+  // element (coalescer returns false -> append).
+  RWQueue<int> q("coalescing", [](int& existing, int& incoming) {
+    if (incoming > 0) {
+      existing += incoming;
+      return true;
+    }
+    return false;
+  });
+
+  q.push(1);
+  q.push(2); // merged -> 3
+  q.push(-5); // not coalesced -> new tail element
+  q.push(4); // merged into tail -> -1
+  EXPECT_EQ(2, q.size());
+  EXPECT_EQ(3, q.get().value());
+  EXPECT_EQ(-1, q.get().value());
+}
+
+TEST(RWQueueTest, NoCoalescerIsPlainAppend) {
+  RWQueue<int> q; // no coalescer -> normal append behavior
+  q.push(1);
+  q.push(2);
+  EXPECT_EQ(2, q.size());
+  EXPECT_EQ(1, q.get().value());
+  EXPECT_EQ(2, q.get().value());
 }

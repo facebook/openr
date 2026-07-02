@@ -11,6 +11,7 @@
 
 #include <folly/IPAddress.h>
 #include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 
 #include <openr/decision/RibEntry.h>
 #include <openr/decision/RibPolicy.h>
@@ -65,6 +66,84 @@ struct DecisionRouteUpdate {
   size() const {
     return unicastRoutesToUpdate.size() + unicastRoutesToDelete.size() +
         mplsRoutesToUpdate.size() + mplsRoutesToDelete.size();
+  }
+
+  /**
+   * Fold a subsequent INCREMENTAL update `other` into this one so a stream of
+   * per-prefix deltas collapses to its net latest value. Later state wins per
+   * key: a later update supersedes a prior delete of the same prefix/label, and
+   * a later delete supersedes a prior update.
+   *
+   * `other` MUST be INCREMENTAL: a FULL_SYNC carries whole-table semantics and
+   * cannot be expressed as a delta layered on top of another update. `this`,
+   * however, may be either type, and its semantics are preserved:
+   *  - INCREMENTAL base: the result is the combined delta -- deletes accumulate
+   *    in unicastRoutesToDelete/mplsRoutesToDelete.
+   *  - FULL_SYNC base: the result stays a whole-table snapshot. A deleted key
+   * is simply removed from the snapshot's update map (absence == not in table);
+   *    no explicit delete entry is added, because a delete list is meaningless
+   *    on a full snapshot. This lets the Decision->Fib push-time coalescer fold
+   *    later incrementals into a pending full-sync while keeping whole-table
+   *    semantics intact (see the getReader coalescer wiring in Main.cpp).
+   */
+  void
+  mergeInPlace(DecisionRouteUpdate&& other) {
+    if (type == FULL_SYNC) {
+      // Whole-table snapshot: apply the delta directly onto the update maps. A
+      // delete just drops the key from the snapshot (absence == deleted); we
+      // never accumulate a delete list on a full-sync.
+      for (auto& [prefix, route] : other.unicastRoutesToUpdate) {
+        unicastRoutesToUpdate.insert_or_assign(prefix, std::move(route));
+      }
+      for (const auto& prefix : other.unicastRoutesToDelete) {
+        unicastRoutesToUpdate.erase(prefix);
+      }
+      for (auto& [label, route] : other.mplsRoutesToUpdate) {
+        mplsRoutesToUpdate.insert_or_assign(label, std::move(route));
+      }
+      for (const auto& label : other.mplsRoutesToDelete) {
+        mplsRoutesToUpdate.erase(label);
+      }
+    } else {
+      // Delta base: reconcile the delete lists via sets so add/delete ordering
+      // is correct.
+      folly::F14FastSet<folly::CIDRNetwork> unicastDeletes(
+          unicastRoutesToDelete.begin(), unicastRoutesToDelete.end());
+      folly::F14FastSet<int32_t> mplsDeletes(
+          mplsRoutesToDelete.begin(), mplsRoutesToDelete.end());
+
+      // Unicast: a newer update supersedes a prior delete of the same prefix.
+      for (auto& [prefix, route] : other.unicastRoutesToUpdate) {
+        unicastDeletes.erase(prefix);
+        unicastRoutesToUpdate.insert_or_assign(prefix, std::move(route));
+      }
+      // Unicast: a newer delete supersedes a prior update of the same prefix.
+      for (const auto& prefix : other.unicastRoutesToDelete) {
+        unicastRoutesToUpdate.erase(prefix);
+        unicastDeletes.insert(prefix);
+      }
+      // MPLS: same reconciliation.
+      for (auto& [label, route] : other.mplsRoutesToUpdate) {
+        mplsDeletes.erase(label);
+        mplsRoutesToUpdate.insert_or_assign(label, std::move(route));
+      }
+      for (const auto& label : other.mplsRoutesToDelete) {
+        mplsRoutesToUpdate.erase(label);
+        mplsDeletes.insert(label);
+      }
+
+      unicastRoutesToDelete.assign(
+          unicastDeletes.begin(), unicastDeletes.end());
+      mplsRoutesToDelete.assign(mplsDeletes.begin(), mplsDeletes.end());
+    }
+
+    // Keep the freshest perf events / prefix type from the later update.
+    if (other.perfEvents.has_value()) {
+      perfEvents = std::move(other.perfEvents);
+    }
+    if (other.prefixType.has_value()) {
+      prefixType = other.prefixType;
+    }
   }
 
   /**

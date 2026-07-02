@@ -60,9 +60,19 @@ class ReplicateQueue : public ReplicateQueueBase {
   /**
    * Get new reader stream of this queue. Stream will get closed automatically
    * when reader is destructed.
+   *
+   * If `coalesceFn` is provided, this reader's backlog is coalesced at push
+   * time (see RWQueue constructor): a newly-pushed value is offered to merge
+   * into the reader's pending tail element instead of being appended. Use this
+   * for eventually-consistent, latest-state-wins consumers to bound the
+   * reader's backlog even when it is slow/stalled. Only affects THIS reader.
+   * `coalesceFn` runs under the reader queue's lock, so it must be cheap (see
+   * RWQueue constructor).
    */
   RQueue<ValueType> getReader(
-      const std::optional<std::string>& readerId = std::nullopt);
+      const std::optional<std::string>& readerId = std::nullopt,
+      std::function<bool(ValueType& existing, ValueType& incoming)> coalesceFn =
+          nullptr);
 
   /**
    * Number of replicated streams/readers

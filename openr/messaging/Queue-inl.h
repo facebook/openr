@@ -51,6 +51,12 @@ template <typename ValueType>
 RWQueue<ValueType>::RWQueue(const std::string& queueId) : queueId_(queueId) {}
 
 template <typename ValueType>
+RWQueue<ValueType>::RWQueue(
+    const std::string& queueId,
+    std::function<bool(ValueType&, ValueType&)> coalesceFn)
+    : queueId_(queueId), coalesceFn_(std::move(coalesceFn)) {}
+
+template <typename ValueType>
 RWQueue<ValueType>::~RWQueue() {
   close();
 }
@@ -72,6 +78,14 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     pendingRead.data.emplace(std::forward<ValueTypeT>(val));
     pendingRead.baton.post();
     pendingReads_.pop_front();
+  } else if (coalesceFn_ && !queue_.empty()) {
+    // Offer the incoming value to be merged into the pending tail element. If
+    // the coalescer consumes it (returns true) nothing is appended, bounding
+    // the backlog even when the reader is slow/stalled; otherwise append it.
+    ValueType incoming(std::forward<ValueTypeT>(val));
+    if (!coalesceFn_(queue_.back(), incoming)) {
+      queue_.emplace_back(std::move(incoming));
+    }
   } else {
     // Add data into the queue
     queue_.emplace_back(std::forward<ValueTypeT>(val));

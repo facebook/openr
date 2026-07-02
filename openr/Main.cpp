@@ -9,6 +9,7 @@
 namespace fs = std::filesystem;
 #include <syslog.h>
 #include <fstream>
+#include <functional>
 #include <stdexcept>
 
 #include <fmt/ostream.h>
@@ -162,8 +163,36 @@ main(int argc, char** argv) {
 
   // Decision -> Fib
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  auto fibDecisionRouteUpdatesQueueReader =
-      routeUpdatesQueue.getReader("fibDecision");
+  // Optionally coalesce the Fib reader's backlog at push time so a slow/stalled
+  // Fib cannot let this queue grow unbounded under route churn (bounds openr
+  // memory). The coalescer ALWAYS folds the incoming update into the single
+  // pending element, so the backlog collapses to one element regardless of
+  // Fib's consumption rate or the update-type mix.
+  // NOTE: the coalescer runs under the reader queue's lock, so it must stay
+  // cheap. This queue has a single producer (Decision), so there is no
+  // cross-producer lock contention.
+  std::function<bool(DecisionRouteUpdate&, DecisionRouteUpdate&)>
+      routeUpdateCoalesceFn = nullptr;
+  if (FLAGS_enable_fib_route_update_coalescing) {
+    routeUpdateCoalesceFn = [](DecisionRouteUpdate& existing,
+                               DecisionRouteUpdate& incoming) {
+      if (incoming.type == DecisionRouteUpdate::FULL_SYNC) {
+        // A full-sync is the authoritative whole-table state; it supersedes
+        // anything already queued.
+        existing = std::move(incoming);
+      } else {
+        // Fold the incoming INCREMENTAL delta into the pending element.
+        // mergeInPlace preserves existing's type and whole-table-vs-delta
+        // semantics: onto a pending incremental it combines the deltas; onto a
+        // pending full-sync it applies the delta to the snapshot (a deleted
+        // key is dropped from the snapshot, keeping whole-table semantics).
+        existing.mergeInPlace(std::move(incoming));
+      }
+      return true;
+    };
+  }
+  auto fibDecisionRouteUpdatesQueueReader = routeUpdatesQueue.getReader(
+      "fibDecision", std::move(routeUpdateCoalesceFn));
 
   // PrefixManager -> Decision
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;

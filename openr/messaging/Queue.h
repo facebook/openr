@@ -10,6 +10,7 @@
 #include <any>
 #include <atomic>
 #include <deque>
+#include <functional>
 #include <memory>
 #include <mutex>
 #include <utility>
@@ -85,6 +86,22 @@ class RWQueue {
  public:
   RWQueue();
   explicit RWQueue(const std::string&);
+  /**
+   * Construct with an optional push-time coalescer. When set and the queue is
+   * non-empty at push time, the incoming value is offered to merge into the
+   * current tail element (existing) instead of being appended; if the coalescer
+   * returns true it consumed `incoming` (nothing is appended), bounding the
+   * queue depth for eventually-consistent consumers even when the reader is
+   * slow/stalled. Returns false to append as usual (e.g. for non-mergeable
+   * element types/boundaries).
+   *
+   * NOTE: `coalesceFn` is invoked while the queue's internal lock is held, so
+   * it must be cheap/bounded -- an expensive coalescer serializes concurrent
+   * producers. Intended for single-producer, latest-state-wins readers.
+   */
+  RWQueue(
+      const std::string& queueId,
+      std::function<bool(ValueType& existing, ValueType& incoming)> coalesceFn);
   ~RWQueue();
 
   /**
@@ -171,6 +188,11 @@ class RWQueue {
 
   // Pending data
   std::deque<ValueType> queue_;
+
+  // Optional push-time coalescer (see constructor). Set once at construction;
+  // nullptr means normal append behavior.
+  std::function<bool(ValueType& existing, ValueType& incoming)> coalesceFn_{
+      nullptr};
 
   // Sent messages
   size_t writes_{0};

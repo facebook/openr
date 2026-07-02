@@ -11,6 +11,7 @@
 #include <folly/fibers/Semaphore.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/AsyncTimeout.h>
+#include <gflags/gflags.h>
 
 #include <openr/common/ExponentialBackoff.h>
 #include <openr/common/OpenrEventBase.h>
@@ -22,6 +23,8 @@
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/LogSample.h>
+
+DECLARE_bool(enable_fib_route_update_coalescing);
 
 namespace openr {
 

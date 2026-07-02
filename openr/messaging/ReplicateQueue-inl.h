@@ -64,17 +64,15 @@ ReplicateQueue<ValueType>::push(ValueTypeT&& value) {
 template <typename ValueType>
 RQueue<ValueType>
 ReplicateQueue<ValueType>::getReader(
-    const std::optional<std::string>& readerId) {
+    const std::optional<std::string>& readerId,
+    std::function<bool(ValueType&, ValueType&)> coalesceFn) {
   auto lockedReaders = readers_.wlock();
   if (closed_) {
     throw std::runtime_error("queue is closed");
   }
-  if (readerId) {
-    lockedReaders->emplace_back(
-        std::make_shared<RWQueue<ValueType>>(*readerId));
-  } else {
-    lockedReaders->emplace_back(std::make_shared<RWQueue<ValueType>>());
-  }
+  lockedReaders->emplace_back(
+      std::make_shared<RWQueue<ValueType>>(
+          readerId ? *readerId : std::string{}, std::move(coalesceFn)));
   return RQueue<ValueType>(lockedReaders->back());
 }
 

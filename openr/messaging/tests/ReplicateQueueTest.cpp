@@ -68,7 +68,7 @@ TEST(ReplicateQueueTest, Test) {
   std::atomic<size_t> replicationWrites{0};
   manager.addTask([&q, &totalWrites, &replicationWrites]() {
     for (size_t i = 0; i < kTotalWrites; ++i) {
-      q.push(i);
+      q.push(static_cast<int>(i));
       ++totalWrites;
     }
     LOG(INFO) << "Writer finished pushing " << kTotalWrites << " messages.";
@@ -104,6 +104,28 @@ TEST(ReplicateQueueTest, OpenQueueTest) {
   q.open();
   auto r2 = q.getReader("r2");
   EXPECT_EQ(1, q.getNumReaders());
+
+  q.close();
+}
+
+TEST(ReplicateQueueTest, ReaderCoalescing) {
+  ReplicateQueue<int> q;
+  auto plain = q.getReader("plain");
+  auto merged = q.getReader("merged", [](int& existing, int& incoming) {
+    existing += incoming;
+    return true;
+  });
+
+  q.push(1);
+  q.push(2);
+  q.push(3);
+
+  // Coalescing is per-reader: only the reader created with a coalescer merges;
+  // the plain reader still receives every element.
+  EXPECT_EQ(3, plain.size());
+  EXPECT_EQ(1, merged.size());
+  EXPECT_EQ(6, merged.get().value());
+  EXPECT_EQ(1, plain.get().value());
 
   q.close();
 }
