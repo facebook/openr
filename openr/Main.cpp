@@ -171,9 +171,14 @@ main(int argc, char** argv) {
   // NOTE: the coalescer runs under the reader queue's lock, so it must stay
   // cheap. This queue has a single producer (Decision), so there is no
   // cross-producer lock contention.
+  // Coalescing is ON by default; a scope can opt out via the
+  // disable_fib_route_update_coalescing config knob (per-scope, configerator)
+  // for blast-radius control.
+  const bool disableFibRouteUpdateCoalescing =
+      config->getConfig().disable_fib_route_update_coalescing().value_or(false);
   std::function<bool(DecisionRouteUpdate&, DecisionRouteUpdate&)>
       routeUpdateCoalesceFn = nullptr;
-  if (FLAGS_enable_fib_route_update_coalescing) {
+  if (!disableFibRouteUpdateCoalescing) {
     routeUpdateCoalesceFn = [](DecisionRouteUpdate& existing,
                                DecisionRouteUpdate& incoming) {
       if (incoming.type == DecisionRouteUpdate::FULL_SYNC) {

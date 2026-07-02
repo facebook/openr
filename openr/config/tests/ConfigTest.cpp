@@ -568,6 +568,32 @@ TEST(ConfigTest, ToThriftKvStoreConfig) {
                    .enable_flood_pub_pre_compression());
 }
 
+TEST(ConfigTest, FibRouteUpdateCoalescingKnob) {
+  // Optional (no thrift default): unset unless a config explicitly sets it, so
+  // the effective value is false (coalescing enabled) via value_or(false) in
+  // Main.cpp.
+  auto tConfig = getBasicOpenrConfig();
+  auto config = Config(tConfig);
+  EXPECT_FALSE(
+      config.getConfig().disable_fib_route_update_coalescing().has_value());
+
+  // An explicit value is preserved verbatim for per-scope (configerator)
+  // blast-radius control.
+  auto tConfigKnob = getBasicOpenrConfig();
+  tConfigKnob.disable_fib_route_update_coalescing() = true;
+  auto configDisabled = Config(tConfigKnob);
+  ASSERT_TRUE(configDisabled.getConfig()
+                  .disable_fib_route_update_coalescing()
+                  .has_value());
+  EXPECT_TRUE(
+      *configDisabled.getConfig().disable_fib_route_update_coalescing());
+
+  tConfigKnob.disable_fib_route_update_coalescing() = false;
+  auto configEnabled = Config(tConfigKnob);
+  EXPECT_FALSE(
+      *configEnabled.getConfig().disable_fib_route_update_coalescing());
+}
+
 TEST(ConfigTest, NonDefaultVrfConfigGetter) {
   std::string mgmtVrf{"mgmtVrf"};
   thrift::ThriftServerConfig thrift_server_config;

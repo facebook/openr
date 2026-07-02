@@ -734,4 +734,16 @@ struct OpenrConfig {
   * When non-empty, indicates this node is part of a fabric.
   */
   202: optional FabricConfig fabric_config;
+
+  /**
+   * Kill-switch to DISABLE the push-time coalescing of Decision->Fib route
+   * updates (see DecisionRouteUpdate::mergeInPlace and the routeUpdatesQueue
+   * Fib-reader coalescer wired in Main.cpp). Coalescing bounds the
+   * routeUpdatesQueue backlog (and openr memory) under sustained route churn
+   * and is ON by default. Optional (no thrift default) so it is not serialized
+   * into every generated config; when unset the effective value is false
+   * (coalescing enabled). Set this true for per-scope (configerator)
+   * blast-radius control to turn coalescing off for a specific scope.
+   */
+  203: optional bool disable_fib_route_update_coalescing;
 }

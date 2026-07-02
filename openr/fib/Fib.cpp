@@ -8,7 +8,6 @@
 #include <fb303/ServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/logging/xlog.h>
-#include <gflags/gflags.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 #include <openr/common/Constants.h>
@@ -18,22 +17,6 @@
 #include <openr/fib/Fib.h>
 
 namespace fb303 = facebook::fb303;
-
-/*
- * When enabled, the Decision->Fib routeUpdatesQueue reader coalesces
- * incremental route updates at PUSH time (see Main.cpp wiring): if Fib has not
- * yet drained the pending update, a newly-pushed INCREMENTAL update is merged
- * into it rather than appended. This bounds the queue's backlog (and thus openr
- * memory) to ~one route-table-sized update even when Fib is stalled/slow,
- * instead of letting it grow unbounded under route churn. Read by Main.cpp.
- * Enabled by default; set to false to restore per-update (non-coalescing)
- * queueing.
- */
-DEFINE_bool(
-    enable_fib_route_update_coalescing,
-    true,
-    "Coalesce incremental Decision->Fib route updates at push time to bound the "
-    "routeUpdatesQueue backlog (and openr memory) under route churn.");
 
 namespace openr {
 
@@ -100,9 +83,10 @@ Fib::Fib(
   // Fiber to process route updates from Decision.
   // NOTE: bounding of this queue's backlog under route churn is handled at the
   // queue layer (push-time coalescing on the Decision->Fib routeUpdatesQueue
-  // reader, wired in Main.cpp and gated by enable_fib_route_update_coalescing),
-  // so a stalled/slow Fib cannot let the backlog grow unbounded. Here we just
-  // process each (possibly already-coalesced) update.
+  // reader, wired in Main.cpp and gated by the
+  // disable_fib_route_update_coalescing config knob), so a stalled/slow Fib
+  // cannot let the backlog grow unbounded. Here we just process each (possibly
+  // already-coalesced) update.
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
     XLOG(DBG1, "Starting route-update task");
     while (true) {
