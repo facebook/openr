@@ -2390,16 +2390,23 @@ Spark::processAddressEvent(AddressEvent&& event) {
   }
 }
 
+bool
+Spark::skipInterfaceWithoutV4Address(
+    const std::set<folly::CIDRNetwork>& v4Networks) const {
+  return enableV4_ && !v4OverV6Nexthop_ && v4Networks.empty();
+}
+
 void
 Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
   decltype(interfaceDb_) newInterfaceDb{};
 
-  //
-  // To be conisdered a valid interface for Spark to track, it must:
-  // - be up
-  // - have a v6LinkLocal IP
-  // - have an IPv4 addr when v4 is enabled
-  //
+  /*
+   * To be considered a valid interface for Spark to track, it must:
+   * - be up
+   * - have a v6LinkLocal IP
+   * - if v4 is enabled and v4-over-v6-nexthop is disabled, have a v4 IP
+   * - if v4 is enabled and v4-over-v6-nexthop is enabled, v4 IP is not needed
+   */
   for (const auto& info : ifDb) {
     // ATTN: multiple networks can be associated with one ifName.
     //  - Retrieve networks in sorted order;
@@ -2414,12 +2421,21 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
       XLOG(DBG2, "IPv6 link local address not found");
       continue;
     }
-    if (enableV4_ && v4Networks.empty()) {
-      XLOG(DBG2, "IPv4 enabled but no IPv4 addresses are configured");
+    if (skipInterfaceWithoutV4Address(v4Networks)) {
+      XLOGF(
+          DBG1,
+          "Skip interface {} since no IPv4 address is configured",
+          info.ifName);
       continue;
     }
 
-    folly::CIDRNetwork v4Network = enableV4_
+    /*
+     * Use the interface's v4 address when one is present; otherwise fall back
+     * to a dummy address. The dummy is used either when v4 is disabled, or for
+     * a v6-only interface under v4-over-v6-nexthop (RFC5549), where the local
+     * v4 address is not needed for forwarding.
+     */
+    folly::CIDRNetwork v4Network = (enableV4_ && !v4Networks.empty())
         ? *v4Networks.begin()
         : folly::IPAddress::createNetwork("0.0.0.0/32");
     folly::CIDRNetwork v6LinkLocalNetwork = *v6LinkLocalNetworks.begin();

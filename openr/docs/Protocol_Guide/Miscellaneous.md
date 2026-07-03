@@ -15,6 +15,12 @@ interfaces). We use any v4 addresses assigned to the interface as a transport
 address for v4 traffic between nodes. For IPv6 we always use Link-Local address
 as it is always present.
 
+The one exception is **--v4_over_v6_nexthop** (RFC5549), which resolves IPv4
+reachability over IPv6 link-local nexthops. With this enabled an interface does
+not need a v4 address at all, so v6-only interfaces can still form adjacencies
+while v4 is enabled. This allows mixed topologies where some interfaces are
+dual-stack and others are v6-only.
+
 Further, you can't run OpenR on a v4 only network. All communication between
 OpenR processes running on different machines and link discovery is done using
 IPv6 transport layer.

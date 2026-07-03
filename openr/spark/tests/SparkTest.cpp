@@ -376,6 +376,116 @@ TEST_F(InitializationTestFixture, NeighborAdjDbAtInit) {
   createAndConnect();
 }
 
+/*
+ * Test fixture for "mixed mode" topologies: enable_v4=true and
+ * v4_over_v6_nexthop=true (RFC5549), where one interface is dual-stack
+ * (v4+v6) and the peer interface is v6-only. Prior to v4-over-v6-nexthop
+ * relaxing the per-interface v4-address requirement, Spark silently dropped
+ * the v6-only interface and no adjacency could form.
+ */
+class SparkV4OverV6MixedModeFixture : public SimpleSparkFixture {
+ protected:
+  void
+  createConfig() override {
+    // enableV4 = true, v4OverV6Nexthop = true on both nodes
+    auto tConfig1 = getBasicOpenrConfig(
+        nodeName1_,
+        {} /* areaCfg */,
+        true /* enableV4 */,
+        true /* dryrun */,
+        true /* enableV4OverV6Nexthop */);
+    auto tConfig2 = getBasicOpenrConfig(
+        nodeName2_,
+        {} /* areaCfg */,
+        true /* enableV4 */,
+        true /* dryrun */,
+        true /* enableV4OverV6Nexthop */);
+    tConfig1.thrift_server()->openr_ctrl_port() = 1;
+    tConfig2.thrift_server()->openr_ctrl_port() = 1;
+
+    config1_ = std::make_shared<Config>(tConfig1);
+    config2_ = std::make_shared<Config>(tConfig2);
+  }
+
+  void
+  createAndConnect() override {
+    mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
+
+    ConnectedIfPairs connectedPairs = {
+        {iface1, {{iface2, 10}}},
+        {iface2, {{iface1, 10}}},
+    };
+    mockIoProvider_->setConnectedPairs(connectedPairs);
+
+    createConfig();
+
+    node1_ = createSpark(nodeName1_, config1_);
+    node2_ = createSpark(nodeName2_, config2_);
+
+    // iface1 is dual-stack (v4 + v6)
+    node1_->updateInterfaceDb({InterfaceInfo(
+        iface1 /* ifName */,
+        true /* isUp */,
+        ifIndex1 /* ifIndex */,
+        {ip1V4, ip1V6} /* networks */)});
+
+    // iface2 is v6-only -- no v4 address configured. Under
+    // v4_over_v6_nexthop this interface must still be tracked and form an
+    // adjacency.
+    node2_->updateInterfaceDb({InterfaceInfo(
+        iface2 /* ifName */,
+        true /* isUp */,
+        ifIndex2 /* ifIndex */,
+        {ip2V6} /* networks */)});
+
+    validate();
+  }
+
+  void
+  validate() override {
+    const folly::IPAddress kZeroV4{"0.0.0.0"};
+
+    // node1 (dual-stack) should see node2 (v6-only) come up. node2 advertises
+    // a dummy 0.0.0.0 v4 transport address since it has no v4 address.
+    {
+      auto events = node1_->waitForEvents(NB_UP);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
+      auto& event = events.value().back();
+      EXPECT_EQ(iface1, event.localIfName);
+      EXPECT_EQ(nodeName2_, event.remoteNodeName);
+      EXPECT_EQ(
+          std::make_pair(kZeroV4, ip2V6.first),
+          SparkWrapper::getTransportAddrs(event));
+      ASSERT_TRUE(node1_->waitForInitializationEvent());
+      ASSERT_EQ(1, node1_->getTotalNeighborCount());
+      ASSERT_EQ(1, node1_->getActiveNeighborCount());
+    }
+
+    // node2 (v6-only) should see node1 (dual-stack) come up with its real v4.
+    {
+      auto events = node2_->waitForEvents(NB_UP);
+      ASSERT_TRUE(events.has_value() && events.value().size() == 1);
+      auto& event = events.value().back();
+      EXPECT_EQ(iface2, event.localIfName);
+      EXPECT_EQ(nodeName1_, event.remoteNodeName);
+      EXPECT_EQ(
+          std::make_pair(ip1V4.first, ip1V6.first),
+          SparkWrapper::getTransportAddrs(event));
+      ASSERT_TRUE(node2_->waitForInitializationEvent());
+      ASSERT_EQ(1, node2_->getTotalNeighborCount());
+      ASSERT_EQ(1, node2_->getActiveNeighborCount());
+    }
+  }
+};
+
+//
+// Mixed-mode adjacency: dual-stack <-> v6-only under v4_over_v6_nexthop.
+// Verifies the v6-only interface is tracked and an adjacency forms.
+//
+TEST_F(SparkV4OverV6MixedModeFixture, MixedV4V6Adjacency) {
+  createAndConnect();
+}
+
 //
 // Start 2 Spark instances and wait them forming adj.
 // Verify public API works as expected and check neighbor state.

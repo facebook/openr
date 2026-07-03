@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <set>
+
 #include <fmt/format.h>
 #include <folly/SocketAddress.h>
 #include <folly/container/F14Map.h>
@@ -173,6 +175,16 @@ class Spark final : public OpenrEventBase {
    *  2) Open/R Initialization Event from LinkMonitor;
    */
   void processInterfaceUpdates(InterfaceDatabase&& interfaceUpdates);
+
+  /*
+   * Predicate used by processInterfaceUpdates() to decide whether an interface
+   * should be skipped because a required IPv4 address is absent. A v4 address
+   * is required only when IPv4 is enabled and v4-over-v6-nexthop (RFC5549) is
+   * disabled; under v4-over-v6-nexthop a v6-only interface is still valid.
+   */
+  bool skipInterfaceWithoutV4Address(
+      const std::set<folly::CIDRNetwork>& v4Networks) const;
+
   void processInitializationEvent(thrift::InitializationEvent&& event);
 
   // util function to delete interface in spark

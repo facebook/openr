@@ -522,9 +522,11 @@ struct OpenrConfig {
   /** If set to true, Open/R will not try to program routes. */
   6: optional bool dryrun;
   /**
-   * Open/R supports v4 as well but it needs to be turned on explicitly. It is
-   * expected that each interface will have v4 address configured for link local
-   * transport and v4/v6 topologies are congruent.
+   * Open/R supports v4 as well but it needs to be turned on explicitly. When
+   * enabled, it is expected that each interface has a v4 address configured for
+   * link-local transport and that the v4/v6 topologies are congruent -- unless
+   * `v4_over_v6_nexthop` (RFC5549) is set, in which case an interface may be
+   * v6-only and its v4 address is optional.
    */
   7: optional bool enable_v4;
   /**
@@ -568,7 +570,9 @@ struct OpenrConfig {
   25: optional MonitorConfig monitor_config;
 
   /**
-   * RFC5549 -- IPv4 reachability over IPv6 nexthop
+   * RFC5549 -- IPv4 reachability over IPv6 nexthop. Also relaxes the
+   * per-interface v4-address requirement of `enable_v4`: a v6-only interface
+   * can still form an adjacency while v4 is enabled.
    */
   28: optional bool v4_over_v6_nexthop;
 
