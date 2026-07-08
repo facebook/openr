@@ -71,7 +71,7 @@ struct BgpCommunities {
   2: string _protocol;
   3: Protocol _protocol_id;
   4: optional string _revision;
-  5: map<string/* community name */ , BgpCommunity> objects;
+  5: map<string /* community name */, BgpCommunity> objects;
 }
 
 struct BgpLocalPref {
@@ -85,7 +85,7 @@ struct BgpLocalPrefs {
   2: string _protocol;
   3: Protocol _protocol_id;
   4: optional string _revision;
-  5: map<string/* localpref name */ , BgpLocalPref> objects;
+  5: map<string /* localpref name */, BgpLocalPref> objects;
 }
 
 struct BgpOrigin {
@@ -99,7 +99,7 @@ struct BgpOrigins {
   2: string _protocol;
   3: Protocol _protocol_id;
   4: optional string _revision;
-  5: map<string/* origin name */ , BgpOrigin> objects;
+  5: map<string /* origin name */, BgpOrigin> objects;
 }
 
 struct BgpPath {
@@ -113,7 +113,7 @@ struct BgpPaths {
   2: string _protocol;
   3: Protocol _protocol_id;
   4: optional string _revision;
-  5: map<string/* path name */ , BgpPath> objects;
+  5: map<string /* path name */, BgpPath> objects;
 }
 
 //
@@ -140,7 +140,7 @@ struct OpenrTag {
 struct OpenrTags {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* tag set name */ , OpenrTag> objects;
+  3: map<string /* tag set name */, OpenrTag> objects;
 }
 
 struct OpenrAreaStack {
@@ -151,7 +151,7 @@ struct OpenrAreaStack {
 struct OpenrAreaStacks {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* area stack name */ , OpenrAreaStack> objects;
+  3: map<string /* area stack name */, OpenrAreaStack> objects;
 }
 
 struct OpenrPathPreference {
@@ -162,7 +162,7 @@ struct OpenrPathPreference {
 struct OpenrPathPreferences {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* path pref name */ , OpenrPathPreference> objects;
+  3: map<string /* path pref name */, OpenrPathPreference> objects;
 }
 
 struct OpenrSourcePreference {
@@ -173,7 +173,7 @@ struct OpenrSourcePreference {
 struct OpenrSourcePreferences {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* admin pref name */ , OpenrSourcePreference> objects;
+  3: map<string /* admin pref name */, OpenrSourcePreference> objects;
 }
 
 struct OpenrIgpCostRange {
@@ -185,7 +185,7 @@ struct OpenrIgpCostRange {
 struct OpenrIgpCostRanges {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* admin igp cost name */ , OpenrIgpCostRange> objects;
+  3: map<string /* admin igp cost name */, OpenrIgpCostRange> objects;
 }
 
 struct OpenrPrefixForwardingType {
@@ -196,7 +196,7 @@ struct OpenrPrefixForwardingType {
 struct OpenrPrefixForwardingTypes {
   1: string _description;
   4: optional string _revision;
-  5: map<string/* type name */ , OpenrPrefixForwardingType> objects;
+  5: map<string /* type name */, OpenrPrefixForwardingType> objects;
 }
 
 struct OpenrPrefixForwardingAlgorithm {
@@ -207,7 +207,7 @@ struct OpenrPrefixForwardingAlgorithm {
 struct OpenrPrefixForwardingAlgorithms {
   1: string _description;
   4: optional string _revision;
-  5: map<string/* algorithm name */ , OpenrPrefixForwardingAlgorithm> objects;
+  5: map<string /* algorithm name */, OpenrPrefixForwardingAlgorithm> objects;
 }
 
 //
@@ -224,7 +224,7 @@ struct NextHop {
 struct NextHops {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* nexthop name */ , NextHop> objects;
+  3: map<string /* nexthop name */, NextHop> objects;
 }
 
 struct UserVariable {
@@ -236,7 +236,7 @@ struct UserVariable {
 struct UserVariables {
   1: string _description;
   2: optional string _revision;
-  3: map<string/* variable name */ , UserVariable> objects;
+  3: map<string /* variable name */, UserVariable> objects;
 }
 
 struct PolicyDefinitions {
@@ -445,7 +445,7 @@ struct Filters {
   2: optional string _protocol;
   3: optional Protocol _protocol_id;
   4: optional string _revision;
-  5: map<string/* filter name */ , Filter> objects;
+  5: map<string /* filter name */, Filter> objects;
 }
 
 struct PolicyFilters {
