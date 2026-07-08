@@ -123,7 +123,7 @@ struct LinkStatus {
  */
 struct LinkStatusRecords {
   @cpp.Type{template = "std::unordered_map"}
-  1: map<string/* interfaceName */ , LinkStatus> linkStatusMap;
+  1: map<string /* interfaceName */, LinkStatus> linkStatusMap;
 }
 
 /**
