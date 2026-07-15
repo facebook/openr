@@ -17,7 +17,6 @@
 
 #include <openr/common/Constants.h>
 #include <openr/common/LsdbUtil.h>
-#include <openr/common/NetworkUtil.h>
 #include <openr/decision/Decision.h>
 #include <openr/fib/Fib.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -101,43 +100,6 @@ const auto adj42 =
     createAdjacency("2", "4/2", "2/4", "fe80::2", "192.168.0.2", 1, 0);
 const auto adj43 =
     createAdjacency("3", "4/3", "3/4", "fe80::3", "192.168.0.3", 1, 0);
-
-using NextHop = pair<string /* ifname */, folly::IPAddress /* nexthop ip */>;
-// Note: use folly::F14FastSet bcoz paths in a route can be in arbitrary order
-using NextHopsWithMetric =
-    folly::F14FastSet<pair<NextHop /* nexthop */, int32_t /* path metric */>>;
-using RouteMap = unordered_map<
-    pair<string /* node name */, string /* ip prefix */>,
-    NextHopsWithMetric>;
-
-// disable V4 by default
-NextHop
-toNextHop(thrift::Adjacency adj, bool isV4 = false) {
-  return {
-      *adj.ifName(), toIPAddress(isV4 ? *adj.nextHopV4() : *adj.nextHopV6())};
-}
-
-// Note: routeMap will be modified
-void
-fillRouteMap(
-    const string& node,
-    RouteMap& routeMap,
-    const thrift::RouteDatabase& routeDb) {
-  for (auto const& route : *routeDb.unicastRoutes()) {
-    auto prefix = toString(*route.dest());
-    for (const auto& nextHop : *route.nextHops()) {
-      const auto nextHopAddr = toIPAddress(*nextHop.address());
-      assert(nextHop.address()->ifName());
-      VLOG(4) << "node: " << node << " prefix: " << prefix << " -> "
-              << nextHop.address()->ifName().value() << " : " << nextHopAddr
-              << " (" << *nextHop.metric() << ")";
-
-      routeMap[make_pair(node, prefix)].insert(
-          {{nextHop.address()->ifName().value(), nextHopAddr},
-           *nextHop.metric()});
-    }
-  }
-}
 
 } // namespace
 
