@@ -328,7 +328,7 @@ class Config {
 
   const std::string
   getSSLEccCurve() const {
-    auto eccCurve = getThriftServerConfig().ecc_curve_name();
+    auto eccCurve = getThriftServerConfig().ecc_curve_name().to_optional();
     if ((!eccCurve) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but ecc_curve_name is empty");
@@ -385,7 +385,7 @@ class Config {
 
   const std::string
   getSSLSeedPath() const {
-    auto seedPath = getThriftServerConfig().ticket_seed_path();
+    auto seedPath = getThriftServerConfig().ticket_seed_path().to_optional();
     if ((!seedPath) && isSecureThriftServerEnabled()) {
       throw std::invalid_argument(
           "enable_secure_thrift_server = true, but ticket_seed_path is empty");
