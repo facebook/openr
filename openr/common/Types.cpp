@@ -30,7 +30,6 @@ RegexSet::RegexSet(std::vector<std::string> const& keyPrefixList) {
               "Failed to add prefixes to RE2 set: '{}', error: '{}'",
               keyPrefix,
               re2AddError));
-      return;
     }
   }
   if (!regexSet_->Compile()) {
