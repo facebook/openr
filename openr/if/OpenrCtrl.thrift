@@ -5,14 +5,18 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+@hack.NamePrefix{prefix = "Openr_"}
+@hack.LegacyAlwaysIncludeNamePrefixInProcessor
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/openr"
+
+namespace hack ""
 
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace go openr.OpenrCtrl
 namespace py openr.OpenrCtrl
 namespace py3 openr.thrift
-namespace php Openr
 namespace lua openr.OpenrCtrl
 namespace rust openr_thrift
 namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
@@ -22,6 +26,7 @@ include "openr/if/KvStore.thrift"
 include "openr/if/OpenrConfig.thrift"
 include "openr/if/Types.thrift"
 include "thrift/annotation/thrift.thrift"
+include "thrift/annotation/hack.thrift"
 
 exception OpenrError {
   @thrift.ExceptionMessage

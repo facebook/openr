@@ -5,14 +5,17 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+@hack.NamePrefix{prefix = "Openr_"}
+@hack.LegacyOmitPrefixInNameString
 package "meta.com/openr"
+
+namespace hack ""
 
 namespace cpp openr.thrift
 namespace cpp2 openr.thrift
 namespace go openr.Network
 namespace py openr.Network
 namespace py3 openr.thrift
-namespace php Openr
 namespace lua openr.Network
 namespace rust openr_network_thrift
 namespace wiki Open_Routing.Thrift_APIs.Network
@@ -20,6 +23,7 @@ namespace wiki Open_Routing.Thrift_APIs.Network
 // Using the defaults from here:
 // https://en.wikipedia.org/wiki/Administrative_distance
 include "thrift/annotation/cpp.thrift"
+include "thrift/annotation/hack.thrift"
 
 enum AdminDistance {
   DIRECTLY_CONNECTED = 0,
