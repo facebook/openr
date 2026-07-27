@@ -293,6 +293,15 @@ Config::checkLinkMonitorConfig() const {
             *lmConf.linkflap_initial_backoff_ms(),
             *lmConf.linkflap_max_backoff_ms()));
   }
+
+  for (const thrift::InterfaceMetricStatic& staticMetric :
+       *lmConf.static_interface_metrics()) {
+    if (*staticMetric.metric() <= 0) {
+      throw std::out_of_range(
+          fmt::format(
+              "Static metric ({}) MUST be > 0", *staticMetric.metric()));
+    }
+  }
 }
 
 void

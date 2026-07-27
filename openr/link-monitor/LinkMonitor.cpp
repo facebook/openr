@@ -139,6 +139,14 @@ LinkMonitor::LinkMonitor(
   CHECK(configStore_);
   CHECK(nlSock_);
 
+  // Pre-compile the static per-interface metric values.
+  for (const thrift::InterfaceMetricStatic& staticMetric :
+       *config->getLinkMonitorConfig().static_interface_metrics()) {
+    staticInterfaceMetrics_.emplace_back(
+        AreaConfiguration::compileRegexSet(*staticMetric.interface_regexes()),
+        *staticMetric.metric());
+  }
+
   // Hold time for synchronizing adjacencies in KvStore. We expect all the
   // adjacencies to be fully established within hold time after Open/R starts.
   // TODO: remove this with strict Open/R initialization sequence
@@ -415,6 +423,26 @@ LinkMonitor::stop() {
   XLOG(INFO, "[Exit] Successfully stopped LinkMonitor eventbase.");
 }
 
+std::optional<int32_t>
+LinkMonitor::getStaticMetric(const std::string& ifName) const {
+  for (const auto& [regexSet, metric] : staticInterfaceMetrics_) {
+    if (regexSet->Match(ifName, nullptr)) {
+      return metric;
+    }
+  }
+  return std::nullopt;
+}
+
+int32_t
+LinkMonitor::getMetric(std::string const& ifName, int64_t rttUs) const {
+  // A static per-interface metric takes precedence over the RTT-derived (or
+  // default hop-count) metric.
+  if (const std::optional<int32_t> staticMetric = getStaticMetric(ifName)) {
+    return *staticMetric;
+  }
+  return useRttMetric_ ? getRttMetric(rttUs) : 1;
+}
+
 void
 LinkMonitor::neighborUpEvent(
     const NeighborEvent& event, bool isGracefulRestart) {
@@ -439,7 +467,7 @@ LinkMonitor::neighborUpEvent(
       localIfName /* local ifName neighbor discovered on */,
       toString(neighborAddrV6) /* nextHopV6 */,
       toString(neighborAddrV4) /* nextHopV4 */,
-      useRttMetric_ ? getRttMetric(rttUs) : 1 /* metric */,
+      getMetric(localIfName, rttUs) /* metric */,
       0 /* adjacency-label */,
       false /* overload bit */,
       useRttMetric_ ? rttUs : 0 /* rtt */,
@@ -617,6 +645,18 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
   const auto& remoteNodeName = event.remoteNodeName;
   const auto& localIfName = event.localIfName;
   const auto& rttUs = event.rttUs;
+
+  // Interfaces with a static metric keep their configured metric and ignore
+  // RTT changes.
+  if (getStaticMetric(localIfName).has_value()) {
+    XLOGF(
+        DBG2,
+        "Ignoring RTT change for neighbor {} on interface {}: static metric override configured",
+        remoteNodeName,
+        localIfName);
+    return;
+  }
+
   int32_t newRttMetric = getRttMetric(rttUs);
   const auto& area = event.area;
 

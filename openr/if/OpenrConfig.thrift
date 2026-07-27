@@ -142,6 +142,16 @@ struct DecisionConfig {
   5: i32 unblock_initial_routes_ms = 120000;
 }
 
+struct InterfaceMetricStatic {
+  /**
+   * Interface-name regexes this override applies to.
+   * Example: ["po3.*", "ethernet1"]
+   */
+  1: list<string> interface_regexes;
+  /** Metric to be used for matching interfaces. */
+  2: i32 metric;
+}
+
 struct LinkMonitorConfig {
   /**
    * When link goes down after being stable/up for long time, then the backoff
@@ -180,6 +190,12 @@ struct LinkMonitorConfig {
   * By default, disable it.
   */
   8: bool enable_link_status_measurement = false;
+
+  /**
+   * Static per-interface metric. When set, matching interfaces will use
+   * configured metric, even if use_rtt_metric is true.
+   */
+  9: list<InterfaceMetricStatic> static_interface_metrics = [];
 }
 
 struct StepDetectorConfig {

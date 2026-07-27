@@ -401,6 +401,36 @@ TEST(ConfigTest, PopulateInternalDb) {
     confInvalidLm.link_monitor_config()->linkflap_max_backoff_ms() = 300000;
     EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
   }
+  // static_interface_metrics: metric == 0
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    openr::thrift::InterfaceMetricStatic staticMetric;
+    staticMetric.interface_regexes() = {"po3.*"};
+    staticMetric.metric() = 0;
+    confInvalidLm.link_monitor_config()->static_interface_metrics() = {
+        staticMetric};
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
+  }
+  // static_interface_metrics: metric < 0
+  {
+    auto confInvalidLm = getBasicOpenrConfig();
+    openr::thrift::InterfaceMetricStatic staticMetric;
+    staticMetric.interface_regexes() = {"po3.*"};
+    staticMetric.metric() = -1;
+    confInvalidLm.link_monitor_config()->static_interface_metrics() = {
+        staticMetric};
+    EXPECT_THROW(auto c = Config(confInvalidLm), std::out_of_range);
+  }
+  // static_interface_metrics: valid metric > 0
+  {
+    auto confValidLm = getBasicOpenrConfig();
+    openr::thrift::InterfaceMetricStatic staticMetric;
+    staticMetric.interface_regexes() = {"po3.*"};
+    staticMetric.metric() = 10;
+    confValidLm.link_monitor_config()->static_interface_metrics() = {
+        staticMetric};
+    EXPECT_NO_THROW((Config(confValidLm)));
+  }
 
   // watchdog
 

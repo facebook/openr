@@ -12,6 +12,7 @@
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <glog/logging.h>
+#include <re2/set.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/AsyncThrottle.h>
@@ -185,6 +186,21 @@ class LinkMonitor final : public OpenrEventBase {
   void neighborRttChangeEvent(const NeighborEvent& event);
 
   /*
+   * Returns the statically-configured metric for `ifName` if it matches any
+   * `static_interface_metrics` entry (first matching entry wins), else
+   * std::nullopt.
+   */
+  std::optional<int32_t> getStaticMetric(std::string const& ifName) const;
+
+  /*
+   * Returns the final adjacency metric for interface `ifName`: the static
+   * per-interface metric if configured (see getStaticMetric), otherwise the
+   * RTT-derived metric when `use_rtt_metric` is set, or the default hop-count
+   * metric (1).
+   */
+  int32_t getMetric(std::string const& ifName, int64_t rttUs) const;
+
+  /*
    * [Public Api Helper]
    */
   void setInterfaceMetricIncrementHelper(
@@ -331,6 +347,12 @@ class LinkMonitor final : public OpenrEventBase {
   bool enableV4_{false};
   // Use spark measured RTT to neighbor as link metric
   bool useRttMetric_{false};
+  // Ordered list of (compiled interface-name regex set -> static metric),
+  // built from LinkMonitorConfig::static_interface_metrics. For an interface
+  // matching any regex in an entry, that entry's metric is used in place of the
+  // RTT-derived metric. First matching entry wins.
+  std::vector<std::pair<std::shared_ptr<re2::RE2::Set>, int32_t>>
+      staticInterfaceMetrics_;
   // link flap back offs
   std::chrono::milliseconds linkflapInitBackoff_;
   std::chrono::milliseconds linkflapMaxBackoff_;

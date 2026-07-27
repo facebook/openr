@@ -106,6 +106,11 @@ const uint64_t kTimestamp{1000000};
 const uint64_t kNodeLabel{0};
 const std::string kConfigKey = "link-monitor-config";
 
+// Static per-interface metrics used by the StaticInterfaceMetric test fixtures.
+constexpr int32_t kStaticInterfaceMetric{999};
+constexpr int32_t kStaticFirstMatchMetric{111};
+constexpr int32_t kStaticSecondMatchMetric{222};
+
 const auto adj_2_1 = createThriftAdjacency(
     "node-2",
     if_2_1,
@@ -1745,6 +1750,215 @@ TEST_F(RttMetricTestFixture, RttChangeUpdatesAdvertisedMetric) {
     expectedAdjDbs.push(std::move(adjDb));
     checkNextAdjPub("adj:node-1");
   }
+}
+
+// Fixture with a static per-interface metric configured for interfaces matching
+// "iface_2.*". use_rtt_metric is enabled so the tests also prove that the
+// static metric takes precedence over the RTT-derived metric.
+class StaticInterfaceMetricTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+    tConfig.link_monitor_config()->use_rtt_metric() = true;
+
+    thrift::InterfaceMetricStatic staticMetric;
+    staticMetric.interface_regexes() = {"iface_2.*"};
+    staticMetric.metric() = kStaticInterfaceMetric;
+    tConfig.link_monitor_config()->static_interface_metrics() = {staticMetric};
+    return tConfig;
+  }
+};
+
+// A neighbor discovered on an interface matching static_interface_metrics is
+// advertised with the configured metric instead of the RTT-derived metric.
+TEST_F(
+    StaticInterfaceMetricTestFixture,
+    StaticMetricOverridesRttOnMatchingInterface) {
+  constexpr int64_t kRttUs = 50000; // getRttMetric() would yield 500
+
+  auto upEvent = nb2_up_event; // iface_2_1 matches "iface_2.*"
+  upEvent.rttUs = kRttUs;
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(NeighborEvents({std::move(upEvent)})));
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+  auto expectedAdj = createThriftAdjacency(
+      "node-2",
+      if_2_1,
+      nb2_v6_addr,
+      nb2_v4_addr,
+      kStaticInterfaceMetric /* metric: static override, not getRttMetric() */,
+      0 /* label */,
+      false /* overload-bit */,
+      kRttUs /* rtt */,
+      kTimestamp,
+      Constants::kDefaultAdjWeight,
+      "" /* otherIfName */);
+  expectedAdjDbs.push(createAdjDb("node-1", {expectedAdj}, kNodeLabel));
+  checkNextAdjPub("adj:node-1");
+}
+
+// A neighbor on an interface that does NOT match static_interface_metrics falls
+// back to the RTT-derived metric.
+TEST_F(StaticInterfaceMetricTestFixture, RttMetricUsedOnNonMatchingInterface) {
+  constexpr int64_t kRttUs = 50000;
+  const int32_t rttMetric = std::max(static_cast<int>(kRttUs / 100), 1); // 500
+
+  auto upEvent = nb3_up_event; // iface_3_1 does NOT match "iface_2.*"
+  upEvent.rttUs = kRttUs;
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(NeighborEvents({std::move(upEvent)})));
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+  auto expectedAdj = createThriftAdjacency(
+      "node-3",
+      if_3_1,
+      nb3_v6_addr,
+      nb3_v4_addr,
+      rttMetric /* metric: RTT-derived, no static override */,
+      0 /* label */,
+      false /* overload-bit */,
+      kRttUs /* rtt */,
+      kTimestamp,
+      Constants::kDefaultAdjWeight,
+      "" /* otherIfName */);
+  expectedAdjDbs.push(createAdjDb("node-1", {expectedAdj}, kNodeLabel));
+  checkNextAdjPub("adj:node-1");
+}
+
+// An RTT change on a static-metric interface is ignored (its metric stays
+// fixed), while an RTT change on a non-static interface still updates its
+// metric. nb2 (iface_2_1) has a static metric; nb3 (iface_3_1) does not.
+TEST_F(
+    StaticInterfaceMetricTestFixture,
+    RttChangeIgnoredForStaticMetricInterface) {
+  constexpr int64_t kInitialRttUs = 50000;
+  constexpr int64_t kUpdatedRttUs = 100000;
+  const int32_t nb3UpdatedMetric =
+      std::max(static_cast<int>(kUpdatedRttUs / 100), 1); // 1000
+
+  auto buildStaticAdj = [](int64_t rttUs) {
+    return createThriftAdjacency(
+        "node-2",
+        if_2_1,
+        nb2_v6_addr,
+        nb2_v4_addr,
+        kStaticInterfaceMetric,
+        0 /* label */,
+        false /* overload-bit */,
+        rttUs,
+        kTimestamp,
+        Constants::kDefaultAdjWeight,
+        "" /* otherIfName */);
+  };
+  auto buildRttAdj = [](int32_t metric, int64_t rttUs) {
+    return createThriftAdjacency(
+        "node-3",
+        if_3_1,
+        nb3_v6_addr,
+        nb3_v4_addr,
+        metric,
+        0 /* label */,
+        false /* overload-bit */,
+        rttUs,
+        kTimestamp,
+        Constants::kDefaultAdjWeight,
+        "" /* otherIfName */);
+  };
+
+  // Bring both neighbors up.
+  {
+    auto up2 = nb2_up_event;
+    up2.rttUs = kInitialRttUs;
+    auto up3 = nb3_up_event;
+    up3.rttUs = kInitialRttUs;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(up2), std::move(up3)})));
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+    const int32_t nb3InitialMetric =
+        std::max(static_cast<int>(kInitialRttUs / 100), 1); // 500
+    expectedAdjDbs.push(createAdjDb(
+        "node-1",
+        {buildStaticAdj(kInitialRttUs),
+         buildRttAdj(nb3InitialMetric, kInitialRttUs)},
+        kNodeLabel));
+    checkNextAdjPub("adj:node-1");
+  }
+
+  // RTT change on nb2 (static iface) is ignored -> no publication. The
+  // subsequent RTT change on nb3 (rtt iface) is applied and triggers a
+  // publication; the resulting DB must show nb2 unchanged (still the static
+  // metric and its original rtt) and nb3 updated.
+  {
+    auto rtt2 = nb2_up_event;
+    rtt2.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
+    rtt2.rttUs = kUpdatedRttUs;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(rtt2)})));
+
+    auto rtt3 = nb3_up_event;
+    rtt3.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
+    rtt3.rttUs = kUpdatedRttUs;
+    neighborUpdatesQueue.push(
+        NeighborInitEvent(NeighborEvents({std::move(rtt3)})));
+
+    expectedAdjDbs.push(createAdjDb(
+        "node-1",
+        {buildStaticAdj(kInitialRttUs),
+         buildRttAdj(nb3UpdatedMetric, kUpdatedRttUs)},
+        kNodeLabel));
+    checkNextAdjPub("adj:node-1");
+  }
+}
+
+// Fixture with two overlapping static-metric entries that both match iface_2_1;
+// the first matching entry (in list order) must win.
+class StaticInterfaceMetricFirstMatchTestFixture
+    : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+    tConfig.link_monitor_config()->use_rtt_metric() = true;
+
+    thrift::InterfaceMetricStatic first;
+    first.interface_regexes() = {"iface_2.*"};
+    first.metric() = kStaticFirstMatchMetric;
+    thrift::InterfaceMetricStatic second;
+    second.interface_regexes() = {"iface.*"};
+    second.metric() = kStaticSecondMatchMetric;
+    tConfig.link_monitor_config()->static_interface_metrics() = {first, second};
+    return tConfig;
+  }
+};
+
+// iface_2_1 matches both entries; the metric from the first entry is used.
+TEST_F(StaticInterfaceMetricFirstMatchTestFixture, FirstMatchingEntryWins) {
+  auto upEvent = nb2_up_event;
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(NeighborEvents({std::move(upEvent)})));
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+  auto expectedAdj = createThriftAdjacency(
+      "node-2",
+      if_2_1,
+      nb2_v6_addr,
+      nb2_v4_addr,
+      kStaticFirstMatchMetric /* first matching entry wins */,
+      0 /* label */,
+      false /* overload-bit */,
+      nb2_up_event.rttUs /* rtt */,
+      kTimestamp,
+      Constants::kDefaultAdjWeight,
+      "" /* otherIfName */);
+  expectedAdjDbs.push(createAdjDb("node-1", {expectedAdj}, kNodeLabel));
+  checkNextAdjPub("adj:node-1");
 }
 
 class DampenLinkTestFixture : public LinkMonitorTestFixture {
