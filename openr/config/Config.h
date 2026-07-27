@@ -319,11 +319,9 @@ class Config {
         isSubstituteX509PathsFromEnvEnabled() && certPathEnv != nullptr &&
         fs::exists(std::string(certPathEnv))) {
       return std::string(certPathEnv);
-    } else {
-      throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_cert_path can be empty, x509_cert_path doesn't exist, or THRIFT_TLS_SRV_CERT environment variable path doesn't exist");
     }
-    return "";
+    throw std::invalid_argument(
+        "enable_secure_thrift_server = true, but x509_cert_path can be empty, x509_cert_path doesn't exist, or THRIFT_TLS_SRV_CERT environment variable path doesn't exist");
   }
 
   const std::string
@@ -353,11 +351,9 @@ class Config {
         isSubstituteX509PathsFromEnvEnabled() && caPathEnv != nullptr &&
         fs::exists(std::string(caPathEnv))) {
       return std::string(caPathEnv);
-    } else {
-      throw std::invalid_argument(
-          "enable_secure_thrift_server = true, but x509_ca_path can be empty, x509_ca_path doesn't exist, or THRIFT_TLS_CL_CERT_PATH environment variable path doesn't exist");
     }
-    return "";
+    throw std::invalid_argument(
+        "enable_secure_thrift_server = true, but x509_ca_path can be empty, x509_ca_path doesn't exist, or THRIFT_TLS_CL_CERT_PATH environment variable path doesn't exist");
   }
 
   const std::string
