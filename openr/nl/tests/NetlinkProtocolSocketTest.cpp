@@ -117,7 +117,6 @@ class NlMessageFixture : public ::testing::Test {
 
     if (getuid()) {
       SKIP() << "Must run this test as root";
-      return;
     }
 
     // cleanup old interfaces in any
