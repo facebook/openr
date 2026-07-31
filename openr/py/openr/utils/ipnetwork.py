@@ -28,13 +28,35 @@ from openr.thrift.OpenrConfig.thrift_enums import (
 from openr.thrift.Types.thrift_types import RouteDatabase as RouteDatabaseThriftPython
 
 
+# The deprecated IPv4-compatible IPv6 range is ::/96 — i.e. 12 leading zero bytes.
+# Hoisted to module scope so the hot sprint_addr path doesn't rebuild it per call.
+_V4_COMPAT_PREFIX: bytes = b"\x00" * 12
+
+
 def sprint_addr(addr: bytes) -> str:
     """binary ip addr -> string"""
 
     if not len(addr) or not addr:
         return ""
 
-    return str(ipaddress.ip_address(addr))
+    # socket.inet_ntop is a thin C wrapper over the libc address formatter and is
+    # markedly faster than building an ipaddress.ip_address object just to str() it.
+    # Dispatch on raw byte length (4 == IPv4, 16 == IPv6). For the deprecated
+    # IPv4-compatible ::/96 block glibc's inet_ntop renders a dotted-quad while
+    # ipaddress renders hextets, so fall back to ipaddress there to keep output
+    # byte-for-byte identical.
+    if len(addr) == 4:
+        return socket.inet_ntop(socket.AF_INET, addr)
+    if len(addr) != 16:
+        # Preserve the original str(ipaddress.ip_address(addr)) contract: any addr
+        # whose length isn't 0/4/16 bytes must raise ValueError with this exact
+        # message. Without this guard, inet_ntop(AF_INET6, ...) would instead
+        # surface a length error with a different message (and, on some libc/Python
+        # builds, a different exception type), breaking type/message parity.
+        raise ValueError(f"{addr!r} does not appear to be an IPv4 or IPv6 address")
+    if addr[:12] == _V4_COMPAT_PREFIX:
+        return str(ipaddress.ip_address(addr))
+    return socket.inet_ntop(socket.AF_INET6, addr)
 
 
 def sprint_prefix(prefix: IpPrefix | network_types_py3.IpPrefix) -> str:
