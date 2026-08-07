@@ -301,6 +301,14 @@ Config::checkLinkMonitorConfig() const {
           fmt::format(
               "Static metric ({}) MUST be > 0", *staticMetric.metric()));
     }
+    if (staticMetric.max_metric().has_value() &&
+        *staticMetric.metric() > *staticMetric.max_metric()) {
+      throw std::out_of_range(
+          fmt::format(
+              "Static metric ({}) MUST be <= max_metric ({})",
+              *staticMetric.metric(),
+              *staticMetric.max_metric()));
+    }
   }
 }
 

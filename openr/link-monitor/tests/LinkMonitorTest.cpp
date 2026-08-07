@@ -1961,6 +1961,105 @@ TEST_F(StaticInterfaceMetricFirstMatchTestFixture, FirstMatchingEntryWins) {
   checkNextAdjPub("adj:node-1");
 }
 
+// Fixture with a static metric (50) and a max metric (100) for interfaces
+// matching "iface_2.*", so tests can show the final advertised metric is capped
+// at max_metric even after soft-drain increments push it above the cap.
+constexpr int32_t kStaticBaseMetric{50};
+constexpr int32_t kMaxInterfaceMetric{100};
+
+class MaxInterfaceMetricTestFixture : public LinkMonitorTestFixture {
+ public:
+  thrift::OpenrConfig
+  createConfig() override {
+    auto tConfig = LinkMonitorTestFixture::createConfig();
+    tConfig.link_monitor_config()->use_rtt_metric() = true;
+
+    thrift::InterfaceMetricStatic staticMetric;
+    staticMetric.interface_regexes() = {"iface_2.*"};
+    staticMetric.metric() = kStaticBaseMetric;
+    staticMetric.max_metric() = kMaxInterfaceMetric;
+    tConfig.link_monitor_config()->static_interface_metrics() = {staticMetric};
+    return tConfig;
+  }
+};
+
+// A metric below max_metric is advertised unchanged (the cap does not lower
+// it).
+TEST_F(MaxInterfaceMetricTestFixture, MetricBelowMaxNotClamped) {
+  auto upEvent = nb2_up_event; // iface_2_1 matches "iface_2.*"
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(NeighborEvents({std::move(upEvent)})));
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+  auto expectedAdj = createThriftAdjacency(
+      "node-2",
+      if_2_1,
+      nb2_v6_addr,
+      nb2_v4_addr,
+      kStaticBaseMetric /* 50, below max 100 -> unchanged */,
+      0 /* label */,
+      false /* overload-bit */,
+      nb2_up_event.rttUs /* rtt */,
+      kTimestamp,
+      Constants::kDefaultAdjWeight,
+      "" /* otherIfName */);
+  expectedAdjDbs.push(createAdjDb("node-1", {expectedAdj}, kNodeLabel));
+  checkNextAdjPub("adj:node-1");
+}
+
+// The max clamp applies even after a soft-drain node metric increment:
+// (base metric + increment) is capped at max_metric.
+TEST_F(MaxInterfaceMetricTestFixture, MaxMetricClampsAfterNodeDrain) {
+  constexpr int32_t kNodeIncrement = 70; // 50 + 70 = 120 -> clamped to 100
+
+  auto upEvent = nb2_up_event; // iface_2_1 matches "iface_2.*"
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(NeighborEvents({std::move(upEvent)})));
+  neighborUpdatesQueue.push(
+      NeighborInitEvent(thrift::InitializationEvent::NEIGHBOR_DISCOVERED));
+
+  // Initial advertisement: base metric (50) is below max, so no clamping.
+  auto baseAdj = createThriftAdjacency(
+      "node-2",
+      if_2_1,
+      nb2_v6_addr,
+      nb2_v4_addr,
+      kStaticBaseMetric,
+      0 /* label */,
+      false /* overload-bit */,
+      nb2_up_event.rttUs /* rtt */,
+      kTimestamp,
+      Constants::kDefaultAdjWeight,
+      "" /* otherIfName */);
+  expectedAdjDbs.push(createAdjDb("node-1", {baseAdj}, kNodeLabel));
+  checkNextAdjPub("adj:node-1");
+
+  // Apply soft-drain node metric increment; base + increment exceeds max and is
+  // clamped to max_metric.
+  auto ret =
+      linkMonitor->semifuture_setNodeInterfaceMetricIncrement(kNodeIncrement)
+          .get();
+  EXPECT_TRUE(folly::Unit() == ret);
+
+  auto drainedAdj = createThriftAdjacency(
+      "node-2",
+      if_2_1,
+      nb2_v6_addr,
+      nb2_v4_addr,
+      kMaxInterfaceMetric /* min(50 + 70, 100) */,
+      0 /* label */,
+      false /* overload-bit */,
+      nb2_up_event.rttUs /* rtt */,
+      kTimestamp,
+      Constants::kDefaultAdjWeight,
+      "" /* otherIfName */);
+  auto drainedAdjDb = createAdjDb("node-1", {drainedAdj}, kNodeLabel);
+  drainedAdjDb.nodeMetricIncrementVal() = kNodeIncrement;
+  expectedAdjDbs.push(std::move(drainedAdjDb));
+  checkNextAdjPub("adj:node-1");
+}
+
 class DampenLinkTestFixture : public LinkMonitorTestFixture {
  public:
   thrift::OpenrConfig

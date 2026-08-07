@@ -193,6 +193,13 @@ class LinkMonitor final : public OpenrEventBase {
   std::optional<int32_t> getStaticMetric(std::string const& ifName) const;
 
   /*
+   * Returns the configured maximum metric for `ifName` if it matches any
+   * `static_interface_metrics` entry with `max_metric` set (first matching
+   * entry wins), else std::nullopt. Used to clamp the final adjacency metric.
+   */
+  std::optional<int32_t> getMaxInterfaceMetric(std::string const& ifName) const;
+
+  /*
    * Returns the final adjacency metric for interface `ifName`: the static
    * per-interface metric if configured (see getStaticMetric), otherwise the
    * RTT-derived metric when `use_rtt_metric` is set, or the default hop-count
@@ -353,6 +360,12 @@ class LinkMonitor final : public OpenrEventBase {
   // RTT-derived metric. First matching entry wins.
   std::vector<std::pair<std::shared_ptr<re2::RE2::Set>, int32_t>>
       staticInterfaceMetrics_;
+  // Ordered list of (compiled interface-name regex set -> max metric), built
+  // from LinkMonitorConfig::static_interface_metrics entries with `max_metric`
+  // set. The final adjacency metric for a matching interface is clamped to this
+  // value. First matching entry wins.
+  std::vector<std::pair<std::shared_ptr<re2::RE2::Set>, int32_t>>
+      maxInterfaceMetrics_;
   // link flap back offs
   std::chrono::milliseconds linkflapInitBackoff_;
   std::chrono::milliseconds linkflapMaxBackoff_;

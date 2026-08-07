@@ -150,6 +150,12 @@ struct InterfaceMetricStatic {
   1: list<string> interface_regexes;
   /** Metric to be used for matching interfaces. */
   2: i32 metric;
+  /**
+   * Maximum metric for matching interfaces. When set, the final adjacency
+   * metric advertised into KvStore (and hence used by SPF) never exceeds
+   * this value, even after various overrides are applied.
+   */
+  3: optional i32 max_metric;
 }
 
 struct LinkMonitorConfig {

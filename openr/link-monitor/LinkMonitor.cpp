@@ -139,12 +139,15 @@ LinkMonitor::LinkMonitor(
   CHECK(configStore_);
   CHECK(nlSock_);
 
-  // Pre-compile the static per-interface metric values.
+  // Pre-compile the static per-interface metric and max-metric values.
   for (const thrift::InterfaceMetricStatic& staticMetric :
        *config->getLinkMonitorConfig().static_interface_metrics()) {
-    staticInterfaceMetrics_.emplace_back(
-        AreaConfiguration::compileRegexSet(*staticMetric.interface_regexes()),
-        *staticMetric.metric());
+    auto regexSet =
+        AreaConfiguration::compileRegexSet(*staticMetric.interface_regexes());
+    staticInterfaceMetrics_.emplace_back(regexSet, *staticMetric.metric());
+    if (staticMetric.max_metric().has_value()) {
+      maxInterfaceMetrics_.emplace_back(regexSet, *staticMetric.max_metric());
+    }
   }
 
   // Hold time for synchronizing adjacencies in KvStore. We expect all the
@@ -428,6 +431,16 @@ LinkMonitor::getStaticMetric(const std::string& ifName) const {
   for (const auto& [regexSet, metric] : staticInterfaceMetrics_) {
     if (regexSet->Match(ifName, nullptr)) {
       return metric;
+    }
+  }
+  return std::nullopt;
+}
+
+std::optional<int32_t>
+LinkMonitor::getMaxInterfaceMetric(const std::string& ifName) const {
+  for (const auto& [regexSet, maxMetric] : maxInterfaceMetrics_) {
+    if (regexSet->Match(ifName, nullptr)) {
+      return maxMetric;
     }
   }
   return std::nullopt;
@@ -1096,6 +1109,12 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
       tAdjKey.ifName() = *adj.ifName();
       metric =
           folly::get_default(*state_.adjMetricOverrides(), tAdjKey, metric);
+
+      // If max_metric is configured, enforce the max.
+      if (const std::optional<int32_t> maxMetric =
+              getMaxInterfaceMetric(*adj.ifName())) {
+        metric = std::min(metric, *maxMetric);
+      }
 
       // NOTE: this will be the final metric used for SPF calculation later
       adj.metric() = metric;
