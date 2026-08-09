@@ -113,7 +113,7 @@ TEST_F(MonitorTestFixture, ProcessCounterTest) {
   // Wait for calling getCPUpercentage() twice for calculating the cpu% counter
   while (true) {
     auto counters = facebook::fb303::fbData->getCounters();
-    if (counters.find("process.cpu.peak_pct") != counters.end()) {
+    if (counters.contains("process.cpu.peak_pct")) {
       EXPECT_GT(counters["process.cpu.pct"], 0);
       EXPECT_GT(counters["process.cpu.peak_pct"], 0);
       EXPECT_GT(counters["process.cpu.pct.avg.60"], 0);
