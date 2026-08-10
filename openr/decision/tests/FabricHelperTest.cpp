@@ -839,6 +839,173 @@ TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_StampsDrainStatus) {
 
 TEST_F(
     FabricHelperTestFixture,
+    UpdateChangedFabricKvs_StampsPerAdjacencyOverloadForDrainedLeaf) {
+  // Two leaves each with one external adjacency; only ld001 is hard-drained
+  // at the node level (AdjacencyDatabase.isOverloaded).
+  thrift::Adjacency drainedLeafToExt = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  adjacencyDatabases_["bbf01-ld001.dfw1"] = createAdjDb(
+      "bbf01-ld001.dfw1",
+      {drainedLeafToExt},
+      1, /*overLoadBit=*/
+      true);
+
+  thrift::Adjacency healthyLeafToExt = createAdjacency(
+      "eb02.rva1", "po2000", "po2001", "fe80::2", "10.0.0.2", 10, 0);
+  adjacencyDatabases_["bbf01-ld002.dfw1"] = createAdjDb(
+      "bbf01-ld002.dfw1",
+      {healthyLeafToExt},
+      1, /*overLoadBit=*/
+      false);
+
+  FabricHelper helper = makeHelper();
+  std::unordered_set<std::string> changedLeaves = {
+      "bbf01-ld001.dfw1", "bbf01-ld002.dfw1"};
+
+  const thrift::AdjacencyDatabase fabricAdjDb =
+      decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves));
+
+  // The adjacency inherited from the drained leaf is stamped overloaded; the
+  // one from the healthy leaf is left untouched.
+  std::map<std::string, bool> overloadByExtNode;
+  for (const thrift::Adjacency& adj : *fabricAdjDb.adjacencies()) {
+    overloadByExtNode[*adj.otherNodeName()] = *adj.isOverloaded();
+  }
+  const std::map<std::string, bool> expected = {
+      {"eb01.rva1", true}, {"eb02.rva1", false}};
+  EXPECT_EQ(overloadByExtNode, expected);
+}
+
+TEST_F(
+    FabricHelperTestFixture,
+    UpdateChangedFabricKvs_PerAdjacencyOverloadLifecycle) {
+  const std::string leaf = "bbf01-ld001.dfw1";
+
+  // Runs one update round for `changed` and returns the generated fabric
+  // AdjacencyDatabase as {externalNode -> adj.isOverloaded}.
+  auto fabricOverloadByExtNode =
+      [&](FabricHelper& helper, const std::unordered_set<std::string>& changed)
+      -> std::map<std::string, bool> {
+    const thrift::AdjacencyDatabase fabricAdjDb =
+        decodeFabricAdjDb(updateChangedFabricKvs(helper, changed));
+    std::map<std::string, bool> result;
+    for (const thrift::Adjacency& adj : *fabricAdjDb.adjacencies()) {
+      result[*adj.otherNodeName()] = *adj.isOverloaded();
+    }
+    return result;
+  };
+
+  thrift::Adjacency linkA = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  thrift::Adjacency linkB = createAdjacency(
+      "eb02.rva1", "po2000", "po2001", "fe80::2", "10.0.0.2", 10, 0);
+
+  FabricHelper helper = makeHelper();
+
+  // (1) New leaf with two links; neither the node nor the links are overloaded.
+  adjacencyDatabases_[leaf] = createAdjDb(leaf, {linkA, linkB}, 1);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper, {leaf}),
+      (std::map<std::string, bool>{
+          {"eb01.rva1", false}, {"eb02.rva1", false}}));
+
+  // (2) linkA becomes overloaded (arriving with other unrelated updates); the
+  //     node itself is still healthy.
+  linkA.isOverloaded() = true;
+  adjacencyDatabases_[leaf] = createAdjDb(leaf, {linkA, linkB}, 2);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper, {leaf, "eb99.other1"}),
+      (std::map<std::string, bool>{{"eb01.rva1", true}, {"eb02.rva1", false}}));
+
+  // (3) The node becomes overloaded -> every adjacency is stamped overloaded.
+  adjacencyDatabases_[leaf] =
+      createAdjDb(leaf, {linkA, linkB}, 3, /*overLoadBit=*/true);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper, {leaf}),
+      (std::map<std::string, bool>{{"eb01.rva1", true}, {"eb02.rva1", true}}));
+
+  // (4) The node is no longer overloaded; linkA is still overloaded.
+  adjacencyDatabases_[leaf] =
+      createAdjDb(leaf, {linkA, linkB}, 4, /*overLoadBit=*/false);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper, {leaf}),
+      (std::map<std::string, bool>{{"eb01.rva1", true}, {"eb02.rva1", false}}));
+
+  // (5) linkA is no longer overloaded -> fully healthy again.
+  linkA.isOverloaded() = false;
+  adjacencyDatabases_[leaf] = createAdjDb(leaf, {linkA, linkB}, 5);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper, {leaf}),
+      (std::map<std::string, bool>{
+          {"eb01.rva1", false}, {"eb02.rva1", false}}));
+}
+
+TEST_F(
+    FabricHelperTestFixture,
+    UpdateChangedFabricKvs_NodeOverloadMasksLinkChange) {
+  const std::string leaf = "bbf01-ld001.dfw1";
+  const std::unordered_set<std::string> changed = {leaf};
+
+  // Returns the generated fabric AdjacencyDatabase as
+  // {externalNode -> adj.isOverloaded}.
+  auto fabricOverloadByExtNode =
+      [&](FabricHelper& helper) -> std::map<std::string, bool> {
+    const thrift::AdjacencyDatabase fabricAdjDb =
+        decodeFabricAdjDb(updateChangedFabricKvs(helper, changed));
+    std::map<std::string, bool> result;
+    for (const thrift::Adjacency& adj : *fabricAdjDb.adjacencies()) {
+      result[*adj.otherNodeName()] = *adj.isOverloaded();
+    }
+    return result;
+  };
+
+  thrift::Adjacency link1 = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  thrift::Adjacency link2 = createAdjacency(
+      "eb02.rva1", "po2000", "po2001", "fe80::2", "10.0.0.2", 10, 0);
+
+  FabricHelper helper = makeHelper();
+
+  // (1) New leaf with link1 and link2; nothing overloaded.
+  adjacencyDatabases_[leaf] = createAdjDb(leaf, {link1, link2}, 1);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper),
+      (std::map<std::string, bool>{
+          {"eb01.rva1", false}, {"eb02.rva1", false}}));
+
+  // (2) link1 becomes overloaded; the node is still healthy.
+  link1.isOverloaded() = true;
+  adjacencyDatabases_[leaf] = createAdjDb(leaf, {link1, link2}, 2);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper),
+      (std::map<std::string, bool>{{"eb01.rva1", true}, {"eb02.rva1", false}}));
+
+  // (3) The node becomes overloaded -> both links are stamped overloaded.
+  adjacencyDatabases_[leaf] =
+      createAdjDb(leaf, {link1, link2}, 3, /*overLoadBit=*/true);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper),
+      (std::map<std::string, bool>{{"eb01.rva1", true}, {"eb02.rva1", true}}));
+
+  // (4) The drained link flips (link2 overloaded, link1 not) while the node
+  //     stays overloaded. Both links still resolve to overloaded, so the fabric
+  //     output is unchanged and NO new FabricAdjacencyDb is generated.
+  link1.isOverloaded() = false;
+  link2.isOverloaded() = true;
+  adjacencyDatabases_[leaf] =
+      createAdjDb(leaf, {link1, link2}, 4, /*overLoadBit=*/true);
+  EXPECT_THAT(updateChangedFabricKvs(helper, changed), IsEmpty());
+
+  // (5) The node is no longer overloaded -> only link2's own overload remains.
+  adjacencyDatabases_[leaf] =
+      createAdjDb(leaf, {link1, link2}, 5, /*overLoadBit=*/false);
+  EXPECT_EQ(
+      fabricOverloadByExtNode(helper),
+      (std::map<std::string, bool>{{"eb01.rva1", false}, {"eb02.rva1", true}}));
+}
+
+TEST_F(
+    FabricHelperTestFixture,
     UpdateChangedFabricKvs_DrainOnlyChangeTriggersRegen) {
   // Leaf has an adjacency to an external node.
   thrift::Adjacency leafToExt = createAdjacency(

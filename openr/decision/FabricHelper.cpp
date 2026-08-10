@@ -134,12 +134,22 @@ FabricHelper::updateFabricAdjacencies(
     if (!fabricConfig_.isLeaf(nodeName)) {
       continue;
     }
+    /*
+     * If the leaf node is hard-drained (node-level isOverloaded), propagate the
+     * overload onto each external adjacency so transit traffic through the
+     * fabric avoids the drained leaf.
+     */
+    const bool isNodeOverloaded = *adjDb.isOverloaded();
     std::set<thrift::Adjacency> newExternalAdjs;
     for (const thrift::Adjacency& adj : *adjDb.adjacencies()) {
       if (fabricConfig_.isFabric(*adj.otherNodeName())) {
         continue;
       }
-      newExternalAdjs.insert(adj);
+      thrift::Adjacency externalAdj = adj;
+      if (isNodeOverloaded) {
+        externalAdj.isOverloaded() = true;
+      }
+      newExternalAdjs.insert(std::move(externalAdj));
     }
     std::set<thrift::Adjacency>& existingAdjs = externalAdjacencies_[nodeName];
     if (existingAdjs != newExternalAdjs) {
