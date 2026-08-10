@@ -1021,3 +1021,8 @@ struct SparkNeighbor {
    */
   13: i64 lastHeartbeatMsgSentTimeDelta = 0;
 }
+
+struct InstanceDrainStatus {
+  1: bool isOverloaded = false;
+  2: i32 nodeMetricIncrementVal = 0;
+}

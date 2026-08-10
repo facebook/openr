@@ -650,8 +650,17 @@ LinkState::runSpf(
 }
 
 void
-LinkState::addFabricHelper(const FabricConfig& fabricConfig) {
-  fabricHelper_.emplace(fabricConfig, linkMap_, adjacencyDatabases_, area_);
+LinkState::addFabricHelper(
+    const FabricConfig& fabricConfig,
+    const std::string& myNodeName,
+    messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue) {
+  fabricHelper_.emplace(
+      fabricConfig,
+      linkMap_,
+      adjacencyDatabases_,
+      area_,
+      myNodeName,
+      kvRequestQueue);
 }
 
 } // namespace openr

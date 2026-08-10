@@ -38,12 +38,56 @@ class FabricHelperTestFixture : public ::testing::Test {
 
   FabricHelper
   makeHelper() {
-    return FabricHelper(fabricCfg_, linkMap_, adjacencyDatabases_, area_);
+    return FabricHelper(
+        fabricCfg_,
+        linkMap_,
+        adjacencyDatabases_,
+        area_,
+        myNodeName_,
+        kvRequestQueue_);
   }
 
   static const std::unordered_map<std::string, std::set<thrift::Adjacency>>&
   getExternalAdjacencies(const FabricHelper& helper) {
     return helper.externalAdjacencies_;
+  }
+
+  // Forwarders to now-private FabricHelper methods (fixture is a friend).
+  static std::vector<PersistKeyValueRequest>
+  updateChangedFabricKvs(
+      FabricHelper& helper,
+      const std::unordered_set<std::string>& changedLeafNames,
+      bool isDrainStatusChanged = false) {
+    return helper.updateChangedFabricKvs(
+        changedLeafNames, isDrainStatusChanged);
+  }
+
+  static bool
+  setDrainStatus(
+      FabricHelper& helper, const thrift::InstanceDrainStatus& drainStatus) {
+    return helper.setDrainStatus(drainStatus);
+  }
+
+  static bool
+  updateFabricDrainStatus(
+      FabricHelper& helper, const thrift::Publication& thriftPub) {
+    return helper.updateFabricDrainStatus(thriftPub);
+  }
+
+  // Decodes the generated fabric AdjacencyDatabase (key "adj:<fabricName>")
+  // from a set of persist requests. Returns a default-constructed db if absent.
+  thrift::AdjacencyDatabase
+  decodeFabricAdjDb(const std::vector<PersistKeyValueRequest>& requests) {
+    const std::string adjKey =
+        Constants::kAdjDbMarker.toString() + fabricCfg_.getFabricName();
+    apache::thrift::CompactSerializer serializer;
+    for (const PersistKeyValueRequest& request : requests) {
+      if (request.getKey() == adjKey) {
+        return readThriftObjStr<thrift::AdjacencyDatabase>(
+            request.getValue(), serializer);
+      }
+    }
+    return {};
   }
 
   using NodeInterface = FabricHelper::NodeInterface;
@@ -65,6 +109,8 @@ class FabricHelperTestFixture : public ::testing::Test {
   folly::F14NodeMap<std::string, Link::LinkSet> linkMap_;
   folly::F14FastMap<std::string, thrift::AdjacencyDatabase> adjacencyDatabases_;
   std::string area_ = "area1";
+  std::string myNodeName_ = "bbf01-sp001.dfw1";
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 };
 
 namespace {
@@ -352,7 +398,7 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_WithFabricName) {
 
   // Create LinkState from eb01.iad1's perspective and install FabricHelper
   LinkState state{kTestingAreaName, "eb01.iad1"};
-  state.addFabricHelper(fabricCfg_);
+  state.addFabricHelper(fabricCfg_, "eb01.iad1", kvRequestQueue_);
 
   // First, update with leaf's adjDb — this populates the external-to-leaf
   // mapping AND stores bbf01-ld001.dfw1's adjacency database.
@@ -428,7 +474,7 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_LeafToSpine) {
       createAdjDb("bbf01-sp001.dfw1", {spineToLeaf}, 2);
 
   LinkState state{kTestingAreaName, "bbf01-ld001.dfw1"};
-  state.addFabricHelper(fabricCfg_);
+  state.addFabricHelper(fabricCfg_, "bbf01-ld001.dfw1", kvRequestQueue_);
 
   // Update with leaf's adjDb first — no link yet (only one side present)
   LinkState::LinkStateChange update1 =
@@ -598,7 +644,7 @@ TEST_F(FabricHelperTestFixture, ClearFabricKvs_WithEntries) {
 
   // Build external adjacencies first
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
-  helper.updateChangedFabricKvs(changedLeaves);
+  updateChangedFabricKvs(helper, changedLeaves);
   EXPECT_THAT(getExternalAdjacencies(helper), Not(IsEmpty()));
 
   // Now clear — should return non-empty requests since entries existed
@@ -614,7 +660,7 @@ TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_NoAdjacencies) {
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), IsEmpty());
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), IsEmpty());
 }
 
 TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_WithExternalAdjacency) {
@@ -629,7 +675,7 @@ TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_WithExternalAdjacency) {
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
   std::vector<PersistKeyValueRequest> requests =
-      helper.updateChangedFabricKvs(changedLeaves);
+      updateChangedFabricKvs(helper, changedLeaves);
   EXPECT_THAT(requests, Not(IsEmpty()));
   // Verify internal state: external adjacencies are populated
   const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs =
@@ -649,10 +695,10 @@ TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_NoChangeOnSecondCall) {
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
   // First call — should return requests
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), Not(IsEmpty()));
 
   // Second call with same leaves — no new changes
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), IsEmpty());
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), IsEmpty());
 }
 
 TEST_F(
@@ -671,7 +717,7 @@ TEST_F(
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
   std::vector<PersistKeyValueRequest> requests =
-      helper.updateChangedFabricKvs(changedLeaves);
+      updateChangedFabricKvs(helper, changedLeaves);
   EXPECT_THAT(requests, Not(IsEmpty()));
   // Verify internal state: only external adjacency, not fabric-to-fabric
   const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs =
@@ -699,7 +745,7 @@ TEST_F(
   FabricHelper helper = makeHelper();
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), Not(IsEmpty()));
   const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs1 =
       getExternalAdjacencies(helper);
   size_t totalAdjs1 = 0;
@@ -714,7 +760,7 @@ TEST_F(
   adjacencyDatabases_["bbf01-ld001.dfw1"] =
       createAdjDb("bbf01-ld001.dfw1", {leafToExt1, leafToExt4}, 2);
 
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), Not(IsEmpty()));
   const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs2 =
       getExternalAdjacencies(helper);
   size_t totalAdjs2 = 0;
@@ -743,7 +789,7 @@ TEST_F(
   std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
 
   // First call — external adjacency present
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), Not(IsEmpty()));
   const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs1 =
       getExternalAdjacencies(helper);
   size_t totalAdjs1 = 0;
@@ -759,7 +805,7 @@ TEST_F(
       createAdjDb("bbf01-ld001.dfw1", {leafToSpine}, 2);
 
   // Second call — should detect removal
-  EXPECT_THAT(helper.updateChangedFabricKvs(changedLeaves), Not(IsEmpty()));
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), Not(IsEmpty()));
   const std::unordered_map<std::string, std::set<thrift::Adjacency>>& extAdjs2 =
       getExternalAdjacencies(helper);
   size_t totalAdjs2 = 0;
@@ -767,6 +813,180 @@ TEST_F(
     totalAdjs2 += adjs.size();
   }
   EXPECT_THAT(totalAdjs2, Eq(0));
+}
+
+TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_StampsDrainStatus) {
+  // Leaf has an adjacency to an external node.
+  thrift::Adjacency leafToExt = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  adjacencyDatabases_["bbf01-ld001.dfw1"] =
+      createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
+
+  FabricHelper helper = makeHelper();
+  std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
+
+  // Fabric is both hard-drained and soft-drained.
+  thrift::InstanceDrainStatus drainStatus;
+  drainStatus.isOverloaded() = true;
+  drainStatus.nodeMetricIncrementVal() = 100;
+  const bool changed = setDrainStatus(helper, drainStatus);
+
+  const thrift::AdjacencyDatabase fabricAdjDb =
+      decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, changed));
+  EXPECT_TRUE(*fabricAdjDb.isOverloaded());
+  EXPECT_EQ(*fabricAdjDb.nodeMetricIncrementVal(), 100);
+}
+
+TEST_F(
+    FabricHelperTestFixture,
+    UpdateChangedFabricKvs_DrainOnlyChangeTriggersRegen) {
+  // Leaf has an adjacency to an external node.
+  thrift::Adjacency leafToExt = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  adjacencyDatabases_["bbf01-ld001.dfw1"] =
+      createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
+
+  FabricHelper helper = makeHelper();
+  std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
+
+  // First call establishes adjacencies while undrained.
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), Not(IsEmpty()));
+  // No adjacency and no drain change -> nothing to re-generate.
+  EXPECT_THAT(updateChangedFabricKvs(helper, changedLeaves), IsEmpty());
+
+  // A drain-only change (same leaves, no adjacency change) triggers re-gen.
+  thrift::InstanceDrainStatus drainStatus;
+  drainStatus.nodeMetricIncrementVal() = 50;
+  const bool changed = setDrainStatus(helper, drainStatus);
+  const thrift::AdjacencyDatabase fabricAdjDb =
+      decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, changed));
+  EXPECT_EQ(*fabricAdjDb.nodeMetricIncrementVal(), 50);
+}
+
+TEST_F(FabricHelperTestFixture, UpdateFabricDrainStatus_AddUpdateAndExpiry) {
+  // Leaf has an adjacency so a fabric AdjacencyDatabase can be generated.
+  thrift::Adjacency leafToExt = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  adjacencyDatabases_["bbf01-ld001.dfw1"] =
+      createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
+
+  FabricHelper helper = makeHelper();
+  std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
+  apache::thrift::CompactSerializer serializer;
+
+  thrift::InstanceDrainStatus drainStatus;
+  drainStatus.nodeMetricIncrementVal() = 100;
+  thrift::Value drainVal;
+  drainVal.value() = writeThriftObjStr(drainStatus, serializer);
+
+  // A drain status key for a different fabric is ignored.
+  thrift::Publication otherPub;
+  otherPub.keyVals() = {{"drainStatus:other.fabric", drainVal}};
+  bool changed = updateFabricDrainStatus(helper, otherPub);
+  EXPECT_EQ(
+      *decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, changed))
+           .nodeMetricIncrementVal(),
+      0);
+
+  // Add/update: this fabric's own drain status is applied.
+  thrift::Publication addPub;
+  addPub.keyVals() = {{"drainStatus:bbf01.dfw1", drainVal}};
+  changed = updateFabricDrainStatus(helper, addPub);
+  EXPECT_EQ(
+      *decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, changed))
+           .nodeMetricIncrementVal(),
+      100);
+
+  // Expiry: the key is removed -> revert to undrained.
+  thrift::Publication expirePub;
+  expirePub.expiredKeys() = {"drainStatus:bbf01.dfw1"};
+  changed = updateFabricDrainStatus(helper, expirePub);
+  EXPECT_EQ(
+      *decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, changed))
+           .nodeMetricIncrementVal(),
+      0);
+}
+
+TEST_F(
+    FabricHelperTestFixture, UpdateFabricDrainStatus_MalformedValueIsIgnored) {
+  // Leaf has an adjacency so a fabric AdjacencyDatabase can be generated.
+  thrift::Adjacency leafToExt = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
+  adjacencyDatabases_["bbf01-ld001.dfw1"] =
+      createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
+
+  FabricHelper helper = makeHelper();
+  std::unordered_set<std::string> changedLeaves = {"bbf01-ld001.dfw1"};
+
+  // Establish a known drain status (soft-drain with increment 100).
+  thrift::InstanceDrainStatus drainStatus;
+  drainStatus.nodeMetricIncrementVal() = 100;
+  ASSERT_TRUE(setDrainStatus(helper, drainStatus));
+
+  // Publish this fabric's drain status key with bytes that cannot be
+  // deserialized into a DrainStatus (invalid compact-protocol field header).
+  thrift::Value badVal;
+  badVal.value() = std::string(4, '\xff');
+  thrift::Publication badPub;
+  badPub.keyVals() = {{"drainStatus:bbf01.dfw1", badVal}};
+
+  // The parse failure is swallowed: no change is reported and the previously
+  // set drain status is left untouched (still increment 100, not reset to 0).
+  EXPECT_FALSE(updateFabricDrainStatus(helper, badPub));
+  EXPECT_EQ(
+      *decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, true))
+           .nodeMetricIncrementVal(),
+      100);
+}
+
+TEST_F(
+    FabricHelperTestFixture, UpdateFabricKv_ReadsDrainStatusFromPublication) {
+  // Make this node (myNodeName_ = bbf01-sp001.dfw1) the fabric master by making
+  // it the only connected fabric node.
+  thrift::Adjacency spToLd = createAdjacency(
+      "bbf01-ld001.dfw1", "po10200", "po10100", "fe80::1", "10.0.0.1", 10, 0);
+  thrift::Adjacency ldToSp = createAdjacency(
+      "bbf01-sp001.dfw1", "po10100", "po10200", "fe80::2", "10.0.0.2", 10, 0);
+  std::shared_ptr<Link> link = std::make_shared<Link>(
+      kTestingAreaName,
+      "bbf01-ld001.dfw1",
+      ldToSp,
+      "bbf01-sp001.dfw1",
+      spToLd,
+      true);
+  linkMap_["bbf01-sp001.dfw1"].insert(link);
+
+  // Leaf with an external adjacency so the generated fabric AdjDb has content.
+  thrift::Adjacency leafToExt = createAdjacency(
+      "eb01.rva1", "po1000", "po1001", "fe80::3", "10.0.0.3", 10, 0);
+  adjacencyDatabases_["bbf01-ld001.dfw1"] =
+      createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
+
+  FabricHelper helper = makeHelper();
+  auto reader = kvRequestQueue_.getReader();
+
+  // Publication advertising this fabric's own drain status.
+  thrift::InstanceDrainStatus drainStatus;
+  drainStatus.isOverloaded() = true;
+  drainStatus.nodeMetricIncrementVal() = 100;
+  apache::thrift::CompactSerializer serializer;
+  thrift::Value drainVal;
+  drainVal.value() = writeThriftObjStr(drainStatus, serializer);
+  thrift::Publication pub;
+  pub.keyVals() = {{"drainStatus:bbf01.dfw1", drainVal}};
+
+  helper.updateFabricKv(/*changedKeys=*/{}, pub);
+
+  // As master, the drain status from the publication is stamped onto the
+  // generated fabric AdjacencyDatabase pushed to the request queue.
+  auto maybeRequest = reader.get();
+  ASSERT_TRUE(maybeRequest.hasValue());
+  const auto& persist = std::get<PersistKeyValueRequest>(maybeRequest.value());
+  const thrift::AdjacencyDatabase fabricAdjDb =
+      readThriftObjStr<thrift::AdjacencyDatabase>(
+          persist.getValue(), serializer);
+  EXPECT_TRUE(*fabricAdjDb.isOverloaded());
+  EXPECT_EQ(*fabricAdjDb.nodeMetricIncrementVal(), 100);
 }
 
 } // namespace

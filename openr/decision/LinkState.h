@@ -213,7 +213,10 @@ class LinkState {
   LinkStateChange deleteAdjacencyDatabase(const std::string& nodeName);
 
   // Populates the FabricHelper object.
-  void addFabricHelper(const FabricConfig& fabricConfig);
+  void addFabricHelper(
+      const FabricConfig& fabricConfig,
+      const std::string& myNodeName,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue);
 
   // Returns the FabricHelper object.
   std::optional<FabricHelper>&

@@ -5,6 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <algorithm>
+
+#include <folly/logging/xlog.h>
+
 #include <openr/common/Constants.h>
 #include <openr/decision/FabricHelper.h>
 
@@ -168,10 +172,49 @@ FabricHelper::clearFabricKvs() {
   return requests;
 }
 
+bool
+FabricHelper::updateFabricDrainStatus(const thrift::Publication& thriftPub) {
+  // Add/update: drain status advertised in this publication.
+  if (auto it = thriftPub.keyVals()->find(drainStatusKey_);
+      it != thriftPub.keyVals()->end() && it->second.value().has_value()) {
+    try {
+      return setDrainStatus(
+          readThriftObjStr<thrift::InstanceDrainStatus>(
+              it->second.value().value(), serializer_));
+    } catch (const std::exception& ex) {
+      XLOGF(
+          ERR,
+          "Failed to parse InstanceDrainStatus for key {}: {}",
+          drainStatusKey_,
+          ex.what());
+      return false;
+    }
+  }
+
+  // Expiry: drain status key removed -> revert to undrained.
+  const auto& expiredKeys = *thriftPub.expiredKeys();
+  if (std::find(expiredKeys.begin(), expiredKeys.end(), drainStatusKey_) !=
+      expiredKeys.end()) {
+    return setDrainStatus(thrift::InstanceDrainStatus{});
+  }
+  return false;
+}
+
+bool
+FabricHelper::setDrainStatus(const thrift::InstanceDrainStatus& drainStatus) {
+  if (drainStatus == fabricDrainStatus_) {
+    return false;
+  }
+  fabricDrainStatus_ = drainStatus;
+  return true;
+}
+
 std::vector<PersistKeyValueRequest>
 FabricHelper::updateChangedFabricKvs(
-    const std::unordered_set<std::string>& changedLeafNames) {
-  if (!updateFabricAdjacencies(changedLeafNames)) {
+    const std::unordered_set<std::string>& changedLeafNames,
+    bool isDrainStatusChanged) {
+  const bool adjacenciesChanged = updateFabricAdjacencies(changedLeafNames);
+  if (!adjacenciesChanged && !isDrainStatusChanged) {
     return {};
   }
 
@@ -184,6 +227,12 @@ FabricHelper::updateChangedFabricKvs(
   const std::string& fabricName = getFabricName();
   fabricAdjDb.thisNodeName() = fabricName;
   fabricAdjDb.area() = area_;
+  // Stamp the fabric node's drain status onto the generated AdjacencyDatabase:
+  //  - isOverloaded          -> hard-drain (node removed from transit);
+  //  - nodeMetricIncrementVal -> soft-drain (node made less preferred).
+  fabricAdjDb.isOverloaded() = *fabricDrainStatus_.isOverloaded();
+  fabricAdjDb.nodeMetricIncrementVal() =
+      *fabricDrainStatus_.nodeMetricIncrementVal();
 
   std::vector<PersistKeyValueRequest> requests;
   std::string adjDbStr = writeThriftObjStr(fabricAdjDb, serializer_);
@@ -203,6 +252,52 @@ FabricHelper::updateChangedFabricKvs(
         prefixDbStr);
   }
   return requests;
+}
+
+void
+FabricHelper::updateFabricKv(
+    const std::unordered_set<std::string>& changedKeys,
+    const thrift::Publication& thriftPub) {
+  // Apply this fabric's drain status changes carried in this publication.
+  const bool isDrainStatusChanged = updateFabricDrainStatus(thriftPub);
+  const auto [isFabricNodeChanged, changedLeafNames] =
+      getFabricChanges(changedKeys);
+  // Proceed if the fabric topology changed or the drain status changed.
+  if (!isFabricNodeChanged && !isDrainStatusChanged) {
+    return;
+  }
+  // Fabric master may have changed.
+  const std::string newFabricMasterName = getFabricMasterGenerator();
+  if (newFabricMasterName != fabricMasterName_) {
+    XLOGF(
+        INFO, "Fabric master: {}->{}", fabricMasterName_, newFabricMasterName);
+    fabricMasterName_ = newFabricMasterName;
+  }
+  if (myNodeName_ != fabricMasterName_) {
+    // This node is not the fabric master.
+    std::vector<ClearKeyValueRequest> clearRequests = clearFabricKvs();
+    if (!clearRequests.empty()) {
+      XLOGF(
+          INFO,
+          "Deleting adj: and prefix: keys for {} from KvStore.",
+          getFabricName());
+      for (ClearKeyValueRequest& kvRequest : clearRequests) {
+        kvRequestQueue_.push(std::move(kvRequest));
+      }
+    }
+    return;
+  }
+  // This node is the fabric master. The fabric's own drain status (advertised
+  // under "drainStatus:<fabricName>") is held by the FabricHelper and stamped
+  // onto the generated fabric AdjacencyDatabase.
+  std::vector<PersistKeyValueRequest> setRequests =
+      updateChangedFabricKvs(changedLeafNames, isDrainStatusChanged);
+  if (!setRequests.empty()) {
+    XLOGF(INFO, "Generating adj: and prefix: keys for {}.", getFabricName());
+    for (PersistKeyValueRequest& kvRequest : setRequests) {
+      kvRequestQueue_.push(std::move(kvRequest));
+    }
+  }
 }
 
 } // namespace openr

@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <fmt/format.h>
+#include <folly/Range.h>
 #include <folly/container/F14Map.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
@@ -12,8 +14,10 @@
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
 #include <openr/decision/Link.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/Types_types.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 #pragma once
 
@@ -21,17 +25,27 @@ namespace openr {
 
 class FabricHelper {
  public:
+  // KvStore key marker for a fabric node's drain status.
+  static constexpr folly::StringPiece kDrainStatusMarker{"drainStatus:"};
+
   FabricHelper(
       const FabricConfig& fabricConfig,
       const folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet>&
           linkMap,
       const folly::F14FastMap<std::string, thrift::AdjacencyDatabase>&
           adjacencyDatabases,
-      const std::string& area)
+      const std::string& area,
+      const std::string& myNodeName,
+      messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue)
       : fabricConfig_(fabricConfig),
         linkMap_(linkMap),
         adjacencyDatabases_(adjacencyDatabases),
-        area_(area) {}
+        area_(area),
+        myNodeName_(myNodeName),
+        drainStatusKey_(
+            fmt::format(
+                "{}{}", kDrainStatusMarker, fabricConfig.getFabricName())),
+        kvRequestQueue_(kvRequestQueue) {}
 
   // Returns the name of the fabric.
   std::string getFabricName() const;
@@ -61,10 +75,14 @@ class FabricHelper {
   // changed. Returns an empty vector if nothing was cleared.
   std::vector<ClearKeyValueRequest> clearFabricKvs();
 
-  // Updates external adjacencies for the given changed leaves and returns KV
-  // set requests if anything changed. Returns an empty vector if unchanged.
-  std::vector<PersistKeyValueRequest> updateChangedFabricKvs(
-      const std::unordered_set<std::string>& changedLeafNames);
+  // Updates this fabric's synthetic key-values in response to the changed keys,
+  // including this fabric's drain status. Refreshes the tracked fabric master
+  // generator and pushes the resulting requests onto the kvRequestQueue.
+  // Generates keys only if `myNodeName_ == fabricMasterName_` (this node is the
+  // fabric master); otherwise clears previously generated keys.
+  void updateFabricKv(
+      const std::unordered_set<std::string>& changedKeys,
+      const thrift::Publication& thriftPub);
 
  private:
   struct NodeInterface {
@@ -85,6 +103,20 @@ class FabricHelper {
   // Returns true if any of the adjacencies changed.
   bool updateFabricAdjacencies(
       const std::unordered_set<std::string>& changedNodes);
+
+  // Updates this fabric's drain status from the given publication. Returns true
+  // if the fabric's drain status changed.
+  bool updateFabricDrainStatus(const thrift::Publication& thriftPub);
+
+  // Returns true if the fabric's drainStatus changed.
+  bool setDrainStatus(const thrift::InstanceDrainStatus& drainStatus);
+
+  // Updates external adjacencies of the changed leaves and stores the
+  // fabric node's drain status. Returns updated KV set requests for the fabric;
+  // empty vector if nothing changed.
+  std::vector<PersistKeyValueRequest> updateChangedFabricKvs(
+      const std::unordered_set<std::string>& changedLeafNames,
+      bool isDrainStatusChanged);
 
   FabricConfig fabricConfig_;
 
@@ -109,6 +141,24 @@ class FabricHelper {
 
   // The area for the adjacencies.
   const std::string area_;
+
+  // Name of the local node this Open/R instance runs on. Used to determine
+  // whether this node is the fabric master generator.
+  const std::string myNodeName_;
+
+  // The drain status key for this fabric.
+  const std::string drainStatusKey_;
+
+  // Name of the node currently generating this fabric's synthetic key-values.
+  // Refreshed on each updateFabricKv(); empty until first computed.
+  std::string fabricMasterName_;
+
+  // Queue onto which generated/cleared fabric key-value requests are pushed.
+  messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
+
+  // Current drain status of this fabric node from KvStore. Defaults to
+  // undrained.
+  thrift::InstanceDrainStatus fabricDrainStatus_;
 
   apache::thrift::CompactSerializer serializer_;
 

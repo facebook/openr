@@ -281,12 +281,6 @@ class Decision : public OpenrEventBase {
   std::optional<thrift::PrefixDatabase> updateNodePrefixDatabase(
       const std::string& key, const thrift::PrefixDatabase& prefixDb);
 
-  // Updates the fabric master generator and fabric (synthetic) key-values as
-  // needed for the given areaLinkState.
-  void updateFabricKv(
-      const std::unordered_set<std::string>& changedKeys,
-      std::optional<FabricHelper>& fabricHelper);
-
   // Openr config
   std::shared_ptr<const Config> config_;
 
@@ -337,10 +331,6 @@ class Decision : public OpenrEventBase {
 
   // this node's name and the key markers
   const std::string myNodeName_;
-
-  // The name of the node that is currently the master of the fabric.
-  // This is set only when this node is a fabric node.
-  std::string fabricMasterName_;
 
   // store rebuildRoutes to-do status and perf events
   detail::DecisionPendingUpdates pendingUpdates_;

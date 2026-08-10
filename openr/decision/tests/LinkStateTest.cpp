@@ -248,7 +248,8 @@ TEST(LinkStateTest, WithFabricHelper) {
 
   // Create LinkState and add FabricHelper
   LinkState state{kTestingAreaName, "eb01.rva1"};
-  state.addFabricHelper(fabricCfg);
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
+  state.addFabricHelper(fabricCfg, "eb01.rva1", kvRequestQueue);
 
   // Verify FabricHelper was added
   EXPECT_THAT(state.getFabricHelper().has_value(), IsTrue());

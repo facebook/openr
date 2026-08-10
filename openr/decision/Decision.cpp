@@ -916,7 +916,8 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   if (newAreaLinkState && config_->getFabricConfig()) {
     // Fabric must be created *after* the LinkState object has been inserted in
     // the map.
-    areaLinkState.addFabricHelper(*config_->getFabricConfig());
+    areaLinkState.addFabricHelper(
+        *config_->getFabricConfig(), myNodeName_, kvRequestQueue_);
   }
 
   // Nothing to process if no adj/prefix db changes
@@ -942,49 +943,8 @@ Decision::processPublication(thrift::Publication&& thriftPub) {
   }
 
   // Generate/delete fabric kvs if needed.
-  if (areaLinkState.getFabricHelper()) {
-    updateFabricKv(changedKeys, areaLinkState.getFabricHelper());
-  }
-}
-
-void
-Decision::updateFabricKv(
-    const std::unordered_set<std::string>& changedKeys,
-    std::optional<FabricHelper>& fabricHelper) {
-  // This is a part of a fabric.
-  const auto [isFabricNodeChanged, changedLeafNames] =
-      fabricHelper->getFabricChanges(changedKeys);
-  if (!isFabricNodeChanged) {
-    return;
-  }
-  // Fabric master may have changed.
-  const std::string newFabricMasterName =
-      fabricHelper->getFabricMasterGenerator();
-  if (newFabricMasterName != fabricMasterName_) {
-    XLOGF(
-        INFO, "Fabric master: {}->{}", fabricMasterName_, newFabricMasterName);
-    fabricMasterName_ = newFabricMasterName;
-  }
-  if (myNodeName_ != fabricMasterName_) {
-    // This node is not the fabric master.
-    std::vector<ClearKeyValueRequest> clearRequests =
-        fabricHelper->clearFabricKvs();
-    if (!clearRequests.empty()) {
-      XLOGF(INFO, "Deleting Fabric keys from KvStore.");
-      for (ClearKeyValueRequest& kvRequest : clearRequests) {
-        kvRequestQueue_.push(std::move(kvRequest));
-      }
-    }
-    return;
-  }
-  // This node is the fabric master.
-  std::vector<PersistKeyValueRequest> setRequests =
-      fabricHelper->updateChangedFabricKvs(changedLeafNames);
-  if (!setRequests.empty()) {
-    XLOGF(INFO, "Generating fabric keys.");
-    for (PersistKeyValueRequest& kvRequest : setRequests) {
-      kvRequestQueue_.push(std::move(kvRequest));
-    }
+  if (auto& fabricHelper = areaLinkState.getFabricHelper()) {
+    fabricHelper->updateFabricKv(changedKeys, thriftPub);
   }
 }
 
