@@ -394,7 +394,7 @@ Config::populateInternalDb() {
   }
 
   // validate IP-TOS
-  if (const auto& ipTos = config_.ip_tos()) {
+  if (const auto& ipTos = config_.ip_tos().as_const()) {
     if (*ipTos < 0 || *ipTos >= 256) {
       throw std::out_of_range(
           "ip_tos must be greater or equal to 0 and less than 256");
