@@ -11,6 +11,7 @@
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <stdexcept>
+#include <string_view>
 
 #include <openr/common/Constants.h>
 #include <openr/config/Config.h>
@@ -614,6 +615,16 @@ FabricConfig::isSpinePrefixKey(const std::string& key) const {
 bool
 FabricConfig::isFabricPrefixKey(const std::string& key) const {
   return isFabric(getNodeNameFromPrefixKey(key));
+}
+
+bool
+FabricConfig::isFabricDrainStatusKey(std::string_view key) const {
+  // The fabric drain-status key is "drainStatus:<fabricName>". Match it
+  // exactly. Taking std::string_view avoids allocating on every call.
+  if (!key.starts_with(kDrainStatusMarker)) {
+    return false;
+  }
+  return key.substr(kDrainStatusMarker.size()) == getFabricName();
 }
 
 bool

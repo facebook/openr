@@ -701,7 +701,8 @@ KvStoreFilters::isAllowedByFabricScope(const std::string& key) const {
     return true;
   }
   if (!fabricConfig_->isFabricAdjKey(key) &&
-      !fabricConfig_->isFabricPrefixKey(key)) {
+      !fabricConfig_->isFabricPrefixKey(key) &&
+      !fabricConfig_->isFabricDrainStatusKey(key)) {
     // Non-fabric key. Not blocked by this rule.
     return true;
   }

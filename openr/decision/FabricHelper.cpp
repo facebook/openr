@@ -216,6 +216,11 @@ FabricHelper::setDrainStatus(const thrift::InstanceDrainStatus& drainStatus) {
     return false;
   }
   fabricDrainStatus_ = drainStatus;
+  XLOGF(
+      INFO,
+      "Updated fabric drain status: isOverloaded={}, nodeMetricIncrementVal={}",
+      *fabricDrainStatus_.isOverloaded(),
+      *fabricDrainStatus_.nodeMetricIncrementVal());
   return true;
 }
 

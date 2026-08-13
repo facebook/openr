@@ -25,9 +25,6 @@ namespace openr {
 
 class FabricHelper {
  public:
-  // KvStore key marker for a fabric node's drain status.
-  static constexpr folly::StringPiece kDrainStatusMarker{"drainStatus:"};
-
   FabricHelper(
       const FabricConfig& fabricConfig,
       const folly::F14NodeMap<std::string /* nodeName */, Link::LinkSet>&
@@ -44,7 +41,9 @@ class FabricHelper {
         myNodeName_(myNodeName),
         drainStatusKey_(
             fmt::format(
-                "{}{}", kDrainStatusMarker, fabricConfig.getFabricName())),
+                "{}{}",
+                FabricConfig::kDrainStatusMarker,
+                fabricConfig.getFabricName())),
         kvRequestQueue_(kvRequestQueue) {}
 
   // Returns the name of the fabric.

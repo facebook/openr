@@ -8,8 +8,10 @@
 #pragma once
 
 #include <filesystem>
+#include <string_view>
 namespace fs = std::filesystem;
 #include <folly/IPAddress.h>
+#include <folly/Range.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 #include <folly/io/async/SSLContext.h>
@@ -85,6 +87,10 @@ class AreaConfiguration {
 
 class FabricConfig {
  public:
+  // KvStore key marker for a fabric node's drain status. The full key is
+  // "drainStatus:<fabricName>".
+  static constexpr folly::StringPiece kDrainStatusMarker{"drainStatus:"};
+
   explicit FabricConfig(const thrift::FabricConfig& fabricConfig);
 
   std::string getFabricName() const;
@@ -101,6 +107,7 @@ class FabricConfig {
   bool isLeafPrefixKey(const std::string& key) const;
   bool isSpinePrefixKey(const std::string& key) const;
   bool isFabricPrefixKey(const std::string& key) const;
+  bool isFabricDrainStatusKey(std::string_view key) const;
   bool isFabricInterface(const std::string& ifName) const;
 
  private:

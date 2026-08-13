@@ -3430,8 +3430,9 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
 // }
 
 /**
- * Verify that fabric-internal keys (adj/prefix keys for fabric nodes) are
- * flooded only to fabric peers, while non-fabric keys are flooded to all peers.
+ * Verify that fabric-internal keys (adj/prefix/drainStatus keys for fabric
+ * nodes) are flooded only to fabric peers, while non-fabric keys are flooded to
+ * all peers.
  *
  * Setup:
  *  - Node A (fabric node "eb01-ld002.dfw1") with fabricConfig — publisher
@@ -3439,13 +3440,13 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
  *  - Node C (non-fabric peer "external-node") — no regex match
  *
  * Expected behavior:
- *  - Fabric adj/prefix keys set on A → flood to B only
+ *  - Fabric adj/prefix/drainStatus keys set on A → flood to B only
  *  - Non-fabric key set on A → flood to both B and C
  */
 TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
   // Build FabricConfig with leaf/spine regexes
   thrift::FabricConfig thriftFabricConfig;
-  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_name() = "bbf01.dfw1";
   thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
   thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
   thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
@@ -3499,9 +3500,14 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
   // Keys to set on Node A:
   //  - fabricAdjKey: adj key for a fabric leaf node → fabric-internal
   //  - fabricPrefixKey: prefix key for a fabric spine node → fabric-internal
+  //  - fabricDrainStatusKey: drainStatus key for this fabric → fabric-internal
+  //  - lagEbFaIfStatusKey: LAG EB/FA if-status key for a BBF node → NOT
+  //    fabric-internal (must still flood to non-fabric peers)
   //  - nonFabricKey: adj key for external node → NOT fabric-internal
   const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
   const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string fabricDrainStatusKey = "drainStatus:bbf01.dfw1";
+  const std::string lagEbFaIfStatusKey = "lagEbFaIfStatus:bbf01.dfw1";
   const std::string nonFabricKey = "adj:external-node";
 
   const auto thriftVal = [&](const std::string& val) {
@@ -3522,26 +3528,42 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
           kTestingAreaName, fabricPrefixKey, thriftVal("fab-prefix")),
       IsTrue());
   EXPECT_THAT(
+      storeA->setKey(
+          kTestingAreaName, fabricDrainStatusKey, thriftVal("fab-drain")),
+      IsTrue());
+  EXPECT_THAT(
+      storeA->setKey(
+          kTestingAreaName, lagEbFaIfStatusKey, thriftVal("lag-status")),
+      IsTrue());
+  EXPECT_THAT(
       storeA->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
       IsTrue());
 
-  // Wait for the non-fabric key to propagate to both peers (it should always
-  // reach both B and C).
+  // Wait for the non-fabric keys to propagate to both peers (they should always
+  // reach both B and C). lagEbFaIfStatus is a BBF key but NOT fabric-internal,
+  // so it must also reach the non-fabric peer C.
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, nonFabricKey);
   waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, nonFabricKey);
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, lagEbFaIfStatusKey);
+  waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, lagEbFaIfStatusKey);
 
   // Also wait for fabric keys to arrive at B
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricAdjKey);
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricPrefixKey);
+  waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, fabricDrainStatusKey);
 
-  // Node B (fabric peer): should have ALL 3 keys
+  // Node B (fabric peer): should have ALL keys
   folly::F14FastMap<std::string, thrift::Value> dumpB =
       storeB->dumpAll(kTestingAreaName);
   EXPECT_THAT(dumpB.count(fabricAdjKey), Eq(1));
   EXPECT_THAT(dumpB.count(fabricPrefixKey), Eq(1));
+  EXPECT_THAT(dumpB.count(fabricDrainStatusKey), Eq(1));
+  EXPECT_THAT(dumpB.count(lagEbFaIfStatusKey), Eq(1));
   EXPECT_THAT(dumpB.count(nonFabricKey), Eq(1));
 
-  // Node C (non-fabric peer): should have ONLY the non-fabric key
+  // Node C (non-fabric peer): should have the non-fabric keys
+  // (adj:external-node and lagEbFaIfStatus:*) but none of the fabric-internal
+  // keys.
   folly::F14FastMap<std::string, thrift::Value> dumpC =
       storeC->dumpAll(kTestingAreaName);
   EXPECT_THAT(dumpC.count(nonFabricKey), Eq(1));
@@ -3549,6 +3571,10 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
       << "Fabric adj key should NOT be flooded to non-fabric peer";
   EXPECT_THAT(dumpC.count(fabricPrefixKey), Eq(0))
       << "Fabric prefix key should NOT be flooded to non-fabric peer";
+  EXPECT_THAT(dumpC.count(fabricDrainStatusKey), Eq(0))
+      << "drainStatus key should NOT be flooded to non-fabric peer";
+  EXPECT_THAT(dumpC.count(lagEbFaIfStatusKey), Eq(1))
+      << "lagEbFaIfStatus key SHOULD be flooded to non-fabric peer";
 }
 
 /**

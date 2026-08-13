@@ -351,10 +351,12 @@ main(int argc, char** argv) {
           kvStoreUpdatesQueue.getReader("dispatcher"),
           *kvStorePublicationsDispatcherQueue));
 
-  // make Decision/Prefix Manager subscribers of Dispatcher
+  // make Decision/Prefix Manager subscribers of Dispatcher. Decision also needs
+  // the fabric drain-status keys, which FabricHelper consumes.
   auto decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
       {Constants::kAdjDbMarker.toString(),
-       Constants::kPrefixDbMarker.toString()});
+       Constants::kPrefixDbMarker.toString(),
+       FabricConfig::kDrainStatusMarker.toString()});
 
   auto prefixMgrKvStoreUpdatesReader =
       dispatcher->getReader({Constants::kPrefixDbMarker.toString()});

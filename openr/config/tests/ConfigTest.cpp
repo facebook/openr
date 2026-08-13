@@ -981,6 +981,31 @@ TEST(ConfigTest, FabricConfigPrefixKeys) {
       ::testing::IsFalse());
 }
 
+TEST(ConfigTest, FabricConfigDrainStatusKeys) {
+  thrift::FabricConfig thriftConfig = makeFabricConfig();
+  FabricConfig fabricConfig(thriftConfig);
+
+  // The drain-status key for this fabric ("drainStatus:<fabricName>").
+  EXPECT_THAT(
+      fabricConfig.isFabricDrainStatusKey("drainStatus:bbf01.dfw"),
+      ::testing::IsTrue());
+
+  // A drain-status key for a different fabric is not this fabric's key.
+  EXPECT_THAT(
+      fabricConfig.isFabricDrainStatusKey("drainStatus:other.fabric"),
+      ::testing::IsFalse());
+
+  // Keys with other prefixes are not drain-status keys.
+  EXPECT_THAT(
+      fabricConfig.isFabricDrainStatusKey("adj:eb01-ld002.dfw1"),
+      ::testing::IsFalse());
+  EXPECT_THAT(
+      fabricConfig.isFabricDrainStatusKey(
+          "prefix:eb01-ld002.dfw1:[10.0.0.0/8]"),
+      ::testing::IsFalse());
+  EXPECT_THAT(fabricConfig.isFabricDrainStatusKey(""), ::testing::IsFalse());
+}
+
 TEST(ConfigTest, FabricConfigInterface) {
   thrift::FabricConfig thriftConfig = makeFabricConfig();
   FabricConfig fabricConfig(thriftConfig);

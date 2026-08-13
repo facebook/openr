@@ -3468,7 +3468,8 @@ KvStoreDb<ClientType>::makeFabricParam(
       std::make_unique<thrift::KeySetParams>();
   for (const auto& [key, val] : *publication.keyVals()) {
     if (kvParams_.fabricConfig->isFabricAdjKey(key) ||
-        kvParams_.fabricConfig->isFabricPrefixKey(key)) {
+        kvParams_.fabricConfig->isFabricPrefixKey(key) ||
+        kvParams_.fabricConfig->isFabricDrainStatusKey(key)) {
       continue;
     }
     params->keyVals()->insert({key, val});
