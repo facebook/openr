@@ -575,6 +575,36 @@ TEST_F(DecisionTestFixture, DecisionSoftDrainStateTest) {
   }
 }
 
+TEST_F(DecisionTestFixture, LinkMetricChangePublishesIncrementalRouteDelta) {
+  const auto initialPublication = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {},
+      {},
+      {});
+  sendKvPublication(initialPublication);
+  recvRouteUpdates();
+
+  auto softDrainedAdj12 = adj12;
+  softDrainedAdj12.metric() = *adj12.metric() + 100000;
+  const auto softDrainPublication = createThriftPublication(
+      {{"adj:1",
+        createAdjValue(serializer, "1", 2, {softDrainedAdj12}, false, 1)}},
+      {},
+      {},
+      {});
+  sendKvPublication(softDrainPublication);
+
+  const auto routeDbDelta = recvRouteUpdates();
+
+  EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, routeDbDelta.type);
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.size());
+  EXPECT_EQ(1, routeDbDelta.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
+  EXPECT_TRUE(routeDbDelta.unicastRoutesToDelete.empty());
+}
+
 // The following topology is used:
 //
 // 1---2---3

@@ -1037,9 +1037,12 @@ Decision::rebuildRoutes(std::string const& event) {
           start,
           std::chrono::steady_clock::now());
     }
-    // update `DecisionRouteDb` cache and return delta as `update`
+    /*
+     * A full route rebuild still produces a delta relative to routeDb_. For
+     * example, an unchanged prefix is omitted rather than resent as a snapshot
+     * entry.
+     */
     update = routeDb_.calculateUpdate(std::move(db));
-    update.type = DecisionRouteUpdate::FULL_SYNC;
   } else {
     // process prefixes update from `prefixState_`
     for (auto const& prefix : pendingUpdates_.updatedPrefixes()) {
