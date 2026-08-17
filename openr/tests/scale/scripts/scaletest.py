@@ -3,7 +3,6 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# pyre-strict
 
 """CLI client for the OpenR scale-test Thrift server (`scale_test_server_d`).
 
