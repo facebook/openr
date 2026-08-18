@@ -233,10 +233,19 @@ FabricHelper::updateChangedFabricKvs(
     return {};
   }
 
+  // Soft-drain: nodeMetricIncrementVal makes the fabric node less preferred by
+  // increasing its adjacency metrics.
+  const int32_t nodeMetricIncrementVal =
+      *fabricDrainStatus_.nodeMetricIncrementVal();
+
   thrift::AdjacencyDatabase fabricAdjDb;
   for (const auto& [_, adjacencies] : externalAdjacencies_) {
     for (const thrift::Adjacency& adj : adjacencies) {
-      fabricAdjDb.adjacencies()->push_back(adj);
+      thrift::Adjacency& fabricAdj =
+          fabricAdjDb.adjacencies()->emplace_back(adj);
+      // Increment the adjacency metric by nodeMetricIncrementVal so transit
+      // through the soft-drained fabric node is made less preferred.
+      fabricAdj.metric() = *fabricAdj.metric() + nodeMetricIncrementVal;
     }
   }
   const std::string& fabricName = getFabricName();
@@ -246,8 +255,7 @@ FabricHelper::updateChangedFabricKvs(
   //  - isOverloaded          -> hard-drain (node removed from transit);
   //  - nodeMetricIncrementVal -> soft-drain (node made less preferred).
   fabricAdjDb.isOverloaded() = *fabricDrainStatus_.isOverloaded();
-  fabricAdjDb.nodeMetricIncrementVal() =
-      *fabricDrainStatus_.nodeMetricIncrementVal();
+  fabricAdjDb.nodeMetricIncrementVal() = nodeMetricIncrementVal;
 
   std::vector<PersistKeyValueRequest> requests;
   std::string adjDbStr = writeThriftObjStr(fabricAdjDb, serializer_);

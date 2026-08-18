@@ -835,6 +835,9 @@ TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_StampsDrainStatus) {
       decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, changed));
   EXPECT_TRUE(*fabricAdjDb.isOverloaded());
   EXPECT_EQ(*fabricAdjDb.nodeMetricIncrementVal(), 100);
+  // Each adjacency metric is incremented by nodeMetricIncrementVal (10 + 100).
+  ASSERT_EQ(fabricAdjDb.adjacencies()->size(), 1);
+  EXPECT_EQ(*fabricAdjDb.adjacencies()->at(0).metric(), 110);
 }
 
 TEST_F(
