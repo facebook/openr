@@ -28,5 +28,4 @@ class ViewFibCli:
     def fib(cli_opts):  # noqa: B902
         """View latest perf log of fib module from this node"""
 
-        # pyrefly: ignore [bad-argument-type]
         perf.ViewFibCmd(cli_opts).run()

@@ -27,5 +27,4 @@ class TechSupportCli:
         - Recent perf events
         """
 
-        # pyrefly: ignore [missing-attribute]
         TechSupportCmd(ctx.obj).run(routes)

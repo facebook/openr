@@ -51,7 +51,6 @@ def get_fib_agent_client(
     client_id: int = FibClient.OPENR,
     client_class: type[
         Client[TAsyncClient, TSyncClient]
-        # pyrefly: ignore [bad-function-definition]
     ] = FibServiceClient,  # Allow service client overwrite
 ) -> TSyncClient:  # return client_class.Sync
     """

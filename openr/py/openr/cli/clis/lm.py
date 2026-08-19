@@ -75,7 +75,6 @@ class LMValidateCli:
     def validate(cli_opts):  # noqa: B902
         """Run checks on discovered interfaces"""
 
-        # pyrefly: ignore [bad-argument-type]
         lm.LMValidateCmd(cli_opts).run()
 
 
@@ -92,7 +91,6 @@ class LMLinksCli:
     def links(cli_opts, only_suppressed, json):  # noqa: B902
         """Dump all known links of the current host"""
 
-        # pyrefly: ignore [bad-argument-type]
         lm.LMLinksCmd(cli_opts).run(only_suppressed, json)
 
 
@@ -123,7 +121,6 @@ class SetNodeOverloadCli:
     def set_node_overload(cli_opts, yes):  # noqa: B902
         """Set overload bit to stop transit traffic through node."""
 
-        # pyrefly: ignore [bad-argument-type]
         lm.SetNodeOverloadCmd(cli_opts).run(yes)
 
 
@@ -134,7 +131,6 @@ class UnsetNodeOverloadCli:
     def unset_node_overload(cli_opts, yes):  # noqa: B902
         """Unset overload bit to resume transit traffic through node."""
 
-        # pyrefly: ignore [bad-argument-type]
         lm.UnsetNodeOverloadCmd(cli_opts).run(yes)
 
 
@@ -146,7 +142,6 @@ class SetLinkOverloadCli:
     def set_link_overload(cli_opts, interface, yes):  # noqa: B902
         """Set overload bit for a link. Transit traffic will be drained."""
 
-        # pyrefly: ignore [bad-argument-type]
         lm.SetLinkOverloadCmd(cli_opts).run(interface, yes)
 
 
@@ -158,7 +153,6 @@ class UnsetLinkOverloadCli:
     def unset_link_overload(cli_opts, interface, yes):  # noqa: B902
         """Unset overload bit for a link to allow transit traffic."""
 
-        # pyrefly: ignore [bad-argument-type]
         lm.UnsetLinkOverloadCmd(cli_opts).run(interface, yes)
 
 
@@ -181,14 +175,11 @@ class IncreaseNodeMetricCli:
         """
 
         # increase node metric
-        # pyrefly: ignore [bad-argument-type]
         lm.IncreaseNodeMetricCmd(cli_opts).run(metric, yes)
 
         # show adj metric result
         if not quiet:
-            # pyrefly: ignore [bad-argument-type]
             nodes = parse_nodes(cli_opts, "")
-            # pyrefly: ignore [bad-argument-type]
             lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
@@ -203,14 +194,11 @@ class ClearNodeMetricCli:
         """
 
         # clear node metric increment
-        # pyrefly: ignore [bad-argument-type]
         lm.ClearNodeMetricCmd(cli_opts).run(yes)
 
         # show adj metric result
         if not quiet:
-            # pyrefly: ignore [bad-argument-type]
             nodes = parse_nodes(cli_opts, "")
-            # pyrefly: ignore [bad-argument-type]
             lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
@@ -227,14 +215,11 @@ class IncreaseLinkMetricCli:
         """
 
         # increase link metric
-        # pyrefly: ignore [bad-argument-type]
         lm.IncreaseLinkMetricCmd(cli_opts).run(interface, metric, yes)
 
         # show adj metric result
         if not quiet:
-            # pyrefly: ignore [bad-argument-type]
             nodes = parse_nodes(cli_opts, "")
-            # pyrefly: ignore [bad-argument-type]
             lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
@@ -250,14 +235,11 @@ class ClearLinkMetricCli:
         """
 
         # clear link metric increment
-        # pyrefly: ignore [bad-argument-type]
         lm.ClearLinkMetricCmd(cli_opts).run(interface, yes)
 
         # show adj metric result
         if not quiet:
-            # pyrefly: ignore [bad-argument-type]
             nodes = parse_nodes(cli_opts, "")
-            # pyrefly: ignore [bad-argument-type]
             lm.LMAdjCmd(cli_opts).run(nodes, False)
 
 
@@ -286,13 +268,10 @@ class OverrideAdjMetricCli:
         if not utils.yesno(question_str, yes):
             return
 
-        # pyrefly: ignore [bad-argument-type]
         lm.OverrideAdjMetricCmd(cli_opts).run(node, interface, metric, yes)
 
         if not quiet:
-            # pyrefly: ignore [bad-argument-type]
             nodes = parse_nodes(cli_opts, "")
-            # pyrefly: ignore [bad-argument-type]
             kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)
 
 
@@ -313,10 +292,7 @@ class ClearAdjMetricOverrideCli:
         if not utils.yesno(question_str, yes):
             return
 
-        # pyrefly: ignore [bad-argument-type]
         lm.ClearAdjMetricOverrideCmd(cli_opts).run(node, interface, yes)
         if not quiet:
-            # pyrefly: ignore [bad-argument-type]
             nodes = parse_nodes(cli_opts, "")
-            # pyrefly: ignore [bad-argument-type]
             kvstore.ShowAdjNodeCmd(cli_opts).run(nodes, node, interface)

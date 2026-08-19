@@ -195,5 +195,4 @@ class PrefixMgrValidateCli:
     def validate(cli_opts):
         """Runs validation checks on prefix manager module"""
 
-        # pyrefly: ignore [bad-argument-type]
         prefix_mgr.ValidateCmd(cli_opts).run()

@@ -35,7 +35,6 @@ class CountersCli:
     def counters(cli_opts, prefix, json):  # noqa: B902
         """Fetch and display OpenR counters"""
 
-        # pyrefly: ignore [bad-argument-type]
         monitor.CountersCmd(cli_opts).run(prefix, json)
 
 
@@ -47,7 +46,6 @@ class MonitorLogs:
     def logs(cli_opts, prefix, json):  # noqa: B902
         """Print log events"""
 
-        # pyrefly: ignore [bad-argument-type]
         monitor.LogCmd(cli_opts).run(json)
 
 
@@ -57,5 +55,4 @@ class MonitorStatistics:
     def statistics(cli_opts):  # noqa: B902
         """Print counters in pretty format"""
 
-        # pyrefly: ignore [bad-argument-type]
         monitor.StatisticsCmd(cli_opts).run()

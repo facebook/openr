@@ -28,5 +28,4 @@ class deduceCommandGroup(click.Group):
     def resolve_command(self, ctx, args):
         # return the full command name
         _, cmd, args = super().resolve_command(ctx, args)
-        # pyrefly: ignore [missing-attribute]
         return cmd.name, cmd, args

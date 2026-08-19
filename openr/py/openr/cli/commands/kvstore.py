@@ -484,7 +484,6 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
                     graph.add_edge(adj.otherNodeName, adj_db.thisNodeName)
                     continue
                 edges.add((adj_db.thisNodeName, adj.otherNodeName, adj.ifName))
-        # pyrefly: ignore [missing-attribute]
         return nx.node_connected_component(graph, node_id)
 
     def print_kvstore_nodes(
@@ -668,7 +667,6 @@ class KvCompareCmd(KvStoreWithInitAreaCmdBase):
         if lines != []:
             self.print_publication_delta(
                 f"Key: {key} difference",
-                # pyrefly: ignore [bad-argument-type]
                 utils.sprint_pub_update(our_kv_pub_db, key, other_val),
                 "\n".join(lines) if lines else "",
             )

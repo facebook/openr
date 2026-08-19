@@ -50,7 +50,6 @@ class ValidateCli:
     def validate(cli_opts):
         """Run validation checks"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.ValidateCmd(cli_opts).run()
 
 
@@ -96,7 +95,6 @@ class KeysCli:
     def keys(cli_opts, json, prefix, originator, ttl):  # noqa: B902
         """dump all available keys"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.KeysCmd(cli_opts).run(json, prefix, originator, ttl)
 
 
@@ -107,7 +105,6 @@ class KeyValsCli:
     def keyvals(cli_opts, keys):  # noqa: B902
         """get values of input keys"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.KeyValsCmd(cli_opts).run(keys)
 
 
@@ -117,7 +114,6 @@ class NodesCli:
     def nodes(cli_opts):  # noqa: B902
         """show nodes info"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.NodesCmd(cli_opts).run()
 
 
@@ -144,7 +140,6 @@ class KvCompareCli:
     def kv_compare(cli_opts, nodes):  # noqa: B902
         """get the kv store delta"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.KvCompareCmd(cli_opts).run(nodes)
 
 
@@ -154,7 +149,6 @@ class PeersCli:
     def peers(cli_opts):  # noqa: B902
         """show the KV store peers of the node"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.PeersCmd(cli_opts).run()
 
 
@@ -165,7 +159,6 @@ class EraseKeyCli:
     def erase_key(cli_opts, key):  # noqa: B902
         """erase key from kvstore"""
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.EraseKeyCmd(cli_opts).run(key)
 
 
@@ -191,7 +184,6 @@ class SetKeyCli:
 
         if ttl != Consts.CONST_TTL_INF:
             ttl = ttl * 1000
-        # pyrefly: ignore [bad-argument-type]
         kvstore.SetKeyCmd(cli_opts).run(key, value, originator, version, ttl)
 
 
@@ -211,7 +203,6 @@ class KvSignatureCli:
         differences
         """
 
-        # pyrefly: ignore [bad-argument-type]
         kvstore.KvSignatureCmd(cli_opts).run(prefix)
 
 
@@ -303,5 +294,4 @@ class StreamSummaryCli:
     def stream_summary(cli_opts):  # noqa: B902
         """Show basic info on all KVstore subscribers"""
         cli_options = {}
-        # pyrefly: ignore [bad-argument-type]
         kvstore.StreamSummaryCmd(cli_opts).run(cli_options)

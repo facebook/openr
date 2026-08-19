@@ -331,7 +331,6 @@ class LMCmdBase(OpenrCtrlCmd):
         columns = ["Interface", "Status", "Metric Override", "Addresses"]
         rows = cls.build_table_rows(interfaces)
 
-        # pyrefly: ignore [bad-argument-type]
         print(printing.render_horizontal_table(rows, columns, caption))
 
 

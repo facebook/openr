@@ -27,7 +27,6 @@ class FiltersCli:
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def filters(cli_opts, json):  # noqa: B902
-        # pyrefly: ignore [bad-argument-type]
         dispatcher.FiltersCmd(cli_opts).run(json)
 
 
@@ -36,5 +35,4 @@ class QueuesCli:
     @click.option("--json/--no-json", default=False, help="Dump in JSON format")
     @click.pass_obj
     def queues(cli_opts, json):  # noqa: B902
-        # pyrefly: ignore [bad-argument-type]
         dispatcher.QueuesCmd(cli_opts).run(json)
