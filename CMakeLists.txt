@@ -224,9 +224,13 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/OpenrLibrary.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Common.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_lsdb_library()
+openr_add_messaging_library()
+openr_add_monitor_libraries()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -268,10 +272,6 @@ add_library(openrlib
   openr/nl/NetlinkMessageBase.cpp
   openr/nl/NetlinkProtocolSocket.cpp
   openr/nl/NetlinkTypes.cpp
-  openr/monitor/LogSample.cpp
-  openr/monitor/Monitor.cpp
-  openr/monitor/MonitorBase.cpp
-  openr/monitor/SystemMetrics.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
   openr/policy/PolicyManager.cpp
@@ -486,6 +486,17 @@ if(BUILD_TESTS)
     EXPECTED_SOURCE_COUNT ${OPENR_LSDB_EXPECTED_SOURCE_COUNT}
   )
 
+  openr_add_source_group_test(
+    NAME OpenrMonitorSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Monitor.cmake
+    SOURCE_VARIABLES
+      OPENR_LOG_SAMPLE_SOURCES
+      OPENR_SYSTEM_METRICS_SOURCES
+      OPENR_MONITOR_BASE_SOURCES
+      OPENR_MONITOR_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_MONITOR_EXPECTED_SOURCE_COUNT}
+  )
+
   set(
     OPENR_COMMON_TEST_LIBRARIES
     openr_common
@@ -606,6 +617,39 @@ if(BUILD_TESTS)
       fmt::fmt
       glog::glog
     DESTINATION sbin/tests/openr/common
+  )
+
+  add_openr_test(LogSampleTest log_sample_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/monitor/tests/LogSampleTest.cpp
+    LIBRARIES
+      openr_log_sample
+      glog::glog
+      gflags
+    DESTINATION sbin/tests/openr/monitor
+  )
+
+  add_openr_test(SystemMetricsTest system_metrics_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/monitor/tests/SystemMetricsTest.cpp
+    LIBRARIES
+      openr_system_metrics
+      glog::glog
+    DESTINATION sbin/tests/openr/monitor
+  )
+
+  add_openr_test(MonitorBaseTest monitor_base_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/monitor/tests/MonitorBaseTest.cpp
+    LIBRARIES
+      openr_constants
+      openr_config
+      openr_monitor_base
+      glog::glog
+    DESTINATION sbin/tests/openr/monitor
   )
 
   add_openr_test(PersistentStoreTest config_store_test
