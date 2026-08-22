@@ -3,11 +3,31 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.13)
 project(openr)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
+# enable coroutine compiler option if supported by compiler
+include(CheckCXXCompilerFlag)
+if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+  check_cxx_compiler_flag(-fcoroutines COMPILER_HAS_F_COROUTINES)
+  if (COMPILER_HAS_F_COROUTINES)
+    message(
+      STATUS
+      "GCC has support for C++ coroutines, "
+      "disabling since fbthrift service is not ready"
+    )
+    # add_compile_options(-fcoroutines)
+  else()
+    message(
+      STATUS
+      "GCC does not have support for C++ coroutines, "
+      "disabling Folly coroutine support."
+    )
+  endif()
+endif()
 
 # Disable all warnings. Warnings can vary across toolchains. We rely on
 # internaly configured CI (lint and compile) to raise the warnings we find
@@ -63,26 +83,6 @@ if (TARGET Folly::folly_exception_tracer)
 endif()
 
 add_compile_definitions(NO_FOLLY_EXCEPTION_TRACER)
-
-# enable coroutine compiler option if supported by compiler
-include(CheckCXXCompilerFlag)
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  check_cxx_compiler_flag(-fcoroutines COMPILER_HAS_F_COROUTINES)
-  if (COMPILER_HAS_F_COROUTINES)
-    message(
-      STATUS
-      "GCC has support for C++ coroutines, "
-      "disabling since fbthrift service is not ready"
-    )
-    # add_compile_options(-fcoroutines)
-  else()
-    message(
-      STATUS
-      "GCC does not have support for C++ coroutines, "
-      "disabling Folly coroutine support."
-    )
-  endif()
-endif()
 
 include_directories(
   ${Boost_INCLUDE_DIR}
@@ -220,20 +220,26 @@ install(TARGETS
   DESTINATION lib
 )
 
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/OpenrLibrary.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Common.cmake)
+openr_add_common_libraries()
+
+# Every openr_add_library call above registers its OBJECT target globally.
+# Collect those $<TARGET_OBJECTS:...> expressions once, after all component
+# libraries are defined, into this local list. The compatibility openrlib then
+# reuses the same compiled objects without compiling their sources again.
+openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
+
 add_library(openrlib
-  openr/common/AsyncThrottle.cpp
+  ${OPENR_COMPONENT_OBJECTS}
   openr/common/BuildInfo.cpp
-  openr/common/Constants.cpp
-  openr/common/ExponentialBackoff.cpp
   openr/common/Flags.cpp
   openr/common/FileUtil.cpp
   openr/common/LsdbTypes.cpp
   openr/common/LsdbUtil.cpp
   openr/common/MainUtil.cpp
   openr/common/NetworkUtil.cpp
-  openr/common/OpenrEventBase.cpp
   openr/common/OpenrProfiler.cpp
-  openr/common/Types.cpp
   openr/common/Util.cpp
   openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
@@ -283,6 +289,11 @@ add_library(openrlib
   openr/tests/utils/Utils.cpp
   openr/watchdog/Watchdog.cpp
 )
+
+# Keep directly listed compatibility sources at the same effective C++20 level
+# as component objects without changing the project-wide coroutine policy or
+# publishing a consumer requirement from openrlib.
+target_compile_features(openrlib PRIVATE cxx_std_20)
 
 if (BUILD_SHARED_LIBS)
   set_target_properties(openrlib PROPERTIES VERSION 1.0.0 SOVERSION 1)
@@ -449,43 +460,25 @@ if(BUILD_TESTS)
     ${GMOCK_INCLUDE_DIRS}
   )
 
-  # function that adds tests, typical usage example:
-  # add_openr_test(TestName test_bin_name
-  #   SOURCES Feature1Test.cpp Feature2Test.cpp
-  #   LIBRARIES additional_library1 -lcrypto
-  #   DESTINATION folder/where/to/place/binary
-  # )
-  function(add_openr_test TEST_NAME BIN_NAME)
-    set(one_value_args DESTINATION)
-    set(multi_value_args SOURCES LIBRARIES)
-    fb_cmake_parse_args(
-      ARG
-      ""
-      "${one_value_args}"
-      "${multi_value_args}"
-      "${ARGN}"
-    )
+  # Validate source-list integrity separately from compilation so duplicate,
+  # missing, or stale entries fail with a focused diagnostic.
+  add_test(
+    NAME OpenrCommonSourceGroupTest
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DOPENR_SOURCE_ROOT=${CMAKE_SOURCE_DIR}
+      -DOPENR_SOURCE_GROUP_FILE=cmake/modules/Common.cmake
+      -DOPENR_SOURCE_VARIABLES=OPENR_CONSTANTS_SOURCES\;OPENR_COMMON_SOURCES
+      -DOPENR_EXPECTED_SOURCE_COUNT=${OPENR_COMMON_EXPECTED_SOURCE_COUNT}
+      -P ${CMAKE_CURRENT_LIST_DIR}/cmake/tests/VerifyOpenrSourceGroup.cmake
+  )
 
-    add_executable(
-      ${BIN_NAME}
-      ${ARG_SOURCES}
-    )
-    target_link_libraries(${BIN_NAME}
-      openrlib
-      ${OPENR_THRIFT_LIBS}
-      ${GTEST_BOTH_LIBRARIES}
-      ${LIBGMOCK_LIBRARIES}
-      ${ARG_LIBRARIES}
-    )
-    add_test(${TEST_NAME} ${BIN_NAME})
-    set_tests_properties(${TEST_NAME} PROPERTIES TIMEOUT 300)
-    if(NOT "${ARG_DESTINATION}" STREQUAL "")
-      install(TARGETS
-        ${BIN_NAME}
-        DESTINATION ${ARG_DESTINATION}
-      )
-    endif()
-  endfunction()
+  set(
+    OPENR_COMMON_TEST_LIBRARIES
+    openr_common
+    glog::glog
+    gflags
+  )
 
   add_openr_test(OpenrSystemTest openr_system_test
     SOURCES
@@ -522,26 +515,34 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(AsyncDebounceTest async_debounce_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/common/tests/AsyncDebounceTest.cpp
+    LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
     DESTINATION sbin/tests/openr/common
   )
 
   add_openr_test(AsyncThrottleTest async_throttle_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/common/tests/AsyncThrottleTest.cpp
+    LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
     DESTINATION sbin/tests/openr/common
   )
 
   add_openr_test(ExponentialBackoffTest exp_backoff_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/common/tests/ExponentialBackoffTest.cpp
+    LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
     DESTINATION sbin/tests/openr/common
   )
 
   add_openr_test(OpenrEventBaseTest openr_event_base_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/common/tests/OpenrEventBaseTest.cpp
+    LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
     DESTINATION sbin/tests/openr/common
   )
 
