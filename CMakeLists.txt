@@ -227,12 +227,14 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_lsdb_library()
 openr_add_messaging_library()
 openr_add_monitor_libraries()
 openr_add_kvstore_libraries()
+openr_add_netlink_library()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -262,14 +264,6 @@ add_library(openrlib
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
   openr/neighbor-monitor/NeighborMonitor.cpp
-  openr/nl/NetlinkAddrMessage.cpp
-  openr/nl/NetlinkLinkMessage.cpp
-  openr/nl/NetlinkNeighborMessage.cpp
-  openr/nl/NetlinkRouteMessage.cpp
-  openr/nl/NetlinkRuleMessage.cpp
-  openr/nl/NetlinkMessageBase.cpp
-  openr/nl/NetlinkProtocolSocket.cpp
-  openr/nl/NetlinkTypes.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
   openr/policy/PolicyManager.cpp
@@ -504,6 +498,13 @@ if(BUILD_TESTS)
       OPENR_KVSTORE_UTIL_SOURCES
       OPENR_KVSTORE_WRAPPER_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_KVSTORE_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrNetlinkSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Netlink.cmake
+    SOURCE_VARIABLES OPENR_FBNL_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_NETLINK_EXPECTED_SOURCE_COUNT}
   )
 
   set(
@@ -798,18 +799,36 @@ if(BUILD_TESTS)
   endif()
 
   add_openr_test(NetlinkTypesTest netlink_types_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/nl/tests/NetlinkTypesTest.cpp
+    LIBRARIES
+      openr_fbnl
+      glog::glog
+      gflags
     DESTINATION sbin/tests/openr/nl
   )
 
   if(ADD_ROOT_TESTS)
-    # these tests must be run by root user
+    # Build this privileged test for compile coverage. It remains disabled
+    # in CTest and must be invoked manually as root.
     add_openr_test(NetlinkProtocolSocketTest netlink_message_test
+      NO_DEFAULT_OPENR_LIBRARIES
       SOURCES
         openr/nl/tests/NetlinkProtocolSocketTest.cpp
+      LIBRARIES
+        openr_fbnl
+        openr_util
+        platform_cpp2
+        network_cpp2
+        fb303::fb303
+        Folly::folly
+        FBThrift::thriftcpp2
+        glog::glog
+        gflags
       DESTINATION sbin/tests/openr/nl
     )
+    set_tests_properties(NetlinkProtocolSocketTest PROPERTIES DISABLED TRUE)
   endif()
 
   add_openr_test(PrefixManagerTest prefix_manager_test
