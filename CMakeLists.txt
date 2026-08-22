@@ -226,11 +226,13 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_lsdb_library()
 openr_add_messaging_library()
 openr_add_monitor_libraries()
+openr_add_kvstore_libraries()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -255,11 +257,7 @@ add_library(openrlib
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/dispatcher/Dispatcher.cpp
   openr/dispatcher/DispatcherQueue.cpp
-  openr/kvstore/Dual.cpp
   openr/fib/Fib.cpp
-  openr/kvstore/KvStorePublisher.cpp
-  openr/kvstore/KvStoreUtil.cpp
-  openr/kvstore/KvStoreWrapper.cpp
   openr/link-monitor/AdjacencyEntry.cpp
   openr/link-monitor/LinkMonitor.cpp
   openr/link-monitor/InterfaceEntry.cpp
@@ -497,6 +495,17 @@ if(BUILD_TESTS)
     EXPECTED_SOURCE_COUNT ${OPENR_MONITOR_EXPECTED_SOURCE_COUNT}
   )
 
+  openr_add_source_group_test(
+    NAME OpenrKvStoreSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/KvStore.cmake
+    SOURCE_VARIABLES
+      OPENR_DUAL_SOURCES
+      OPENR_KVSTORE_SOURCES
+      OPENR_KVSTORE_UTIL_SOURCES
+      OPENR_KVSTORE_WRAPPER_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_KVSTORE_EXPECTED_SOURCE_COUNT}
+  )
+
   set(
     OPENR_COMMON_TEST_LIBRARIES
     openr_common
@@ -677,8 +686,28 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(DualTest dual_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/kvstore/tests/DualTest.cpp
+    LIBRARIES
+      openr_dual
+      glog::glog
+      gflags
+      Folly::folly
+      ${Boost_LIBRARIES}
+    DESTINATION sbin/tests/openr/kvstore
+  )
+
+  add_openr_test(KvStorePublisherTest kvstore_publisher_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/kvstore/tests/KvStorePublisherTest.cpp
+    LIBRARIES
+      openr_kvstore
+      openr_util
+      glog::glog
+      gflags
+      Folly::folly
     DESTINATION sbin/tests/openr/kvstore
   )
 
@@ -723,14 +752,31 @@ if(BUILD_TESTS)
   endif()
 
   add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStoreSelfOriginatedKeyTest.cpp
+    LIBRARIES
+      openr_kvstore_wrapper
+      openr_util
+      kv_store_cpp2
+      glog::glog
+      gflags
+      Folly::folly
     DESTINATION sbin/tests/openr/kvstore
   )
 
   add_openr_test(KvStoreUtilTest kvstore_util_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStoreUtilTest.cpp
+    LIBRARIES
+      openr_client_util
+      openr_kvstore_util
+      openr_kvstore_wrapper
+      kv_store_cpp2
+      glog::glog
+      gflags
+      Folly::folly
     DESTINATION sbin/tests/openr/kvstore
   )
 
