@@ -232,15 +232,9 @@ openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
 
 add_library(openrlib
   ${OPENR_COMPONENT_OBJECTS}
-  openr/common/BuildInfo.cpp
-  openr/common/Flags.cpp
-  openr/common/FileUtil.cpp
   openr/common/LsdbTypes.cpp
   openr/common/LsdbUtil.cpp
   openr/common/MainUtil.cpp
-  openr/common/NetworkUtil.cpp
-  openr/common/OpenrProfiler.cpp
-  openr/common/Util.cpp
   openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreWrapper.cpp
@@ -468,7 +462,7 @@ if(BUILD_TESTS)
       ${CMAKE_COMMAND}
       -DOPENR_SOURCE_ROOT=${CMAKE_SOURCE_DIR}
       -DOPENR_SOURCE_GROUP_FILE=cmake/modules/Common.cmake
-      -DOPENR_SOURCE_VARIABLES=OPENR_CONSTANTS_SOURCES\;OPENR_COMMON_SOURCES
+      -DOPENR_SOURCE_VARIABLES=OPENR_CONSTANTS_SOURCES\;OPENR_COMMON_SOURCES\;OPENR_BUILD_INFO_SOURCES\;OPENR_FLAGS_SOURCES\;OPENR_FILE_UTIL_SOURCES\;OPENR_NETWORK_UTIL_SOURCES\;OPENR_PROFILER_SOURCES\;OPENR_UTIL_SOURCES
       -DOPENR_EXPECTED_SOURCE_COUNT=${OPENR_COMMON_EXPECTED_SOURCE_COUNT}
       -P ${CMAKE_CURRENT_LIST_DIR}/cmake/tests/VerifyOpenrSourceGroup.cmake
   )
@@ -549,6 +543,26 @@ if(BUILD_TESTS)
   add_openr_test(UtilTest util_test
     SOURCES
       openr/common/tests/UtilTest.cpp
+    DESTINATION sbin/tests/openr/common
+  )
+
+  add_openr_test(FileUtilTest file_util_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/common/tests/FileUtilTest.cpp
+    LIBRARIES
+      openr_file_util
+    DESTINATION sbin/tests/openr/common
+  )
+
+  add_openr_test(OpenrProfilerTest openr_profiler_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/common/tests/OpenrProfilerTest.cpp
+    LIBRARIES
+      openr_profiler
+      fmt::fmt
+      glog::glog
     DESTINATION sbin/tests/openr/common
   )
 

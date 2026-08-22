@@ -22,9 +22,39 @@ set(
 
 # Keep this independent from the lists so ownership changes require an
 # explicit review of both the source group and its expected size.
-set(OPENR_COMMON_EXPECTED_SOURCE_COUNT 5)
+set(
+  OPENR_BUILD_INFO_SOURCES
+  openr/common/BuildInfo.cpp
+)
 
-# Create the two Buck-aligned libraries after generated Thrift targets exist.
+set(
+  OPENR_FLAGS_SOURCES
+  openr/common/Flags.cpp
+)
+
+set(
+  OPENR_FILE_UTIL_SOURCES
+  openr/common/FileUtil.cpp
+)
+
+set(
+  OPENR_NETWORK_UTIL_SOURCES
+  openr/common/NetworkUtil.cpp
+)
+
+set(
+  OPENR_PROFILER_SOURCES
+  openr/common/OpenrProfiler.cpp
+)
+
+set(
+  OPENR_UTIL_SOURCES
+  openr/common/Util.cpp
+)
+
+set(OPENR_COMMON_EXPECTED_SOURCE_COUNT 11)
+
+# Create the Buck-aligned common libraries after generated Thrift targets exist.
 macro(openr_add_common_libraries)
   # Buck2 target: //openr/common:Constants
   openr_add_library(
@@ -48,4 +78,76 @@ macro(openr_add_common_libraries)
       ${Boost_LIBRARIES}
   )
   add_library(OpenR::common ALIAS openr_common)
+
+  # The remaining compiled targets in common/ stay separate because their
+  # Buck ownership and dependency surfaces are independent. In particular,
+  # build_info is distinct from the generated build_info target above.
+  # CMake uses the OSS BuildInfo.cpp implementation at this target boundary;
+  # Buck uses the corresponding facebook/BuildInfo.cpp implementation.
+  # Buck2 target: //openr/common:build_info
+  openr_add_library(
+    NAME openr_build_info
+    SOURCES ${OPENR_BUILD_INFO_SOURCES}
+    PRIVATE_DEPENDENCIES build_info fmt::fmt
+  )
+  add_library(OpenR::build_info ALIAS openr_build_info)
+
+  # Buck2 target: //openr/common:flags
+  openr_add_library(
+    NAME openr_flags
+    SOURCES ${OPENR_FLAGS_SOURCES}
+    PUBLIC_DEPENDENCIES gflags
+  )
+  add_library(OpenR::flags ALIAS openr_flags)
+
+  # Buck2 target: //openr/common:file_util
+  openr_add_library(
+    NAME openr_file_util
+    SOURCES ${OPENR_FILE_UTIL_SOURCES}
+    PRIVATE_DEPENDENCIES glog::glog
+    PUBLIC_DEPENDENCIES Folly::folly
+  )
+  add_library(OpenR::file_util ALIAS openr_file_util)
+
+  # Buck2 target: //openr/common:network_util
+  openr_add_library(
+    NAME openr_network_util
+    SOURCES ${OPENR_NETWORK_UTIL_SOURCES}
+    PUBLIC_DEPENDENCIES
+      openr_constants
+      network_cpp2
+      openr_ctrl_cpp2
+      types_cpp2
+      fmt::fmt
+      Folly::folly
+      FBThrift::thriftcpp2
+  )
+  add_library(OpenR::network_util ALIAS openr_network_util)
+
+  # Buck2 target: //openr/common:openr_profiler
+  openr_add_library(
+    NAME openr_profiler
+    SOURCES ${OPENR_PROFILER_SOURCES}
+    PRIVATE_DEPENDENCIES fb303::fb303 glog::glog
+    PUBLIC_DEPENDENCIES
+      Folly::folly
+      gflags
+      ${RE2}
+  )
+  add_library(OpenR::profiler ALIAS openr_profiler)
+
+  # Buck2 target: //openr/common:util
+  openr_add_library(
+    NAME openr_util
+    SOURCES ${OPENR_UTIL_SOURCES}
+    PUBLIC_DEPENDENCIES
+      openr_constants
+      openr_common
+      kv_store_cpp2
+      fb303::fb303
+      Folly::folly
+      FBThrift::thriftcpp2
+      ${Boost_LIBRARIES}
+  )
+  add_library(OpenR::util ALIAS openr_util)
 endmacro()
