@@ -222,7 +222,9 @@ install(TARGETS
 
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/OpenrLibrary.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Common.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
 openr_add_common_libraries()
+openr_add_config_library()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -235,7 +237,6 @@ add_library(openrlib
   openr/common/LsdbTypes.cpp
   openr/common/LsdbUtil.cpp
   openr/common/MainUtil.cpp
-  openr/config/Config.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp
@@ -464,6 +465,17 @@ if(BUILD_TESTS)
       -DOPENR_SOURCE_GROUP_FILE=cmake/modules/Common.cmake
       -DOPENR_SOURCE_VARIABLES=OPENR_CONSTANTS_SOURCES\;OPENR_COMMON_SOURCES\;OPENR_BUILD_INFO_SOURCES\;OPENR_FLAGS_SOURCES\;OPENR_FILE_UTIL_SOURCES\;OPENR_NETWORK_UTIL_SOURCES\;OPENR_PROFILER_SOURCES\;OPENR_UTIL_SOURCES
       -DOPENR_EXPECTED_SOURCE_COUNT=${OPENR_COMMON_EXPECTED_SOURCE_COUNT}
+      -P ${CMAKE_CURRENT_LIST_DIR}/cmake/tests/VerifyOpenrSourceGroup.cmake
+  )
+
+  add_test(
+    NAME OpenrConfigSourceGroupTest
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DOPENR_SOURCE_ROOT=${CMAKE_SOURCE_DIR}
+      -DOPENR_SOURCE_GROUP_FILE=cmake/modules/Config.cmake
+      -DOPENR_SOURCE_VARIABLES=OPENR_CONFIG_SOURCES
+      -DOPENR_EXPECTED_SOURCE_COUNT=${OPENR_CONFIG_EXPECTED_SOURCE_COUNT}
       -P ${CMAKE_CURRENT_LIST_DIR}/cmake/tests/VerifyOpenrSourceGroup.cmake
   )
 

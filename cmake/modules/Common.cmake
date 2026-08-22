@@ -109,6 +109,18 @@ macro(openr_add_common_libraries)
   )
   add_library(OpenR::file_util ALIAS openr_file_util)
 
+  # MplsUtil is header-only, so its INTERFACE target carries generated
+  # Thrift ordering and link requirements without adding an archive.
+  add_library(openr_mpls_util INTERFACE)
+  target_compile_features(openr_mpls_util INTERFACE cxx_std_20)
+  target_link_libraries(
+    openr_mpls_util
+    INTERFACE
+      network_cpp2
+      glog::glog
+  )
+  add_library(OpenR::mpls_util ALIAS openr_mpls_util)
+
   # Buck2 target: //openr/common:network_util
   openr_add_library(
     NAME openr_network_util

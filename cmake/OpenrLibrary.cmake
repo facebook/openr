@@ -28,6 +28,23 @@ function(openr_add_library)
     message(FATAL_ERROR "openr_add_library(${ARG_NAME}) requires SOURCES")
   endif()
 
+  get_property(
+    registered_sources GLOBAL PROPERTY OPENR_COMPONENT_SOURCES
+  )
+  foreach(source IN LISTS ARG_SOURCES)
+    list(FIND registered_sources "${source}" source_index)
+    if(NOT source_index EQUAL -1)
+      message(
+        FATAL_ERROR
+        "Open/R source belongs to more than one component library: ${source}"
+      )
+    endif()
+    list(APPEND registered_sources "${source}")
+  endforeach()
+  set_property(
+    GLOBAL PROPERTY OPENR_COMPONENT_SOURCES "${registered_sources}"
+  )
+
   set(object_target "${ARG_NAME}_objects")
   add_library(${object_target} OBJECT ${ARG_SOURCES})
 
