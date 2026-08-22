@@ -223,8 +223,10 @@ install(TARGETS
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/OpenrLibrary.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Common.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
+openr_add_lsdb_library()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -234,8 +236,6 @@ openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
 
 add_library(openrlib
   ${OPENR_COMPONENT_OBJECTS}
-  openr/common/LsdbTypes.cpp
-  openr/common/LsdbUtil.cpp
   openr/common/MainUtil.cpp
   openr/config-store/PersistentStore.cpp
   openr/config-store/PersistentStoreWrapper.cpp
@@ -457,26 +457,33 @@ if(BUILD_TESTS)
 
   # Validate source-list integrity separately from compilation so duplicate,
   # missing, or stale entries fail with a focused diagnostic.
-  add_test(
+  openr_add_source_group_test(
     NAME OpenrCommonSourceGroupTest
-    COMMAND
-      ${CMAKE_COMMAND}
-      -DOPENR_SOURCE_ROOT=${CMAKE_SOURCE_DIR}
-      -DOPENR_SOURCE_GROUP_FILE=cmake/modules/Common.cmake
-      -DOPENR_SOURCE_VARIABLES=OPENR_CONSTANTS_SOURCES\;OPENR_COMMON_SOURCES\;OPENR_BUILD_INFO_SOURCES\;OPENR_FLAGS_SOURCES\;OPENR_FILE_UTIL_SOURCES\;OPENR_NETWORK_UTIL_SOURCES\;OPENR_PROFILER_SOURCES\;OPENR_UTIL_SOURCES
-      -DOPENR_EXPECTED_SOURCE_COUNT=${OPENR_COMMON_EXPECTED_SOURCE_COUNT}
-      -P ${CMAKE_CURRENT_LIST_DIR}/cmake/tests/VerifyOpenrSourceGroup.cmake
+    SOURCE_GROUP_FILE cmake/modules/Common.cmake
+    SOURCE_VARIABLES
+      OPENR_CONSTANTS_SOURCES
+      OPENR_COMMON_SOURCES
+      OPENR_BUILD_INFO_SOURCES
+      OPENR_FLAGS_SOURCES
+      OPENR_FILE_UTIL_SOURCES
+      OPENR_NETWORK_UTIL_SOURCES
+      OPENR_PROFILER_SOURCES
+      OPENR_UTIL_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_COMMON_EXPECTED_SOURCE_COUNT}
   )
 
-  add_test(
+  openr_add_source_group_test(
     NAME OpenrConfigSourceGroupTest
-    COMMAND
-      ${CMAKE_COMMAND}
-      -DOPENR_SOURCE_ROOT=${CMAKE_SOURCE_DIR}
-      -DOPENR_SOURCE_GROUP_FILE=cmake/modules/Config.cmake
-      -DOPENR_SOURCE_VARIABLES=OPENR_CONFIG_SOURCES
-      -DOPENR_EXPECTED_SOURCE_COUNT=${OPENR_CONFIG_EXPECTED_SOURCE_COUNT}
-      -P ${CMAKE_CURRENT_LIST_DIR}/cmake/tests/VerifyOpenrSourceGroup.cmake
+    SOURCE_GROUP_FILE cmake/modules/Config.cmake
+    SOURCE_VARIABLES OPENR_CONFIG_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_CONFIG_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrLsdbSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Lsdb.cmake
+    SOURCE_VARIABLES OPENR_LSDB_UTIL_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_LSDB_EXPECTED_SOURCE_COUNT}
   )
 
   set(
@@ -553,8 +560,31 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(UtilTest util_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/common/tests/UtilTest.cpp
+    LIBRARIES
+      openr_lsdb_util
+      openr_mpls_util
+      openr_util
+      kv_store_cpp2
+      types_cpp2
+      fb303::fb303
+      glog::glog
+      gflags
+      Folly::folly
+      FBThrift::thriftcpp2
+    DESTINATION sbin/tests/openr/common
+  )
+
+  add_openr_test(TypesTest types_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/common/tests/TypesTest.cpp
+    LIBRARIES
+      openr_lsdb_util
+      glog::glog
+      gflags
     DESTINATION sbin/tests/openr/common
   )
 
