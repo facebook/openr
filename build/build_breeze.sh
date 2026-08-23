@@ -43,8 +43,10 @@ cp -r /src/openr/if/ ./openr-thrift/openr/
 
 # Neteng thrift
 mkdir -p neteng-thrift/configerator/structs/neteng/config/
-cp -r \
-/tmp/fbcode_builder_getdeps-ZsrcZbuildZfbcode_builder-root/repos/github.com-facebook-openr.git/configerator/structs/neteng/config/routing_policy.thrift \
+OPENR_NETENG_CONFIG_DIR=/src/configerator/structs/neteng/config
+cp \
+"$OPENR_NETENG_CONFIG_DIR/routing_policy.thrift" \
+"$OPENR_NETENG_CONFIG_DIR/vip_service_config.thrift" \
 neteng-thrift/configerator/structs/neteng/config/
 
 # HACK TO FIX CYTHON .pxd
@@ -53,6 +55,7 @@ cp /cython/Cython/Includes/libcpp/utility.pxd /usr/lib/python3/dist-packages/Cyt
 # Step 2. Generate mstch_cpp2 and mstch_py3 bindings
 
 python3 /src/build/gen.py
+errorCheck "Failed to generate Thrift bindings"
 
 # HACK TO FIX fbthrift-py/gen-cpp2/
 echo " " > /src/fbthrift-thrift/gen-cpp2/metadata_metadata.h
@@ -62,6 +65,7 @@ echo " " > /src/fbthrift-thrift/gen-cpp2/metadata_types_custom_protocol.h
 # Step 3. Generate clients.cpp
 
 python3 /src/build/cython_compile.py
+errorCheck "Failed to compile Cython modules"
 
 # Step 4. Compile .so
 
@@ -73,3 +77,4 @@ CFLAGS="-I. -Iopenr-thrift -Ifb303-thrift -Ineteng-thrift -std=c++20 -fcoroutine
 CFLAGS="$CFLAGS -w -D_CPPLIB_VER=20" \
 CXXFLAGS="$CFLAGS" \
 python3 openr/py/setup.py build -j10
+errorCheck "Failed to build Breeze extensions"
