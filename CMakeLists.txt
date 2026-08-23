@@ -227,6 +227,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/ConfigStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Policy.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/NeighborMonitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Decision.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
@@ -239,6 +240,7 @@ openr_add_config_store_library()
 openr_add_lsdb_library()
 openr_add_policy_library()
 openr_add_messaging_library()
+openr_add_neighbor_monitor_library()
 openr_add_decision_libraries()
 openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
@@ -264,7 +266,6 @@ add_library(openrlib
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/fib/Fib.cpp
-  openr/neighbor-monitor/NeighborMonitor.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
   openr/prefix-manager/PrefixManager.cpp
@@ -490,6 +491,13 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/Policy.cmake
     SOURCE_VARIABLES OPENR_POLICY_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_POLICY_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrNeighborMonitorSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/NeighborMonitor.cmake
+    SOURCE_VARIABLES OPENR_NEIGHBOR_MONITOR_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_NEIGHBOR_MONITOR_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
