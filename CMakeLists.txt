@@ -234,6 +234,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/PrefixManager.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Spark.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Watchdog.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Fib.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
@@ -252,6 +253,7 @@ openr_add_prefix_manager_library()
 openr_add_spark_libraries()
 openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
+openr_add_watchdog_library()
 openr_add_fib_library()
 openr_add_kvstore_libraries()
 openr_add_netlink_library()
@@ -278,7 +280,6 @@ add_library(openrlib
   openr/tests/mocks/MockNetlinkProtocolSocket.cpp
   openr/tests/mocks/PrefixGenerator.cpp
   openr/tests/utils/Utils.cpp
-  openr/watchdog/Watchdog.cpp
 )
 
 # Keep directly listed compatibility sources at the same effective C++20 level
@@ -551,6 +552,13 @@ if(BUILD_TESTS)
       OPENR_MONITOR_BASE_SOURCES
       OPENR_MONITOR_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_MONITOR_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrWatchdogSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Watchdog.cmake
+    SOURCE_VARIABLES OPENR_WATCHDOG_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_WATCHDOG_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
