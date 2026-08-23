@@ -722,7 +722,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(AsyncDebounceTest async_debounce_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/AsyncDebounceTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -730,7 +729,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(AsyncThrottleTest async_throttle_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/AsyncThrottleTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -738,7 +736,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(ExponentialBackoffTest exp_backoff_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/ExponentialBackoffTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -746,7 +743,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(OpenrEventBaseTest openr_event_base_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/OpenrEventBaseTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -754,7 +750,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(UtilTest util_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/UtilTest.cpp
     LIBRARIES
@@ -772,7 +767,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(TypesTest types_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/TypesTest.cpp
     LIBRARIES
@@ -783,7 +777,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(FileUtilTest file_util_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/FileUtilTest.cpp
     LIBRARIES
@@ -792,7 +785,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(OpenrProfilerTest openr_profiler_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/OpenrProfilerTest.cpp
     LIBRARIES
@@ -803,7 +795,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(LogSampleTest log_sample_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/monitor/tests/LogSampleTest.cpp
     LIBRARIES
@@ -814,7 +805,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(SystemMetricsTest system_metrics_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/monitor/tests/SystemMetricsTest.cpp
     LIBRARIES
@@ -824,7 +814,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(MonitorBaseTest monitor_base_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/monitor/tests/MonitorBaseTest.cpp
     LIBRARIES
@@ -846,7 +835,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(DecisionTest decision_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/DecisionTest.cpp
     LIBRARIES
@@ -890,7 +878,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(DualTest dual_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/DualTest.cpp
     LIBRARIES
@@ -903,7 +890,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(KvStorePublisherTest kvstore_publisher_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStorePublisherTest.cpp
     LIBRARIES
@@ -916,7 +902,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(LinkStateTest link_state_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/LinkStateTest.cpp
     LIBRARIES
@@ -931,7 +916,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(PrefixStateTest prefix_state_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/PrefixStateTest.cpp
     LIBRARIES
@@ -944,7 +928,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(RibPolicyTest rib_policy_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/RibPolicyTest.cpp
     LIBRARIES
@@ -956,7 +939,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(RibEntryTest rib_entry_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/RibEntryTest.cpp
     LIBRARIES
@@ -967,7 +949,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(LinkTest link_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/LinkTest.cpp
     LIBRARIES
@@ -977,7 +958,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(RouteUpdateTest route_update_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/RouteUpdateTest.cpp
     LIBRARIES
@@ -988,7 +968,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(FabricHelperTest fabric_helper_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/FabricHelperTest.cpp
     LIBRARIES
@@ -1031,7 +1010,6 @@ if(BUILD_TESTS)
   endif()
 
   add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStoreSelfOriginatedKeyTest.cpp
     LIBRARIES
@@ -1045,7 +1023,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(KvStoreUtilTest kvstore_util_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStoreUtilTest.cpp
     LIBRARIES
@@ -1060,7 +1037,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(InterfaceEntryTest interface_entry_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/link-monitor/tests/InterfaceEntryTest.cpp
     LIBRARIES
@@ -1111,7 +1087,6 @@ if(BUILD_TESTS)
   endif()
 
   add_openr_test(NetlinkTypesTest netlink_types_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/nl/tests/NetlinkTypesTest.cpp
     LIBRARIES
@@ -1125,7 +1100,6 @@ if(BUILD_TESTS)
     # Build this privileged test for compile coverage. It remains disabled
     # in CTest and must be invoked manually as root.
     add_openr_test(NetlinkProtocolSocketTest netlink_message_test
-      NO_DEFAULT_THRIFT_LIBRARIES
       SOURCES
         openr/nl/tests/NetlinkProtocolSocketTest.cpp
       LIBRARIES
@@ -1175,7 +1149,6 @@ if(BUILD_TESTS)
   set_tests_properties(SparkTest PROPERTIES TIMEOUT 600)
 
   add_openr_test(MockIoProviderTest mock_io_provider_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/tests/MockIoProviderTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
@@ -1193,7 +1166,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(MessagingQueueTest queue_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/messaging/tests/QueueTest.cpp
     LIBRARIES
@@ -1203,7 +1175,6 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(MessagingReplicateQueueTest replicate_queue_test
-    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/messaging/tests/ReplicateQueueTest.cpp
     LIBRARIES

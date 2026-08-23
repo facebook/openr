@@ -148,17 +148,14 @@ function(openr_add_source_group_test)
 endfunction()
 
 # Create a test executable, register it with CTest, and optionally install it
-# for getdeps/TPX discovery. Tests inherit generated Thrift libraries by
-# default but must name their granular Open/R libraries explicitly.
-# NO_DEFAULT_THRIFT_LIBRARIES removes the generated Thrift umbrella for tests
-# whose component targets provide a complete dependency graph.
+# for getdeps/TPX discovery. Tests name their Open/R and generated Thrift
+# dependencies explicitly through LIBRARIES.
 function(add_openr_test TEST_NAME BIN_NAME)
-  set(options NO_DEFAULT_THRIFT_LIBRARIES)
   set(one_value_args DESTINATION)
   set(multi_value_args SOURCES LIBRARIES)
   fb_cmake_parse_args(
     ARG
-    "${options}"
+    ""
     "${one_value_args}"
     "${multi_value_args}"
     "${ARGN}"
@@ -168,12 +165,7 @@ function(add_openr_test TEST_NAME BIN_NAME)
     ${BIN_NAME}
     ${ARG_SOURCES}
   )
-  set(openr_test_default_libraries ${OPENR_THRIFT_LIBS})
-  if(ARG_NO_DEFAULT_THRIFT_LIBRARIES)
-    set(openr_test_default_libraries)
-  endif()
   target_link_libraries(${BIN_NAME}
-    ${openr_test_default_libraries}
     ${GTEST_BOTH_LIBRARIES}
     ${LIBGMOCK_LIBRARIES}
     ${ARG_LIBRARIES}
