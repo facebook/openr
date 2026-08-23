@@ -225,6 +225,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Common.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/ConfigStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Policy.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Decision.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
@@ -236,6 +237,7 @@ openr_add_common_libraries()
 openr_add_config_library()
 openr_add_config_store_library()
 openr_add_lsdb_library()
+openr_add_policy_library()
 openr_add_messaging_library()
 openr_add_decision_libraries()
 openr_add_dispatcher_libraries()
@@ -265,7 +267,6 @@ add_library(openrlib
   openr/neighbor-monitor/NeighborMonitor.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
-  openr/policy/PolicyManager.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
@@ -482,6 +483,13 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/Lsdb.cmake
     SOURCE_VARIABLES OPENR_LSDB_UTIL_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_LSDB_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrPolicySourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Policy.cmake
+    SOURCE_VARIABLES OPENR_POLICY_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_POLICY_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
