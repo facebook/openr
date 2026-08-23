@@ -231,6 +231,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/NeighborMonitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Decision.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Plugin.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/PrefixManager.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Spark.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Fib.cmake)
@@ -248,6 +249,7 @@ openr_add_neighbor_monitor_library()
 openr_add_decision_libraries()
 openr_add_plugin_library()
 openr_add_prefix_manager_library()
+openr_add_spark_libraries()
 openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
 openr_add_fib_library()
@@ -273,9 +275,6 @@ add_library(openrlib
   # compatibility archive until that support layer is separated.
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
-  openr/spark/IoProvider.cpp
-  openr/spark/SparkWrapper.cpp
-  openr/spark/Spark.cpp
   openr/tests/mocks/MockNetlinkProtocolSocket.cpp
   openr/tests/mocks/PrefixGenerator.cpp
   openr/tests/utils/Utils.cpp
@@ -531,6 +530,16 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/PrefixManager.cmake
     SOURCE_VARIABLES OPENR_PREFIX_MANAGER_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_PREFIX_MANAGER_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrSparkSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Spark.cmake
+    SOURCE_VARIABLES
+      OPENR_IO_PROVIDER_SOURCES
+      OPENR_SPARK_SOURCES
+      OPENR_SPARK_WRAPPER_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_SPARK_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
@@ -1001,10 +1010,20 @@ if(BUILD_TESTS)
   set_tests_properties(SparkTest PROPERTIES TIMEOUT 600)
 
   add_openr_test(MockIoProviderTest mock_io_provider_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/tests/MockIoProviderTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
       openr/tests/mocks/MockIoProviderUtils.cpp
+    LIBRARIES
+      openr_io_provider
+      openr_constants
+      openr_network_util
+      fmt::fmt
+      Folly::folly
+      glog::glog
+      gflags
+      Threads::Threads
     DESTINATION sbin/tests/openr/spark
   )
 

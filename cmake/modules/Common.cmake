@@ -121,6 +121,18 @@ macro(openr_add_common_libraries)
   )
   add_library(OpenR::mpls_util ALIAS openr_mpls_util)
 
+  # StepDetector is header-only. Its INTERFACE target records both the
+  # generated configuration type and Folly time-series implementation used
+  # by the public template.
+  add_library(openr_step_detector INTERFACE)
+  target_link_libraries(
+    openr_step_detector
+    INTERFACE
+      openr_config_cpp2
+      Folly::folly
+  )
+  add_library(OpenR::step_detector ALIAS openr_step_detector)
+
   # Buck2 target: //openr/common:network_util
   openr_add_library(
     NAME openr_network_util
