@@ -223,6 +223,7 @@ install(TARGETS
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/OpenrLibrary.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Common.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/ConfigStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
@@ -230,6 +231,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
+openr_add_config_store_library()
 openr_add_lsdb_library()
 openr_add_messaging_library()
 openr_add_monitor_libraries()
@@ -245,7 +247,8 @@ openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
 add_library(openrlib
   ${OPENR_COMPONENT_OBJECTS}
   openr/common/MainUtil.cpp
-  openr/config-store/PersistentStore.cpp
+  # PersistentStoreWrapper depends on broad test utilities and remains
+  # compatibility test support until those utilities are separated.
   openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp
   openr/decision/Decision.cpp
@@ -469,6 +472,13 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/Config.cmake
     SOURCE_VARIABLES OPENR_CONFIG_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_CONFIG_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrConfigStoreSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/ConfigStore.cmake
+    SOURCE_VARIABLES OPENR_PERSISTENT_STORE_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_CONFIG_STORE_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
@@ -886,6 +896,7 @@ if(BUILD_TESTS)
   # benchmarks
   #
 
+  # This benchmark uses PersistentStoreWrapper from compatibility support.
   add_executable(config_store_benchmark
     openr/config-store/tests/PersistentStoreBenchmark.cpp
   )
