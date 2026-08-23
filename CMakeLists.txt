@@ -226,6 +226,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/ConfigStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Decision.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
@@ -236,6 +237,7 @@ openr_add_config_library()
 openr_add_config_store_library()
 openr_add_lsdb_library()
 openr_add_messaging_library()
+openr_add_decision_libraries()
 openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
 openr_add_kvstore_libraries()
@@ -255,13 +257,8 @@ add_library(openrlib
   # compatibility test support until those utilities are separated.
   openr/config-store/PersistentStoreWrapper.cpp
   openr/ctrl-server/OpenrCtrlHandler.cpp
-  openr/decision/Decision.cpp
-  openr/decision/FabricHelper.cpp
-  openr/decision/Link.cpp
-  openr/decision/LinkState.cpp
-  openr/decision/PrefixState.cpp
-  openr/decision/RibPolicy.cpp
-  openr/decision/SpfSolver.cpp
+  # Decision test helpers depend on shared test utilities and remain in the
+  # compatibility archive until that support layer is separated.
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/fib/Fib.cpp
@@ -497,6 +494,18 @@ if(BUILD_TESTS)
   )
 
   openr_add_source_group_test(
+    NAME OpenrDecisionSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Decision.cmake
+    SOURCE_VARIABLES
+      OPENR_LINK_SOURCES
+      OPENR_DECISION_STRUCTS_SOURCES
+      OPENR_FABRIC_HELPER_SOURCES
+      OPENR_SPF_SOLVER_SOURCES
+      OPENR_DECISION_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_DECISION_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
     NAME OpenrMonitorSourceGroupTest
     SOURCE_GROUP_FILE cmake/modules/Monitor.cmake
     SOURCE_VARIABLES
@@ -695,6 +704,8 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/config-store
   )
 
+  # DecisionTest consumes the unsplit Decision test utilities and remains
+  # on the compatibility archive until the support layer is separated.
   add_openr_test(DecisionTest decision_test
     SOURCES
       openr/decision/tests/DecisionTest.cpp
@@ -741,6 +752,7 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/kvstore
   )
 
+  # LinkStateTest also consumes the unsplit Decision test utilities.
   add_openr_test(LinkStateTest link_state_test
     SOURCES
       openr/decision/tests/LinkStateTest.cpp
@@ -748,20 +760,74 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(PrefixStateTest prefix_state_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/decision/tests/PrefixStateTest.cpp
+    LIBRARIES
+      openr_spf_solver
+      openr_lsdb_util
+      openr_network_util
+      glog::glog
+      Folly::folly
     DESTINATION sbin/tests/openr/decision
   )
 
   add_openr_test(RibPolicyTest rib_policy_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/decision/tests/RibPolicyTest.cpp
+    LIBRARIES
+      openr_decision_structs
+      openr_lsdb_util
+      fb303::fb303
+      Folly::folly
     DESTINATION sbin/tests/openr/decision
   )
 
   add_openr_test(RibEntryTest rib_entry_test
+    NO_DEFAULT_OPENR_LIBRARIES
     SOURCES
       openr/decision/tests/RibEntryTest.cpp
+    LIBRARIES
+      openr_rib_entry
+      openr_lsdb_util
+      Folly::folly
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_openr_test(LinkTest link_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/decision/tests/LinkTest.cpp
+    LIBRARIES
+      openr_link
+      openr_lsdb_util
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_openr_test(RouteUpdateTest route_update_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/decision/tests/RouteUpdateTest.cpp
+    LIBRARIES
+      openr_decision_structs
+      openr_lsdb_util
+      Folly::folly
+    DESTINATION sbin/tests/openr/decision
+  )
+
+  add_openr_test(FabricHelperTest fabric_helper_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/decision/tests/FabricHelperTest.cpp
+    LIBRARIES
+      openr_fabric_helper
+      openr_spf_solver
+      openr_constants
+      openr_lsdb_util
+      openr_config
+      openr_config_cpp2
+      Folly::folly
     DESTINATION sbin/tests/openr/decision
   )
 
@@ -989,6 +1055,8 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/platform
   )
 
+  # The Decision benchmark consumes unsplit routing and shared test
+  # utilities, so it remains on the compatibility archive.
   add_executable(decision_benchmark
     openr/decision/tests/DecisionBenchmark.cpp
   )
