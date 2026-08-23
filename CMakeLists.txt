@@ -230,6 +230,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/NeighborMonitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Decision.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Plugin.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/PrefixManager.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Fib.cmake)
@@ -246,6 +247,7 @@ openr_add_messaging_library()
 openr_add_neighbor_monitor_library()
 openr_add_decision_libraries()
 openr_add_plugin_library()
+openr_add_prefix_manager_library()
 openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
 openr_add_fib_library()
@@ -271,7 +273,6 @@ add_library(openrlib
   # compatibility archive until that support layer is separated.
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
-  openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
   openr/spark/SparkWrapper.cpp
   openr/spark/Spark.cpp
@@ -523,6 +524,13 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/Plugin.cmake
     SOURCE_VARIABLES OPENR_PLUGIN_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_PLUGIN_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrPrefixManagerSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/PrefixManager.cmake
+    SOURCE_VARIABLES OPENR_PREFIX_MANAGER_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_PREFIX_MANAGER_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
