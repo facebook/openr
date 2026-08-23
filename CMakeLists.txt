@@ -226,6 +226,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Config.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/ConfigStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Lsdb.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
@@ -235,6 +236,7 @@ openr_add_config_library()
 openr_add_config_store_library()
 openr_add_lsdb_library()
 openr_add_messaging_library()
+openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
 openr_add_kvstore_libraries()
 openr_add_netlink_library()
@@ -262,8 +264,6 @@ add_library(openrlib
   openr/decision/SpfSolver.cpp
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
-  openr/dispatcher/Dispatcher.cpp
-  openr/dispatcher/DispatcherQueue.cpp
   openr/fib/Fib.cpp
   openr/neighbor-monitor/NeighborMonitor.cpp
   openr/platform/NetlinkFibHandler.cpp
@@ -488,6 +488,15 @@ if(BUILD_TESTS)
   )
 
   openr_add_source_group_test(
+    NAME OpenrDispatcherSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Dispatcher.cmake
+    SOURCE_VARIABLES
+      OPENR_DISPATCHER_QUEUE_SOURCES
+      OPENR_DISPATCHER_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_DISPATCHER_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
     NAME OpenrMonitorSourceGroupTest
     SOURCE_GROUP_FILE cmake/modules/Monitor.cmake
     SOURCE_VARIABLES
@@ -692,6 +701,8 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/decision
   )
 
+  # These broader tests also consume shared test utilities and, for
+  # DispatcherTest, the KvStore wrapper from the compatibility archive.
   add_openr_test(DispatcherTest dispatcher_test
     SOURCES
       openr/dispatcher/tests/DispatcherTest.cpp
@@ -1004,15 +1015,14 @@ if(BUILD_TESTS)
   )
 
   target_link_libraries(dispatcher_queue_benchmark
-    openrlib
-    ${FOLLY}
+    openr_dispatcher_queue
+    openr_util
+    kv_store_cpp2
+    fmt::fmt
+    Folly::folly
     ${FOLLY_EXCEPTION_TRACER}
-    ${GMOCK}
-    ${GMOCK_MAIN}
-    ${GTEST_BOTH_LIBRARIES}
-    ${GTEST_MAIN}
-    ${THRIFTCPP2}
     ${BENCHMARK}
+    glog::glog
   )
 
   install(TARGETS
