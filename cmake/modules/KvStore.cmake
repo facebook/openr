@@ -4,12 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 # Sources corresponding to the compiled Buck targets in openr/kvstore.
-set(OPENR_DUAL_SOURCES openr/kvstore/Dual.cpp)
 set(OPENR_KVSTORE_SOURCES openr/kvstore/KvStorePublisher.cpp)
 set(OPENR_KVSTORE_UTIL_SOURCES openr/kvstore/KvStoreUtil.cpp)
 set(OPENR_KVSTORE_WRAPPER_SOURCES openr/kvstore/KvStoreWrapper.cpp)
 
-set(OPENR_KVSTORE_EXPECTED_SOURCE_COUNT 4)
+set(OPENR_KVSTORE_EXPECTED_SOURCE_COUNT 3)
 
 # Create KvStore's header-only and compiled targets in dependency order.
 #
@@ -25,17 +24,6 @@ macro(openr_add_kvstore_libraries)
       FBThrift::thriftcpp2
   )
   add_library(OpenR::client_util ALIAS openr_client_util)
-
-  # Buck2 target: //openr/kvstore:dual
-  openr_add_library(
-    NAME openr_dual
-    SOURCES ${OPENR_DUAL_SOURCES}
-    PRIVATE_DEPENDENCIES glog::glog
-    PUBLIC_DEPENDENCIES
-      dual_cpp2
-      Folly::folly
-  )
-  add_library(OpenR::dual ALIAS openr_dual)
 
   # Buck2 target: //openr/kvstore:kvstore-util
   openr_add_library(

@@ -592,7 +592,6 @@ if(BUILD_TESTS)
     NAME OpenrKvStoreSourceGroupTest
     SOURCE_GROUP_FILE cmake/modules/KvStore.cmake
     SOURCE_VARIABLES
-      OPENR_DUAL_SOURCES
       OPENR_KVSTORE_SOURCES
       OPENR_KVSTORE_UTIL_SOURCES
       OPENR_KVSTORE_WRAPPER_SOURCES
@@ -875,18 +874,6 @@ if(BUILD_TESTS)
       openr_common
       openr_util
     DESTINATION sbin/tests/openr/dispatcher
-  )
-
-  add_openr_test(DualTest dual_test
-    SOURCES
-      openr/kvstore/tests/DualTest.cpp
-    LIBRARIES
-      openr_dual
-      glog::glog
-      gflags
-      Folly::folly
-      ${Boost_LIBRARIES}
-    DESTINATION sbin/tests/openr/kvstore
   )
 
   add_openr_test(KvStorePublisherTest kvstore_publisher_test
