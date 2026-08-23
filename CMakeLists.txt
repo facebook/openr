@@ -229,6 +229,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Messaging.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/LinkMonitor.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_config_store_library()
@@ -237,6 +238,7 @@ openr_add_messaging_library()
 openr_add_monitor_libraries()
 openr_add_kvstore_libraries()
 openr_add_netlink_library()
+openr_add_link_monitor_libraries()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -263,9 +265,6 @@ add_library(openrlib
   openr/dispatcher/Dispatcher.cpp
   openr/dispatcher/DispatcherQueue.cpp
   openr/fib/Fib.cpp
-  openr/link-monitor/AdjacencyEntry.cpp
-  openr/link-monitor/LinkMonitor.cpp
-  openr/link-monitor/InterfaceEntry.cpp
   openr/neighbor-monitor/NeighborMonitor.cpp
   openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
@@ -515,6 +514,15 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/Netlink.cmake
     SOURCE_VARIABLES OPENR_FBNL_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_NETLINK_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrLinkMonitorSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/LinkMonitor.cmake
+    SOURCE_VARIABLES
+      OPENR_ADJACENCY_ENTRY_SOURCES
+      OPENR_LINK_MONITOR_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_LINK_MONITOR_EXPECTED_SOURCE_COUNT}
   )
 
   set(
@@ -791,7 +799,24 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/kvstore
   )
 
- add_openr_test(LinkMonitorTest link_monitor_test
+  add_openr_test(InterfaceEntryTest interface_entry_test
+    NO_DEFAULT_OPENR_LIBRARIES
+    SOURCES
+      openr/link-monitor/tests/InterfaceEntryTest.cpp
+    LIBRARIES
+      openr_link_monitor
+      openr_common
+      openr_network_util
+      glog::glog
+      gflags
+      Folly::folly
+      ${RE2}
+    DESTINATION sbin/tests/openr/link-monitor
+  )
+
+  # This integration test also consumes PrefixManager, shared test
+  # utilities, and Netlink mocks provided by the compatibility archive.
+  add_openr_test(LinkMonitorTest link_monitor_test
     SOURCES
       openr/link-monitor/tests/LinkMonitorTest.cpp
       openr/tests/mocks/NetlinkEventsInjector.cpp
