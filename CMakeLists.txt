@@ -240,6 +240,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Platform.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/LinkMonitor.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/CtrlServer.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_config_store_library()
@@ -259,6 +260,7 @@ openr_add_kvstore_libraries()
 openr_add_netlink_library()
 openr_add_platform_library()
 openr_add_link_monitor_libraries()
+openr_add_ctrl_server_library()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -272,7 +274,6 @@ add_library(openrlib
   # PersistentStoreWrapper depends on broad test utilities and remains
   # compatibility test support until those utilities are separated.
   openr/config-store/PersistentStoreWrapper.cpp
-  openr/ctrl-server/OpenrCtrlHandler.cpp
   # Decision test helpers depend on shared test utilities and remain in the
   # compatibility archive until that support layer is separated.
   openr/decision/tests/DecisionTestUtils.cpp
@@ -600,6 +601,13 @@ if(BUILD_TESTS)
       OPENR_ADJACENCY_ENTRY_SOURCES
       OPENR_LINK_MONITOR_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_LINK_MONITOR_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrCtrlServerSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/CtrlServer.cmake
+    SOURCE_VARIABLES OPENR_CTRL_HANDLER_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_CTRL_SERVER_EXPECTED_SOURCE_COUNT}
   )
 
   set(
