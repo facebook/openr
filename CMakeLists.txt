@@ -233,6 +233,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Dispatcher.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Monitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/KvStore.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Platform.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/LinkMonitor.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
@@ -246,6 +247,7 @@ openr_add_dispatcher_libraries()
 openr_add_monitor_libraries()
 openr_add_kvstore_libraries()
 openr_add_netlink_library()
+openr_add_platform_library()
 openr_add_link_monitor_libraries()
 
 # Every openr_add_library call above registers its OBJECT target globally.
@@ -266,7 +268,6 @@ add_library(openrlib
   openr/decision/tests/DecisionTestUtils.cpp
   openr/decision/tests/RoutingBenchmarkUtils.cpp
   openr/fib/Fib.cpp
-  openr/platform/NetlinkFibHandler.cpp
   openr/plugin/Plugin.cpp
   openr/prefix-manager/PrefixManager.cpp
   openr/spark/IoProvider.cpp
@@ -377,22 +378,16 @@ endif()
 
 add_executable(platform_linux
   openr/platform/LinuxPlatformMain.cpp
-  openr/platform/NetlinkFibHandler.cpp
 )
 
 target_link_libraries(platform_linux
-  openrlib
-  ${OPENR_THRIFT_LIBS}
-  ${GLOG}
-  ${GFLAGS}
+  openr_netlink_fib_handler
+  openr_common
+  openr_fbnl
+  glog::glog
+  gflags
   Folly::folly
-  ${FOLLY_EXCEPTION_TRACER}
   FBThrift::thriftcpp2
-  ${ZSTD}
-  ${ASYNC}
-  ${CONCURRENCY}
-  ${SODIUM}
-  ${Boost_LIBRARIES}
   -lpthread
 )
 
@@ -548,6 +543,13 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/Netlink.cmake
     SOURCE_VARIABLES OPENR_FBNL_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_NETLINK_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrPlatformSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Platform.cmake
+    SOURCE_VARIABLES OPENR_NETLINK_FIB_HANDLER_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_PLATFORM_EXPECTED_SOURCE_COUNT}
   )
 
   openr_add_source_group_test(
@@ -998,6 +1000,7 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/messaging
   )
 
+  # This test still consumes the compatibility netlink mock.
   add_openr_test(NetlinkFibHandlerTest netlink_fib_handler_test
     SOURCES
       openr/platform/tests/NetlinkFibHandlerTest.cpp
@@ -1053,6 +1056,7 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/fib
   )
 
+  # This benchmark still consumes compatibility test support.
   add_executable(netlink_fib_handler_benchmark
     openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
   )
