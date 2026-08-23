@@ -242,6 +242,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Platform.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/LinkMonitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/CtrlServer.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/MainUtil.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/TestSupport.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_config_store_library()
@@ -263,6 +264,7 @@ openr_add_platform_library()
 openr_add_link_monitor_libraries()
 openr_add_ctrl_server_library()
 openr_add_main_util_library()
+openr_add_test_support_libraries()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -272,16 +274,6 @@ openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
 
 add_library(openrlib
   ${OPENR_COMPONENT_OBJECTS}
-  # PersistentStoreWrapper depends on broad test utilities and remains
-  # compatibility test support until those utilities are separated.
-  openr/config-store/PersistentStoreWrapper.cpp
-  # Decision test helpers depend on shared test utilities and remain in the
-  # compatibility archive until that support layer is separated.
-  openr/decision/tests/DecisionTestUtils.cpp
-  openr/decision/tests/RoutingBenchmarkUtils.cpp
-  openr/tests/mocks/MockNetlinkProtocolSocket.cpp
-  openr/tests/mocks/PrefixGenerator.cpp
-  openr/tests/utils/Utils.cpp
 )
 
 # Keep directly listed compatibility sources at the same effective C++20 level
@@ -380,7 +372,10 @@ if(BUILD_TOOLS)
   )
 
   target_link_libraries(openr_kvstore_snooper
-    openrlib
+    openr_client_util
+    openr_kvstore
+    openr_kvstore_util
+    openr_ctrl_cpp_cpp2
     ${GLOG}
     ${GFLAGS}
     ${THRIFT}
@@ -641,6 +636,19 @@ if(BUILD_TESTS)
     EXPECTED_SOURCE_COUNT ${OPENR_MAIN_UTIL_EXPECTED_SOURCE_COUNT}
   )
 
+  openr_add_source_group_test(
+    NAME OpenrTestSupportSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/TestSupport.cmake
+    SOURCE_VARIABLES
+      OPENR_PREFIX_GENERATOR_SOURCES
+      OPENR_MOCK_NETLINK_PROTOCOL_SOCKET_SOURCES
+      OPENR_TEST_UTILS_SOURCES
+      OPENR_PERSISTENT_STORE_WRAPPER_SOURCES
+      OPENR_DECISION_TEST_UTILS_SOURCES
+      OPENR_ROUTING_BENCHMARK_UTILS_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_TEST_SUPPORT_EXPECTED_SOURCE_COUNT}
+  )
+
   set(
     OPENR_COMMON_TEST_LIBRARIES
     openr_common
@@ -656,6 +664,19 @@ if(BUILD_TESTS)
       openr/tests/mocks/MockIoProvider.cpp
       openr/tests/mocks/MockIoProviderUtils.cpp
     LIBRARIES
+      openr_test_utils
+      openr_mock_netlink_protocol_socket
+      openr_config
+      openr_lsdb_util
+      openr_decision
+      openr_fib
+      openr_kvstore
+      openr_link_monitor
+      openr_monitor
+      openr_prefix_manager
+      openr_spark
+      openr_watchdog
+      openr_io_provider
       ${GLOG}
       ${GFLAGS}
       FBThrift::thriftcpp2
@@ -673,17 +694,35 @@ if(BUILD_TESTS)
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlHandlerTest.cpp
       openr/tests/mocks/NetlinkEventsInjector.cpp
+    LIBRARIES
+      openr_ctrl_handler
+      openr_persistent_store
+      openr_kvstore_wrapper
+      openr_decision
+      openr_fib
+      openr_link_monitor
+      openr_prefix_manager
+      openr_config
+      openr_common
+      openr_util
+      openr_messaging
+      openr_test_utils
+      openr_mock_netlink_protocol_socket
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
   add_openr_test(OpenrCtrlLongPollTest openr_ctrl_longpoll_test
     SOURCES
       openr/ctrl-server/tests/OpenrCtrlLongPollTest.cpp
+    LIBRARIES
+      openr_ctrl_handler
+      openr_kvstore_wrapper
+      openr_test_utils
     DESTINATION sbin/tests/openr/ctrl-server
   )
 
   add_openr_test(AsyncDebounceTest async_debounce_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/AsyncDebounceTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -691,7 +730,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(AsyncThrottleTest async_throttle_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/AsyncThrottleTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -699,7 +738,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(ExponentialBackoffTest exp_backoff_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/ExponentialBackoffTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -707,7 +746,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(OpenrEventBaseTest openr_event_base_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/OpenrEventBaseTest.cpp
     LIBRARIES ${OPENR_COMMON_TEST_LIBRARIES}
@@ -715,7 +754,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(UtilTest util_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/UtilTest.cpp
     LIBRARIES
@@ -733,7 +772,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(TypesTest types_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/TypesTest.cpp
     LIBRARIES
@@ -744,7 +783,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(FileUtilTest file_util_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/FileUtilTest.cpp
     LIBRARIES
@@ -753,7 +792,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(OpenrProfilerTest openr_profiler_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/common/tests/OpenrProfilerTest.cpp
     LIBRARIES
@@ -764,7 +803,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(LogSampleTest log_sample_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/monitor/tests/LogSampleTest.cpp
     LIBRARIES
@@ -775,7 +814,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(SystemMetricsTest system_metrics_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/monitor/tests/SystemMetricsTest.cpp
     LIBRARIES
@@ -785,7 +824,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(MonitorBaseTest monitor_base_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/monitor/tests/MonitorBaseTest.cpp
     LIBRARIES
@@ -799,33 +838,59 @@ if(BUILD_TESTS)
   add_openr_test(PersistentStoreTest config_store_test
     SOURCES
       openr/config-store/tests/PersistentStoreTest.cpp
+    LIBRARIES
+      openr_persistent_store_wrapper
+      glog::glog
+      gflags
     DESTINATION sbin/tests/openr/config-store
   )
 
-  # DecisionTest consumes the unsplit Decision test utilities and remains
-  # on the compatibility archive until the support layer is separated.
   add_openr_test(DecisionTest decision_test
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/DecisionTest.cpp
+    LIBRARIES
+      openr_decision_test_utils
+      openr_test_utils
+      openr_decision
+      openr_decision_structs
+      openr_network_util
+      openr_util
+      openr_flags
+      openr_mpls_util
+      openr_constants
+      openr_config_cpp2
     DESTINATION sbin/tests/openr/decision
   )
 
-  # These broader tests also consume shared test utilities and, for
-  # DispatcherTest, the KvStore wrapper from the compatibility archive.
   add_openr_test(DispatcherTest dispatcher_test
     SOURCES
       openr/dispatcher/tests/DispatcherTest.cpp
+    LIBRARIES
+      openr_dispatcher
+      openr_dispatcher_queue
+      openr_kvstore_util
+      openr_test_utils
+      openr_lsdb_util
+      openr_common
+      openr_util
+      openr_messaging
     DESTINATION sbin/tests/openr/dispatcher
   )
 
   add_openr_test(DispatcherQueueTest dispatcher_queue_test
     SOURCES
       openr/dispatcher/tests/DispatcherQueueTest.cpp
+    LIBRARIES
+      openr_dispatcher_queue
+      openr_test_utils
+      openr_common
+      openr_util
     DESTINATION sbin/tests/openr/dispatcher
   )
 
   add_openr_test(DualTest dual_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/DualTest.cpp
     LIBRARIES
@@ -838,7 +903,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(KvStorePublisherTest kvstore_publisher_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStorePublisherTest.cpp
     LIBRARIES
@@ -850,15 +915,23 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/kvstore
   )
 
-  # LinkStateTest also consumes the unsplit Decision test utilities.
   add_openr_test(LinkStateTest link_state_test
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/LinkStateTest.cpp
+    LIBRARIES
+      openr_decision_test_utils
+      openr_test_utils
+      openr_spf_solver
+      openr_network_util
+      openr_util
+      openr_constants
+      openr_config_cpp2
     DESTINATION sbin/tests/openr/decision
   )
 
   add_openr_test(PrefixStateTest prefix_state_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/PrefixStateTest.cpp
     LIBRARIES
@@ -871,7 +944,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(RibPolicyTest rib_policy_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/RibPolicyTest.cpp
     LIBRARIES
@@ -883,7 +956,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(RibEntryTest rib_entry_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/RibEntryTest.cpp
     LIBRARIES
@@ -894,7 +967,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(LinkTest link_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/LinkTest.cpp
     LIBRARIES
@@ -904,7 +977,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(RouteUpdateTest route_update_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/RouteUpdateTest.cpp
     LIBRARIES
@@ -915,7 +988,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(FabricHelperTest fabric_helper_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/decision/tests/FabricHelperTest.cpp
     LIBRARIES
@@ -935,18 +1008,30 @@ if(BUILD_TESTS)
     add_openr_test(KvStoreTest kvstore_test
       SOURCES
         openr/kvstore/tests/KvStoreTest.cpp
+      LIBRARIES
+        openr_kvstore_util
+        openr_kvstore_wrapper
+        openr_config
+        openr_util
+        fb303::fb303
+        Folly::folly
+        glog::glog
       DESTINATION sbin/tests/openr/kvstore
     )
 
     add_openr_test(KvStoreTtlTest kvstore_ttl_test
       SOURCES
         openr/kvstore/tests/KvStoreTtlTest.cpp
+      LIBRARIES
+        openr_kvstore_wrapper
+        Folly::folly
+        range-v3
       DESTINATION sbin/tests/openr/kvstore
     )
   endif()
 
   add_openr_test(KvStoreSelfOriginatedKeyTest kvstore_self_originated_key_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStoreSelfOriginatedKeyTest.cpp
     LIBRARIES
@@ -960,7 +1045,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(KvStoreUtilTest kvstore_util_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/kvstore/tests/KvStoreUtilTest.cpp
     LIBRARIES
@@ -975,7 +1060,7 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(InterfaceEntryTest interface_entry_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/link-monitor/tests/InterfaceEntryTest.cpp
     LIBRARIES
@@ -989,12 +1074,20 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/link-monitor
   )
 
-  # This integration test also consumes PrefixManager, shared test
-  # utilities, and Netlink mocks provided by the compatibility archive.
   add_openr_test(LinkMonitorTest link_monitor_test
     SOURCES
       openr/link-monitor/tests/LinkMonitorTest.cpp
       openr/tests/mocks/NetlinkEventsInjector.cpp
+    LIBRARIES
+      openr_link_monitor
+      openr_prefix_manager
+      openr_kvstore_wrapper
+      openr_config
+      openr_network_util
+      openr_common
+      openr_util
+      openr_test_utils
+      openr_mock_netlink_protocol_socket
     DESTINATION sbin/tests/openr/link-monitor
   )
 
@@ -1004,12 +1097,21 @@ if(BUILD_TESTS)
       SOURCES
         openr/fib/tests/FibTest.cpp
         openr/tests/mocks/MockNetlinkFibHandler.cpp
+      LIBRARIES
+        openr_fib
+        openr_ctrl_handler
+        openr_rib_entry
+        openr_decision_structs
+        openr_messaging
+        openr_test_utils
+        openr_config
+        openr_network_util
       DESTINATION sbin/tests/openr/fib
     )
   endif()
 
   add_openr_test(NetlinkTypesTest netlink_types_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/nl/tests/NetlinkTypesTest.cpp
     LIBRARIES
@@ -1023,7 +1125,7 @@ if(BUILD_TESTS)
     # Build this privileged test for compile coverage. It remains disabled
     # in CTest and must be invoked manually as root.
     add_openr_test(NetlinkProtocolSocketTest netlink_message_test
-      NO_DEFAULT_OPENR_LIBRARIES
+      NO_DEFAULT_THRIFT_LIBRARIES
       SOURCES
         openr/nl/tests/NetlinkProtocolSocketTest.cpp
       LIBRARIES
@@ -1044,6 +1146,15 @@ if(BUILD_TESTS)
   add_openr_test(PrefixManagerTest prefix_manager_test
     SOURCES
       openr/prefix-manager/tests/PrefixManagerTest.cpp
+    LIBRARIES
+      openr_prefix_manager
+      openr_kvstore_wrapper
+      openr_test_utils
+      openr_config
+      openr_rib_entry
+      openr_messaging
+      openr_network_util
+      openr_util
     DESTINATION sbin/tests/openr/prefix-manager
   )
 
@@ -1052,12 +1163,19 @@ if(BUILD_TESTS)
       openr/spark/tests/SparkTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
       openr/tests/mocks/MockIoProviderUtils.cpp
+    LIBRARIES
+      openr_spark_wrapper
+      openr_test_utils
+      openr_config
+      openr_mpls_util
+      openr_network_util
+      openr_constants
     DESTINATION sbin/tests/openr/spark
   )
   set_tests_properties(SparkTest PROPERTIES TIMEOUT 600)
 
   add_openr_test(MockIoProviderTest mock_io_provider_test
-    NO_DEFAULT_OPENR_LIBRARIES
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/tests/MockIoProviderTest.cpp
       openr/tests/mocks/MockIoProvider.cpp
@@ -1075,31 +1193,44 @@ if(BUILD_TESTS)
   )
 
   add_openr_test(MessagingQueueTest queue_test
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/messaging/tests/QueueTest.cpp
     LIBRARIES
+      openr_messaging
       Folly::folly
     DESTINATION sbin/tests/openr/messaging
   )
 
   add_openr_test(MessagingReplicateQueueTest replicate_queue_test
+    NO_DEFAULT_THRIFT_LIBRARIES
     SOURCES
       openr/messaging/tests/ReplicateQueueTest.cpp
     LIBRARIES
+      openr_messaging
       Folly::folly
     DESTINATION sbin/tests/openr/messaging
   )
 
-  # This test still consumes the compatibility netlink mock.
   add_openr_test(NetlinkFibHandlerTest netlink_fib_handler_test
     SOURCES
       openr/platform/tests/NetlinkFibHandlerTest.cpp
+    LIBRARIES
+      openr_netlink_fib_handler
+      openr_mock_netlink_protocol_socket
+      openr_lsdb_util
+      openr_network_util
     DESTINATION sbin/tests/openr/platform
   )
 
   add_openr_test(WatchdogTest watchdog_test
     SOURCES
       openr/watchdog/tests/WatchdogTest.cpp
+    LIBRARIES
+      openr_watchdog
+      openr_test_utils
+      openr_common
+      openr_messaging
     DESTINATION sbin/tests/openr/watchdog
   )
 
@@ -1107,13 +1238,12 @@ if(BUILD_TESTS)
   # benchmarks
   #
 
-  # This benchmark uses PersistentStoreWrapper from compatibility support.
   add_executable(config_store_benchmark
     openr/config-store/tests/PersistentStoreBenchmark.cpp
   )
 
   target_link_libraries(config_store_benchmark
-    openrlib
+    openr_persistent_store_wrapper
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
     ${BENCHMARK}
@@ -1130,7 +1260,13 @@ if(BUILD_TESTS)
   )
 
   target_link_libraries(fib_benchmark
-    openrlib
+    openr_fib
+    openr_ctrl_handler
+    openr_config
+    openr_messaging
+    openr_system_metrics
+    openr_test_utils
+    openr_prefix_generator
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
     ${GMOCK}
@@ -1146,13 +1282,14 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/fib
   )
 
-  # This benchmark still consumes compatibility test support.
   add_executable(netlink_fib_handler_benchmark
     openr/platform/tests/NetlinkFibHandlerBenchmark.cpp
   )
 
   target_link_libraries(netlink_fib_handler_benchmark
-    openrlib
+    openr_netlink_fib_handler
+    openr_mock_netlink_protocol_socket
+    openr_prefix_generator
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
     ${LIBGMOCK_LIBRARIES}
@@ -1165,14 +1302,12 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/platform
   )
 
-  # The Decision benchmark consumes unsplit routing and shared test
-  # utilities, so it remains on the compatibility archive.
   add_executable(decision_benchmark
     openr/decision/tests/DecisionBenchmark.cpp
   )
 
   target_link_libraries(decision_benchmark
-    openrlib
+    openr_routing_benchmark_utils
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
     ${GMOCK}
@@ -1213,7 +1348,11 @@ if(BUILD_TESTS)
   )
 
   target_link_libraries(kvstore_benchmark
-    openrlib
+    openr_kvstore
+    openr_kvstore_util
+    openr_kvstore_wrapper
+    openr_system_metrics
+    openr_test_utils
     ${FOLLY}
     ${FOLLY_EXCEPTION_TRACER}
     ${BENCHMARK}
