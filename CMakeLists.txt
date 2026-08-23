@@ -241,6 +241,7 @@ include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Netlink.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/Platform.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/LinkMonitor.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/CtrlServer.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/cmake/modules/MainUtil.cmake)
 openr_add_common_libraries()
 openr_add_config_library()
 openr_add_config_store_library()
@@ -261,6 +262,7 @@ openr_add_netlink_library()
 openr_add_platform_library()
 openr_add_link_monitor_libraries()
 openr_add_ctrl_server_library()
+openr_add_main_util_library()
 
 # Every openr_add_library call above registers its OBJECT target globally.
 # Collect those $<TARGET_OBJECTS:...> expressions once, after all component
@@ -270,7 +272,6 @@ openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
 
 add_library(openrlib
   ${OPENR_COMPONENT_OBJECTS}
-  openr/common/MainUtil.cpp
   # PersistentStoreWrapper depends on broad test utilities and remains
   # compatibility test support until those utilities are separated.
   openr/config-store/PersistentStoreWrapper.cpp
@@ -325,7 +326,30 @@ add_executable(openr_bin
 )
 
 target_link_libraries(openr_bin
-  openrlib
+  openr_build_info
+  openr_flags
+  openr_main_util
+  openr_common
+  openr_util
+  openr_config
+  openr_persistent_store
+  openr_ctrl_handler
+  openr_decision
+  openr_decision_structs
+  openr_dispatcher
+  openr_fib
+  openr_kvstore
+  openr_link_monitor
+  openr_messaging
+  openr_monitor
+  openr_neighbor_monitor
+  openr_fbnl
+  openr_netlink_fib_handler
+  openr_plugin
+  openr_prefix_manager
+  openr_io_provider
+  openr_spark
+  openr_watchdog
   ${OPENR_THRIFT_LIBS}
   ${GLOG}
   ${GFLAGS}
@@ -608,6 +632,13 @@ if(BUILD_TESTS)
     SOURCE_GROUP_FILE cmake/modules/CtrlServer.cmake
     SOURCE_VARIABLES OPENR_CTRL_HANDLER_SOURCES
     EXPECTED_SOURCE_COUNT ${OPENR_CTRL_SERVER_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
+    NAME OpenrMainUtilSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/MainUtil.cmake
+    SOURCE_VARIABLES OPENR_MAIN_UTIL_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_MAIN_UTIL_EXPECTED_SOURCE_COUNT}
   )
 
   set(
