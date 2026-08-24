@@ -2807,8 +2807,14 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   auto s0PubSent1 =
       fb303::fbData->getCounters()["kvstore.thrift.num_flood_pub.count"];
 
-  // check number of sent publications should be at least number of keys set
-  EXPECT_GE(s0PubSent1 - i1, 0);
+  // store0 is not rate limited, so it floods updates to store1. Under flood
+  // memory pressure the per-area byte budget may coalesce/defer flooding, so
+  // the number of flood publications is not necessarily one-per-update. Assert
+  // that flooding happened and that the latest value converged to store1.
+  EXPECT_GE(s0PubSent1, 1);
+  auto s1Key1 = store1->getKey(kTestingAreaName, "key1");
+  ASSERT_TRUE(s1Key1.has_value());
+  EXPECT_EQ(i1, *s1Key1->ttlVersion());
   /**
    * TEST2: install several keys in store1 which is rate limited. Number of
    * pulications sent should be (duration * messageRate). e.g. if duration

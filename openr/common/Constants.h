@@ -171,6 +171,48 @@ class Constants {
   // Kvstore timer for flooding pending publication
   static constexpr std::chrono::milliseconds kFloodPendingPublication{100};
 
+  /*
+   * Per-area soft budget (in bytes) for in-flight flood-publication payloads.
+   * Checked once at the start of each flood: if the area is already at/over
+   * this budget, the whole publication is deferred into the single area-level
+   * pending-key set (coalesced, re-derived from KvStore and flooded once budget
+   * frees up); otherwise it is flooded to all peers without a mid-loop
+   * re-check. Soft in two ways: the check ignores the size of the incoming
+   * publication, and it is not repeated mid-loop, so the peak may exceed this
+   * value by one publication's worth of serialized buffers.
+   *
+   * This counts *resident* bytes: peers share one refcounted serialized buffer
+   * (IOBuf::clone), so a payload flooded to N peers is charged once, not N
+   * times. The bound is therefore near-independent of peer count (see
+   * KvStoreDb::FloodByteCharge for the small per-send overhead that is left
+   * uncharged), and the value should be read as "how much flood payload may be
+   * simultaneously un-acked in this area", not as a per-peer queue depth.
+   *
+   * Sizing: deliberately permissive. This is a runaway guard, not an
+   * operational rate limiter -- it should not engage during normal convergence,
+   * only when a peer stalls and in-flight payloads would otherwise grow without
+   * bound. Starting loose and tightening later is the safer rollout order: a
+   * too-tight budget defers real advertisements and adds convergence latency,
+   * whereas a too-loose one merely fires rarely, which is still strictly better
+   * than the unbounded behavior it replaces.
+   *
+   * Note the budget is per area, so total exposure for the process is
+   * areas * kFloodMemBudgetBytes. Revisit this value (or divide it by area
+   * count) before deploying to many-area configurations.
+   * TODO: value is a placeholder pending tuning.
+   */
+  static constexpr size_t kFloodMemBudgetBytes{128 * 1024 * 1024}; // 128 MiB
+
+  /*
+   * How long area-level pending flood keys may remain undrained before we
+   * assume a flood-RPC completion was lost (leaking the in-flight byte budget)
+   * and force a reconcile + drain. Must be comfortably larger than
+   * kServiceProcTimeout so a legitimately in-flight RPC is never mistaken for a
+   * lost one.
+   */
+  static constexpr std::chrono::milliseconds kFloodDrainReconcileThreshold{
+      10000}; // 10s
+
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};
 

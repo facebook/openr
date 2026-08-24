@@ -7,6 +7,9 @@
 
 #pragma once
 
+#include <atomic>
+#include <chrono>
+#include <memory>
 #include <type_traits>
 
 #include <folly/TokenBucket.h>
@@ -309,6 +312,187 @@ class KvStoreDb {
   void floodPublication(
       thrift::Publication&& publication, bool rateLimit = true);
 
+  /*
+   * [Incremental flooding]
+   *
+   * RAII charge against the per-area flood memory budget. Exactly one instance
+   * exists per distinct serialized buffer, shared (via shared_ptr) by every
+   * peer's in-flight send of that buffer.
+   *
+   * Why shared rather than per-peer: the peer sends hand thrift
+   * `serializedBuf.clone()`, and IOBuf::clone shares the payload by refcount
+   * rather than deep-copying it, so a B-byte buffer flooded to N peers is
+   * resident once, not N times. Charging once per buffer therefore makes
+   * areaOutstandingFloodBytes_ track actual resident bytes, and makes the
+   * budget (very nearly, see below) independent of peer count.
+   *
+   * The budget is debited on construction and credited back by the destructor,
+   * i.e. when the last holder drops its reference -- whether that send
+   * succeeded, failed, or the peer went IDLE mid-flight. There is no
+   * "was I the last peer?" bookkeeping to get wrong. The one case that skips
+   * the credit is a charge outliving its KvStoreDb (see FloodCallbackState):
+   * there is no counter left to credit, so the destructor must not touch it.
+   *
+   * What is charged is the buffer's allocated capacity rather than its data
+   * length. zstd sizes its output to ZSTD_compressBound and then trims the
+   * visible length without shrinking the allocation, so for a highly
+   * compressible publication the two differ by orders of magnitude, and only
+   * capacity reflects memory actually held.
+   *
+   * EXTERNAL DEPENDENCY (thrift/rocket) -- two properties of the rocket client
+   * write path this accounting relies on, neither of which openr controls:
+   *
+   *  1. Correctness. DefaultPayloadSerializerStrategy serializes RPC metadata
+   *     into the *data buffer's headroom* when it can, which for a shared
+   *     buffer would mean every peer scribbling into one allocation. It is
+   *     safe here only because canSerializeMetadataIntoDataBufferHeadroom()
+   *     gates on `!data->isSharedOne()`, and our clones are always shared. If
+   *     that guard ever weakens, flooding silently corrupts payloads across
+   *     peers -- a data bug, not a memory one, so it would not show up here.
+   *
+   *  2. Sizing. Because the buffer is shared, rocket always takes the
+   *     no-headroom path and allocates a per-send metadata buffer with a 1 KiB
+   *     floor (kMinAllocBytes), on top of the THeader, response callback and
+   *     cloned IOBuf header. Those are NOT charged, so true residency is
+   *     roughly B + N * O(1 KiB). At realistic fan-out that tail is a low
+   *     single-digit percentage of kFloodMemBudgetBytes; it is deliberately
+   *     left uncharged rather than reintroducing a peer-count term into a
+   *     budget whose whole point is to not have one.
+   */
+  struct FloodCallbackState {
+    std::atomic<bool> alive{true};
+  };
+
+  class FloodByteCharge {
+   public:
+    FloodByteCharge(
+        KvStoreDb* db,
+        std::shared_ptr<FloodCallbackState> callbackState,
+        size_t bytes)
+        : db_(db), callbackState_(std::move(callbackState)), bytes_(bytes) {
+      db_->areaOutstandingFloodBytes_ += bytes_;
+    }
+    ~FloodByteCharge() {
+      if (callbackState_->alive.load(std::memory_order_relaxed)) {
+        db_->releaseFloodBytes(bytes_);
+      }
+    }
+    FloodByteCharge(const FloodByteCharge&) = delete;
+    FloodByteCharge& operator=(const FloodByteCharge&) = delete;
+    FloodByteCharge(FloodByteCharge&&) = delete;
+    FloodByteCharge& operator=(FloodByteCharge&&) = delete;
+
+   private:
+    KvStoreDb* const db_;
+    const std::shared_ptr<FloodCallbackState> callbackState_;
+    const size_t bytes_;
+  };
+
+  /*
+   * A serialized flood request paired with its budget charge. Cached per
+   * (protocolType, isFabricExternal) within a single flood round and shared
+   * across peers. `charge` is null when the flood memory budget is disabled
+   * (enable_flood_pub_pre_compression off), which is the single source of
+   * truth for whether this send participates in byte accounting.
+   */
+  struct FloodBuffer {
+    apache::thrift::SerializedRequest request;
+    std::shared_ptr<FloodByteCharge> charge;
+  };
+
+  /*
+   * [Incremental flooding]
+   *
+   * Send a pre-serialized flood request to a single peer. Takes a reference on
+   * the buffer's budget charge and attaches the continuation that drops it
+   * (crediting the budget back once the last peer's RPC resolves) and drains
+   * any keys deferred while the RPC was in flight.
+   */
+  void sendSerializedFloodToPeer(
+      KvStorePeer& peer,
+      const folly::IOBuf& serializedBuf,
+      uint16_t protocolId,
+      bool preCompressed,
+      std::chrono::steady_clock::time_point startTime,
+      std::shared_ptr<FloodByteCharge> charge);
+
+  /*
+   * Serialize a flood KeySetParams for the given protocol, applying zstd
+   * pre-compression when enabled. Shared by the immediate and drain flood
+   * paths.
+   */
+  apache::thrift::SerializedRequest serializeFloodRequest(
+      uint16_t protocolType, thrift::KeySetParams& params);
+
+  /*
+   * Serialize a flood KeySetParams (via serializeFloodRequest) and charge its
+   * allocated capacity -- not its logical length -- to the per-area flood
+   * memory budget. Shared by the immediate and drain flood paths, which cache
+   * the result per (protocol, fabric) and reuse it across peers.
+   */
+  FloodBuffer makeFloodBuffer(
+      uint16_t protocolType, thrift::KeySetParams& params);
+
+  /*
+   * Record flood telemetry and send an already-serialized flood request to a
+   * peer. Shared by the immediate and drain flood paths.
+   */
+  void floodSerializedRequestToPeer(
+      KvStorePeer& peer,
+      FloodBuffer& floodBuffer,
+      uint16_t protocolType,
+      size_t numKeyVals);
+
+  /*
+   * [Incremental flooding]
+   *
+   * Build the coalesced flood KeySetParams from pendingFloodKeys_, re-deriving
+   * current values from KvStore. When isFabricExternal, fabric adj/prefix keys
+   * are excluded (mirrors makeFabricParam). Returns empty keyVals if there is
+   * nothing to flood. Used by drainPendingFloods, which serializes it once per
+   * (protocol, fabric) and shares the buffer across peers.
+   */
+  thrift::KeySetParams buildCoalescedFloodParams(bool isFabricExternal);
+
+  /*
+   * [Incremental flooding]
+   *
+   * Attempt to drain pendingFloodKeys across all peers, honoring the per-area
+   * flood memory budget. Invoked when an outstanding flood RPC completes and
+   * frees budget, and from reconcileAndDrainPendingFloods as a timer backstop.
+   */
+  void drainPendingFloods();
+
+  /*
+   * Timer-driven safety net: if pendingFloodKeys_ has been stuck past
+   * kFloodDrainReconcileThreshold (a lost flood-RPC completion leaked the byte
+   * budget), reset the leaked accounting, then drain. Recovers flooding without
+   * relying solely on RPC-completion callbacks.
+   */
+  void reconcileAndDrainPendingFloods();
+
+  /*
+   * Record the flood-side perf events for a publication: the recv->advertise
+   * latency and the local-only PEER_FLOOD_COMPLETE stamp. `flooded` says
+   * whether this publication actually went out; when it was deferred under
+   * backpressure, the latency is instead attributed on drain so it includes
+   * the wait rather than under-reporting it.
+   */
+  void recordFloodPerfEvents(thrift::Publication& publication, bool flooded);
+
+  /*
+   * Arm floodDrainTimer_ to fire once pendingFloodKeys_ is old enough for
+   * reconcileAndDrainPendingFloods to judge it wedged. No-op if already armed:
+   * this is a deadline, not a debounce.
+   */
+  void armFloodDrainTimer();
+
+  /*
+   * Release `bytes` from the per-area in-flight flood budget (saturating at 0).
+   * Called only from ~FloodByteCharge.
+   */
+  void releaseFloodBytes(size_t bytes);
+
   std::unique_ptr<thrift::KeySetParams> makeFabricParam(
       const thrift::Publication& publication,
       const std::string& senderId) const;
@@ -542,6 +726,14 @@ class KvStoreDb {
   // timer to send pending kvstore publication
   std::unique_ptr<folly::AsyncTimeout> pendingPublicationTimer_{nullptr};
 
+  /*
+   * Backstop timer for the flood memory budget, deliberately separate from
+   * pendingPublicationTimer_: that one is a debounce for the rate limiter,
+   * this one is a deadline for the wedge check. See the ctor for why sharing
+   * one AsyncTimeout cannot satisfy both.
+   */
+  std::unique_ptr<folly::AsyncTimeout> floodDrainTimer_{nullptr};
+
   // timer to promote idle peers for initial syncing
   std::unique_ptr<folly::AsyncTimeout> thriftSyncTimer_{nullptr};
 
@@ -579,6 +771,69 @@ class KvStoreDb {
   // map<flood-root-id: set<keys>>
   folly::F14FastMap<std::optional<std::string>, folly::F14FastSet<std::string>>
       publicationBuffer_{};
+
+  std::shared_ptr<FloodCallbackState> floodCallbackState_;
+
+  /*
+   * Resident bytes of in-flight flood-publication payloads in this area. Gated
+   * against Constants::kFloodMemBudgetBytes to bound flood memory per area.
+   *
+   * Counted once per distinct serialized buffer, NOT once per peer: peers share
+   * one refcounted payload (IOBuf::clone), so a buffer flooded to N peers is
+   * resident once. Mutated only by FloodByteCharge's constructor/destructor,
+   * i.e. debited when a buffer is serialized and credited when the last peer's
+   * send of it resolves. All mutations happen on the KvStoreDb evb thread.
+   */
+  size_t areaOutstandingFloodBytes_{0};
+
+  /*
+   * Number of in-flight flood-publication RPCs across all peers in this area.
+   * Incremented on send, decremented when the RPC resolves.
+   */
+  size_t areaOutstandingFloodRpcs_{0};
+
+  /*
+   * Keys deferred while the area was at/over the flood memory budget. Because
+   * flooding is all-or-nothing per publication, the deferred set is identical
+   * for every peer, so a single area-level set (coalesced, bounded by KvStore
+   * size) is kept here; re-derived from KvStore and flooded to all peers on a
+   * later drain once budget frees up.
+   *
+   * By design senderId is NOT stored alongside the keys. On drain the coalesced
+   * set is flooded to all peers regardless of which key came from which sender,
+   * including back to the original sender. This is intentional to keep the
+   * implementation simple: draining is a delayed publication that only happens
+   * under memory pressure, and re-flooding a key back to its original sender is
+   * harmless -- the sender already has that version, so its merge is a no-op
+   * (no material update) and it is not re-flooded onward.
+   */
+  folly::F14FastSet<std::string> pendingFloodKeys_{};
+
+  /*
+   * Earliest RECV_PUB timestamp (unix ms) among publications deferred into
+   * pendingFloodKeys_. Stored so that, when the deferred keys are finally
+   * flooded on drain, we can calculate the recv-to-advertise latency (ms) from
+   * it (including the time spent waiting while deferred). Reset on drain.
+   */
+  std::optional<int64_t> pendingFloodOldestRecvTsMs_{};
+
+  /*
+   * When the current backpressure episode started; nullopt when no keys are
+   * pending. Measures how long keys have been awaiting advertisement; once that
+   * exceeds kFloodDrainReconcileThreshold, floodDrainTimer_ reconciles the byte
+   * budget and drains them. reconcileAndDrainPendingFloods restarts it from the
+   * reconcile point, so a drain that fails to clear the pending set cannot
+   * re-trip the wedge check on the very next tick.
+   *
+   * steady_clock, NOT wall clock: this is a pure elapsed-time safety net, so it
+   * must not be perturbed by an NTP step or an operator clock change. On a
+   * wall-clock reading, a backward jump could suppress the reconcile
+   * indefinitely, and a forward jump could fire it while RPCs are still in
+   * flight -- zeroing accounting those completions would then release again.
+   * (pendingFloodOldestRecvTsMs_ above stays wall-clock by necessity: it is
+   * differenced against RECV_PUB perf-event timestamps, which are unix ms.)
+   */
+  std::optional<std::chrono::steady_clock::time_point> pendingFloodSince_{};
 
   // Callback function to signal KvStore that KvStoreDb sync with all peers
   // are completed.

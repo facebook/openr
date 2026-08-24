@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <algorithm>
+
 #include <fb303/ServiceData.h>
 #include <folly/compression/Compression.h>
 #include <folly/io/async/SSLContext.h>
@@ -1246,6 +1248,35 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       "kvstore.thrift.num_keyvals_update", fb303::SUM);
 
+  /*
+   * Flood backpressure stats. Registered here so they export 0 from startup
+   * (addStatValue-created stats otherwise only appear after the first update).
+   *
+   * backpressure_engaged / backpressure_resolved are a matched pair: each
+   * increments once per backpressure episode (pending goes empty -> non-empty,
+   * and non-empty -> empty respectively). Equal counts => every backpressure
+   * episode was drained; a persistent gap => a stuck (never-drained) episode.
+   */
+  fb303::fbData->addStatExportType(
+      "kvstore.flood.backpressure_engaged", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.flood.backpressure_resolved", fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      "kvstore.flood.stuck_reconciled", fb303::COUNT);
+
+  /*
+   * Backpressure state sampled once per flood-publication and exported as AVG,
+   * so ODS gets a precise per-window average of the per-flood samples instead
+   * of a lossy 5s/60s point-sample of a flat gauge. (fb303 has no MAX export
+   * type; an exported histogram p100 would be needed for the true per-window
+   * peak.)
+   */
+  fb303::fbData->addStatExportType("kvstore.flood.pending_keys", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.flood.outstanding_bytes", fb303::AVG);
+  fb303::fbData->addStatExportType(
+      "kvstore.flood.outstanding_rpcs", fb303::AVG);
+
   // Initialize stats keys
   fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
   fb303::fbData->addStatExportType("kvstore.rate_limit_keys", fb303::AVG);
@@ -1741,6 +1772,8 @@ KvStoreDb<ClientType>::KvStoreDb(
       initialSelfOriginatedKeysSyncedCallback_(
           initialSelfOriginatedKeysSyncedCallback),
       evb_(evb) {
+  floodCallbackState_ = std::make_shared<FloodCallbackState>();
+
   if (kvParams_.floodRate) {
     floodLimiter_ = std::make_unique<folly::BasicTokenBucket<>>(
         *kvParams_.floodRate->flood_msg_per_sec(),
@@ -1753,6 +1786,32 @@ KvStoreDb<ClientType>::KvStoreDb(
             return;
           }
           floodBufferedUpdates();
+        });
+  }
+
+  /*
+   * [Incremental flooding]
+   *
+   * Backstop for the flood memory budget, kept separate from
+   * pendingPublicationTimer_ on purpose: the two want opposite timer
+   * semantics. The rate limiter wants debounce (every buffered publication
+   * pushes the flush out, coalescing a burst), whereas this one wants a
+   * deadline -- re-arming it on every deferral would push the tick out
+   * indefinitely under sustained backpressure, which is precisely the case it
+   * exists to recover from. Sharing one AsyncTimeout would force one of the
+   * two to take the other's semantics.
+   *
+   * Normally an in-flight flood RPC's completion drains pendingFloodKeys_ and
+   * this never fires; it is here for the quiescent wedge, where a completion
+   * was lost and no further publication arrives to re-drive the drain.
+   */
+  if (kvParams_.enable_flood_pub_pre_compression) {
+    floodDrainTimer_ =
+        folly::AsyncTimeout::make(*evb_->getEvb(), [this]() noexcept {
+          reconcileAndDrainPendingFloods();
+          if (!pendingFloodKeys_.empty()) {
+            armFloodDrainTimer();
+          }
         });
   }
 
@@ -1856,6 +1915,14 @@ KvStoreDb<ClientType>::stop() {
 
   // NOTE: folly::AsyncTimeout and AsyncThrottle must be tear-down in evb loop
   evb_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait([this]() {
+    /*
+     * Detach in-flight flood continuations before destroying clients, so a late
+     * completion neither dereferences this KvStoreDb nor credits a budget that
+     * is about to go away. Shutdown and test-teardown only; see
+     * FloodCallbackState for why this is safe to read relaxed.
+     */
+    floodCallbackState_->alive.store(false, std::memory_order_relaxed);
+
     // Reverse order to reset throttle
     unsetSelfOriginatedKeysThrottled_.reset();
     advertiseSelfOriginatedKeysThrottled_.reset();
@@ -1867,9 +1934,14 @@ KvStoreDb<ClientType>::stop() {
     ttlCountdownTimer_.reset();
     thriftSyncTimer_.reset();
 
-    if (kvParams_.floodRate) {
-      pendingPublicationTimer_.reset();
-    }
+    /*
+     * Deliberately unguarded: these two timers are created under different
+     * config knobs, and a teardown guard that has to mirror a creation
+     * condition is one edit away from leaking a live AsyncTimeout into the
+     * evb.
+     */
+    pendingPublicationTimer_.reset();
+    floodDrainTimer_.reset();
 
     // Clean up peer with client connection
     thriftPeers_.clear();
@@ -3347,22 +3419,54 @@ KvStoreDb<ClientType>::floodPublication(
   std::unique_ptr<thrift::KeySetParams> fabricParams = nullptr;
 
   /*
-   * Whether to pre-compress the flood payload once (shared across peers)
-   * instead of leaving per-peer compression to the thrift layer.
-   */
-  const bool preCompress = kvParams_.enable_flood_pub_pre_compression;
-
-  /*
-   * Buffers to cache serialized (and, when preCompress is set, pre-compressed)
-   * requests for flooding. Serialized once per protocol type and shared across
-   * all peers to avoid redundant per-peer work; compressed in-place with zstd
-   * only when preCompress is enabled.
+   * Buffers to cache serialized (and, when flood pre-compression is enabled,
+   * pre-compressed) requests. Serialized once per (protocol, fabric) and shared
+   * across all peers to avoid redundant per-peer work.
    */
   using FloodCacheKey = std::pair<uint16_t, bool>;
-  folly::F14NodeMap<
-      FloodCacheKey,
-      std::optional<apache::thrift::SerializedRequest>>
-      serializedRequests;
+  folly::F14NodeMap<FloodCacheKey, FloodBuffer> floodBuffers;
+
+  /*
+   * Backpressure (all-or-nothing per publication): decide once, up front,
+   * whether the area has room. If already at/over the per-area flood memory
+   * budget, defer the whole publication into the area-level pendingFloodKeys_
+   * (coalesced, re-derived from KvStore and flooded on a later drain);
+   * otherwise flood it to all peers without re-checking mid-loop. The check
+   * ignores this publication's own size, so a flood that starts just under
+   * budget may push the total over by its serialized buffers.
+   *
+   * The whole memory-budget / backpressure workflow is gated behind
+   * enable_flood_pub_pre_compression; when disabled floodNow is always true, so
+   * we keep the original workflow of flooding to all peers with no deferral.
+   */
+  const bool floodNow = !kvParams_.enable_flood_pub_pre_compression ||
+      areaOutstandingFloodBytes_ < Constants::kFloodMemBudgetBytes;
+  if (!floodNow) {
+    /*
+     * Deferred (area at/over budget): record the whole publication once in the
+     * area-level pending set. Flooding is all-or-nothing, so every peer would
+     * get the same keys; one set (bounded by KvStore size) suffices. It is
+     * re-derived from KvStore and flooded to all peers on a later drain. Note
+     * non-INITIALIZED peers are still handled below via
+     * pendingKeysDuringInitialization, which is independent of the flood
+     * budget.
+     */
+    if (pendingFloodKeys_.empty()) {
+      // Start of a backpressure episode (pending goes empty -> non-empty).
+      pendingFloodSince_ = std::chrono::steady_clock::now();
+      fb303::fbData->addStatValue(
+          "kvstore.flood.backpressure_engaged", 1, fb303::COUNT);
+    }
+    for (auto const& [key, _] : *params.keyVals()) {
+      pendingFloodKeys_.insert(key);
+    }
+    /*
+     * Safety net: normally an in-flight flood RPC's completion drains these,
+     * but arm the drain timer too so a lost completion can't strand them (the
+     * timer reconciles the leaked budget and drains).
+     */
+    armFloodDrainTimer();
+  }
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     if (senderId.has_value() && senderId.value() == peerName) {
       // Do not flood towards senderId from whom we received this
@@ -3380,83 +3484,484 @@ KvStoreDb<ClientType>::floodPublication(
       continue;
     }
 
-    bool isFabricExternal = kvParams_.fabricConfig.has_value() &&
+    if (!floodNow) {
+      /*
+       * Deferred: recorded once in the area-level pending set above; drained
+       * when budget frees.
+       */
+      continue;
+    }
+
+    const bool isFabricExternal = kvParams_.fabricConfig.has_value() &&
         !kvParams_.fabricConfig->isFabric(peerName);
     if (isFabricExternal && !fabricParams) {
       fabricParams = makeFabricParam(publication, kvParams_.nodeId);
     }
-    uint16_t protocolType = getProtocolType(thriftPeer);
+
+    const uint16_t protocolType = getProtocolType(thriftPeer);
     FloodCacheKey cacheKey{protocolType, isFabricExternal};
-    std::optional<apache::thrift::SerializedRequest>& serializedRequest =
-        serializedRequests[cacheKey];
-    if (!serializedRequest) {
-      serializedRequest.emplace(serializeRequest(
-          protocolType, isFabricExternal ? *fabricParams : params, area_));
-      if (preCompress) {
-        serializedRequest->buffer =
-            folly::compression::getCodec(folly::compression::CodecType::ZSTD, 1)
-                ->compress(serializedRequest->buffer.get());
-      }
+    auto bufferIt = floodBuffers.find(cacheKey);
+    if (bufferIt == floodBuffers.end()) {
+      /*
+       * Serialize once per (protocol, fabric); shared across peers, and
+       * charged against the flood memory budget exactly once here rather than
+       * once per peer.
+       */
+      bufferIt =
+          floodBuffers
+              .try_emplace(
+                  cacheKey,
+                  makeFloodBuffer(
+                      protocolType, isFabricExternal ? *fabricParams : params))
+              .first;
     }
-    // record telemetry for flooding publications
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.num_flood_pub", 1, fb303::COUNT);
-    fb303::fbData->addStatValue(
-        "kvstore.thrift.num_flood_key_vals",
-        publication.keyVals()->size(),
-        fb303::SUM);
-
-    auto startTime = std::chrono::steady_clock::now();
-    auto sf = thriftPeer.sendPreSerializedSetKvStoreKeyVals(
-        *serializedRequest->buffer,
+    floodSerializedRequestToPeer(
+        thriftPeer,
+        bufferIt->second,
         protocolType,
-        preCompress /* preCompressed */);
-    std::move(sf)
-        .via(evb_->getEvb())
-        .thenValue([startTime](folly::Unit&&) {
-          auto endTime = std::chrono::steady_clock::now();
-          auto timeDelta =
-              std::chrono::duration_cast<std::chrono::milliseconds>(
-                  endTime - startTime);
-
-          // record telemetry for thrift calls
-          fb303::fbData->addStatValue(
-              fmt::format(
-                  "kvstore.thrift.num_{}_success",
-                  Constants::kTypeFloodPub.toString()),
-              1,
-              fb303::COUNT);
-          fb303::fbData->addStatValue(
-              fmt::format(
-                  "kvstore.thrift.{}_duration_ms",
-                  Constants::kTypeFloodPub.toString()),
-              timeDelta.count(),
-              fb303::AVG);
-        })
-        .thenError([this, peerNameStr = peerName, startTime](
-                       const folly::exception_wrapper& ew) {
-          // state transition to IDLE
-          processThriftFailure(
-              peerNameStr,
-              Constants::kTypeFloodPub.toString(),
-              fmt::format(
-                  "FLOOD_PUB failure with {}, {}", peerNameStr, ew.what()),
-              startTime);
-        });
+        publication.keyVals()->size());
   }
 
-  // Local-only stamp; the queue copy was pushed earlier, so this doesn't
-  // propagate.
-  if (publication.perfEvents().has_value()) {
-    auto& events = *publication.perfEvents()->events();
-    auto it = std::find_if(events.begin(), events.end(), [](const auto& e) {
-      return *e.eventDescr() == "RECV_PUB";
-    });
-    if (it != events.end()) {
-      recordRecvToAdvertiseLatencyMs(getUnixTimeStampMs() - *it->unixTs());
+  /*
+   * Record recv->advertise latency (and the local-only PEER_FLOOD_COMPLETE
+   * stamp) only when we actually flooded this publication. When deferred
+   * (!floodNow) the flood happens later on drain, so instead remember the
+   * earliest RECV_PUB timestamp among pending publications; drainPendingFloods
+   * records the true latency (including the backpressure wait) once the
+   * deferred keys are flooded.
+   */
+  recordFloodPerfEvents(publication, floodNow);
+
+  /*
+   * Sample the current backpressure state once per publication flood (event-
+   * driven), exported as AVG so ODS captures a precise per-window average
+   * rather than losing transients to the 5s/60s flat-counter sampling.
+   */
+  if (kvParams_.enable_flood_pub_pre_compression) {
+    fb303::fbData->addStatValue(
+        "kvstore.flood.pending_keys", pendingFloodKeys_.size(), fb303::AVG);
+    fb303::fbData->addStatValue(
+        "kvstore.flood.outstanding_bytes",
+        areaOutstandingFloodBytes_,
+        fb303::AVG);
+    fb303::fbData->addStatValue(
+        "kvstore.flood.outstanding_rpcs",
+        areaOutstandingFloodRpcs_,
+        fb303::AVG);
+  }
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::recordFloodPerfEvents(
+    thrift::Publication& publication, bool flooded) {
+  if (!publication.perfEvents().has_value()) {
+    return;
+  }
+  auto& events = *publication.perfEvents()->events();
+  const auto it = std::find_if(events.begin(), events.end(), [](const auto& e) {
+    return *e.eventDescr() == "RECV_PUB";
+  });
+  if (it != events.end()) {
+    const int64_t recvTsMs = *it->unixTs();
+    if (flooded) {
+      recordRecvToAdvertiseLatencyMs(getUnixTimeStampMs() - recvTsMs);
+    } else {
+      /*
+       * Deferred: the flood happens later on drain, so remember the earliest
+       * RECV_PUB among pending publications instead. drainPendingFloods
+       * records the true latency, including the backpressure wait, once the
+       * deferred keys actually go out.
+       */
+      pendingFloodOldestRecvTsMs_ = pendingFloodOldestRecvTsMs_
+          ? std::min(*pendingFloodOldestRecvTsMs_, recvTsMs)
+          : recvTsMs;
     }
+  }
+  if (flooded) {
     addPerfEvent(
         *publication.perfEvents(), kvParams_.nodeId, "PEER_FLOOD_COMPLETE");
+  }
+}
+
+template <class ClientType>
+apache::thrift::SerializedRequest
+KvStoreDb<ClientType>::serializeFloodRequest(
+    uint16_t protocolType, thrift::KeySetParams& params) {
+  apache::thrift::SerializedRequest serializedRequest =
+      serializeRequest(protocolType, params, area_);
+  if (kvParams_.enable_flood_pub_pre_compression) {
+    serializedRequest.buffer =
+        folly::compression::getCodec(folly::compression::CodecType::ZSTD, 1)
+            ->compress(serializedRequest.buffer.get());
+  }
+  return serializedRequest;
+}
+
+template <class ClientType>
+typename KvStoreDb<ClientType>::FloodBuffer
+KvStoreDb<ClientType>::makeFloodBuffer(
+    uint16_t protocolType, thrift::KeySetParams& params) {
+  auto request = serializeFloodRequest(protocolType, params);
+  /*
+   * The flood memory budget is gated behind enable_flood_pub_pre_compression;
+   * a null charge means this buffer is not accounted and its sends skip the
+   * budget/drain workflow entirely.
+   */
+  std::shared_ptr<FloodByteCharge> charge{nullptr};
+  if (kvParams_.enable_flood_pub_pre_compression) {
+    /*
+     * Charge allocated capacity, not logical compressed length. Folly trims
+     * the visible compressed data without shrinking its backing IOBuf, so data
+     * length can understate resident memory by orders of magnitude for highly
+     * compressible publications.
+     */
+    charge = std::make_shared<FloodByteCharge>(
+        this, floodCallbackState_, request.buffer->computeChainCapacity());
+  }
+  return FloodBuffer{std::move(request), std::move(charge)};
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::floodSerializedRequestToPeer(
+    KvStorePeer& peer,
+    FloodBuffer& floodBuffer,
+    uint16_t protocolType,
+    size_t numKeyVals) {
+  fb303::fbData->addStatValue("kvstore.thrift.num_flood_pub", 1, fb303::COUNT);
+  fb303::fbData->addStatValue(
+      "kvstore.thrift.num_flood_key_vals", numKeyVals, fb303::SUM);
+  sendSerializedFloodToPeer(
+      peer,
+      *floodBuffer.request.buffer,
+      protocolType,
+      kvParams_.enable_flood_pub_pre_compression /* preCompressed */,
+      std::chrono::steady_clock::now(),
+      floodBuffer.charge);
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::releaseFloodBytes(size_t bytes) {
+  /*
+   * Saturating subtract. ~FloodByteCharge matches its constructor's add
+   * exactly once, so under normal operation this never clamps. It does clamp
+   * after reconcileAndDrainPendingFloods zeroes the counter as a wedge
+   * recovery while charges are still alive -- those charges then credit back
+   * bytes that were already dropped. Clamping keeps that case a harmless
+   * under-count instead of a size_t underflow to ~2^64, which would wedge the
+   * area out of flooding permanently.
+   */
+  if (areaOutstandingFloodBytes_ >= bytes) {
+    areaOutstandingFloodBytes_ -= bytes;
+  } else {
+    areaOutstandingFloodBytes_ = 0;
+  }
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::sendSerializedFloodToPeer(
+    KvStorePeer& peer,
+    const folly::IOBuf& serializedBuf,
+    uint16_t protocolId,
+    bool preCompressed,
+    std::chrono::steady_clock::time_point startTime,
+    std::shared_ptr<FloodByteCharge> charge) {
+  /*
+   * The flood memory budget / backpressure workflow is gated behind
+   * enable_flood_pub_pre_compression. When disabled the caller hands us a null
+   * charge and we keep the original workflow: just send, with no byte
+   * accounting, deferral, or drain. The charge pointer is the single source of
+   * truth here, so a knob flip while an RPC is in flight cannot desynchronize
+   * the debit from its credit.
+   */
+  if (charge) {
+    ++areaOutstandingFloodRpcs_;
+  }
+
+  /*
+   * Accounting invariant (backpressure on): this send's reference on the
+   * buffer's charge MUST be dropped exactly once, no matter how the send ends
+   * -- the last reference dropped is what credits the bytes back. A leaked
+   * reference permanently inflates areaOutstandingFloodBytes_ and, since
+   * flooding is gated on it, would wedge the whole area out of flooding. To
+   * guarantee this:
+   *   - makeSemiFutureWith turns a *synchronous* throw from the send into a
+   *     failed future (so a bad channel can't skip the continuation), and
+   *   - a single thenTry (not thenValue+thenError) drops the reference FIRST,
+   *     before any branch/telemetry/drain that could throw, so it can neither
+   *     be skipped nor run twice.
+   * Dropping first also matters for ordering: the drain below must observe the
+   * budget already credited, which only happens once this reference is gone.
+   */
+  folly::makeSemiFutureWith([&] {
+    return peer.sendPreSerializedSetKvStoreKeyVals(
+        serializedBuf, protocolId, preCompressed);
+  })
+      .via(evb_->getEvb())
+      .thenTry(
+          [this,
+           state = floodCallbackState_,
+           peerName = peer.nodeName,
+           startTime,
+           charge = std::move(charge)](folly::Try<folly::Unit>&& t) mutable {
+            /*
+             * The charge pointer is the single source of truth for whether
+             * this send participates in byte accounting; latch it before the
+             * reset below drops it.
+             */
+            const bool accounted = charge != nullptr;
+
+            if (!state->alive.load(std::memory_order_relaxed)) {
+              charge.reset();
+              return;
+            }
+
+            if (accounted) {
+              /* Drop this send's reference first, exactly once. */
+              charge.reset();
+              if (areaOutstandingFloodRpcs_ > 0) {
+                --areaOutstandingFloodRpcs_;
+              }
+            }
+
+            if (t.hasException()) {
+              /*
+               * processThriftFailure transitions the peer to IDLE and it will
+               * re-sync, which reconciles its state; the area-level
+               * pendingFloodKeys_ is shared, so it is left intact for other
+               * peers.
+               */
+              processThriftFailure(
+                  peerName,
+                  Constants::kTypeFloodPub.toString(),
+                  fmt::format(
+                      "FLOOD_PUB failure with {}, {}",
+                      peerName,
+                      t.exception().what()),
+                  startTime);
+            } else {
+              const auto timeDelta =
+                  std::chrono::duration_cast<std::chrono::milliseconds>(
+                      std::chrono::steady_clock::now() - startTime);
+              fb303::fbData->addStatValue(
+                  fmt::format(
+                      "kvstore.thrift.num_{}_success",
+                      Constants::kTypeFloodPub.toString()),
+                  1,
+                  fb303::COUNT);
+              fb303::fbData->addStatValue(
+                  fmt::format(
+                      "kvstore.thrift.{}_duration_ms",
+                      Constants::kTypeFloodPub.toString()),
+                  timeDelta.count(),
+                  fb303::AVG);
+            }
+
+            if (accounted) {
+              /*
+               * Freed budget may unblock deferred peers. Done last, after
+               * accounting is settled, so a throw here cannot skip the release
+               * above.
+               */
+              drainPendingFloods();
+            }
+          });
+}
+
+template <class ClientType>
+thrift::KeySetParams
+KvStoreDb<ClientType>::buildCoalescedFloodParams(bool isFabricExternal) {
+  /*
+   * Re-derive current values from KvStore so we flood the latest state, not the
+   * (possibly superseded) values queued while budget was exhausted. Keys no
+   * longer present (expired/deleted) are dropped; the peer expires them via
+   * ttl. Fabric-external peers do not receive fabric adj/prefix keys (mirrors
+   * makeFabricParam).
+   */
+  thrift::KeySetParams params;
+  for (auto const& key : pendingFloodKeys_) {
+    if (isFabricExternal &&
+        (kvParams_.fabricConfig->isFabricAdjKey(key) ||
+         kvParams_.fabricConfig->isFabricPrefixKey(key))) {
+      continue;
+    }
+    auto kvIt = kvStore_.find(key);
+    if (kvIt != kvStore_.end()) {
+      params.keyVals()->insert({key, kvIt->second});
+    }
+  }
+  if (!params.keyVals()->empty()) {
+    params.nodeIds() = std::vector<std::string>{kvParams_.nodeId};
+    params.timestamp_ms() = getUnixTimeStampMs();
+    params.senderId() = kvParams_.nodeId;
+  }
+  return params;
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::armFloodDrainTimer() {
+  /*
+   * Deadline, not debounce: if the timer is already armed, leave it alone.
+   * Re-arming on every deferral is what would push the tick out indefinitely
+   * under sustained backpressure and starve the wedge check.
+   *
+   * Only reachable with enable_flood_pub_pre_compression on (the deferral path
+   * is gated on it), which is the same condition floodDrainTimer_ is created
+   * under.
+   */
+  if (floodDrainTimer_->isScheduled()) {
+    return;
+  }
+  /*
+   * Fire when the pending set is old enough for reconcileAndDrainPendingFloods
+   * to judge it wedged. Measured from pendingFloodSince_ rather than from now,
+   * so re-arming after a partial wait does not restart the full threshold. A
+   * zero timeout is fine and self-correcting: it fires on the next loop
+   * iteration, by which point the elapsed check has strictly passed.
+   */
+  auto timeout = Constants::kFloodDrainReconcileThreshold;
+  if (pendingFloodSince_) {
+    const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now() - *pendingFloodSince_);
+    timeout = std::max(std::chrono::milliseconds{0}, timeout - elapsed);
+  }
+  floodDrainTimer_->scheduleTimeout(timeout);
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::reconcileAndDrainPendingFloods() {
+  if (pendingFloodKeys_.empty()) {
+    return;
+  }
+  /*
+   * Wedge detection: if the area is at/over budget and pending keys have been
+   * stuck past the reconcile threshold, a flood-RPC completion was lost and
+   * leaked the byte budget (a legitimately in-flight RPC resolves within
+   * kServiceProcTimeout, far below the threshold). Reset the leaked accounting
+   * so flooding can resume. Measured on steady_clock so a clock step can
+   * neither fire this early (while RPCs are still in flight) nor defer it.
+   *
+   * If any FloodByteCharge is somehow still alive when this fires, its later
+   * destructor credits bytes against an already-zeroed counter; the saturating
+   * subtract in releaseFloodBytes absorbs that as a harmless under-count.
+   */
+  if (areaOutstandingFloodBytes_ >= Constants::kFloodMemBudgetBytes &&
+      pendingFloodSince_ &&
+      (std::chrono::steady_clock::now() - *pendingFloodSince_) >
+          Constants::kFloodDrainReconcileThreshold) {
+    areaOutstandingFloodBytes_ = 0;
+    areaOutstandingFloodRpcs_ = 0;
+    /*
+     * Restart the threshold from the reconcile point, not the original
+     * deferral. Without this, a drain that does not clear the pending set
+     * (new floods pushed the area back over budget) leaves an already-expired
+     * pendingFloodSince_ behind, so armFloodDrainTimer computes zero remaining
+     * time and the next tick re-reconciles immediately -- zeroing accounting
+     * for RPCs that are legitimately in flight, in a tight loop.
+     */
+    pendingFloodSince_ = std::chrono::steady_clock::now();
+    fb303::fbData->addStatValue(
+        "kvstore.flood.stuck_reconciled", 1, fb303::COUNT);
+  }
+  drainPendingFloods();
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::drainPendingFloods() {
+  /*
+   * All-or-nothing: only drain when below budget, then flood the area-level
+   * pending set to every peer without re-checking mid-loop (so, as in
+   * floodPublication, the drain's own buffers may push the total over budget),
+   * and clear it once.
+   */
+  if (areaOutstandingFloodBytes_ >= Constants::kFloodMemBudgetBytes) {
+    return;
+  }
+  if (pendingFloodKeys_.empty()) {
+    return;
+  }
+
+  /*
+   * Re-derive the coalesced params at most twice -- the full set for
+   * non-fabric-external peers and the fabric-filtered set for fabric-external
+   * peers -- and serialize (+ pre-compress) once per (protocol, fabric),
+   * sharing the buffer across peers. Same "serialize/compress once, flood to
+   * many" optimization as the immediate flood path.
+   */
+  std::optional<thrift::KeySetParams> fullParams;
+  std::optional<thrift::KeySetParams> fabricParams;
+  using FloodCacheKey = std::pair<uint16_t, bool>;
+  folly::F14NodeMap<FloodCacheKey, FloodBuffer> floodBuffers;
+
+  for (auto& [peerName, peer] : thriftPeers_) {
+    /*
+     * A peer that has not finished initial sync is reconciled by the
+     * pendingKeysDuringInitialization / full-sync path; skip it here.
+     */
+    if (*peer.peerSpec.state() != thrift::KvStorePeerState::INITIALIZED) {
+      continue;
+    }
+    const bool isFabricExternal = kvParams_.fabricConfig.has_value() &&
+        !kvParams_.fabricConfig->isFabric(peerName);
+    std::optional<thrift::KeySetParams>& params =
+        isFabricExternal ? fabricParams : fullParams;
+    if (!params) {
+      params = buildCoalescedFloodParams(isFabricExternal);
+    }
+    if (params->keyVals()->empty()) {
+      continue;
+    }
+    const uint16_t protocolType = getProtocolType(peer);
+    FloodCacheKey cacheKey{protocolType, isFabricExternal};
+    auto bufferIt = floodBuffers.find(cacheKey);
+    if (bufferIt == floodBuffers.end()) {
+      bufferIt =
+          floodBuffers
+              .try_emplace(cacheKey, makeFloodBuffer(protocolType, *params))
+              .first;
+    }
+    floodSerializedRequestToPeer(
+        peer, bufferIt->second, protocolType, params->keyVals()->size());
+  }
+
+  /*
+   * End of a backpressure episode (pending goes non-empty -> empty); paired
+   * with backpressure_engaged so equal counts => every episode was resolved.
+   *
+   * "Resolved" deliberately also covers the nothing-left-to-flood case: the
+   * loop above skips a peer that is not INITIALIZED, and skips entirely when
+   * every deferred key has since expired or been deleted so the re-derived
+   * params are empty. Those episodes end without an RPC, and the pending set
+   * is still cleared -- holding the keys would mean re-deriving an empty set
+   * forever. So read the pair as "every episode ended", not "every episode
+   * flooded"; kvstore.thrift.num_flood_pub is what says an RPC went out.
+   */
+  fb303::fbData->addStatValue(
+      "kvstore.flood.backpressure_resolved", 1, fb303::COUNT);
+  pendingFloodKeys_.clear();
+  pendingFloodSince_.reset();
+  /*
+   * Nothing left to back off for. Cancelling here means the timer is armed
+   * only while an episode is actually open, instead of ticking on against an
+   * empty pending set.
+   */
+  floodDrainTimer_->cancelTimeout();
+
+  /*
+   * The deferred keys are now flooded: record the true recv->advertise latency
+   * measured from the earliest deferred publication, so the metric reflects the
+   * backpressure wait rather than under-reporting it.
+   */
+  if (pendingFloodOldestRecvTsMs_) {
+    recordRecvToAdvertiseLatencyMs(
+        getUnixTimeStampMs() - *pendingFloodOldestRecvTsMs_);
+    pendingFloodOldestRecvTsMs_.reset();
   }
 }
 
