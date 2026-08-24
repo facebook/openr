@@ -3633,18 +3633,17 @@ getCounterOrZero(const std::string& name) {
 /*
  * Assert the flood pre-compression / memory-budget path actually ran.
  *
- * These samples are only taken when enable_flood_pub_pre_compression is on, and
- * a nonzero byte count means FloodByteCharge was really debiting the budget
- * while RPCs were in flight. Without this guard a config-plumbing regression
- * would silently turn every test below into a test of the legacy flood path.
+ * Presence, not value: publishFloodBackpressureState() samples the backpressure
+ * state only when enable_flood_pub_pre_compression is on, so after
+ * resetAllData() the stat exists if and only if that path executed. The VALUE
+ * cannot be used -- the sample is deliberately taken at the backpressure
+ * decision point, before this publication is charged, so a healthy node with
+ * non-overlapping floods correctly reports 0.
  */
 void
 expectPreCompressionPathExercised() {
-  // Only assert on the byte gauge. outstanding_rpcs is a small integer and the
-  // stat is exported as AVG, so a store that floods to no peers contributes a
-  // zero sample and truncates the average to 0 -- outstanding_bytes carries the
-  // same signal without that sensitivity.
-  EXPECT_GT(getCounterOrZero("kvstore.flood.outstanding_bytes.avg"), 0)
+  const auto counters = fb303::fbData->getCounters();
+  EXPECT_TRUE(counters.contains("kvstore.flood.outstanding_bytes.avg"))
       << "flood pre-compression path did not run; budget accounting inert";
 }
 
@@ -3878,6 +3877,75 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionFabricScope) {
       << "Fabric adj key should NOT be flooded to fabric-external peer";
   EXPECT_THAT(dumpC.count(fabricPrefixKey), Eq(0))
       << "Fabric prefix key should NOT be flooded to fabric-external peer";
+}
+
+/**
+ * The byte watermark must capture a publication's own charge.
+ *
+ * The AVG gauges are sampled at the backpressure decision point, i.e. before
+ * the publication is serialized and charged. If the watermark rode along with
+ * that sample it would only ever see bytes contributed by *earlier* floods, so
+ * a single flood with no follow-up traffic would allocate, send and complete
+ * without its peak being recorded at all -- outstanding_bytes_max would read 0
+ * while a multi-MiB buffer was resident. That is the same "transient is
+ * invisible" failure the watermarks exist to fix.
+ *
+ * Deliberately one publication and nothing after it: with a burst, a later
+ * flood's pre-charge sample would observe this one's bytes and hide the bug.
+ * The value is highly compressible so the assertion also pins that the charge
+ * is the buffer's allocated capacity rather than its compressed length.
+ */
+TEST_F(KvStoreTestFixture, FloodWatermarkCapturesSinglePublication) {
+  fb303::fbData->resetAllData();
+  resetFloodWatermarks();
+
+  constexpr size_t kValueBytes{1 << 20};
+  const std::string publisherId{"single-pub-publisher"};
+  const std::string key{"single-pub-key"};
+  const std::string value(kValueBytes, 'x');
+
+  // Default budget: this must not engage backpressure -- the point is the
+  // ordinary, non-deferred flood path.
+  auto* publisher = createKvStore(getPreCompressKvConf(publisherId));
+  auto* receiver = createKvStore(getPreCompressKvConf("single-pub-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  auto thriftVal = createThriftValue(
+      1 /* version */,
+      publisherId /* originatorId */,
+      value /* value */,
+      Constants::kTtlInfinity /* ttl */,
+      0 /* ttl version */,
+      generateHash(
+          1, publisherId, thrift::Value().value() = std::string(value)));
+  EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value));
+
+  // No backpressure, so the AVG-sampled path contributed nothing; the mark can
+  // only be non-zero if the charge itself recorded it.
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.flood.backpressure_engaged.count"), Eq(0));
+  EXPECT_GE(
+      getCounterOrZero("kvstore.flood.outstanding_bytes_max"),
+      static_cast<int64_t>(kValueBytes))
+      << "isolated flood's peak was never recorded -- watermark is sampled "
+         "before the charge, or charged compressed length instead of capacity";
+  EXPECT_GE(
+      getCounterOrZero(
+          fmt::format(
+              "kvstore.flood.outstanding_bytes_max.{}", kTestingAreaName.t)),
+      static_cast<int64_t>(kValueBytes));
 }
 
 /**
@@ -4151,6 +4219,22 @@ TEST_F(KvStoreTestFixture, FloodBackpressureCoalescesToLatestValue) {
   const auto received = receiver->getKey(kTestingAreaName, key);
   ASSERT_TRUE(received.has_value());
   EXPECT_THAT(*received->version(), Eq(kNumUpdates));
+
+  /*
+   * Coalescing is observable, and here it is strict: every deferral is a repeat
+   * of the same key, so the drains must flush strictly fewer keys than were
+   * deferred into them. This is the ratio num_deferred_keys/num_coalesced_keys
+   * exists to report; a ratio of 1 would mean deferral bought nothing.
+   */
+  const auto deferredKeys =
+      getCounterOrZero("kvstore.flood.num_deferred_keys.sum");
+  const auto coalescedKeys =
+      getCounterOrZero("kvstore.flood.num_coalesced_keys.sum");
+  EXPECT_GT(deferredKeys, 0);
+  EXPECT_GT(coalescedKeys, 0);
+  EXPECT_GT(deferredKeys, coalescedKeys)
+      << "repeated updates to one key were not coalesced: " << deferredKeys
+      << " deferred vs " << coalescedKeys << " flushed";
 }
 
 /**
@@ -4316,6 +4400,153 @@ TEST_F(
   }
   EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(kNumKeys));
   EXPECT_THAT(getCounterOrZero("kvstore.flood.stuck_reconciled.count"), Eq(0));
+}
+
+/**
+ * Guard the observability contract of the flood counters. Production data
+ * showed the original shape was not operable: pending_keys read 0 across a full
+ * day that contained real backpressure episodes, because an AVG stat truncates
+ * a sub-sampling-interval transient to zero.
+ *
+ * Covers, under forced backpressure:
+ *  - the sticky high-water marks record the peak the AVG stats lose;
+ *  - deferral volume and coalescing are observable at all;
+ *  - every flood counter is emitted area-tagged as well as globally, so an
+ *    incident can be narrowed to one area of a multi-area node;
+ *  - the resolved budget is exported, so outstanding_bytes is interpretable.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureCountersAreOperable) {
+  fb303::fbData->resetAllData();
+  resetFloodWatermarks();
+
+  constexpr size_t kNumKeys{40};
+  constexpr size_t kCapacityProbeBytes{1 << 20};
+  const std::string publisherId{"counters-publisher"};
+  const auto area = kTestingAreaName.t;
+  const std::string capacityProbeValue(kCapacityProbeBytes, 'x');
+
+  /*
+   * Both stores get the same budget on purpose. kvstore.flood.budget_bytes is a
+   * node-level setCounter, and this test process hosts two KvStore instances,
+   * so the last one to initialize wins the counter. Production runs one KvStore
+   * per process, where the value is unambiguous.
+   */
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
+  auto* receiver = createKvStore(getTinyBudgetKvConf("counters-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  std::map<std::string, std::string> expectedKeyVals;
+  for (size_t i = 0; i < kNumKeys; ++i) {
+    const auto key = fmt::format("counters-key{}", i);
+    const auto value = i == 0 ? capacityProbeValue : makeFloodValue(key);
+    expectedKeyVals.emplace(key, value);
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+  for (const auto& [key, value] : expectedKeyVals) {
+    EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value));
+  }
+
+  const auto engaged =
+      getCounterOrZero("kvstore.flood.backpressure_engaged.count");
+  ASSERT_GT(engaged, 0) << "test did not reach backpressure";
+
+  // Peaks survive even though the AVG stats average them away.
+  EXPECT_GT(getCounterOrZero("kvstore.flood.pending_keys_max"), 0)
+      << "pending-keys watermark missed an episode the AVG stat also hides";
+  EXPECT_GE(
+      getCounterOrZero("kvstore.flood.outstanding_bytes_max"),
+      static_cast<int64_t>(capacityProbeValue.size()))
+      << "resident IOBuf capacity was undercounted as compressed data length";
+  EXPECT_GT(
+      getCounterOrZero(fmt::format("kvstore.flood.pending_keys_max.{}", area)),
+      0);
+
+  /*
+   * Deferral volume at all three granularities, not just episode count: keys
+   * deferred (sum), publications deferred (count -- COUNT counts calls rather
+   * than values, so one stat yields both), and distinct keys flushed on drain.
+   */
+  const auto deferredKeys =
+      getCounterOrZero("kvstore.flood.num_deferred_keys.sum");
+  const auto deferredPubs =
+      getCounterOrZero("kvstore.flood.num_deferred_keys.count");
+  const auto coalescedKeys =
+      getCounterOrZero("kvstore.flood.num_coalesced_keys.sum");
+  EXPECT_GT(deferredKeys, 0);
+  EXPECT_GT(deferredPubs, 0);
+  EXPECT_GT(coalescedKeys, 0);
+  // A publication carries >= 1 key; an episode groups >= 1 publication.
+  EXPECT_GE(deferredKeys, deferredPubs);
+  EXPECT_GE(deferredPubs, engaged);
+  /*
+   * A drain never flushes more than was deferred into it. This test uses
+   * distinct keys, so nothing is collapsed and the two are equal -- the strict
+   * coalescing ratio is asserted in FloodBackpressureCoalescesToLatestValue,
+   * which repeatedly overwrites a single key.
+   */
+  EXPECT_GE(deferredKeys, coalescedKeys);
+
+  /*
+   * Every flood counter is emitted area-tagged as well as globally with the
+   * same value, so an incident on a multi-area node can be narrowed to one
+   * area. engaged is separately asserted nonzero so the comparisons below
+   * cannot all pass as 0 == 0; stuck_reconciled is legitimately 0 here.
+   */
+  EXPECT_GT(
+      getCounterOrZero(
+          fmt::format("kvstore.flood.backpressure_engaged.{}.count", area)),
+      0)
+      << "area-tagged engaged counter never incremented";
+  for (const auto& stat :
+       {std::string("backpressure_engaged"),
+        std::string("backpressure_resolved"),
+        std::string("stuck_reconciled")}) {
+    const auto globalName = fmt::format("kvstore.flood.{}.count", stat);
+    const auto taggedName =
+        fmt::format("kvstore.flood.{}.{}.count", stat, area);
+    EXPECT_THAT(getCounterOrZero(taggedName), Eq(getCounterOrZero(globalName)))
+        << "area-tagged " << taggedName << " disagrees with " << globalName;
+  }
+  for (const auto& suffix : {std::string("sum"), std::string("count")}) {
+    EXPECT_THAT(
+        getCounterOrZero(
+            fmt::format("kvstore.flood.num_deferred_keys.{}.{}", area, suffix)),
+        Eq(getCounterOrZero(
+            fmt::format("kvstore.flood.num_deferred_keys.{}", suffix))));
+  }
+  EXPECT_THAT(
+      getCounterOrZero(
+          fmt::format("kvstore.flood.num_coalesced_keys.{}.sum", area)),
+      Eq(coalescedKeys));
+
+  // The budget is exported so outstanding_bytes can be read as utilization,
+  // once at node level with the configured value. It must NOT be area-tagged
+  // (one node-level config applied to every area) and must NOT be summed
+  // across areas, which is what routing it through getCounters() would do.
+  EXPECT_THAT(getCounterOrZero("kvstore.flood.budget_bytes"), Eq(1));
+  EXPECT_THAT(
+      getCounterOrZero(fmt::format("kvstore.flood.budget_bytes.{}", area)),
+      Eq(0))
+      << "budget must not be area-tagged; it is not a per-area config";
 }
 
 /**

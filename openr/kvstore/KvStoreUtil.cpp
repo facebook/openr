@@ -52,6 +52,60 @@ resetRecvToAdvertiseMaxMs() {
 
 namespace {
 
+constexpr std::string_view kFloodOutstandingBytesMax =
+    "kvstore.flood.outstanding_bytes_max";
+constexpr std::string_view kFloodPendingKeysMax =
+    "kvstore.flood.pending_keys_max";
+
+std::atomic<int64_t>&
+floodOutstandingBytesMax() {
+  static std::atomic<int64_t> value{0};
+  return value;
+}
+
+std::atomic<int64_t>&
+floodPendingKeysMax() {
+  static std::atomic<int64_t> value{0};
+  return value;
+}
+
+// Raise `maxRef` to `value` if higher, and republish it under `counterName`.
+void
+publishStickyMax(
+    std::atomic<int64_t>& maxRef, std::string_view counterName, int64_t value) {
+  int64_t prev = maxRef.load(std::memory_order_relaxed);
+  while (
+      value > prev &&
+      !maxRef.compare_exchange_weak(prev, value, std::memory_order_relaxed)) {
+  }
+  facebook::fb303::fbData->setCounter(
+      std::string(counterName), maxRef.load(std::memory_order_relaxed));
+}
+
+} // namespace
+
+void
+recordFloodOutstandingBytes(int64_t bytes) {
+  publishStickyMax(
+      floodOutstandingBytesMax(), kFloodOutstandingBytesMax, bytes);
+}
+
+void
+recordFloodPendingKeys(int64_t numPendingKeys) {
+  publishStickyMax(floodPendingKeysMax(), kFloodPendingKeysMax, numPendingKeys);
+}
+
+void
+resetFloodWatermarks() {
+  floodOutstandingBytesMax().store(0, std::memory_order_relaxed);
+  floodPendingKeysMax().store(0, std::memory_order_relaxed);
+  facebook::fb303::fbData->setCounter(
+      std::string(kFloodOutstandingBytesMax), 0);
+  facebook::fb303::fbData->setCounter(std::string(kFloodPendingKeysMax), 0);
+}
+
+namespace {
+
 bool
 isValidTtlAndLog(
     const std::string& key,

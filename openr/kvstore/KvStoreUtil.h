@@ -7,9 +7,14 @@
 
 #pragma once
 
+#include <array>
 #include <concepts>
 #include <ranges>
 #include <string>
+#include <string_view>
+#include <utility>
+
+#include <fb303/ExportType.h>
 
 #include <folly/container/F14Map.h>
 #include <folly/io/async/AsyncSocket.h>
@@ -337,6 +342,54 @@ std::string getAreaTypeByAreaName(const std::string& area);
  */
 void recordRecvToAdvertiseLatencyMs(int64_t latencyMs);
 void resetRecvToAdvertiseMaxMs();
+
+/*
+ * Flood backpressure high-water marks.
+ *
+ * Backpressure episodes are typically far shorter than the ODS sampling
+ * interval -- a flood RPC resolves in well under a millisecond, so an episode
+ * opens and drains between two samples. A point-sampled gauge therefore reads
+ * 0 during a real incident, and an AVG-exported stat truncates the transient
+ * away (observed in production: kvstore.flood.pending_keys read 0 across a
+ * full day that contained genuine backpressure episodes).
+ *
+ * These are process-wide sticky maxima published as flat counters, so a step
+ * up means a new record and any sampling rate observes it. Sticky until reset,
+ * so operators can clear them before a specific event and read the worst
+ * observation that followed. Per-area equivalents are published by KvStoreDb.
+ */
+void recordFloodOutstandingBytes(int64_t bytes);
+void recordFloodPendingKeys(int64_t numPendingKeys);
+void resetFloodWatermarks();
+
+/*
+ * Single source of truth for the flood-backpressure stats and their export
+ * types. Every one of these is registered twice -- untagged at node level by
+ * KvStore::initGlobalCounters, and area-tagged ("<name>.<area>") by each
+ * KvStoreDb -- so the names live here rather than being spelled out at both
+ * sites, where the two lists would drift.
+ *
+ * Registering up front matters: an addStatValue-created stat does not appear
+ * until its first update, so without this a quiet node would export nothing
+ * and an alert could not distinguish "no backpressure" from "not deployed".
+ *
+ * num_deferred_keys appears with BOTH SUM and COUNT deliberately: COUNT
+ * exports the number of samples rather than the sum of values, so the single
+ * stat yields keys deferred (.sum) alongside publications deferred (.count).
+ */
+inline constexpr std::
+    array<std::pair<std::string_view, facebook::fb303::ExportType>, 9>
+        kFloodBackpressureStats{{
+            {"kvstore.flood.backpressure_engaged", facebook::fb303::COUNT},
+            {"kvstore.flood.backpressure_resolved", facebook::fb303::COUNT},
+            {"kvstore.flood.stuck_reconciled", facebook::fb303::COUNT},
+            {"kvstore.flood.num_deferred_keys", facebook::fb303::SUM},
+            {"kvstore.flood.num_deferred_keys", facebook::fb303::COUNT},
+            {"kvstore.flood.num_coalesced_keys", facebook::fb303::SUM},
+            {"kvstore.flood.pending_keys", facebook::fb303::AVG},
+            {"kvstore.flood.outstanding_bytes", facebook::fb303::AVG},
+            {"kvstore.flood.outstanding_rpcs", facebook::fb303::AVG},
+        }};
 
 } // namespace openr
 

@@ -12,6 +12,7 @@
 #include <memory>
 #include <type_traits>
 
+#include <fb303/ExportType.h>
 #include <folly/TokenBucket.h>
 #include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
@@ -371,6 +372,16 @@ class KvStoreDb {
         size_t bytes)
         : db_(db), callbackState_(std::move(callbackState)), bytes_(bytes) {
       db_->areaOutstandingFloodBytes_ += bytes_;
+      /*
+       * Peak residency is reached here, immediately after the increment, so
+       * the watermark is taken here rather than left to a later sample. The
+       * AVG gauges are deliberately sampled elsewhere (at the backpressure
+       * decision, before this charge exists) because they answer a different
+       * question -- how much pressure the defer/flood decision was taken
+       * against. A watermark sampled at that point would miss every isolated
+       * flood, since nothing later observes it before the RPC completes.
+       */
+      db_->recordFloodByteWatermark();
     }
     ~FloodByteCharge() {
       if (callbackState_->alive.load(std::memory_order_relaxed)) {
@@ -493,6 +504,38 @@ class KvStoreDb {
    * Called only from ~FloodByteCharge.
    */
   void releaseFloodBytes(size_t bytes);
+
+  /*
+   * Emit a flood stat under both the global name (for fleet-wide alerting) and
+   * the area-tagged name (for narrowing an incident to one area), following the
+   * two-layer counter convention documented in getCounters(). The flood memory
+   * budget is per area, so a global-only counter cannot say which area is under
+   * pressure.
+   */
+  void addFloodStat(
+      const std::string& name, int64_t value, facebook::fb303::ExportType type);
+
+  /*
+   * Publish the flood backpressure state.
+   *
+   * MUST be called at the point the backpressure decision is made, i.e. BEFORE
+   * this publication's bytes are charged -- otherwise outstanding_bytes reports
+   * the size of the flood just sent rather than the pressure the decision was
+   * taken against, which is what an operator needs.
+   *
+   * Publishes both the AVG stats (per-window average) and the sticky
+   * high-water marks (peaks; see KvStoreUtil, backpressure episodes are shorter
+   * than an ODS sampling interval so averages alone hide them).
+   */
+  void publishFloodBackpressureState();
+
+  /*
+   * Record the current in-flight byte total into the sticky high-water marks
+   * (process-wide and per-area). Called from FloodByteCharge's constructor,
+   * which is the only place areaOutstandingFloodBytes_ increases and therefore
+   * the only point at which a new peak can occur.
+   */
+  void recordFloodByteWatermark();
 
   std::unique_ptr<thrift::KeySetParams> makeFabricParam(
       const thrift::Publication& publication,
@@ -793,6 +836,19 @@ class KvStoreDb {
    * Incremented on send, decremented when the RPC resolves.
    */
   size_t areaOutstandingFloodRpcs_{0};
+
+  /*
+   * Per-area sticky high-water marks for the backpressure state, published as
+   * flat counters (kvstore.flood.{outstanding_bytes,pending_keys}_max.<area>).
+   *
+   * Needed in addition to the AVG stats because a backpressure episode is
+   * usually shorter than one ODS sampling interval, so averages truncate the
+   * transient away and a point-sampled gauge misses it entirely. Sticky, so a
+   * step up means a new record at any sampling rate. The process-wide
+   * equivalents live in KvStoreUtil.
+   */
+  size_t areaOutstandingFloodBytesMax_{0};
+  size_t areaPendingFloodKeysMax_{0};
 
   /*
    * Keys deferred while the area was at/over the flood memory budget. Because

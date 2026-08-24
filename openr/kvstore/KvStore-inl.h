@@ -1170,6 +1170,25 @@ template <class ClientType>
 void
 KvStore<ClientType>::initGlobalCounters() {
   /*
+   * Resolved flood memory budget. Exported so outstanding_bytes is
+   * interpretable -- the budget is config-driven and differs per deployment, so
+   * a raw byte count says nothing about how close an area is to deferring.
+   *
+   * Deliberately NOT area-tagged and NOT emitted from KvStoreDb::getCounters():
+   * flood_mem_budget_bytes is a single node-level config value applied
+   * identically to every area, so a per-area copy would be N duplicates of one
+   * constant and would wrongly imply the budget is tunable per area. Going
+   * through getCounters() would also be wrong -- getGlobalCounters() sums
+   * same-named counters across areas, which would report areas * budget rather
+   * than the configured value.
+   *
+   * The state gated against it (outstanding_bytes, pending_keys, ...) IS
+   * per-area, since each KvStoreDb enforces the budget independently.
+   */
+  fb303::fbData->setCounter(
+      "kvstore.flood.budget_bytes", kvParams_.floodMemBudgetBytes);
+
+  /*
    * [KvStore Thrift Sync]
    *
    * Initialize counters for KvStore thrift I/O monitoring, which includes:
@@ -1249,33 +1268,21 @@ KvStore<ClientType>::initGlobalCounters() {
       "kvstore.thrift.num_keyvals_update", fb303::SUM);
 
   /*
-   * Flood backpressure stats. Registered here so they export 0 from startup
-   * (addStatValue-created stats otherwise only appear after the first update).
+   * Node-level (untagged) flood backpressure stats; see
+   * kFloodBackpressureStats for the names, their export types, and why they
+   * are registered rather than left to appear on first update. Each KvStoreDb
+   * registers the area-tagged copies from the same table.
    *
-   * backpressure_engaged / backpressure_resolved are a matched pair: each
-   * increments once per backpressure episode (pending goes empty -> non-empty,
-   * and non-empty -> empty respectively). Equal counts => every backpressure
-   * episode was drained; a persistent gap => a stuck (never-drained) episode.
+   * Semantics worth knowing when reading them: backpressure_engaged /
+   * backpressure_resolved are a matched pair, one increment per episode
+   * (pendingFloodKeys_ going empty -> non-empty and back), so a persistent gap
+   * means an episode never ended. The AVG-exported gauges carry steady-state
+   * shape only -- an episode is usually shorter than one ODS sampling interval,
+   * so peaks live in the sticky watermarks in KvStoreUtil instead.
    */
-  fb303::fbData->addStatExportType(
-      "kvstore.flood.backpressure_engaged", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.flood.backpressure_resolved", fb303::COUNT);
-  fb303::fbData->addStatExportType(
-      "kvstore.flood.stuck_reconciled", fb303::COUNT);
-
-  /*
-   * Backpressure state sampled once per flood-publication and exported as AVG,
-   * so ODS gets a precise per-window average of the per-flood samples instead
-   * of a lossy 5s/60s point-sample of a flat gauge. (fb303 has no MAX export
-   * type; an exported histogram p100 would be needed for the true per-window
-   * peak.)
-   */
-  fb303::fbData->addStatExportType("kvstore.flood.pending_keys", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "kvstore.flood.outstanding_bytes", fb303::AVG);
-  fb303::fbData->addStatExportType(
-      "kvstore.flood.outstanding_rpcs", fb303::AVG);
+  for (const auto& [name, exportType] : kFloodBackpressureStats) {
+    fb303::fbData->addStatExportType(std::string(name), exportType);
+  }
 
   // Initialize stats keys
   fb303::fbData->addStatExportType("kvstore.expired_key_vals", fb303::SUM);
@@ -1896,6 +1903,17 @@ KvStoreDb<ClientType>::KvStoreDb(
       "kvstore.num_expiring_keys." + area, fb303::SUM);
   fb303::fbData->addStatExportType(
       "kvstore.num_flood_peers." + area, fb303::SUM);
+
+  /*
+   * Area-tagged copies of the flood backpressure stats (the untagged versions
+   * are registered in KvStore::initGlobalCounters). The flood memory budget is
+   * per area, so a global-only counter cannot say which area is under pressure
+   * on a multi-area node.
+   */
+  for (const auto& [name, exportType] : kFloodBackpressureStats) {
+    fb303::fbData->addStatExportType(
+        fmt::format("{}.{}", name, area), exportType);
+  }
 }
 
 template <class ClientType>
@@ -3441,6 +3459,14 @@ KvStoreDb<ClientType>::floodPublication(
    */
   const bool floodNow = !kvParams_.enable_flood_pub_pre_compression ||
       areaOutstandingFloodBytes_ < kvParams_.floodMemBudgetBytes;
+
+  /*
+   * Publish before charging this publication, so outstanding_bytes reports the
+   * pressure the decision above was taken against rather than the size of the
+   * flood we are about to send.
+   */
+  publishFloodBackpressureState();
+
   if (!floodNow) {
     /*
      * Deferred (area at/over budget): record the whole publication once in the
@@ -3454,12 +3480,17 @@ KvStoreDb<ClientType>::floodPublication(
     if (pendingFloodKeys_.empty()) {
       // Start of a backpressure episode (pending goes empty -> non-empty).
       pendingFloodSince_ = std::chrono::steady_clock::now();
-      fb303::fbData->addStatValue(
-          "kvstore.flood.backpressure_engaged", 1, fb303::COUNT);
+      addFloodStat("kvstore.flood.backpressure_engaged", 1, fb303::COUNT);
     }
     for (auto const& [key, _] : *params.keyVals()) {
       pendingFloodKeys_.insert(key);
     }
+    addFloodStat(
+        "kvstore.flood.num_deferred_keys",
+        params.keyVals()->size(),
+        fb303::SUM);
+    // Republish now that pendingFloodKeys_ has grown, so the watermark sees it.
+    publishFloodBackpressureState();
     /*
      * Safety net: normally an in-flight flood RPC's completion drains these,
      * but arm the drain timer too so a lost completion can't strand them (the
@@ -3531,24 +3562,6 @@ KvStoreDb<ClientType>::floodPublication(
    * deferred keys are flooded.
    */
   recordFloodPerfEvents(publication, floodNow);
-
-  /*
-   * Sample the current backpressure state once per publication flood (event-
-   * driven), exported as AVG so ODS captures a precise per-window average
-   * rather than losing transients to the 5s/60s flat-counter sampling.
-   */
-  if (kvParams_.enable_flood_pub_pre_compression) {
-    fb303::fbData->addStatValue(
-        "kvstore.flood.pending_keys", pendingFloodKeys_.size(), fb303::AVG);
-    fb303::fbData->addStatValue(
-        "kvstore.flood.outstanding_bytes",
-        areaOutstandingFloodBytes_,
-        fb303::AVG);
-    fb303::fbData->addStatValue(
-        "kvstore.flood.outstanding_rpcs",
-        areaOutstandingFloodRpcs_,
-        fb303::AVG);
-  }
 }
 
 template <class ClientType>
@@ -3639,6 +3652,61 @@ KvStoreDb<ClientType>::floodSerializedRequestToPeer(
       kvParams_.enable_flood_pub_pre_compression /* preCompressed */,
       std::chrono::steady_clock::now(),
       floodBuffer.charge);
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::addFloodStat(
+    const std::string& name, int64_t value, facebook::fb303::ExportType type) {
+  fb303::fbData->addStatValue(name, value, type);
+  fb303::fbData->addStatValue(fmt::format("{}.{}", name, area_), value, type);
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::recordFloodByteWatermark() {
+  recordFloodOutstandingBytes(areaOutstandingFloodBytes_);
+  if (areaOutstandingFloodBytes_ > areaOutstandingFloodBytesMax_) {
+    areaOutstandingFloodBytesMax_ = areaOutstandingFloodBytes_;
+    fb303::fbData->setCounter(
+        fmt::format("kvstore.flood.outstanding_bytes_max.{}", area_),
+        areaOutstandingFloodBytesMax_);
+  }
+}
+
+template <class ClientType>
+void
+KvStoreDb<ClientType>::publishFloodBackpressureState() {
+  if (!kvParams_.enable_flood_pub_pre_compression) {
+    return;
+  }
+
+  addFloodStat(
+      "kvstore.flood.pending_keys", pendingFloodKeys_.size(), fb303::AVG);
+  addFloodStat(
+      "kvstore.flood.outstanding_bytes",
+      areaOutstandingFloodBytes_,
+      fb303::AVG);
+  addFloodStat(
+      "kvstore.flood.outstanding_rpcs", areaOutstandingFloodRpcs_, fb303::AVG);
+
+  /*
+   * Process-wide sticky peaks, plus per-area copies. setCounter (not a stat) so
+   * the value survives arbitrary sampling intervals; see KvStoreUtil for why an
+   * AVG stat cannot represent these.
+   *
+   * The byte watermark is primarily maintained by FloodByteCharge (peaks occur
+   * on increment, which this call site never observes); it is refreshed here
+   * too so a deferral that raises nothing still leaves both marks consistent.
+   */
+  recordFloodByteWatermark();
+  recordFloodPendingKeys(pendingFloodKeys_.size());
+  if (pendingFloodKeys_.size() > areaPendingFloodKeysMax_) {
+    areaPendingFloodKeysMax_ = pendingFloodKeys_.size();
+    fb303::fbData->setCounter(
+        fmt::format("kvstore.flood.pending_keys_max.{}", area_),
+        areaPendingFloodKeysMax_);
+  }
 }
 
 template <class ClientType>
@@ -3865,8 +3933,7 @@ KvStoreDb<ClientType>::reconcileAndDrainPendingFloods() {
      * for RPCs that are legitimately in flight, in a tight loop.
      */
     pendingFloodSince_ = std::chrono::steady_clock::now();
-    fb303::fbData->addStatValue(
-        "kvstore.flood.stuck_reconciled", 1, fb303::COUNT);
+    addFloodStat("kvstore.flood.stuck_reconciled", 1, fb303::COUNT);
   }
   drainPendingFloods();
 }
@@ -3942,8 +4009,20 @@ KvStoreDb<ClientType>::drainPendingFloods() {
    * forever. So read the pair as "every episode ended", not "every episode
    * flooded"; kvstore.thrift.num_flood_pub is what says an RPC went out.
    */
-  fb303::fbData->addStatValue(
-      "kvstore.flood.backpressure_resolved", 1, fb303::COUNT);
+  addFloodStat("kvstore.flood.backpressure_resolved", 1, fb303::COUNT);
+  /*
+   * Size of the coalesced set this drain flushed, i.e. DISTINCT keys, against
+   * num_deferred_keys which counts every deferred occurrence including repeats
+   * of the same key. num_deferred_keys.sum / num_coalesced_keys.sum is the
+   * coalescing ratio: >> 1 means deferral collapsed repeated updates into one
+   * flood, ~1 means it bought nothing.
+   *
+   * Deliberately NOT a per-flush event counter: that would be emitted here
+   * exactly once per drain, identical to backpressure_resolved above, and so
+   * carry no information beyond it.
+   */
+  addFloodStat(
+      "kvstore.flood.num_coalesced_keys", pendingFloodKeys_.size(), fb303::SUM);
   pendingFloodKeys_.clear();
   pendingFloodSince_.reset();
   /*
