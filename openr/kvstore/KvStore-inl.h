@@ -3440,7 +3440,7 @@ KvStoreDb<ClientType>::floodPublication(
    * we keep the original workflow of flooding to all peers with no deferral.
    */
   const bool floodNow = !kvParams_.enable_flood_pub_pre_compression ||
-      areaOutstandingFloodBytes_ < Constants::kFloodMemBudgetBytes;
+      areaOutstandingFloodBytes_ < kvParams_.floodMemBudgetBytes;
   if (!floodNow) {
     /*
      * Deferred (area at/over budget): record the whole publication once in the
@@ -3823,7 +3823,7 @@ KvStoreDb<ClientType>::armFloodDrainTimer() {
    * zero timeout is fine and self-correcting: it fires on the next loop
    * iteration, by which point the elapsed check has strictly passed.
    */
-  auto timeout = Constants::kFloodDrainReconcileThreshold;
+  auto timeout = kvParams_.floodDrainReconcileThreshold;
   if (pendingFloodSince_) {
     const auto elapsed = std::chrono::duration_cast<std::chrono::milliseconds>(
         std::chrono::steady_clock::now() - *pendingFloodSince_);
@@ -3850,10 +3850,10 @@ KvStoreDb<ClientType>::reconcileAndDrainPendingFloods() {
    * destructor credits bytes against an already-zeroed counter; the saturating
    * subtract in releaseFloodBytes absorbs that as a harmless under-count.
    */
-  if (areaOutstandingFloodBytes_ >= Constants::kFloodMemBudgetBytes &&
+  if (areaOutstandingFloodBytes_ >= kvParams_.floodMemBudgetBytes &&
       pendingFloodSince_ &&
       (std::chrono::steady_clock::now() - *pendingFloodSince_) >
-          Constants::kFloodDrainReconcileThreshold) {
+          kvParams_.floodDrainReconcileThreshold) {
     areaOutstandingFloodBytes_ = 0;
     areaOutstandingFloodRpcs_ = 0;
     /*
@@ -3880,7 +3880,7 @@ KvStoreDb<ClientType>::drainPendingFloods() {
    * floodPublication, the drain's own buffers may push the total over budget),
    * and clear it once.
    */
-  if (areaOutstandingFloodBytes_ >= Constants::kFloodMemBudgetBytes) {
+  if (areaOutstandingFloodBytes_ >= kvParams_.floodMemBudgetBytes) {
     return;
   }
   if (pendingFloodKeys_.empty()) {

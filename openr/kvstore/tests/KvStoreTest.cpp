@@ -102,7 +102,7 @@ class KvStoreTestFixture : public ::testing::Test {
    * prefix
    */
   std::string
-  getNodeId(const std::string& prefix, const int index) const {
+  getNodeId(const std::string& prefix, size_t index) const {
     return fmt::format("{}{}", prefix, index);
   }
 
@@ -3581,6 +3581,1281 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
       << "drainStatus key should NOT be flooded to non-fabric peer";
   EXPECT_THAT(dumpC.count(lagEbFaIfStatusKey), Eq(1))
       << "lagEbFaIfStatus key SHOULD be flooded to non-fabric peer";
+}
+
+namespace {
+
+/*
+ * [Flood pre-compression / memory-budget test helpers]
+ *
+ * The flood memory-budget workflow (byte accounting via FloodByteCharge,
+ * deferral into pendingFloodKeys_, drain) is gated behind
+ * enable_flood_pub_pre_compression. The tests below turn that knob on so the
+ * path is actually exercised; without it floodNow is always true and the whole
+ * feature is inert.
+ */
+thrift::KvStoreConfig
+getPreCompressKvConf(const std::string& nodeId) {
+  thrift::KvStoreConfig kvConf;
+  kvConf.node_name() = nodeId;
+  kvConf.enable_flood_pub_pre_compression() = true;
+  return kvConf;
+}
+
+/*
+ * Config that forces the area into backpressure immediately.
+ *
+ * The production budget is 128 MiB, which a unit test cannot reach -- it would
+ * have to hold that much in-flight compressed payload. A 1-byte budget instead
+ * makes the "already at/over budget" check true the moment any flood RPC is
+ * outstanding, so deferral into pendingFloodKeys_ and the subsequent drain are
+ * hit deterministically rather than by racing real memory growth.
+ */
+thrift::KvStoreConfig
+getTinyBudgetKvConf(const std::string& nodeId) {
+  auto kvConf = getPreCompressKvConf(nodeId);
+  kvConf.flood_mem_budget_bytes() = 1;
+  return kvConf;
+}
+
+/*
+ * Read an fb303 counter, treating "absent" as 0. Counters registered via
+ * addStatExportType export 0 from startup, but resetAllData() drops them until
+ * the next bump, so absent and zero must be handled alike.
+ */
+int64_t
+getCounterOrZero(const std::string& name) {
+  const auto counters = fb303::fbData->getCounters();
+  const auto it = counters.find(name);
+  return it == counters.end() ? 0 : it->second;
+}
+
+/*
+ * Assert the flood pre-compression / memory-budget path actually ran.
+ *
+ * These samples are only taken when enable_flood_pub_pre_compression is on, and
+ * a nonzero byte count means FloodByteCharge was really debiting the budget
+ * while RPCs were in flight. Without this guard a config-plumbing regression
+ * would silently turn every test below into a test of the legacy flood path.
+ */
+void
+expectPreCompressionPathExercised() {
+  // Only assert on the byte gauge. outstanding_rpcs is a small integer and the
+  // stat is exported as AVG, so a store that floods to no peers contributes a
+  // zero sample and truncates the average to 0 -- outstanding_bytes carries the
+  // same signal without that sensitivity.
+  EXPECT_GT(getCounterOrZero("kvstore.flood.outstanding_bytes.avg"), 0)
+      << "flood pre-compression path did not run; budget accounting inert";
+}
+
+/*
+ * Poll until `key` in `store` carries `expectedValue`. Returns false on
+ * timeout. Value-aware (not just presence) so a corrupted or stale payload
+ * fails rather than passing on mere arrival.
+ */
+bool
+waitForKeyValue(
+    KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* store,
+    AreaId const& areaId,
+    std::string const& key,
+    std::string const& expectedValue,
+    std::chrono::milliseconds timeout = std::chrono::seconds(10)) {
+  const auto start = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - start < timeout) {
+    const auto val = store->getKey(areaId, key);
+    if (val.has_value() && val->value().has_value() &&
+        *val->value() == expectedValue) {
+      return true;
+    }
+    std::this_thread::yield();
+  }
+  return false;
+}
+
+/*
+ * Poll until `peerName` reaches `expectedState` in `store`. Returns false on
+ * timeout.
+ */
+bool
+waitForPeerState(
+    KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>* store,
+    AreaId const& areaId,
+    std::string const& peerName,
+    thrift::KvStorePeerState expectedState,
+    std::chrono::milliseconds timeout = std::chrono::seconds(30)) {
+  const auto start = std::chrono::steady_clock::now();
+  while (std::chrono::steady_clock::now() - start < timeout) {
+    const auto peers = store->getPeers(areaId);
+    const auto it = peers.find(peerName);
+    if (it != peers.end() && *it->second.state() == expectedState) {
+      return true;
+    }
+    std::this_thread::yield();
+  }
+  return false;
+}
+
+/*
+ * Build a value large and repetitive enough that zstd pre-compression actually
+ * does work on it, while remaining unique per key so a cross-peer payload mixup
+ * is detectable.
+ */
+std::string
+makeFloodValue(const std::string& tag) {
+  std::string value;
+  value.reserve(1024);
+  for (int i = 0; i < 32; ++i) {
+    value += fmt::format("{}-block{:02d}-", tag, i);
+  }
+  return value;
+}
+
+} // namespace
+
+/**
+ * Verify that with flood pre-compression enabled a single publication is
+ * serialized+compressed once and delivered intact to every peer.
+ *
+ * Why this matters beyond plain propagation: on this path all peers are handed
+ * `serializedBuf.clone()`, which shares one refcounted payload rather than
+ * copying it, and that one buffer carries a single FloodByteCharge. Thrift's
+ * DefaultPayloadSerializerStrategy will serialize RPC metadata directly into a
+ * data buffer's headroom when it is allowed to, which for a shared buffer would
+ * mean every peer writing into the same allocation. It is safe only because
+ * canSerializeMetadataIntoDataBufferHeadroom() gates on !isSharedOne(). This
+ * test fans out to several peers and asserts exact payloads, so that class of
+ * corruption surfaces as a value mismatch instead of passing silently.
+ */
+TEST_F(KvStoreTestFixture, FloodPreCompressionMultiPeerDelivery) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumPeers{4};
+  constexpr size_t kNumKeys{5};
+  const std::string publisherId{"pre-compress-publisher"};
+
+  auto* publisher = createKvStore(getPreCompressKvConf(publisherId));
+  publisher->run();
+
+  std::vector<KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*>
+      peers;
+  for (size_t i = 0; i < kNumPeers; ++i) {
+    const auto peerId = getNodeId("pre-compress-peer", i);
+    auto* peer = createKvStore(getPreCompressKvConf(peerId));
+    peer->run();
+    peers.emplace_back(peer);
+
+    EXPECT_THAT(
+        publisher->addPeer(
+            kTestingAreaName, peer->getNodeId(), peer->getPeerSpec()),
+        IsTrue());
+    EXPECT_THAT(
+        peer->addPeer(
+            kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+        IsTrue());
+  }
+  waitForAllPeersInitialized();
+
+  // Set distinct, compressible values so a payload mixup is visible.
+  std::map<std::string, std::string> expectedKeyVals;
+  for (size_t i = 0; i < kNumKeys; ++i) {
+    const auto key = fmt::format("pre-compress-key{}", i);
+    const auto value = makeFloodValue(key);
+    expectedKeyVals.emplace(key, value);
+
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  // Every peer must receive every key with the exact payload.
+  for (auto* peer : peers) {
+    for (const auto& [key, value] : expectedKeyVals) {
+      EXPECT_TRUE(waitForKeyValue(peer, kTestingAreaName, key, value))
+          << "peer " << peer->getNodeId() << " missing/incorrect key " << key;
+    }
+  }
+
+  // Positive control: flooding really happened, so the assertions above are not
+  // vacuously true on a store that never flooded.
+  EXPECT_GT(getCounterOrZero("kvstore.thrift.num_flood_pub.count"), 0);
+  expectPreCompressionPathExercised();
+}
+
+/**
+ * Verify fabric scoping still holds with flood pre-compression enabled.
+ *
+ * With a fabric-external peer present, one publication yields TWO distinct
+ * serialized buffers -- the full set and the fabric-filtered set -- each
+ * serialized, compressed and charged against the flood budget independently.
+ * This covers that multi-buffer-per-publication shape, which the non-fabric
+ * tests never produce.
+ */
+TEST_F(KvStoreTestFixture, FloodPreCompressionFabricScope) {
+  fb303::fbData->resetAllData();
+
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeAId = "eb01-ld002.dfw1"; // fabric publisher
+  const std::string nodeBId = "eb01-sp002.dfw1"; // fabric peer
+  const std::string nodeCId = "external-node"; // fabric-external peer
+
+  auto* storeA = createKvStore(
+      getPreCompressKvConf(nodeAId),
+      {kTestingAreaName.t},
+      std::nullopt,
+      std::nullopt,
+      fabricConfig);
+  auto* storeB = createKvStore(getPreCompressKvConf(nodeBId));
+  auto* storeC = createKvStore(getPreCompressKvConf(nodeCId));
+
+  storeA->run();
+  storeB->run();
+  storeC->run();
+
+  for (auto* peer : {storeB, storeC}) {
+    EXPECT_THAT(
+        storeA->addPeer(
+            kTestingAreaName, peer->getNodeId(), peer->getPeerSpec()),
+        IsTrue());
+    EXPECT_THAT(
+        peer->addPeer(
+            kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+        IsTrue());
+  }
+  waitForAllPeersInitialized();
+
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+  const std::string nonFabricKey = "adj:external-node";
+
+  const auto setKey = [&](const std::string& key, const std::string& value) {
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        nodeAId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(1, nodeAId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(storeA->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  };
+
+  const auto fabricAdjVal = makeFloodValue("fab-adj");
+  const auto fabricPrefixVal = makeFloodValue("fab-prefix");
+  const auto nonFabricVal = makeFloodValue("non-fab");
+  setKey(fabricAdjKey, fabricAdjVal);
+  setKey(fabricPrefixKey, fabricPrefixVal);
+  setKey(nonFabricKey, nonFabricVal);
+
+  // Fabric peer receives everything, with payloads intact through the
+  // compress-once path.
+  EXPECT_TRUE(
+      waitForKeyValue(storeB, kTestingAreaName, nonFabricKey, nonFabricVal));
+  EXPECT_TRUE(
+      waitForKeyValue(storeB, kTestingAreaName, fabricAdjKey, fabricAdjVal));
+  EXPECT_TRUE(waitForKeyValue(
+      storeB, kTestingAreaName, fabricPrefixKey, fabricPrefixVal));
+
+  // Fabric-external peer receives only the non-fabric key.
+  EXPECT_TRUE(
+      waitForKeyValue(storeC, kTestingAreaName, nonFabricKey, nonFabricVal));
+  // Guard: without pre-compression this degrades into the plain fabric-scope
+  // test and would no longer cover the two-buffer-per-publication shape.
+  expectPreCompressionPathExercised();
+
+  const auto dumpC = storeC->dumpAll(kTestingAreaName);
+  EXPECT_THAT(dumpC.count(fabricAdjKey), Eq(0))
+      << "Fabric adj key should NOT be flooded to fabric-external peer";
+  EXPECT_THAT(dumpC.count(fabricPrefixKey), Eq(0))
+      << "Fabric prefix key should NOT be flooded to fabric-external peer";
+}
+
+/**
+ * Pin the invariant that the flood memory budget is a runaway guard, not an
+ * operational rate limiter: a normal burst of updates must converge without
+ * ever engaging backpressure or tripping wedge recovery.
+ *
+ * This is the regression guard for accounting drift. Every FloodByteCharge is
+ * debited when a buffer is serialized and credited when the last peer's send
+ * resolves; if a release were ever skipped, areaOutstandingFloodBytes_ would
+ * ratchet upward instead of returning to zero and backpressure would eventually
+ * engage on traffic like this, which the assertions below would catch.
+ */
+TEST_F(KvStoreTestFixture, FloodPreCompressionBudgetNotEngagedUnderNormalLoad) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumKeys{200};
+  const std::string publisherId{"budget-publisher"};
+
+  auto* publisher = createKvStore(getPreCompressKvConf(publisherId));
+  auto* receiver = createKvStore(getPreCompressKvConf("budget-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  std::string lastKey;
+  std::string lastValue;
+  for (size_t i = 0; i < kNumKeys; ++i) {
+    lastKey = fmt::format("budget-key{}", i);
+    lastValue = makeFloodValue(lastKey);
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        lastValue /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(lastValue)));
+    EXPECT_THAT(
+        publisher->setKey(kTestingAreaName, lastKey, thriftVal), IsTrue());
+  }
+
+  // Convergence: the last key arriving implies the burst drained.
+  EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, lastKey, lastValue));
+  EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(kNumKeys));
+
+  // Positive control so the zero-assertions below cannot pass vacuously.
+  EXPECT_GT(getCounterOrZero("kvstore.thrift.num_flood_pub.count"), 0);
+  expectPreCompressionPathExercised();
+
+  // A burst this size is orders of magnitude below the per-area budget, so
+  // backpressure must never engage and the wedge-recovery path must never run.
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.flood.backpressure_engaged.count"), Eq(0));
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.flood.backpressure_resolved.count"), Eq(0));
+  EXPECT_THAT(getCounterOrZero("kvstore.flood.stuck_reconciled.count"), Eq(0));
+}
+
+/**
+ * Verify a flood RPC that fails against a dead peer still settles cleanly: the
+ * peer is driven to IDLE and no wedge recovery is triggered.
+ *
+ * This covers the failure branch of the flood continuation. The charge is
+ * dropped in a single thenTry before the success/exception split, so a failed
+ * send must credit the budget exactly like a successful one; a leak here would
+ * strand the area's accounting. Reaching IDLE proves the continuation ran, and
+ * stuck_reconciled staying at zero proves nothing wedged behind it.
+ */
+TEST_F(KvStoreTestFixture, FloodPreCompressionPeerFailureSettlesCleanly) {
+  fb303::fbData->resetAllData();
+
+  const std::string publisherId{"failure-publisher"};
+  auto* publisher = createKvStore(getPreCompressKvConf(publisherId));
+  auto* deadPeer = createKvStore(getPreCompressKvConf("failure-peer"));
+  publisher->run();
+  deadPeer->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, deadPeer->getNodeId(), deadPeer->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      deadPeer->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  // Flood once while the peer is healthy. This both confirms the pre-compress
+  // budget path is live (deterministic here, before the peer goes IDLE stops
+  // new buffers being charged) and gives the failure below a working baseline.
+  {
+    const auto warmupValue = makeFloodValue("failure-warmup");
+    auto warmupVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        warmupValue /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1,
+            publisherId,
+            thrift::Value().value() = std::string(warmupValue)));
+    EXPECT_THAT(
+        publisher->setKey(kTestingAreaName, "failure-warmup", warmupVal),
+        IsTrue());
+    EXPECT_TRUE(waitForKeyValue(
+        deadPeer, kTestingAreaName, "failure-warmup", warmupValue));
+    expectPreCompressionPathExercised();
+  }
+
+  // Kill the peer's thrift server; subsequent floods to it must fail. stop() is
+  // idempotent, so the fixture teardown stopping it again is harmless.
+  const auto deadPeerId = deadPeer->getNodeId();
+  deadPeer->closeQueue();
+  deadPeer->stop();
+
+  // Flood towards the now-dead peer.
+  for (size_t i = 0; i < 5; ++i) {
+    const auto key = fmt::format("failure-key{}", i);
+    const auto value = makeFloodValue(key);
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  // The failed flood RPC drives the peer to IDLE via processThriftFailure,
+  // which only runs from the continuation that also released the charge.
+  EXPECT_TRUE(waitForPeerState(
+      publisher, kTestingAreaName, deadPeerId, thrift::KvStorePeerState::IDLE))
+      << "peer should transition to IDLE after flood RPC failure";
+
+  // Accounting settled: nothing wedged the area out of flooding.
+  EXPECT_THAT(getCounterOrZero("kvstore.flood.stuck_reconciled.count"), Eq(0));
+}
+
+/**
+ * Drive the area over its flood memory budget and verify the full backpressure
+ * cycle: publications are deferred into the area-level pending set, and the
+ * budget freed by a completing flood RPC drains them so every key still lands
+ * on the peer.
+ *
+ * A 1-byte budget makes the check trip as soon as any RPC is in flight, so this
+ * exercises deferral and drain without needing 128 MiB of real payload.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureDefersAndDrains) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumKeys{50};
+  const std::string publisherId{"backpressure-publisher"};
+
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
+  auto* receiver = createKvStore(getPreCompressKvConf("backpressure-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  std::map<std::string, std::string> expectedKeyVals;
+  for (size_t i = 0; i < kNumKeys; ++i) {
+    const auto key = fmt::format("backpressure-key{}", i);
+    const auto value = makeFloodValue(key);
+    expectedKeyVals.emplace(key, value);
+
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  // Deferral must actually have happened -- otherwise this is just the
+  // no-backpressure test with a different config.
+  EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0)
+      << "expected the 1-byte budget to defer at least one publication";
+
+  // Despite deferral, every key must still reach the peer via
+  // drainPendingFloods.
+  for (const auto& [key, value] : expectedKeyVals) {
+    EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value))
+        << "deferred key " << key << " was never drained to the peer";
+  }
+  EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(kNumKeys));
+
+  // Every backpressure episode that started must have ended: pendingFloodKeys_
+  // is drained and cleared, not stranded.
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.flood.backpressure_resolved.count"),
+      Eq(getCounterOrZero("kvstore.flood.backpressure_engaged.count")));
+}
+
+/**
+ * Verify the coalescing semantics of the deferred set: keys queued while over
+ * budget are re-derived from kvStore_ at drain time, so the peer converges on
+ * the latest value rather than replaying every superseded intermediate one.
+ *
+ * This is the behavior that makes deferral safe to coalesce -- buildCoalesced-
+ * FloodParams looks the key up fresh instead of retaining the queued payload.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureCoalescesToLatestValue) {
+  fb303::fbData->resetAllData();
+
+  constexpr int64_t kNumUpdates{40};
+  const std::string publisherId{"coalesce-publisher"};
+  const std::string key{"coalesce-key"};
+
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
+  auto* receiver = createKvStore(getPreCompressKvConf("coalesce-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  // Repeatedly overwrite one key with monotonically increasing versions while
+  // the area is backpressured.
+  std::string finalValue;
+  for (int64_t version = 1; version <= kNumUpdates; ++version) {
+    finalValue = makeFloodValue(fmt::format("coalesce-v{}", version));
+    auto thriftVal = createThriftValue(
+        version /* version */,
+        publisherId /* originatorId */,
+        finalValue /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            version,
+            publisherId,
+            thrift::Value().value() = std::string(finalValue)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0);
+
+  // The peer must land on the newest version, not a stale queued one.
+  EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, finalValue));
+  const auto received = receiver->getKey(kTestingAreaName, key);
+  ASSERT_TRUE(received.has_value());
+  EXPECT_THAT(*received->version(), Eq(kNumUpdates));
+}
+
+/**
+ * Verify fabric scoping is re-applied when draining deferred keys.
+ *
+ * The drain path does not reuse makeFabricParam: buildCoalescedFloodParams
+ * re-implements the adj/prefix filtering against the fabric config. That
+ * duplication can silently diverge, so this asserts the filtering still holds
+ * on the drain path specifically, with the area forced into backpressure.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureDrainRespectsFabricScope) {
+  fb303::fbData->resetAllData();
+
+  thrift::FabricConfig thriftFabricConfig;
+  thriftFabricConfig.fabric_name() = "bbf01.dfw";
+  thriftFabricConfig.fabric_prefixes() = {"1::1/128"};
+  thriftFabricConfig.fabric_leaf_regexes() = {"eb01-ld\\d{3}\\.dfw1"};
+  thriftFabricConfig.fabric_spine_regexes() = {"eb01-sp\\d{3}\\.dfw1"};
+  FabricConfig fabricConfig(thriftFabricConfig);
+
+  const std::string nodeAId = "eb01-ld002.dfw1"; // fabric publisher
+  const std::string nodeBId = "eb01-sp002.dfw1"; // fabric peer
+  const std::string nodeCId = "external-node"; // fabric-external peer
+
+  auto* storeA = createKvStore(
+      getTinyBudgetKvConf(nodeAId),
+      {kTestingAreaName.t},
+      std::nullopt,
+      std::nullopt,
+      fabricConfig);
+  auto* storeB = createKvStore(getPreCompressKvConf(nodeBId));
+  auto* storeC = createKvStore(getPreCompressKvConf(nodeCId));
+
+  storeA->run();
+  storeB->run();
+  storeC->run();
+
+  for (auto* peer : {storeB, storeC}) {
+    EXPECT_THAT(
+        storeA->addPeer(
+            kTestingAreaName, peer->getNodeId(), peer->getPeerSpec()),
+        IsTrue());
+    EXPECT_THAT(
+        peer->addPeer(
+            kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+        IsTrue());
+  }
+  waitForAllPeersInitialized();
+
+  const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
+  const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
+
+  // Enough keys that the later ones are certain to be deferred and drained.
+  std::map<std::string, std::string> nonFabricKeyVals;
+  const auto setKey = [&](const std::string& key, const std::string& value) {
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        nodeAId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(1, nodeAId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(storeA->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  };
+
+  setKey(fabricAdjKey, makeFloodValue("fab-adj"));
+  setKey(fabricPrefixKey, makeFloodValue("fab-prefix"));
+  for (size_t i = 0; i < 20; ++i) {
+    const auto key = fmt::format("adj:external-node{}", i);
+    const auto value = makeFloodValue(key);
+    nonFabricKeyVals.emplace(key, value);
+    setKey(key, value);
+  }
+
+  EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0)
+      << "expected the 1-byte budget to force keys through the drain path";
+
+  // Fabric peer converges on everything.
+  for (const auto& [key, value] : nonFabricKeyVals) {
+    EXPECT_TRUE(waitForKeyValue(storeB, kTestingAreaName, key, value));
+  }
+  EXPECT_TRUE(waitForKeyValue(
+      storeB, kTestingAreaName, fabricAdjKey, makeFloodValue("fab-adj")));
+  EXPECT_TRUE(waitForKeyValue(
+      storeB, kTestingAreaName, fabricPrefixKey, makeFloodValue("fab-prefix")));
+
+  // Fabric-external peer gets the non-fabric keys but never the fabric ones,
+  // including for keys delivered via the drain path.
+  for (const auto& [key, value] : nonFabricKeyVals) {
+    EXPECT_TRUE(waitForKeyValue(storeC, kTestingAreaName, key, value));
+  }
+  const auto dumpC = storeC->dumpAll(kTestingAreaName);
+  EXPECT_THAT(dumpC.count(fabricAdjKey), Eq(0))
+      << "fabric adj key leaked to fabric-external peer via drain path";
+  EXPECT_THAT(dumpC.count(fabricPrefixKey), Eq(0))
+      << "fabric prefix key leaked to fabric-external peer via drain path";
+}
+
+/**
+ * Verify that the smallest valid drain-reconcile threshold still allows keys
+ * deferred under backpressure to converge.
+ *
+ * NOTE ON COVERAGE: this does NOT reach the wedge-reset branch inside
+ * reconcileAndDrainPendingFloods (the one that zeroes leaked accounting and
+ * bumps kvstore.flood.stuck_reconciled). That branch needs pendingFloodKeys_ to
+ * still be non-empty when floodDrainTimer_ fires, and over loopback thrift a
+ * flood RPC completes in well under a millisecond, so an RPC completion drains
+ * the pending set long before any timer tick. Covering that branch needs a
+ * flood RPC that never resolves, which requires a mock ClientType (KvStoreDb is
+ * templated on it) rather than a real peer.
+ */
+TEST_F(
+    KvStoreTestFixture, FloodBackpressureMinimumReconcileThresholdConverges) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumKeys{30};
+  const std::string publisherId{"reconcile-publisher"};
+
+  auto publisherConf = getTinyBudgetKvConf(publisherId);
+  // The floor Config::checkKvStoreConfig enforces: 2x the flood RPC timeout.
+  publisherConf.flood_drain_reconcile_threshold_ms() =
+      2 * Constants::kServiceProcTimeout.count();
+
+  auto* publisher = createKvStore(publisherConf);
+  auto* receiver = createKvStore(getPreCompressKvConf("reconcile-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  std::map<std::string, std::string> expectedKeyVals;
+  for (size_t i = 0; i < kNumKeys; ++i) {
+    const auto key = fmt::format("reconcile-key{}", i);
+    const auto value = makeFloodValue(key);
+    expectedKeyVals.emplace(key, value);
+
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0);
+
+  // No key may be lost, and the minimum valid threshold must not spuriously
+  // trip wedge recovery while RPCs are legitimately in flight.
+  for (const auto& [key, value] : expectedKeyVals) {
+    EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value))
+        << "key " << key << " lost at the minimum reconcile threshold";
+  }
+  EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(kNumKeys));
+  EXPECT_THAT(getCounterOrZero("kvstore.flood.stuck_reconciled.count"), Eq(0));
+}
+
+/**
+ * KvStoreParams is the single place the Constants fallback for the flood budget
+ * knobs is applied, so verify both halves of that resolution directly rather
+ * than only through end-to-end behavior.
+ */
+TEST_F(KvStoreTestFixture, FloodMemBudgetParamsResolution) {
+  messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
+  messaging::ReplicateQueue<LogSample> logSampleQueue;
+
+  // Unset in config -> Constants defaults.
+  const KvStoreParams defaulted(
+      getTestKvConf("params-default"), kvStoreUpdatesQueue, logSampleQueue);
+  EXPECT_THAT(
+      defaulted.floodMemBudgetBytes, Eq(Constants::kFloodMemBudgetBytes));
+  EXPECT_THAT(
+      defaulted.floodDrainReconcileThreshold,
+      Eq(Constants::kFloodDrainReconcileThreshold));
+
+  // Set in config -> config wins.
+  auto overrideConf = getTestKvConf("params-override");
+  overrideConf.flood_mem_budget_bytes() = 4096;
+  overrideConf.flood_drain_reconcile_threshold_ms() = 10000;
+  const KvStoreParams overridden(
+      overrideConf, kvStoreUpdatesQueue, logSampleQueue);
+  EXPECT_THAT(overridden.floodMemBudgetBytes, Eq(4096u));
+  EXPECT_THAT(
+      overridden.floodDrainReconcileThreshold,
+      Eq(std::chrono::milliseconds(10000)));
+
+  /*
+   * KvStoreParams is constructed straight from a thrift::KvStoreConfig by
+   * tests and direct embedders, bypassing Config::checkKvStoreConfig. Unsafe
+   * values must not reach the members.
+   *
+   * A negative budget is the one that matters: the field is i64 and the member
+   * size_t, so an unguarded static_cast turns -1 into SIZE_MAX and disables
+   * the bound entirely instead of tightening it.
+   */
+  auto negBudgetConf = getTestKvConf("params-neg-budget");
+  negBudgetConf.flood_mem_budget_bytes() = -1;
+  const KvStoreParams negBudget(
+      negBudgetConf, kvStoreUpdatesQueue, logSampleQueue);
+  EXPECT_THAT(
+      negBudget.floodMemBudgetBytes, Eq(Constants::kFloodMemBudgetBytes))
+      << "negative budget wrapped to a huge size_t, disabling the bound";
+
+  auto zeroBudgetConf = getTestKvConf("params-zero-budget");
+  zeroBudgetConf.flood_mem_budget_bytes() = 0;
+  const KvStoreParams zeroBudget(
+      zeroBudgetConf, kvStoreUpdatesQueue, logSampleQueue);
+  EXPECT_THAT(
+      zeroBudget.floodMemBudgetBytes, Eq(Constants::kFloodMemBudgetBytes))
+      << "zero budget would latch flooding off permanently";
+
+  // Below the floor -> default, so live accounting cannot be reset under a
+  // still-in-flight RPC.
+  auto shortThresholdConf = getTestKvConf("params-short-threshold");
+  shortThresholdConf.flood_drain_reconcile_threshold_ms() =
+      Constants::kMinFloodDrainReconcileThreshold.count() - 1;
+  const KvStoreParams shortThreshold(
+      shortThresholdConf, kvStoreUpdatesQueue, logSampleQueue);
+  EXPECT_THAT(
+      shortThreshold.floodDrainReconcileThreshold,
+      Eq(Constants::kFloodDrainReconcileThreshold));
+
+  // Exactly at the floor is accepted verbatim.
+  auto floorConf = getTestKvConf("params-floor-threshold");
+  floorConf.flood_drain_reconcile_threshold_ms() =
+      Constants::kMinFloodDrainReconcileThreshold.count();
+  const KvStoreParams atFloor(floorConf, kvStoreUpdatesQueue, logSampleQueue);
+  EXPECT_THAT(
+      atFloor.floodDrainReconcileThreshold,
+      Eq(Constants::kMinFloodDrainReconcileThreshold));
+
+  kvStoreUpdatesQueue.close();
+  logSampleQueue.close();
+}
+
+/**
+ * Rollout interop: the pre-compression knob is per-node, so during a staged
+ * rollout a compressing publisher will talk to a non-compressing peer and vice
+ * versa. The receiver decompresses based on the frame's compression metadata,
+ * not on its own config, so both directions must work.
+ */
+TEST_F(KvStoreTestFixture, FloodPreCompressionInteropAcrossMixedPeers) {
+  fb303::fbData->resetAllData();
+
+  const std::string compressingId{"interop-compressing"};
+  const std::string legacyId{"interop-legacy"};
+
+  auto* compressing = createKvStore(getPreCompressKvConf(compressingId));
+  auto* legacy = createKvStore(getTestKvConf(legacyId)); // knob off
+  compressing->run();
+  legacy->run();
+
+  EXPECT_THAT(
+      compressing->addPeer(
+          kTestingAreaName, legacy->getNodeId(), legacy->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      legacy->addPeer(
+          kTestingAreaName,
+          compressing->getNodeId(),
+          compressing->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  const auto setKeyOn = [&](auto* store,
+                            const std::string& originator,
+                            const std::string& key,
+                            const std::string& value) {
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        originator /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, originator, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(store->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  };
+
+  // Compressing -> legacy.
+  const auto fwdValue = makeFloodValue("interop-fwd");
+  setKeyOn(compressing, compressingId, "interop-fwd-key", fwdValue);
+  EXPECT_TRUE(
+      waitForKeyValue(legacy, kTestingAreaName, "interop-fwd-key", fwdValue))
+      << "pre-compressed flood was not decoded by a non-compressing peer";
+
+  // Legacy -> compressing.
+  const auto revValue = makeFloodValue("interop-rev");
+  setKeyOn(legacy, legacyId, "interop-rev-key", revValue);
+  EXPECT_TRUE(waitForKeyValue(
+      compressing, kTestingAreaName, "interop-rev-key", revValue))
+      << "uncompressed flood was not accepted by a compressing peer";
+
+  expectPreCompressionPathExercised();
+}
+
+/**
+ * Exercise the drain path's own fan-out. drainPendingFloods rebuilds the
+ * coalesced params and caches serialized buffers per (protocol, fabric) across
+ * peers, independently of the immediate flood path -- so multi-peer delivery
+ * has to be asserted for drained keys specifically, not just for immediate
+ * ones.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureDrainFansOutToAllPeers) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumPeers{4};
+  constexpr size_t kNumKeys{25};
+  const std::string publisherId{"drain-fanout-publisher"};
+
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
+  publisher->run();
+
+  std::vector<KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*>
+      peers;
+  for (size_t i = 0; i < kNumPeers; ++i) {
+    auto* peer =
+        createKvStore(getPreCompressKvConf(getNodeId("drain-fanout-peer", i)));
+    peer->run();
+    peers.emplace_back(peer);
+    EXPECT_THAT(
+        publisher->addPeer(
+            kTestingAreaName, peer->getNodeId(), peer->getPeerSpec()),
+        IsTrue());
+    EXPECT_THAT(
+        peer->addPeer(
+            kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+        IsTrue());
+  }
+  waitForAllPeersInitialized();
+
+  std::map<std::string, std::string> expectedKeyVals;
+  for (size_t i = 0; i < kNumKeys; ++i) {
+    const auto key = fmt::format("drain-fanout-key{}", i);
+    const auto value = makeFloodValue(key);
+    expectedKeyVals.emplace(key, value);
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            1, publisherId, thrift::Value().value() = std::string(value)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0);
+
+  for (auto* peer : peers) {
+    for (const auto& [key, value] : expectedKeyVals) {
+      EXPECT_TRUE(waitForKeyValue(peer, kTestingAreaName, key, value))
+          << "peer " << peer->getNodeId() << " never received drained key "
+          << key;
+    }
+  }
+}
+
+/**
+ * Leak detector for the byte accounting.
+ *
+ * Runs several bursts separated by quiescence. Every charge must be credited
+ * back when its sends resolve; if any release were skipped,
+ * areaOutstandingFloodBytes_ would ratchet permanently past the budget and both
+ * gates (floodNow and drainPendingFloods) would latch closed, so a later burst
+ * would never be delivered.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureRepeatedBurstsDoNotWedge) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumBursts{3};
+  constexpr size_t kKeysPerBurst{20};
+  const std::string publisherId{"burst-publisher"};
+
+  // 1-byte budget: every burst is guaranteed to go through defer -> drain, so
+  // the wedge check below is exercised rather than depending on whether floods
+  // happen to overlap.
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
+  auto* receiver = createKvStore(getPreCompressKvConf("burst-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  size_t totalKeys{0};
+  for (size_t burst = 0; burst < kNumBursts; ++burst) {
+    std::map<std::string, std::string> burstKeyVals;
+    for (size_t i = 0; i < kKeysPerBurst; ++i) {
+      const auto key = fmt::format("burst{}-key{}", burst, i);
+      const auto value = makeFloodValue(key);
+      burstKeyVals.emplace(key, value);
+      auto thriftVal = createThriftValue(
+          1 /* version */,
+          publisherId /* originatorId */,
+          value /* value */,
+          Constants::kTtlInfinity /* ttl */,
+          0 /* ttl version */,
+          generateHash(
+              1, publisherId, thrift::Value().value() = std::string(value)));
+      EXPECT_THAT(
+          publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+    }
+
+    // Each burst must fully drain before the next one starts; a ratcheting
+    // leak shows up as a burst that never arrives.
+    for (const auto& [key, value] : burstKeyVals) {
+      EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value))
+          << "burst " << burst << " key " << key
+          << " never delivered -- flood budget may have leaked";
+    }
+    totalKeys += burstKeyVals.size();
+    EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(totalKeys));
+  }
+
+  // Every backpressure episode across every burst must have been resolved. A
+  // skipped release would latch both gates closed and strand the pending set,
+  // leaving engaged > resolved.
+  const auto engaged =
+      getCounterOrZero("kvstore.flood.backpressure_engaged.count");
+  EXPECT_GT(engaged, 0);
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.flood.backpressure_resolved.count"),
+      Eq(engaged));
+}
+
+/**
+ * Cover the documented echo caveat of the drain path.
+ *
+ * Deferred keys lose their originating senderId, so drainPendingFloods
+ * re-floods the coalesced set to every peer including the node the keys came
+ * from. The parent change argues this is safe and bounded: the receiver merges
+ * an empty delta (counted as kvstore.received_redundant_publications), does not
+ * re-flood it, and versions are monotonic so no sustained ping-pong is
+ * possible. Both nodes are backpressured here so echoes flow in both
+ * directions; the assertion is that traffic still converges and terminates.
+ */
+TEST_F(
+    KvStoreTestFixture, FloodBackpressureSenderEchoConvergesWithoutPingPong) {
+  fb303::fbData->resetAllData();
+
+  constexpr size_t kNumKeysPerNode{15};
+  const std::string nodeAId{"echo-node-a"};
+  const std::string nodeBId{"echo-node-b"};
+
+  auto* storeA = createKvStore(getTinyBudgetKvConf(nodeAId));
+  auto* storeB = createKvStore(getTinyBudgetKvConf(nodeBId));
+  storeA->run();
+  storeB->run();
+
+  EXPECT_THAT(
+      storeA->addPeer(
+          kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      storeB->addPeer(
+          kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  std::map<std::string, std::string> expectedKeyVals;
+  const auto publish = [&](auto* store,
+                           const std::string& originator,
+                           const std::string& prefix) {
+    for (size_t i = 0; i < kNumKeysPerNode; ++i) {
+      const auto key = fmt::format("{}-key{}", prefix, i);
+      const auto value = makeFloodValue(key);
+      expectedKeyVals.emplace(key, value);
+      auto thriftVal = createThriftValue(
+          1 /* version */,
+          originator /* originatorId */,
+          value /* value */,
+          Constants::kTtlInfinity /* ttl */,
+          0 /* ttl version */,
+          generateHash(
+              1, originator, thrift::Value().value() = std::string(value)));
+      EXPECT_THAT(store->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+    }
+  };
+  publish(storeA, nodeAId, "echo-a");
+  publish(storeB, nodeBId, "echo-b");
+
+  EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0);
+
+  // Both nodes converge on the union despite echoes in both directions.
+  for (auto* store : {storeA, storeB}) {
+    for (const auto& [key, value] : expectedKeyVals) {
+      EXPECT_TRUE(waitForKeyValue(store, kTestingAreaName, key, value))
+          << store->getNodeId() << " missing " << key;
+    }
+    EXPECT_THAT(
+        store->dumpAll(kTestingAreaName).size(), Eq(expectedKeyVals.size()));
+  }
+
+  // Traffic must terminate rather than ping-pong: once converged, letting the
+  // stores idle produces no further flood publications.
+  const auto floodsAfterConvergence =
+      getCounterOrZero("kvstore.thrift.num_flood_pub.count");
+  const auto idleUntil =
+      std::chrono::steady_clock::now() + std::chrono::milliseconds(500);
+  while (std::chrono::steady_clock::now() < idleUntil) {
+    std::this_thread::yield();
+  }
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.thrift.num_flood_pub.count"),
+      Eq(floodsAfterConvergence))
+      << "flooding continued after convergence -- possible echo ping-pong";
+}
+
+/**
+ * The budget and its accounting are per-area (areaOutstandingFloodBytes_ lives
+ * on KvStoreDb, one instance per area), even though the knob is per-node.
+ * Verify one area saturating its budget does not stall another area on the
+ * same node.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureBudgetIsPerArea) {
+  fb303::fbData->resetAllData();
+
+  const AreaId areaOne{"flood-area-1"};
+  const AreaId areaTwo{"flood-area-2"};
+  const folly::F14FastSet<std::string> areaIds{areaOne.t, areaTwo.t};
+  const std::string publisherId{"per-area-publisher"};
+
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId), areaIds);
+  auto* receiver =
+      createKvStore(getPreCompressKvConf("per-area-receiver"), areaIds);
+  publisher->run();
+  receiver->run();
+
+  for (const auto& area : {areaOne, areaTwo}) {
+    EXPECT_THAT(
+        publisher->addPeer(
+            area, receiver->getNodeId(), receiver->getPeerSpec()),
+        IsTrue());
+    EXPECT_THAT(
+        receiver->addPeer(
+            area, publisher->getNodeId(), publisher->getPeerSpec()),
+        IsTrue());
+  }
+  waitForAllPeersInitialized();
+
+  // Drive both areas into backpressure concurrently.
+  std::map<std::string, std::string> areaOneKeys;
+  std::map<std::string, std::string> areaTwoKeys;
+  for (size_t i = 0; i < 15; ++i) {
+    for (const auto& [area, keys, prefix] :
+         {std::tuple<AreaId, std::map<std::string, std::string>*, std::string>{
+              areaOne, &areaOneKeys, "area1"},
+          std::tuple<AreaId, std::map<std::string, std::string>*, std::string>{
+              areaTwo, &areaTwoKeys, "area2"}}) {
+      const auto key = fmt::format("{}-key{}", prefix, i);
+      const auto value = makeFloodValue(key);
+      keys->emplace(key, value);
+      auto thriftVal = createThriftValue(
+          1 /* version */,
+          publisherId /* originatorId */,
+          value /* value */,
+          Constants::kTtlInfinity /* ttl */,
+          0 /* ttl version */,
+          generateHash(
+              1, publisherId, thrift::Value().value() = std::string(value)));
+      EXPECT_THAT(publisher->setKey(area, key, thriftVal), IsTrue());
+    }
+  }
+
+  // Neither area may be starved by the other's backpressure.
+  for (const auto& [key, value] : areaOneKeys) {
+    EXPECT_TRUE(waitForKeyValue(receiver, areaOne, key, value))
+        << "area-1 key " << key << " stalled";
+  }
+  for (const auto& [key, value] : areaTwoKeys) {
+    EXPECT_TRUE(waitForKeyValue(receiver, areaTwo, key, value))
+        << "area-2 key " << key << " stalled";
+  }
+  EXPECT_THAT(receiver->dumpAll(areaOne).size(), Eq(areaOneKeys.size()));
+  EXPECT_THAT(receiver->dumpAll(areaTwo).size(), Eq(areaTwoKeys.size()));
+}
+
+/**
+ * TTL-only refreshes go through the same flood path as value updates, so verify
+ * they survive coalescing: the deferred set is re-derived from kvStore_, and a
+ * ttl-version bump must not be lost or rolled back by a drain.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureTtlUpdatesConverge) {
+  fb303::fbData->resetAllData();
+
+  constexpr int64_t kNumTtlBumps{30};
+  const std::string publisherId{"ttl-publisher"};
+  const std::string key{"ttl-key"};
+  const auto value = makeFloodValue("ttl-value");
+
+  auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
+  auto* receiver = createKvStore(getPreCompressKvConf("ttl-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  for (int64_t ttlVersion = 1; ttlVersion <= kNumTtlBumps; ++ttlVersion) {
+    auto thriftVal = createThriftValue(
+        1 /* version */,
+        publisherId /* originatorId */,
+        value /* value */,
+        300000 /* ttl */,
+        ttlVersion /* ttl version */,
+        0 /* hash */);
+    thriftVal.hash() = generateHash(
+        *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  // Converge on the newest ttlVersion, not a superseded one.
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(10);
+  std::optional<thrift::Value> received;
+  while (std::chrono::steady_clock::now() < deadline) {
+    received = receiver->getKey(kTestingAreaName, key);
+    if (received.has_value() && *received->ttlVersion() == kNumTtlBumps) {
+      break;
+    }
+    std::this_thread::yield();
+  }
+  ASSERT_TRUE(received.has_value());
+  EXPECT_THAT(*received->ttlVersion(), Eq(kNumTtlBumps));
+}
+
+/**
+ * The rate limiter and the flood memory budget both defer publications, but on
+ * separate timers with deliberately opposite semantics:
+ * pendingPublicationTimer_ debounces the rate-limiter buffer, while
+ * floodDrainTimer_ is a deadline for the wedge check. Verify they compose: with
+ * both active, updates are still delivered and the latest value wins.
+ */
+TEST_F(KvStoreTestFixture, FloodBackpressureComposesWithRateLimiter) {
+  fb303::fbData->resetAllData();
+
+  constexpr int64_t kNumUpdates{25};
+  const std::string publisherId{"ratelimit-budget-publisher"};
+  const std::string key{"ratelimit-budget-key"};
+
+  auto publisherConf = getTinyBudgetKvConf(publisherId);
+  publisherConf.flood_rate() =
+      createKvStoreFloodRate(10 /* flood_msg_per_sec */, 5 /* burst */);
+
+  auto* publisher = createKvStore(publisherConf);
+  auto* receiver =
+      createKvStore(getPreCompressKvConf("ratelimit-budget-receiver"));
+  publisher->run();
+  receiver->run();
+
+  EXPECT_THAT(
+      publisher->addPeer(
+          kTestingAreaName, receiver->getNodeId(), receiver->getPeerSpec()),
+      IsTrue());
+  EXPECT_THAT(
+      receiver->addPeer(
+          kTestingAreaName, publisher->getNodeId(), publisher->getPeerSpec()),
+      IsTrue());
+  waitForAllPeersInitialized();
+
+  std::string finalValue;
+  for (int64_t version = 1; version <= kNumUpdates; ++version) {
+    finalValue = makeFloodValue(fmt::format("ratelimited-v{}", version));
+    auto thriftVal = createThriftValue(
+        version /* version */,
+        publisherId /* originatorId */,
+        finalValue /* value */,
+        Constants::kTtlInfinity /* ttl */,
+        0 /* ttl version */,
+        generateHash(
+            version,
+            publisherId,
+            thrift::Value().value() = std::string(finalValue)));
+    EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
+  }
+
+  EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, finalValue));
+  const auto received = receiver->getKey(kTestingAreaName, key);
+  ASSERT_TRUE(received.has_value());
+  EXPECT_THAT(*received->version(), Eq(kNumUpdates));
 }
 
 /**

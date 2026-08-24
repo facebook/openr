@@ -631,6 +631,65 @@ TEST(ConfigTest, ToThriftKvStoreConfig) {
                    .enable_flood_pub_pre_compression());
 }
 
+TEST(ConfigTest, FloodMemBudgetKnobs) {
+  // Both knobs are optional and are deliberately left unset when absent, so
+  // that KvStoreParams is the single place the Constants fallback is applied.
+  auto tConfig = getBasicOpenrConfig();
+  auto config = Config(tConfig);
+  const auto defaulted = config.toThriftKvStoreConfig();
+  EXPECT_FALSE(defaulted.flood_mem_budget_bytes().has_value());
+  EXPECT_FALSE(defaulted.flood_drain_reconcile_threshold_ms().has_value());
+
+  // An explicit value is plumbed through OpenrConfig::KvstoreConfig ->
+  // KvStore.thrift KvStoreConfig.
+  auto tConfigSet = getBasicOpenrConfig();
+  tConfigSet.kvstore_config()->flood_mem_budget_bytes() = 4096;
+  tConfigSet.kvstore_config()->flood_drain_reconcile_threshold_ms() = 10000;
+  auto configSet = Config(tConfigSet);
+  const auto plumbed = configSet.toThriftKvStoreConfig();
+  EXPECT_EQ(4096, *plumbed.flood_mem_budget_bytes());
+  EXPECT_EQ(10000, *plumbed.flood_drain_reconcile_threshold_ms());
+}
+
+TEST(ConfigTest, FloodMemBudgetKnobsRejectUnsafeValues) {
+  // A zero/negative budget is not "unlimited" -- it latches flooding off
+  // permanently (every publication defers, every drain early-returns), so the
+  // config must be rejected rather than silently blackholing the area.
+  auto tConfigZeroBudget = getBasicOpenrConfig();
+  tConfigZeroBudget.kvstore_config()->flood_mem_budget_bytes() = 0;
+  EXPECT_THROW((Config(tConfigZeroBudget)), std::out_of_range);
+
+  auto tConfigNegBudget = getBasicOpenrConfig();
+  tConfigNegBudget.kvstore_config()->flood_mem_budget_bytes() = -1;
+  EXPECT_THROW((Config(tConfigNegBudget)), std::out_of_range);
+
+  /*
+   * A reconcile threshold at or below the flood RPC timeout makes wedge
+   * recovery fire on healthy traffic, so the floor is 2x that timeout. Reject
+   * anything under it -- including a value that clears the raw RPC timeout but
+   * leaves no margin for timer granularity and evb scheduling latency.
+   */
+  const auto minReconcileThresholdMs =
+      2 * Constants::kServiceProcTimeout.count();
+
+  auto tConfigShortThreshold = getBasicOpenrConfig();
+  tConfigShortThreshold.kvstore_config()->flood_drain_reconcile_threshold_ms() =
+      Constants::kServiceProcTimeout.count() + 1;
+  EXPECT_THROW((Config(tConfigShortThreshold)), std::out_of_range);
+
+  auto tConfigBelowFloor = getBasicOpenrConfig();
+  tConfigBelowFloor.kvstore_config()->flood_drain_reconcile_threshold_ms() =
+      minReconcileThresholdMs - 1;
+  EXPECT_THROW((Config(tConfigBelowFloor)), std::out_of_range);
+
+  // The floor itself is accepted.
+  auto tConfigValid = getBasicOpenrConfig();
+  tConfigValid.kvstore_config()->flood_mem_budget_bytes() = 1;
+  tConfigValid.kvstore_config()->flood_drain_reconcile_threshold_ms() =
+      minReconcileThresholdMs;
+  EXPECT_NO_THROW((Config(tConfigValid)));
+}
+
 TEST(ConfigTest, FibRouteUpdateCoalescingKnob) {
   // Optional (no thrift default): unset unless a config explicitly sets it, so
   // the effective value is false (coalescing enabled) via value_or(false) in

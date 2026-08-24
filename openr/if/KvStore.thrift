@@ -484,6 +484,24 @@ struct KvStoreConfig {
    * See KvStoreDb::floodPublication.
    */
   19: optional bool enable_flood_pub_pre_compression;
+
+  /**
+   * Per-area soft budget (bytes) for in-flight flood-publication payloads.
+   * Optional; the effective default (Constants::kFloodMemBudgetBytes) is
+   * applied by KvStoreParams. Exposed so the budget can be retuned per fleet
+   * without a binary push. See KvStoreDb::floodPublication.
+   */
+  20: optional i64 flood_mem_budget_bytes;
+
+  /**
+   * How long (ms) area-level pending flood keys may remain undrained before a
+   * lost flood-RPC completion is assumed and the leaked byte budget is
+   * reconciled. Optional; the effective default
+   * (Constants::kFloodDrainReconcileThreshold) is applied by KvStoreParams.
+   * Rejected below 2x the flood RPC timeout (Constants::kServiceProcTimeout).
+   * See KvStoreDb::reconcileAndDrainPendingFloods.
+   */
+  21: optional i64 flood_drain_reconcile_threshold_ms;
 }
 
 /**

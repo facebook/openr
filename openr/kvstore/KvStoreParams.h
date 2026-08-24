@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <folly/logging/xlog.h>
+
 #include <openr/config/Config.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -20,6 +22,62 @@ namespace openr {
  * data structures like queues and config knobs shared across KvStoreDbs.
  */
 struct KvStoreParams {
+  /*
+   * Resolve the flood-budget knobs, applying the Constants fallback and
+   * rejecting values that would defeat the budget.
+   *
+   * Config::checkKvStoreConfig already rejects these at startup, but only for
+   * configs built through Config. KvStoreParams is also constructed directly
+   * from a thrift::KvStoreConfig by tests and by direct embedders (see
+   * KvStoreWrapper), which bypasses that check entirely -- so the invariant is
+   * re-established here rather than assumed.
+   *
+   * A negative budget is the dangerous one: the field is i64 and the member is
+   * size_t, so a plain static_cast turns -1 into SIZE_MAX and silently
+   * disables the bound altogether -- the exact opposite of the knob's purpose,
+   * and invisible at runtime. Zero is the mirror failure: every publication
+   * defers and every drain early-returns, latching flooding off.
+   *
+   * These log and fall back rather than throw: KvStoreParams has no throwing
+   * contract, and the loud failure already exists at the Config layer for
+   * anything production-facing.
+   */
+  static size_t
+  resolveFloodMemBudgetBytes(const thrift::KvStoreConfig& kvStoreConfig) {
+    auto configured = kvStoreConfig.flood_mem_budget_bytes();
+    if (!configured) {
+      return Constants::kFloodMemBudgetBytes;
+    }
+    if (*configured <= 0) {
+      XLOGF(
+          ERR,
+          "Ignoring non-positive kvstore flood_mem_budget_bytes {}; falling back to {}",
+          *configured,
+          Constants::kFloodMemBudgetBytes);
+      return Constants::kFloodMemBudgetBytes;
+    }
+    return static_cast<size_t>(*configured);
+  }
+
+  static std::chrono::milliseconds
+  resolveFloodDrainReconcileThreshold(
+      const thrift::KvStoreConfig& kvStoreConfig) {
+    auto configured = kvStoreConfig.flood_drain_reconcile_threshold_ms();
+    if (!configured) {
+      return Constants::kFloodDrainReconcileThreshold;
+    }
+    if (*configured < Constants::kMinFloodDrainReconcileThreshold.count()) {
+      XLOGF(
+          ERR,
+          "Ignoring kvstore flood_drain_reconcile_threshold_ms {} below the {}ms floor; falling back to {}ms",
+          *configured,
+          Constants::kMinFloodDrainReconcileThreshold.count(),
+          Constants::kFloodDrainReconcileThreshold.count());
+      return Constants::kFloodDrainReconcileThreshold;
+    }
+    return std::chrono::milliseconds(*configured);
+  }
+
   // the name of this node (unique in domain)
   std::string nodeId{};
 
@@ -51,6 +109,16 @@ struct KvStoreParams {
   bool enable_secure_thrift_client{false};
   // Pre-compress flood-publication payload once, shared across peers
   bool enable_flood_pub_pre_compression{false};
+  /*
+   * Per-area soft budget (bytes) for in-flight flood-publication payloads, and
+   * how long deferred keys may sit before a lost flood-RPC completion is
+   * assumed. Config-driven, falling back to the Constants defaults, so the
+   * budget can be retuned without a binary push and so tests can drive the
+   * backpressure path with a small budget instead of generating a real one.
+   */
+  size_t floodMemBudgetBytes{Constants::kFloodMemBudgetBytes};
+  std::chrono::milliseconds floodDrainReconcileThreshold{
+      Constants::kFloodDrainReconcileThreshold};
   // TLS paths
   std::optional<std::string> x509_cert_path{std::nullopt};
   std::optional<std::string> x509_key_path{std::nullopt};
@@ -84,6 +152,9 @@ struct KvStoreParams {
             *kvStoreConfig.enable_secure_thrift_client()),
         enable_flood_pub_pre_compression(
             kvStoreConfig.enable_flood_pub_pre_compression().value_or(false)),
+        floodMemBudgetBytes(resolveFloodMemBudgetBytes(kvStoreConfig)),
+        floodDrainReconcileThreshold(
+            resolveFloodDrainReconcileThreshold(kvStoreConfig)),
         x509_cert_path(kvStoreConfig.x509_cert_path().to_optional()),
         x509_key_path(kvStoreConfig.x509_key_path().to_optional()),
         x509_ca_path(kvStoreConfig.x509_ca_path().to_optional()),

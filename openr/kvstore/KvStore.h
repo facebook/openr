@@ -465,7 +465,8 @@ class KvStoreDb {
 
   /*
    * Timer-driven safety net: if pendingFloodKeys_ has been stuck past
-   * kFloodDrainReconcileThreshold (a lost flood-RPC completion leaked the byte
+   * the configured drain-reconcile threshold (a lost flood-RPC completion
+   * leaked the byte
    * budget), reset the leaked accounting, then drain. Recovers flooding without
    * relying solely on RPC-completion callbacks.
    */
@@ -776,7 +777,8 @@ class KvStoreDb {
 
   /*
    * Resident bytes of in-flight flood-publication payloads in this area. Gated
-   * against Constants::kFloodMemBudgetBytes to bound flood memory per area.
+   * against kvParams_.floodMemBudgetBytes (config-driven, defaulting to
+   * Constants::kFloodMemBudgetBytes) to bound flood memory per area.
    *
    * Counted once per distinct serialized buffer, NOT once per peer: peers share
    * one refcounted payload (IOBuf::clone), so a buffer flooded to N peers is
@@ -820,10 +822,11 @@ class KvStoreDb {
   /*
    * When the current backpressure episode started; nullopt when no keys are
    * pending. Measures how long keys have been awaiting advertisement; once that
-   * exceeds kFloodDrainReconcileThreshold, floodDrainTimer_ reconciles the byte
-   * budget and drains them. reconcileAndDrainPendingFloods restarts it from the
-   * reconcile point, so a drain that fails to clear the pending set cannot
-   * re-trip the wedge check on the very next tick.
+   * exceeds the configured drain-reconcile threshold, floodDrainTimer_
+   * reconciles the byte budget and drains them.
+   * reconcileAndDrainPendingFloods restarts it from the reconcile point, so a
+   * drain that fails to clear the pending set cannot re-trip the wedge check on
+   * the very next tick.
    *
    * steady_clock, NOT wall clock: this is a pure elapsed-time safety net, so it
    * must not be perturbed by an NTP step or an operator clock change. On a

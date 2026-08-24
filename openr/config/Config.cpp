@@ -132,6 +132,34 @@ Config::checkKvStoreConfig() const {
   if (kvStoreConf.key_ttl_ms() == Constants::kTtlInfinity) {
     throw std::out_of_range("kvstore key_ttl_ms should be a finite number");
   }
+
+  /*
+   * A non-positive budget is not "unlimited", it is a hard stop: floodPublica-
+   * tion defers every publication (outstanding < 0 is never true) and
+   * drainPendingFloods early-returns (outstanding >= 0 is always true), so
+   * flooding latches off permanently. Reject it rather than let a config typo
+   * silently blackhole the area.
+   */
+  if (auto floodMemBudgetBytes = kvStoreConf.flood_mem_budget_bytes()) {
+    if (*floodMemBudgetBytes <= 0) {
+      throw std::out_of_range("kvstore flood_mem_budget_bytes should be > 0");
+    }
+  }
+
+  /*
+   * Reject a threshold that would trip wedge recovery on RPCs still
+   * legitimately in flight; see Constants::kMinFloodDrainReconcileThreshold.
+   */
+  if (auto reconcileThresholdMs =
+          kvStoreConf.flood_drain_reconcile_threshold_ms()) {
+    if (*reconcileThresholdMs <
+        Constants::kMinFloodDrainReconcileThreshold.count()) {
+      throw std::out_of_range(
+          fmt::format(
+              "kvstore flood_drain_reconcile_threshold_ms should be >= {}",
+              Constants::kMinFloodDrainReconcileThreshold.count()));
+    }
+  }
 }
 
 void
@@ -495,6 +523,17 @@ Config::toThriftKvStoreConfig() const {
   }
   config.enable_flood_pub_pre_compression() =
       oldConfig.enable_flood_pub_pre_compression().value_or(false);
+  /*
+   * Left unset when absent (rather than defaulted here) so KvStoreParams is the
+   * single place the Constants fallback is applied.
+   */
+  if (auto floodMemBudgetBytes = oldConfig.flood_mem_budget_bytes()) {
+    config.flood_mem_budget_bytes() = *floodMemBudgetBytes;
+  }
+  if (auto reconcileThresholdMs =
+          oldConfig.flood_drain_reconcile_threshold_ms()) {
+    config.flood_drain_reconcile_threshold_ms() = *reconcileThresholdMs;
+  }
   return config;
 }
 

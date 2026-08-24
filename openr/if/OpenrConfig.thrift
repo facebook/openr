@@ -100,6 +100,26 @@ struct KvstoreConfig {
    * Config::toThriftKvStoreConfig via value_or(false).
    */
   12: optional bool enable_flood_pub_pre_compression;
+
+  /**
+   * Per-area soft budget (bytes) for in-flight flood-publication payloads.
+   * Optional (no thrift default) so it is not serialized into every generated
+   * openr config; the effective default (Constants::kFloodMemBudgetBytes) is
+   * applied in KvStoreParams. Exposed so the budget can be retuned per fleet
+   * without a binary push. Example: 134217728 (128 MiB).
+   */
+  13: optional i64 flood_mem_budget_bytes;
+
+  /**
+   * How long (ms) area-level pending flood keys may remain undrained before a
+   * lost flood-RPC completion is assumed and the leaked byte budget is
+   * reconciled. Optional; the effective default
+   * (Constants::kFloodDrainReconcileThreshold) is applied in KvStoreParams.
+   * Rejected below 2x the flood RPC timeout (Constants::kServiceProcTimeout),
+   * since a shorter threshold trips wedge recovery on RPCs that are still
+   * legitimately in flight. Example: 10000 (10s).
+   */
+  14: optional i64 flood_drain_reconcile_threshold_ms;
 }
 
 /*

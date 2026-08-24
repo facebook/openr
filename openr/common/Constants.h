@@ -172,7 +172,9 @@ class Constants {
   static constexpr std::chrono::milliseconds kFloodPendingPublication{100};
 
   /*
-   * Per-area soft budget (in bytes) for in-flight flood-publication payloads.
+   * Default per-area soft budget (in bytes) for in-flight flood-publication
+   * payloads; overridable per deployment via the kvstore config knob
+   * flood_mem_budget_bytes (resolved in KvStoreParams).
    * Checked once at the start of each flood: if the area is already at/over
    * this budget, the whole publication is deferred into the single area-level
    * pending-key set (coalesced, re-derived from KvStore and flooded once budget
@@ -204,14 +206,32 @@ class Constants {
   static constexpr size_t kFloodMemBudgetBytes{128 * 1024 * 1024}; // 128 MiB
 
   /*
-   * How long area-level pending flood keys may remain undrained before we
-   * assume a flood-RPC completion was lost (leaking the in-flight byte budget)
-   * and force a reconcile + drain. Must be comfortably larger than
-   * kServiceProcTimeout so a legitimately in-flight RPC is never mistaken for a
-   * lost one.
+   * Default for how long area-level pending flood keys may remain undrained
+   * before we assume a flood-RPC completion was lost (leaking the in-flight
+   * byte budget) and force a reconcile + drain.
+   *
+   * Must stay clear of kServiceProcTimeout, the flood RPC's processing
+   * timeout, or wedge recovery fires on RPCs that are merely still in flight.
+   * See kMinFloodDrainReconcileThreshold for the enforced floor.
    */
   static constexpr std::chrono::milliseconds kFloodDrainReconcileThreshold{
       10000}; // 10s
+
+  /*
+   * Lowest accepted flood_drain_reconcile_threshold_ms. 2x the flood RPC's
+   * processing timeout rather than "just above" it, so that timer granularity
+   * and evb scheduling latency cannot consume the whole margin -- a value one
+   * millisecond above kServiceProcTimeout is arithmetically valid but would
+   * trip wedge recovery on RPCs that are still legitimately in flight.
+   *
+   * Enforced in two places, because they guard different entry points:
+   * Config::checkKvStoreConfig rejects it outright at startup (production),
+   * and KvStoreParams falls back to the default (direct embedders and tests,
+   * which construct KvStoreParams from a thrift::KvStoreConfig and never go
+   * through Config).
+   */
+  static constexpr std::chrono::milliseconds kMinFloodDrainReconcileThreshold{
+      2 * kServiceProcTimeout};
 
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};
