@@ -26,8 +26,6 @@ from openr.py.openr.cli.clis import (
 )
 from openr.py.openr.cli.utils.options import breeze_option, OPTIONS, str2cert
 from thrift.python.exceptions import ApplicationError, TransportError
-from thrift.Thrift import TApplicationException
-from thrift.transport.TTransport import TTransportException
 
 
 # Plugin module is optional
@@ -110,10 +108,10 @@ def main() -> None:
 
     try:
         main_cli()
-    except (TApplicationException, ApplicationError) as e:
-        raise SystemExit(f"Thrift Application Exception: {str(e)}")
-    except (TTransportException, TransportError) as e:
-        raise SystemExit(f"Failed connecting to host: {str(e)}")
+    except ApplicationError as e:
+        raise SystemExit(f"Thrift Application Exception: {e.message}")
+    except TransportError as e:
+        raise SystemExit(f"Failed connecting to host: {e.message}")
     except Exception as e:
         raise SystemExit(f"Failed with exception: {str(e)}")
 

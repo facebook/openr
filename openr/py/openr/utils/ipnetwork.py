@@ -7,8 +7,8 @@
 
 import ipaddress
 import socket
+from typing import Protocol
 
-from openr.thrift.Network import types as network_types_py3
 from openr.thrift.Network.thrift_enums import PrefixType as PrefixTypeThriftEnum
 from openr.thrift.Network.thrift_types import (
     BinaryAddress,
@@ -29,6 +29,19 @@ from openr.thrift.Types.thrift_types import RouteDatabase as RouteDatabaseThrift
 # The deprecated IPv4-compatible IPv6 range is ::/96 — i.e. 12 leading zero bytes.
 # Hoisted to module scope so the hot sprint_addr path doesn't rebuild it per call.
 _V4_COMPAT_PREFIX: bytes = b"\x00" * 12
+
+
+class _BinaryAddressLike(Protocol):
+    @property
+    def addr(self) -> bytes: ...
+
+
+class _IpPrefixLike(Protocol):
+    @property
+    def prefixAddress(self) -> _BinaryAddressLike: ...
+
+    @property
+    def prefixLength(self) -> int: ...
 
 
 def sprint_addr(addr: bytes) -> str:
@@ -57,7 +70,7 @@ def sprint_addr(addr: bytes) -> str:
     return socket.inet_ntop(socket.AF_INET6, addr)
 
 
-def sprint_prefix(prefix: IpPrefix | network_types_py3.IpPrefix) -> str:
+def sprint_prefix(prefix: _IpPrefixLike) -> str:
     """
     :param prefix: IpPrefix representing an CIDR network
 

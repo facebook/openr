@@ -8,11 +8,9 @@
 import json
 from typing import Any
 
-from openr.py.openr.utils.consts import Consts
 from openr.py.openr.utils.ipnetwork import sprint_addr, sprint_prefix
 from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix
 from thrift.python import types as thrift_python_types
-from thrift.util import Serializer
 
 
 TO_DICT_OVERRIDES = {
@@ -81,34 +79,3 @@ def serialize_json(struct: Any) -> str:
     """Serialize any thrift Struct into JSON"""
 
     return json.dumps(object_to_dict(struct), indent=2, sort_keys=True)
-
-
-# to be deprecated
-def serialize_thrift_py_object(thrift_obj, proto_factory=Consts.PROTO_FACTORY):
-    """Serialize thrift-py data to binary blob
-
-    :param thrift_obj: the thrift-py object
-    :param proto_factory: protocol factory, set default as Compact Protocol
-
-    :return: string the serialized thrift-py payload
-    """
-
-    return Serializer.serialize(proto_factory(), thrift_obj)
-
-
-# to be deprecated
-def deserialize_thrift_py_object(
-    raw_data, thrift_type, proto_factory=Consts.PROTO_FACTORY
-):
-    """Deserialize thrift-py data from binary blob
-
-    :param raw_data string: the serialized thrift-py payload
-    :param thrift_type: the thrift-py type
-    :param proto_factory: protocol factory, set default as Compact Protocol
-
-    :return: instance of thrift_type
-    """
-
-    resp = thrift_type()
-    Serializer.deserialize(proto_factory(), raw_data, resp)
-    return resp

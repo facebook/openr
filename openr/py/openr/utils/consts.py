@@ -8,7 +8,7 @@
 import re
 
 from nettools.ebb.py.agents.constants import FIB_AGENT_PORT
-from thrift.protocol.TCompactProtocol import TCompactProtocolFactory
+from thrift.python.serializer import Protocol
 
 
 class Consts:
@@ -38,7 +38,7 @@ class Consts:
     PREFIX_MGR_KEY = "prefix-manager-config"
 
     # Default serializer/deserializer for communication with OpenR
-    PROTO_FACTORY = TCompactProtocolFactory
+    PROTO_FACTORY = Protocol.COMPACT
 
     OPENR_CONFIG_FILE = "/etc/sysconfig/openr"
 
