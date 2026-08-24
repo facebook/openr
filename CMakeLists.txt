@@ -266,53 +266,6 @@ openr_add_ctrl_server_library()
 openr_add_main_util_library()
 openr_add_test_support_libraries()
 
-# Every openr_add_library call above registers its OBJECT target globally.
-# Collect those $<TARGET_OBJECTS:...> expressions once, after all component
-# libraries are defined, into this local list. The compatibility openrlib then
-# reuses the same compiled objects without compiling their sources again.
-openr_get_component_objects(OPENR_COMPONENT_OBJECTS)
-
-add_library(openrlib
-  ${OPENR_COMPONENT_OBJECTS}
-)
-
-# Keep directly listed compatibility sources at the same effective C++20 level
-# as component objects without changing the project-wide coroutine policy or
-# publishing a consumer requirement from openrlib.
-target_compile_features(openrlib PRIVATE cxx_std_20)
-
-if (BUILD_SHARED_LIBS)
-  set_target_properties(openrlib PROPERTIES VERSION 1.0.0 SOVERSION 1)
-endif()
-
-target_link_libraries(openrlib
-  build_info
-  ${BENCHMARK}
-  ${OPENR_THRIFT_LIBS}
-  glog::glog
-  gflags
-  FBThrift::thriftcpp2
-  fb303::fb303
-  ${ASYNC}
-  ${CONCURRENCY}
-  ${ZSTD}
-  Folly::folly
-  ${FOLLY_EXCEPTION_TRACER}
-  ${SODIUM}
-  ${RE2}
-  Snappy::snappy
-  ${Boost_LIBRARIES}
-  -lpthread
-  -lcrypto
-  stdc++fs
-  range-v3
-)
-
-install(TARGETS
-  openrlib
-  DESTINATION lib
-)
-
 add_executable(openr_bin
   openr/Main.cpp
 )
@@ -465,6 +418,8 @@ if(BUILD_TESTS)
     ${GTEST_INCLUDE_DIRS}
     ${GMOCK_INCLUDE_DIRS}
   )
+
+  openr_add_install_contract_test()
 
   # Validate source-list integrity separately from compilation so duplicate,
   # missing, or stale entries fail with a focused diagnostic.

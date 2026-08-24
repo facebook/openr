@@ -27,10 +27,9 @@ set(OPENR_TEST_SUPPORT_EXPECTED_SOURCE_COUNT 6)
 
 # Create test-support libraries from leaf mocks toward composite helpers.
 #
-# These targets remain part of the physical openrlib compatibility archive,
-# but tests can link only the support they use. Keeping the libraries
-# separate prevents a change to one test helper from invalidating every
-# Open/R test and benchmark.
+# Tests link only the support they use. Keeping the libraries separate
+# prevents a change to one test helper from invalidating every Open/R test
+# and benchmark.
 macro(openr_add_test_support_libraries)
   # Buck2 target: //openr/tests/mocks:prefix_generator
   openr_add_library(

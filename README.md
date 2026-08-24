@@ -107,10 +107,11 @@ directory to build openr with your changes.
 
 ### Installing
 
-`openr` builds both static and dynamic libraries and the install step installs
-libraries and all header files to `/opt/facebook/openr/lib` and
-`/opt/facebook/openr/include/` along with python modules in your Python's
-`site-packages` directory.
+The install step installs the Open/R binaries, generated Thrift libraries,
+source and generated Thrift headers under `/opt/facebook/openr`, and Python
+modules in your Python's `site-packages` directory. Open/R executables and tests
+link the granular component libraries directly; the build does not install a
+monolithic Open/R implementation library.
 Note: the `build_openr.sh` script will run this step for you
 
 - Manually you can drive `getdeps.py` to install elsewhere

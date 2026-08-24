@@ -5,13 +5,12 @@
 
 set(OPENR_CMAKE_HELPER_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
-# Define a granular Open/R library without changing libopenrlib's contents.
+# Define a granular Open/R library.
 #
 # Each source is compiled once in an OBJECT library. The small STATIC target
-# gives focused tests a narrow link dependency, while the same object files
-# are collected into the historical libopenrlib compatibility archive.
-# Dependency lists are applied to both targets because consuming
-# $<TARGET_OBJECTS:...> does not propagate usage requirements.
+# gives consumers a narrow link dependency. Dependency lists are applied to
+# both targets because consuming $<TARGET_OBJECTS:...> does not propagate
+# usage requirements.
 function(openr_add_library)
   set(one_value_args NAME)
   set(multi_value_args SOURCES PRIVATE_DEPENDENCIES PUBLIC_DEPENDENCIES)
@@ -79,22 +78,20 @@ function(openr_add_library)
     PUBLIC
       ${ARG_PUBLIC_DEPENDENCIES}
   )
-
-  set_property(
-    GLOBAL APPEND PROPERTY OPENR_COMPONENT_OBJECT_TARGETS ${object_target}
-  )
 endfunction()
 
-# Return the registered object expressions for the compatibility archive.
-function(openr_get_component_objects output_variable)
-  get_property(
-    component_targets GLOBAL PROPERTY OPENR_COMPONENT_OBJECT_TARGETS
+# Register a CTest that verifies the installed Open/R CMake contract.
+function(openr_add_install_contract_test)
+  add_test(
+    NAME OpenrInstallContractTest
+    COMMAND
+      ${CMAKE_COMMAND}
+      -DOPENR_BINARY_DIR=${CMAKE_BINARY_DIR}
+      -DOPENR_COMPONENT_TARGET_EXISTS=$<TARGET_EXISTS:openr_common>
+      -DOPENR_AGGREGATE_TARGET_EXISTS=$<TARGET_EXISTS:openrlib>
+      -P ${OPENR_CMAKE_HELPER_DIR}/tests/VerifyOpenrInstallContract.cmake
   )
-  set(component_objects)
-  foreach(component_target IN LISTS component_targets)
-    list(APPEND component_objects $<TARGET_OBJECTS:${component_target}>)
-  endforeach()
-  set(${output_variable} ${component_objects} PARENT_SCOPE)
+  set_tests_properties(OpenrInstallContractTest PROPERTIES TIMEOUT 30)
 endfunction()
 
 # Register a CTest that validates one module's declared source ownership.
