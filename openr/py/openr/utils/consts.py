@@ -7,7 +7,6 @@
 
 import re
 
-from nettools.ebb.py.agents.constants import FIB_AGENT_PORT
 from thrift.python.serializer import Protocol
 
 
@@ -29,7 +28,7 @@ class Consts:
     STATIC_PREFIX_ALLOC_PARAM_KEY = "e2e-network-allocations"
 
     CTRL_PORT = 2018
-    FIB_AGENT_PORT = FIB_AGENT_PORT
+    FIB_AGENT_PORT = 5912
 
     TOPOLOGY_OUTPUT_FILE = "/tmp/openr-topology.png"
 

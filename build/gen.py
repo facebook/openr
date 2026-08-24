@@ -4,10 +4,11 @@
 # LICENSE file in the root directory of this source tree.
 
 import os
+import shutil
 from subprocess import check_call
 
 
-# Breeze uses OpenrConfig V1; V2 needs separate native and dependency packaging.
+# Breeze uses OpenrConfig V1; V2 needs separate routing-policy-v2 packaging.
 SUPPORTED_OPENR_THRIFT_FILES = (
     "Dual.thrift",
     "KvStore.thrift",
@@ -21,26 +22,31 @@ SUPPORTED_OPENR_THRIFT_FILES = (
 
 EXCLUDED_OPENR_THRIFT_FILES = ("OpenrConfigV2.thrift",)
 
-DEPENDENCY_THRIFT_DIRS = (
-    "fb303-thrift",
-    "neteng-thrift",
-    "fbthrift-thrift",
-)
-
 REQUIRED_DEPENDENCY_THRIFT_FILES = (
+    "fb303-thrift/fb303/thrift/fb303_core.thrift",
+    "fbthrift-thrift/thrift/annotation/cpp.thrift",
+    "fbthrift-thrift/thrift/annotation/hack.thrift",
+    "fbthrift-thrift/thrift/annotation/python.thrift",
+    "fbthrift-thrift/thrift/annotation/scope.thrift",
+    "fbthrift-thrift/thrift/annotation/thrift.thrift",
     "neteng-thrift/configerator/structs/neteng/config/routing_policy.thrift",
     "neteng-thrift/configerator/structs/neteng/config/vip_service_config.thrift",
 )
 
 THRIFT_INCLUDE_DIRS = (
     "openr-thrift",
-    *DEPENDENCY_THRIFT_DIRS,
+    "fb303-thrift",
+    "neteng-thrift",
+    "fbthrift-thrift",
     ".",
 )
 
+GENERATED_THRIFT_DIR = "generated-thrift"
+THRIFT_COMPILER = "/opt/facebook/fbthrift/bin/thrift1"
+
 
 def collect_thrift_files(source_root="."):
-    """Return the supported Open/R roots and their staged dependencies."""
+    """Return the supported Open/R roots and required generated dependencies."""
 
     openr_thrift_dir = os.path.join(source_root, "openr-thrift", "openr", "if")
     actual_openr_thrift_files = {
@@ -66,66 +72,40 @@ def collect_thrift_files(source_root="."):
         for thrift_file in SUPPORTED_OPENR_THRIFT_FILES
     ]
 
-    required_dependency_files = [
+    thrift_files.extend(
         os.path.join(source_root, thrift_file)
         for thrift_file in REQUIRED_DEPENDENCY_THRIFT_FILES
-    ]
-    missing_files = [
-        path
-        for path in [*thrift_files, *required_dependency_files]
-        if not os.path.isfile(path)
-    ]
+    )
+    missing_files = [path for path in thrift_files if not os.path.isfile(path)]
     if missing_files:
         raise FileNotFoundError(
             "Missing required Breeze Thrift files: " + ", ".join(missing_files)
         )
 
-    for thrift_dir in DEPENDENCY_THRIFT_DIRS:
-        dependency_root = os.path.join(source_root, thrift_dir)
-        if not os.path.isdir(dependency_root):
+    for include_dir in THRIFT_INCLUDE_DIRS:
+        include_root = os.path.join(source_root, include_dir)
+        if not os.path.isdir(include_root):
             raise FileNotFoundError(
-                f"Missing Breeze Thrift dependency directory: {dependency_root}"
+                f"Missing Breeze Thrift include directory: {include_root}"
             )
-        for root, dirs, files in os.walk(dependency_root):
-            dirs.sort()
-            for file in sorted(files):
-                if file.endswith(".thrift"):
-                    thrift_files.append(os.path.join(root, file))
 
     return thrift_files
 
 
-def generate_thrift_files():
-    """
-    Get list of all thrift files (absolute path names) and then generate
-    python definitions for all thrift files.
-    """
+def generate_thrift_files(source_root=".", thrift_compiler=THRIFT_COMPILER):
+    """Generate modern Thrift Python modules into one namespace-package tree."""
 
-    generators = ["mstch_cpp2", "py", "mstch_py3"]
-    thrift_files = collect_thrift_files()
-
-    # Generate cpp and python
-    for gen in generators:
-        cmd = ["/opt/facebook/fbthrift/bin/thrift1", "--gen", gen]
-        for include in THRIFT_INCLUDE_DIRS:
-            cmd += ["-I", f"{include}"]
-        for thrift_file in thrift_files:
-            check_call(
-                [
-                    *cmd,
-                    "-o",
-                    os.path.join(os.path.dirname(thrift_file)),
-                    str(thrift_file),
-                ]
-            )
-
-    # Add __init__.py for compiling cython modules
+    output_root = os.path.join(source_root, GENERATED_THRIFT_DIR)
+    if os.path.exists(output_root):
+        shutil.rmtree(output_root)
+    os.makedirs(output_root, exist_ok=True)
+    cmd = [thrift_compiler, "--gen", "mstch_python"]
     for include in THRIFT_INCLUDE_DIRS:
-        for root, _dirs, files in os.walk(f"{include}"):
-            for f in files:
-                check_call(
-                    ["touch", os.path.join(root, os.path.dirname(f), "__init__.py")]
-                )
+        cmd.extend(["-I", os.path.join(source_root, include)])
+    for thrift_file in collect_thrift_files(source_root):
+        check_call([*cmd, "-o", output_root, thrift_file])
+
+    return os.path.join(output_root, "gen-python")
 
 
 if __name__ == "__main__":

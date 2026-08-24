@@ -4,77 +4,93 @@
 # This source code is licensed under the MIT license found in the
 # LICENSE file in the root directory of this source tree.
 
-# shellcheck disable=SC1090
+set -euo pipefail
+
+# shellcheck disable=SC1090,SC1091
 source "$(dirname "$0")/common.sh"
 
-alias thrift1=/opt/facebook/fbthrift/bin/thrift1
+BREEZE_VENV=/opt/openr-breeze
+BREEZE_PACKAGE_DIR=/src/breeze-package
+FBTHRIFT_BUILD_VENV=/opt/fbthrift-python-build
+GENERATED_THRIFT_DIR=/src/generated-thrift/gen-python
 
-# Step 1: Stage compilation
+# Stage the exact Thrift sources needed by the Breeze V1 package.
+mkdir -p /src/fb303-thrift
+cp -r /opt/facebook/fb303/include/thrift-files/fb303 /src/fb303-thrift/
 
-# folly Cython
-mkdir ./folly
-cp -r \
-/tmp/fbcode_builder_getdeps-ZsrcZbuildZfbcode_builder-root/repos/github.com-facebook-folly.git/folly/python/* ./folly
+FBTHRIFT_SOURCE_DIR=$(
+  "$PYTHON3" "$GETDEPS" show-source-dir fbthrift
+)
+mkdir -p /src/fbthrift-thrift/thrift
+cp -r "$FBTHRIFT_SOURCE_DIR/thrift/annotation" /src/fbthrift-thrift/thrift/
 
-# fb303 thrift
-mkdir -p ./fb303-thrift
-cp -r  /opt/facebook/fb303/include/thrift-files/fb303 ./fb303-thrift/
+mkdir -p /src/openr-thrift/openr
+cp -r /src/openr/if /src/openr-thrift/openr/
 
-# fbthrift Cython and thrift
-cp -r  /opt/facebook/fbthrift/include/thrift/lib/ ./thrift
-touch ./thrift/py3/__init__.py
-touch ./thrift/__init__.py
-
-mkdir /src/fbthrift-thrift
-cp -r \
-/tmp/fbcode_builder_getdeps-ZsrcZbuildZfbcode_builder-root/repos/github.com-facebook-fbthrift.git/thrift/lib/thrift/* \
-/src/fbthrift-thrift
-
-mkdir -p /src/thrift/py3
-chown -R root /tmp/fbcode_builder_getdeps-ZsrcZbuildZfbcode_builder-root/repos/github.com-facebook-fbthrift.git/thrift/lib/py3/
-cp -r \
-/tmp/fbcode_builder_getdeps-ZsrcZbuildZfbcode_builder-root/repos/github.com-facebook-fbthrift.git/thrift/lib/py3/* \
-/src/thrift/py3
-touch /src/thrift/__init__.py
-
-# Open/R thrift
-mkdir -p ./openr-thrift/openr
-cp -r /src/openr/if/ ./openr-thrift/openr/
-
-# Neteng thrift
-mkdir -p neteng-thrift/configerator/structs/neteng/config/
+mkdir -p /src/neteng-thrift/configerator/structs/neteng/config
 OPENR_NETENG_CONFIG_DIR=/src/configerator/structs/neteng/config
 cp \
-"$OPENR_NETENG_CONFIG_DIR/routing_policy.thrift" \
-"$OPENR_NETENG_CONFIG_DIR/vip_service_config.thrift" \
-neteng-thrift/configerator/structs/neteng/config/
+  "$OPENR_NETENG_CONFIG_DIR/routing_policy.thrift" \
+  "$OPENR_NETENG_CONFIG_DIR/vip_service_config.thrift" \
+  /src/neteng-thrift/configerator/structs/neteng/config/
 
-# HACK TO FIX CYTHON .pxd
-cp /cython/Cython/Includes/libcpp/utility.pxd /usr/lib/python3/dist-packages/Cython/Includes/libcpp/utility.pxd
+cd /src
+"$PYTHON3" /src/build/gen.py
 
-# Step 2. Generate mstch_cpp2 and mstch_py3 bindings
+"$PYTHON3" /src/build/breeze_package.py \
+  --source-root /src \
+  --generated-root "$GENERATED_THRIFT_DIR" \
+  --output-root "$BREEZE_PACKAGE_DIR"
 
-python3 /src/build/gen.py
-errorCheck "Failed to generate Thrift bindings"
+# Build the runtime with the same interpreter used to run Breeze.
+"$PYTHON3" -m venv "$FBTHRIFT_BUILD_VENV"
+FBTHRIFT_BUILD_PYTHON="$FBTHRIFT_BUILD_VENV/bin/python"
+"$FBTHRIFT_BUILD_PYTHON" -m pip install \
+  "cython==3.2.2" \
+  auditwheel \
+  setuptools \
+  wheel
+PATH="$FBTHRIFT_BUILD_VENV/bin:$PATH" \
+  "$FBTHRIFT_BUILD_PYTHON" "$GETDEPS" \
+  build \
+  --allow-system-packages \
+  --no-tests \
+  --install-prefix "$INSTALL_PREFIX" \
+  fbthrift-python
 
-# HACK TO FIX fbthrift-py/gen-cpp2/
-echo " " > /src/fbthrift-thrift/gen-cpp2/metadata_metadata.h
-echo " " > /src/fbthrift-thrift/gen-cpp2/metadata_types.h
-echo " " > /src/fbthrift-thrift/gen-cpp2/metadata_types_custom_protocol.h
+FBTHRIFT_PYTHON_INSTALL_DIR=$(
+  "$FBTHRIFT_BUILD_PYTHON" "$GETDEPS" \
+    show-inst-dir \
+    --install-prefix "$INSTALL_PREFIX" \
+    fbthrift-python
+)
 
-# Step 3. Generate clients.cpp
+shopt -s nullglob
+FBTHRIFT_PYTHON_WHEELS=("$FBTHRIFT_PYTHON_INSTALL_DIR"/share/thrift/wheels/*.whl)
+if [ "${#FBTHRIFT_PYTHON_WHEELS[@]}" -ne 1 ]; then
+  echo "Expected exactly one fbthrift-python wheel"
+  exit 1
+fi
 
-python3 /src/build/cython_compile.py
-errorCheck "Failed to compile Cython modules"
+"$PYTHON3" -m venv "$BREEZE_VENV"
+BREEZE_PYTHON="$BREEZE_VENV/bin/python"
+"$BREEZE_PYTHON" -m pip install \
+  --no-deps \
+  "${FBTHRIFT_PYTHON_WHEELS[0]}"
 
-# Step 4. Compile .so
+if ! "$BREEZE_PYTHON" -c "import folly.iobuf"; then
+  echo "The fbthrift-python wheel does not contain its folly runtime"
+  exit 1
+fi
 
-# shellcheck disable=SC2097,SC2098
-env \
-CC="/usr/bin/gcc-10" \
-CXX="/usr/bin/g++-10" \
-CFLAGS="-I. -Iopenr-thrift -Ifb303-thrift -Ineteng-thrift -std=c++20 -fcoroutines " \
-CFLAGS="$CFLAGS -w -D_CPPLIB_VER=20" \
-CXXFLAGS="$CFLAGS" \
-python3 openr/py/setup.py build -j10
-errorCheck "Failed to build Breeze extensions"
+"$BREEZE_PYTHON" -m pip install "$BREEZE_PACKAGE_DIR"
+
+BREEZE_PACKAGE_ROOT=$(
+  "$BREEZE_PYTHON" -c "import site; print(site.getsitepackages()[0])"
+)
+
+cd /
+"$BREEZE_PYTHON" /src/build/validate_breeze.py \
+  --package-root "$BREEZE_PACKAGE_ROOT"
+
+"$BREEZE_VENV/bin/breeze" --help >/dev/null

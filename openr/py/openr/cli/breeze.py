@@ -8,7 +8,6 @@
 from typing import Any
 
 import click
-from fastcli.click import inject_fastcli
 from openr.py.openr.cli.clis import (
     baseGroup,
     config,
@@ -26,6 +25,13 @@ from openr.py.openr.cli.clis import (
 )
 from openr.py.openr.cli.utils.options import breeze_option, OPTIONS, str2cert
 from thrift.python.exceptions import ApplicationError, TransportError
+
+try:
+    from fastcli.click import inject_fastcli
+except ModuleNotFoundError as error:
+    if error.name != "fastcli":
+        raise
+    inject_fastcli = None
 
 
 # Plugin module is optional
@@ -104,7 +110,8 @@ def main() -> None:
 
     # attach CLI commands
     main_cli = get_breeze_cli()
-    inject_fastcli(main_cli)
+    if inject_fastcli is not None:
+        inject_fastcli(main_cli)
 
     try:
         main_cli()

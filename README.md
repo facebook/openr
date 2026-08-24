@@ -53,6 +53,7 @@ We have tried `OpenR` on Ubuntu 24.04 LTS (earlier versions are no longer suppor
 OpenR should work on all Linux based platforms.
 
 - Compiler supporting C++17 or higher
+- Python 3.10 or higher for the Breeze CLI
 
 ## Build
 
@@ -81,8 +82,8 @@ your system and follows the traditional cmake build steps below.
 ### One Step Build - Ubuntu
 
 We've provided a script, `build/build_openr.sh`, tested on Ubuntu LTS releases.
-It uses `gendeps.py` to install all necessary dependencies, compile OpenR and install
-C++ binaries as well as python tools. Please modify the script as needed for
+It uses `gendeps.py` to install all necessary dependencies and compile and install
+the OpenR C++ binaries. Please modify the script as needed for
 your platform. Also, note that some library dependencies require a newer version
 than provided by the default package manager on the system and hence we are
 compiling them from source instead of installing via the package manager. Please
@@ -117,19 +118,11 @@ Note: the `build_openr.sh` script will run this step for you
 
 #### Installing Python Libraries + CLI
 
-You will need python `pip` or `setuptools` to build and install python modules.
-All library dependencies will be automatically installed except the
-`fbthrift-python` module which you will need to install manually using steps
-similar to those described below. This will install `breeze`, a cli tool to
-interact with OpenR.
-
-- Python install requires a `fbthrift` / `thrift1` compiler to be installed and in PATH
-
-```console
-cd openr/openr/py
-python setup.py build
-sudo python setup.py install
-```
+The Docker build runs `build/build_breeze.sh` to generate modern Thrift Python
+bindings, install their matching `fbthrift-python` runtime, and install the
+`breeze` CLI in an isolated virtual environment. `openr/py/setup.py` packages
+the staged source and generated bindings; it is not a standalone source-tree
+build entry point.
 
 ### Docker Building / Usage
 
