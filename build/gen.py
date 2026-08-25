@@ -30,7 +30,6 @@ REQUIRED_DEPENDENCY_THRIFT_FILES = (
     "fbthrift-thrift/thrift/annotation/scope.thrift",
     "fbthrift-thrift/thrift/annotation/thrift.thrift",
     "neteng-thrift/configerator/structs/neteng/config/routing_policy.thrift",
-    "neteng-thrift/configerator/structs/neteng/config/vip_service_config.thrift",
 )
 
 THRIFT_INCLUDE_DIRS = (

@@ -342,32 +342,6 @@ Config::checkLinkMonitorConfig() const {
 }
 
 void
-Config::checkVipServiceConfig() const {
-  if (isVipServiceEnabled()) {
-    if (!config_.vip_service_config()) {
-      throw std::invalid_argument(
-          "enable_vip_service = true, but vip_service_config is empty");
-    } else {
-      if (config_.vip_service_config()->ingress_policy().has_value()) {
-        std::optional<neteng::config::routing_policy::Filters>
-            propagationPolicy{std::nullopt};
-        if (auto areaPolicies = getAreaPolicies()) {
-          propagationPolicy =
-              areaPolicies->filters()->routePropagationPolicy().to_optional();
-        }
-        auto ingress_policy = *config_.vip_service_config()->ingress_policy();
-        if (!propagationPolicy ||
-            propagationPolicy->objects()->count(ingress_policy) == 0) {
-          throw std::invalid_argument(
-              fmt::format(
-                  "No area policy definition found for {}", ingress_policy));
-        }
-      }
-    }
-  }
-}
-
-void
 Config::checkThriftServerConfig() const {
   const auto& thriftServerConfig = getThriftServerConfig();
 
@@ -455,9 +429,6 @@ Config::populateInternalDb() {
 
   // validate Link Monitor config (e.g. backoff)
   checkLinkMonitorConfig();
-
-  // validate VipServiceConfig config
-  checkVipServiceConfig();
 
   // validate thrift server config
   if (isSecureThriftServerEnabled()) {

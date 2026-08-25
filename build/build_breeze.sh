@@ -31,7 +31,6 @@ mkdir -p /src/neteng-thrift/configerator/structs/neteng/config
 OPENR_NETENG_CONFIG_DIR=/src/configerator/structs/neteng/config
 cp \
   "$OPENR_NETENG_CONFIG_DIR/routing_policy.thrift" \
-  "$OPENR_NETENG_CONFIG_DIR/vip_service_config.thrift" \
   /src/neteng-thrift/configerator/structs/neteng/config/
 
 cd /src

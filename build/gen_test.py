@@ -128,6 +128,9 @@ class CollectThriftFilesTest(unittest.TestCase):
         }
 
         self.assertSetEqual(source_modules, generated_modules)
+        self.assertNotIn("vip_service_config", source_modules)
+        self.assertNotIn("vip_service_config", generated_modules)
+        self.assertNotIn("vipconfig", breeze_package.GENERATED_PACKAGE_ROOTS)
 
 
 class BreezePackageTest(unittest.TestCase):

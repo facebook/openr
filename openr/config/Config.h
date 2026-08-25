@@ -448,23 +448,6 @@ class Config {
     return config_.thrift_client().to_optional();
   }
 
-  //
-  // VIP thrift injection service
-  //
-  bool
-  isVipServiceEnabled() const {
-    return config_.enable_vip_service().value_or(false);
-  }
-
-  //
-  // VIP thrift injection config
-  //
-  const vipconfig::config::VipServiceConfig&
-  getVipServiceConfig() const {
-    CHECK(isVipServiceEnabled());
-    return *config_.vip_service_config();
-  }
-
   /*
    * [Drain Status]
    *
@@ -544,9 +527,6 @@ class Config {
 
   // validate Link Monitor config
   void checkLinkMonitorConfig() const;
-
-  // validate VipService Config
-  void checkVipServiceConfig() const;
 
   // validate BGP Peering config and BGP Translation Config
   void checkBgpPeeringConfig();

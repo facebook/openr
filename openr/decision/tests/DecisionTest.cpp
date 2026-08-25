@@ -3059,10 +3059,6 @@ class InitialRibBuildTestFixture : public DecisionTestFixture {
     originatedPrefixV4.install_to_fib() = true;
     tConfig.originated_prefixes() = {originatedPrefixV4};
 
-    // Enable Vip service.
-    tConfig.enable_vip_service() = true;
-    tConfig.vip_service_config() = vipconfig::config::VipServiceConfig();
-
     return tConfig;
   }
 

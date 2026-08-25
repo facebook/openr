@@ -24,7 +24,6 @@ namespace hack OpenrConfigV2
 
 # There is a difference here between fbcode and configerator paths, one is OSS the other is not
 include "configerator/structs/neteng/config/routing_policy_v2.thrift"
-include "configerator/structs/neteng/config/vip_service_config.thrift"
 include "thrift/annotation/cpp.thrift"
 include "thrift/annotation/thrift.thrift"
 
@@ -545,6 +544,7 @@ struct FabricConfig {
   6: list<string> fabric_interface_regexes = [];
 }
 
+@thrift.ReserveIds{ids = [90, 91]}
 @cpp.MinimizePadding
 struct OpenrConfig {
   1: optional string node_name;
@@ -712,10 +712,6 @@ struct OpenrConfig {
    * will disable route deletion.
    */
   60: i32 route_delete_delay_ms = 1000;
-
-  # vip thrift injection service
-  90: optional bool enable_vip_service;
-  91: optional vip_service_config.VipServiceConfig vip_service_config;
 
   /**
    * Enable FSDB subscription to detect a neighbor down event, in case

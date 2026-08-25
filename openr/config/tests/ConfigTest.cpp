@@ -474,32 +474,6 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW((Config(confInvalid)), std::invalid_argument);
   }
 
-  // vip service
-  {
-    auto conf = getBasicOpenrConfig();
-    EXPECT_FALSE(Config(conf).isVipServiceEnabled());
-    conf.enable_vip_service() = true;
-    EXPECT_THROW(Config(conf).isVipServiceEnabled(), std::invalid_argument);
-    EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
-    conf.vip_service_config() = {};
-    conf.vip_service_config()->ingress_policy() = "test_policy";
-    // There is no area_policies, so should throw.
-    EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
-    conf.area_policies() = neteng::config::routing_policy::PolicyConfig();
-    conf.area_policies()->filters() =
-        neteng::config::routing_policy::PolicyFilters();
-    conf.area_policies()->filters()->routePropagationPolicy() =
-        neteng::config::routing_policy::Filters();
-    // There is policies, but no vip ingress policy, should throw
-    EXPECT_THROW(Config(conf).checkVipServiceConfig(), std::invalid_argument);
-    std::map<std::string, neteng::config::routing_policy::Filter> policy;
-    policy["test_policy"] = neteng::config::routing_policy::Filter();
-    conf.area_policies()->filters()->routePropagationPolicy()->objects() =
-        policy;
-    // There is vip ingress policy in area_policies, should pass
-    EXPECT_NO_THROW(Config(conf).checkVipServiceConfig());
-  }
-
   // FIB route deletion
   {
     auto conf = getBasicOpenrConfig();
@@ -547,8 +521,6 @@ TEST(ConfigTest, GeneralGetter) {
     EXPECT_FALSE(config.isBestRouteSelectionEnabled());
     // enable_v4_over_v6_nexthop
     EXPECT_TRUE(config.isV4OverV6NexthopEnabled());
-    // enable_vip_service
-    EXPECT_FALSE(config.isVipServiceEnabled());
     // enable_soft_drain
     EXPECT_TRUE(config.isSoftdrainEnabled());
 

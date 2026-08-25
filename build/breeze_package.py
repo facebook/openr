@@ -8,7 +8,7 @@ import shutil
 from pathlib import Path
 
 
-GENERATED_PACKAGE_ROOTS = ("facebook", "fb303_core", "neteng", "openr", "vipconfig")
+GENERATED_PACKAGE_ROOTS = ("facebook", "fb303_core", "neteng", "openr")
 NON_SERVICE_THRIFT_MODULES = (
     "facebook/thrift/annotation/cpp",
     "facebook/thrift/annotation/hack",
@@ -20,7 +20,6 @@ NON_SERVICE_THRIFT_MODULES = (
     "openr/thrift/Network",
     "openr/thrift/OpenrConfig",
     "openr/thrift/Types",
-    "vipconfig/config/vip_service_config",
 )
 SERVICE_THRIFT_MODULES = (
     "fb303_core",

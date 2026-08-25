@@ -41,7 +41,6 @@ def validate_breeze(package_root):
     from openr.thrift.Platform.thrift_clients import FibService
     from openr.thrift.Types.thrift_types import AdjacencyDatabase
     from thrift.python.serializer import deserialize, serialize
-    from vipconfig.config.vip_service_config.thrift_types import VipServiceConfig
 
     flood_rate = KvstoreFloodRate(
         flood_msg_per_sec=100,
@@ -63,7 +62,6 @@ def validate_breeze(package_root):
         IpPrefix,
         OpenrError,
         Publication,
-        VipServiceConfig,
     ):
         if generated_type is None:
             raise RuntimeError("Breeze generated module validation failed")
