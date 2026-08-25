@@ -397,10 +397,14 @@ Decision::getDecisionRouteDb(std::string nodeName) {
         if (nodeName.empty()) {
           nodeName = myNodeName_;
         }
-        auto maybeRouteDb =
-            spfSolver_->buildRouteDb(nodeName, areaLinkStates_, prefixState_);
-        if (maybeRouteDb.has_value()) {
-          routeDb = maybeRouteDb->toThrift();
+        if (nodeName == myNodeName_) {
+          routeDb = routeDb_.toThrift();
+        } else {
+          auto maybeRouteDb =
+              spfSolver_->buildRouteDb(nodeName, areaLinkStates_, prefixState_);
+          if (maybeRouteDb.has_value()) {
+            routeDb = maybeRouteDb->toThrift();
+          }
         }
 
         *routeDb.thisNodeName() = nodeName;

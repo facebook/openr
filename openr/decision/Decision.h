@@ -158,8 +158,8 @@ class Decision : public OpenrEventBase {
   getDecisionDrainState(std::string nodeName = "");
 
   /*
-   * Retrieve routeDb from specified node.
-   * If empty nodename specified, will return routeDb of its own
+   * Retrieve the committed routeDb for the local node, or compute it from the
+   * topology for another node. An empty node name selects the local node.
    */
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>> getDecisionRouteDb(
       std::string nodeName = "");

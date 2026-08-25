@@ -1740,6 +1740,26 @@ TEST_F(DecisionTestFixture, RibPolicy) {
              ->weight());
   }
 
+  /*
+   * Local queries return the committed Decision RIB, including RIB policy,
+   * whether the caller omits the node name or supplies it explicitly.
+   */
+  for (const auto& nodeName : {std::string{}, std::string{"1"}}) {
+    auto routeDb = decision->getDecisionRouteDb(nodeName).get();
+    ASSERT_EQ(1, routeDb->unicastRoutes()->size());
+    EXPECT_EQ(
+        2, *routeDb->unicastRoutes()->front().nextHops()->front().weight());
+  }
+
+  // Queries for another node must still compute that node's routing table.
+  {
+    auto routeDb = decision->getDecisionRouteDb("2").get();
+    ASSERT_EQ(1, routeDb->unicastRoutes()->size());
+    EXPECT_EQ(addr1, *routeDb->unicastRoutes()->front().dest());
+    EXPECT_EQ(
+        0, *routeDb->unicastRoutes()->front().nextHops()->front().weight());
+  }
+
   // Set the policy with empty weight. Expect route remains intact and error
   // counter is reported
   policy.statements()->at(0).action()->set_weight()->neighbor_to_weight()["2"] =
@@ -3296,6 +3316,7 @@ TEST_F(DecisionV4OverV6NexthopTestFixture, BasicOperationsV4OverV6Nexthop) {
       {});
 
   sendKvPublication(publication);
+  recvRouteUpdates();
 
   routeDb = dumpRouteDb({"1"})["1"];
   fillRouteMap("1", routeMap, routeDb);
@@ -3412,6 +3433,7 @@ TEST_F(
       {});
 
   sendKvPublication(publication);
+  recvRouteUpdates();
 
   routeDb = dumpRouteDb({"1"})["1"];
   fillRouteMap("1", routeMap, routeDb);
