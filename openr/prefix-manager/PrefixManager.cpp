@@ -49,11 +49,6 @@ PrefixManager::PrefixManager(
   XLOG(INFO, "[Initialization] PrefixManager should wait for RIB updates.");
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
 
-  if (config->isVipServiceEnabled()) {
-    XLOG(INFO, "[Initialization] PrefixManager should wait for VIP prefixes.");
-    uninitializedPrefixTypes_.emplace(thrift::PrefixType::VIP);
-  }
-
   if (config->getConfig().originated_prefixes()) {
     XLOG(
         INFO,

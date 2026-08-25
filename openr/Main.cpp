@@ -39,7 +39,6 @@ namespace fs = std::filesystem;
 #include <openr/neighbor-monitor/NeighborMonitor.h>
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
-#include <openr/plugin/Plugin.h>
 #include <openr/prefix-manager/PrefixManager.h>
 #include <openr/spark/IoProvider.h>
 #include <openr/spark/Spark.h>
@@ -455,20 +454,6 @@ main(int argc, char** argv) {
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
   }
 
-  // Create vip service module
-  if (config->isVipServiceEnabled()) {
-    auto vipRouteEvb = std::make_unique<OpenrEventBase>();
-    auto vipPluginArgs = VipPluginArgs{
-        vipRouteEvb->getEvb(), prefixUpdatesQueue, config, sslContext};
-    startEventBase(
-        allThreads,
-        orderedEvbs,
-        watchdog,
-        "vipRouteManager",
-        std::move(vipRouteEvb));
-    vipPluginStart(vipPluginArgs);
-  }
-
   // Wait for the above three modules to start and run before running
   // SPF in Decision module.  This is to make sure the Decision module
   // receives itself as one of the nodes before running the spf.
@@ -565,10 +550,6 @@ main(int argc, char** argv) {
     (*riter)->waitUntilStopped();
   }
 
-  if (config->isVipServiceEnabled()) {
-    vipPluginStop();
-  }
-
   if (netlinkFibServer) {
     CHECK(netlinkFibServerThread);
     netlinkFibServer->stop();
@@ -584,18 +565,7 @@ main(int argc, char** argv) {
     t.join();
   }
 
-  // We're about to delete VipRouteManager object. The vipRouteManager
-  // EventBase has already stopped and the event thread has also joined.
-  // However, when an EventBase is stopped, there could still be queued
-  // functions. During EventBase destruction, these oustanding functions will
-  // be executed in main thread. These outstanding functions access
-  // VipRouteManager object state, that is deleted in vipPluginDestroy().
-  // Thus, we explicitly destruct the EventBase before the VIP route manager
-  // object is deleted.
   orderedEvbs.clear();
-  if (config->isVipServiceEnabled()) {
-    vipPluginDestroy();
-  }
 
   // Close syslog connection (this is optional)
   SYSLOG(INFO) << "[Exit] Stopping OpenR daemon: ppid = " << getpid();

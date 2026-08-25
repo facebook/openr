@@ -290,7 +290,6 @@ target_link_libraries(openr_bin
   openr_neighbor_monitor
   openr_fbnl
   openr_netlink_fib_handler
-  openr_plugin
   openr_prefix_manager
   openr_io_provider
   openr_spark
