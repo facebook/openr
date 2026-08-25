@@ -34,14 +34,6 @@ except ModuleNotFoundError as error:
     inject_fastcli = None
 
 
-# Plugin module is optional
-plugin = None
-try:
-    from openr.py.openr.cli.clis.facebook import plugin
-except ImportError:
-    pass
-
-
 @click.group(name="breeze", cls=baseGroup.deduceCommandGroup)
 # make host eager (option callback is called before others) sice some default
 # options can depend on this
@@ -99,8 +91,6 @@ def get_breeze_cli() -> click.Group:
     cli.add_command(prefix_mgr.PrefixMgrCli().prefixmgr)
     cli.add_command(spark.SparkCli().spark)
     cli.add_command(tech_support.TechSupportCli().tech_support)
-    if plugin:
-        plugin.plugin_start(cli)
 
     return cli
 
