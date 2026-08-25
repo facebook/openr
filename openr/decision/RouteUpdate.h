@@ -261,4 +261,21 @@ struct DecisionRouteUpdate {
   }
 };
 
+/*
+ * Preserve the distinction between an authoritative whole-table snapshot and
+ * a delta produced by recomputing routes. Only a genuine FULL_SYNC may replace
+ * the pending queue entry; every incremental update must be folded into it so
+ * a slow Fib consumer cannot lose an earlier route change.
+ */
+inline bool
+coalesceDecisionRouteUpdates(
+    DecisionRouteUpdate& existing, DecisionRouteUpdate& incoming) {
+  if (incoming.type == DecisionRouteUpdate::FULL_SYNC) {
+    existing = std::move(incoming);
+  } else {
+    existing.mergeInPlace(std::move(incoming));
+  }
+  return true;
+}
+
 } // namespace openr

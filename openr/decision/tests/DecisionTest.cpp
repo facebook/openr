@@ -605,6 +605,72 @@ TEST_F(DecisionTestFixture, LinkMetricChangePublishesIncrementalRouteDelta) {
   EXPECT_TRUE(routeDbDelta.unicastRoutesToDelete.empty());
 }
 
+TEST_F(
+    DecisionTestFixture,
+    PendingRouteDeltaSurvivesEmptyTopologyRebuildWhileFibStalled) {
+  /* Establish the initial bidirectional topology and drain its route update. */
+  const auto initialPublication = createThriftPublication(
+      {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
+       {"adj:2", createAdjValue(serializer, "2", 1, {adj21}, false, 2)},
+       createPrefixKeyValue("1", 1, addr1),
+       createPrefixKeyValue("2", 1, addr2)},
+      {},
+      {},
+      {});
+  sendKvPublication(initialPublication);
+  recvRouteUpdates();
+
+  /*
+   * This reader represents Fib after it has started programming the previous
+   * update. Leaving it unread forces subsequent Decision updates to coalesce,
+   * while the fixture's plain reader synchronizes each Decision calculation.
+   */
+  auto stalledFibReader =
+      routeUpdatesQueue.getReader("stalledFib", coalesceDecisionRouteUpdates);
+
+  /* Queue a corrective route delta while the simulated Fib remains stalled. */
+  auto softDrainedAdj12 = adj12;
+  softDrainedAdj12.metric() = *adj12.metric() + 100000;
+  const auto forwardMetricPublication = createThriftPublication(
+      {{"adj:1",
+        createAdjValue(serializer, "1", 2, {softDrainedAdj12}, false, 1)}},
+      {},
+      {},
+      {});
+  sendKvPublication(forwardMetricPublication);
+
+  const auto correctiveDelta = recvRouteUpdates();
+  ASSERT_EQ(1, correctiveDelta.unicastRoutesToUpdate.count(toIPNetwork(addr2)));
+
+  /*
+   * Updating the reverse direction to the same effective link metric triggers
+   * another full route computation, but its calculated route delta is empty.
+   */
+  auto softDrainedAdj21 = adj21;
+  softDrainedAdj21.metric() = *adj21.metric() + 100000;
+  const auto reverseMetricPublication = createThriftPublication(
+      {{"adj:2",
+        createAdjValue(serializer, "2", 2, {softDrainedAdj21}, false, 2)}},
+      {},
+      {},
+      {});
+  sendKvPublication(reverseMetricPublication);
+
+  const auto emptyDelta = recvRouteUpdates();
+  EXPECT_TRUE(emptyDelta.empty());
+
+  /*
+   * The empty incremental result must merge with, rather than replace, the
+   * corrective delta already waiting for Fib.
+   */
+  ASSERT_EQ(1, stalledFibReader.size());
+  auto pendingUpdate = stalledFibReader.get();
+  ASSERT_FALSE(pendingUpdate.hasError());
+  EXPECT_EQ(1, pendingUpdate->unicastRoutesToUpdate.count(toIPNetwork(addr2)));
+  EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, pendingUpdate->type);
+  EXPECT_TRUE(pendingUpdate->unicastRoutesToDelete.empty());
+}
+
 // The following topology is used:
 //
 // 1---2---3

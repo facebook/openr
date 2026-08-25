@@ -178,22 +178,7 @@ main(int argc, char** argv) {
   std::function<bool(DecisionRouteUpdate&, DecisionRouteUpdate&)>
       routeUpdateCoalesceFn = nullptr;
   if (!disableFibRouteUpdateCoalescing) {
-    routeUpdateCoalesceFn = [](DecisionRouteUpdate& existing,
-                               DecisionRouteUpdate& incoming) {
-      if (incoming.type == DecisionRouteUpdate::FULL_SYNC) {
-        // A full-sync is the authoritative whole-table state; it supersedes
-        // anything already queued.
-        existing = std::move(incoming);
-      } else {
-        // Fold the incoming INCREMENTAL delta into the pending element.
-        // mergeInPlace preserves existing's type and whole-table-vs-delta
-        // semantics: onto a pending incremental it combines the deltas; onto a
-        // pending full-sync it applies the delta to the snapshot (a deleted
-        // key is dropped from the snapshot, keeping whole-table semantics).
-        existing.mergeInPlace(std::move(incoming));
-      }
-      return true;
-    };
+    routeUpdateCoalesceFn = coalesceDecisionRouteUpdates;
   }
   auto fibDecisionRouteUpdatesQueueReader = routeUpdatesQueue.getReader(
       "fibDecision", std::move(routeUpdateCoalesceFn));
