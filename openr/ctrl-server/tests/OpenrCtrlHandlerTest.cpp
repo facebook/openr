@@ -40,6 +40,8 @@ AreaId const kPlaneAreaId("plane");
 AreaId const kPodAreaId("pod");
 
 std::set<std::string> const kSpineOnlySet = {kSpineAreaId};
+
+using OpenrCtrlClient = apache::thrift::Client<openr::thrift::OpenrCtrlCpp>;
 } // namespace
 
 class OpenrCtrlFixture : public ::testing::Test {
@@ -146,6 +148,9 @@ class OpenrCtrlFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    thriftClient_.reset();
+    thriftServer_.reset();
+
     routeUpdatesQueue_.close();
     staticRoutesUpdatesQueue_.close();
     prefixMgrInitializationEventsQueue_.close();
@@ -252,6 +257,17 @@ class OpenrCtrlFixture : public ::testing::Test {
         .get();
   }
 
+  OpenrCtrlClient&
+  getOpenrCtrlClient() {
+    if (!thriftServer_) {
+      thriftServer_ =
+          std::make_unique<apache::thrift::ScopedServerInterfaceThread>(
+              handler_, "::1", 0);
+      thriftClient_ = thriftServer_->newClient<OpenrCtrlClient>();
+    }
+    return *thriftClient_;
+  }
+
  protected:
   messaging::ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue_;
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;
@@ -292,20 +308,16 @@ class OpenrCtrlFixture : public ::testing::Test {
   std::unique_ptr<KvStoreWrapper<thrift::OpenrCtrlCppAsyncClient>>
       kvStoreWrapper_{nullptr};
   std::shared_ptr<OpenrCtrlHandler> handler_{nullptr};
+  std::unique_ptr<apache::thrift::ScopedServerInterfaceThread> thriftServer_;
+  std::unique_ptr<OpenrCtrlClient> thriftClient_;
 };
 
-TEST_F(OpenrCtrlFixture, GetMyNodeName) {
+CO_TEST_F(OpenrCtrlFixture, GetMyNodeName) {
   std::string res;
-  handler_->getMyNodeName(res);
+  getOpenrCtrlClient().sync_getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
+  co_return;
 }
-
-#if FOLLY_HAS_COROUTINES
-CO_TEST_F(OpenrCtrlFixture, GetMyNodeNameCoro) {
-  auto name = co_await handler_->co_getMyNodeName();
-  EXPECT_EQ(nodeName_, *name);
-}
-#endif // FOLLY_HAS_COROUTINES
 
 TEST_F(OpenrCtrlFixture, InitializationApis) {
   // Add KVSTORE_SYNCED event into fb303. Initialization not converged yet.

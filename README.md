@@ -52,7 +52,7 @@ The code of conduct is described in [`CODE_OF_CONDUCT.md`](CODE_OF_CONDUCT.md)
 We have tried `OpenR` on Ubuntu 24.04 LTS (earlier versions are no longer supported) and CentOS Stream 9.
 OpenR should work on all Linux based platforms.
 
-- Compiler supporting C++17 or higher
+- Compiler supporting C++20 or higher
 - Python 3.10 or higher for the Breeze CLI
 
 ## Build

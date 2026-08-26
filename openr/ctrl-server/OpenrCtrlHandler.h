@@ -82,7 +82,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   int64_t getCounter(std::unique_ptr<std::string> key) override;
 
   // Openr Node Name
-  void getMyNodeName(std::string& _return) override;
+  folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
 
   //
   // config APIs
@@ -581,8 +581,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   co_setKvStoreKeyValues(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
-
-  folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreKeyValsArea(

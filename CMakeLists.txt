@@ -6,28 +6,8 @@
 cmake_minimum_required(VERSION 3.13)
 project(openr)
 
-set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-
-# enable coroutine compiler option if supported by compiler
-include(CheckCXXCompilerFlag)
-if (CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
-  check_cxx_compiler_flag(-fcoroutines COMPILER_HAS_F_COROUTINES)
-  if (COMPILER_HAS_F_COROUTINES)
-    message(
-      STATUS
-      "GCC has support for C++ coroutines, "
-      "disabling since fbthrift service is not ready"
-    )
-    # add_compile_options(-fcoroutines)
-  else()
-    message(
-      STATUS
-      "GCC does not have support for C++ coroutines, "
-      "disabling Folly coroutine support."
-    )
-  endif()
-endif()
 
 # Disable all warnings. Warnings can vary across toolchains. We rely on
 # internaly configured CI (lint and compile) to raise the warnings we find

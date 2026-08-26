@@ -49,9 +49,7 @@ function(openr_add_library)
   set(object_target "${ARG_NAME}_objects")
   add_library(${object_target} OBJECT ${ARG_SOURCES})
 
-  # Preserve the effective C++20 mode inherited by the legacy build through
-  # generated Thrift and mvfst usage requirements, and publish that same mode
-  # to granular-library consumers.
+  # Compile objects with C++20 and publish it to public-header consumers.
   target_compile_features(${object_target} PRIVATE cxx_std_20)
   if(BUILD_SHARED_LIBS)
     set_target_properties(

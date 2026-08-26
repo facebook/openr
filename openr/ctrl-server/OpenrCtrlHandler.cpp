@@ -355,9 +355,9 @@ OpenrCtrlHandler::getCounter(std::unique_ptr<std::string> key) {
   return BaseService::getCounter(std::move(key));
 }
 
-void
-OpenrCtrlHandler::getMyNodeName(std::string& _return) {
-  _return = nodeName_;
+folly::coro::Task<std::unique_ptr<std::string>>
+OpenrCtrlHandler::co_getMyNodeName() {
+  co_return folly::copy_to_unique_ptr(nodeName_);
 }
 
 void
@@ -1446,11 +1446,6 @@ OpenrCtrlHandler::semifuture_clearRibPolicy() {
 }
 
 #if FOLLY_HAS_COROUTINES
-folly::coro::Task<std::unique_ptr<std::string>>
-OpenrCtrlHandler::co_getMyNodeName() {
-  co_return folly::copy_to_unique_ptr(nodeName_);
-}
-
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
