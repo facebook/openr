@@ -21,12 +21,15 @@
  */
 
 #include <arpa/inet.h>
+#include <fcntl.h>
 #include <ifaddrs.h>
 #include <net/if.h>
 #include <netinet/in.h>
+#include <unistd.h>
+#include <atomic>
+#include <cerrno>
 #include <chrono>
 #include <csignal>
-#include <iostream>
 #include <map>
 #include <memory>
 #include <mutex>
@@ -42,6 +45,7 @@
 
 #include <openr/tests/scale/DutMonitor.h>
 #include <openr/tests/scale/FakeKvStoreManager.h>
+#include <openr/tests/scale/InterruptibleCommandReader.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
 #include <openr/tests/scale/KvStoreThriftInjector.h>
 #include <openr/tests/scale/RealSparkIo.h>
@@ -138,11 +142,28 @@ namespace {
 constexpr int kDutNodeId{99999};
 
 std::atomic<bool> g_running{true};
+std::atomic<int> g_commandStopFd{-1};
+std::atomic<int> g_receivedSignal{0};
+
+static_assert(std::atomic<bool>::is_always_lock_free);
+static_assert(std::atomic<int>::is_always_lock_free);
 
 void
-signalHandler(int /* signal */) {
-  XLOG(INFO, "Received interrupt signal, shutting down...");
-  g_running.store(false);
+requestShutdown() noexcept {
+  const int savedErrno = errno;
+  g_running.store(false, std::memory_order_relaxed);
+  const int stopFd = g_commandStopFd.load(std::memory_order_relaxed);
+  if (stopFd >= 0) {
+    constexpr char kStop = 1;
+    (void)::write(stopFd, &kStop, sizeof(kStop));
+  }
+  errno = savedErrno;
+}
+
+void
+signalHandler(int signal) {
+  g_receivedSignal.store(signal, std::memory_order_relaxed);
+  requestShutdown();
 }
 
 /*
@@ -999,13 +1020,23 @@ main(int argc, char** argv) {
       1; /* initial injection uses version 1, first cmd bumps to 2 */
   std::mutex cmdMutex;
   std::queue<std::string> cmdQueue;
-  std::thread cmdThread([&]() {
-    std::string line;
-    while (g_running.load() && std::getline(std::cin, line)) {
-      std::lock_guard<std::mutex> lock(cmdMutex);
-      cmdQueue.push(std::move(line));
-    }
-  });
+  int commandStopPipe[2]{-1, -1};
+  std::thread cmdThread;
+  if (::pipe2(commandStopPipe, O_CLOEXEC | O_NONBLOCK) != 0) {
+    XLOGF(
+        WARN,
+        "Failed to create command-reader stop pipe; interactive commands are disabled: {}",
+        strerror(errno));
+  } else {
+    g_commandStopFd.store(commandStopPipe[1], std::memory_order_relaxed);
+    cmdThread = std::thread([&]() {
+      openr::readCommandsUntilStopped(
+          STDIN_FILENO, commandStopPipe[0], [&](std::string line) {
+            std::lock_guard<std::mutex> lock(cmdMutex);
+            cmdQueue.push(std::move(line));
+          });
+    });
+  }
 
   auto startTime = std::chrono::steady_clock::now();
   int64_t lastStatsTime = 0;
@@ -1014,6 +1045,9 @@ main(int argc, char** argv) {
 
   while (g_running.load()) {
     std::this_thread::sleep_for(std::chrono::seconds(1));
+    if (!g_running.load(std::memory_order_relaxed)) {
+      break;
+    }
 
     /*
      * Drain command queue (commands from stdin reader thread)
@@ -1126,6 +1160,10 @@ main(int argc, char** argv) {
     }
   }
 
+  if (g_receivedSignal.load(std::memory_order_relaxed) != 0) {
+    XLOG(INFO, "Received interrupt signal, shutting down...");
+  }
+
   /*
    * Final stats
    */
@@ -1140,14 +1178,14 @@ main(int argc, char** argv) {
    */
   XLOG(INFO, "[SCALE-TEST] Shutting down...");
 
-  /*
-   * Close stdin to unblock the cmdThread's std::getline, then join.
-   * This avoids use-after-free on stack locals (cmdMutex, cmdQueue)
-   * that a detached thread would hit.
-   */
-  std::fclose(stdin);
+  requestShutdown();
   if (cmdThread.joinable()) {
     cmdThread.join();
+  }
+  g_commandStopFd.store(-1, std::memory_order_relaxed);
+  if (commandStopPipe[0] >= 0) {
+    ::close(commandStopPipe[0]);
+    ::close(commandStopPipe[1]);
   }
 
   if (faker) {
