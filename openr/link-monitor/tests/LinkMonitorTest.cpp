@@ -40,6 +40,13 @@ using ::testing::InSequence;
 // interface iface_3_1
 namespace {
 
+/**
+ * ExponentialBackoff reports remaining time in whole milliseconds, so a
+ * rescheduled timeout can expire up to one millisecond before its nominal
+ * deadline.
+ */
+constexpr std::chrono::milliseconds kBackoffTimerTolerance{1};
+
 const auto nb2_v4_addr = "192.168.0.2";
 const auto nb3_v4_addr = "192.168.0.3";
 const auto nb2_v6_addr = "fe80::2";
@@ -2181,7 +2188,8 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
 
   // Elapsed total time between interface down->up must be greater than
   // backoff time of 2s. Also ensure upper bound
-  EXPECT_LE(std::chrono::seconds(2), linkUpTs - linkDownTs);
+  EXPECT_LE(
+      std::chrono::seconds(2) - kBackoffTimerTolerance, linkUpTs - linkDownTs);
   EXPECT_GE(std::chrono::seconds(3), linkUpTs - linkDownTs);
 
   // Expect interface update after backoff time passes with state=UP
@@ -2263,7 +2271,8 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
 
   // Elapsed total time between interface down->up must be greater than
   // backoff time of 4s. Also ensure upper bound
-  EXPECT_LE(std::chrono::seconds(4), linkUpTs - linkDownTs);
+  EXPECT_LE(
+      std::chrono::seconds(4) - kBackoffTimerTolerance, linkUpTs - linkDownTs);
   EXPECT_GE(std::chrono::seconds(5), linkUpTs - linkDownTs);
 
   // at this point, both interface should have backoff back to init value
