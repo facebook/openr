@@ -381,7 +381,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeers() override;
 
-  /*
+  /**
    * API to return structured thrift::KvStoreAreaSummary to include:
    *  - selected area names;
    *  - number of key-val pairs;
@@ -390,8 +390,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    *  - counters in each area;
    *  - etc;
    */
-  folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
-  semifuture_getKvStoreAreaSummary(
+  folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
+  co_getKvStoreAreaSummary(
       std::unique_ptr<std::set<std::string>> selectAreas) override;
 
   // Stream API's
@@ -580,10 +580,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreHashFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
-
-  folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
-  co_getKvStoreAreaSummary(
-      std::unique_ptr<std::set<std::string>> selectAreas) override;
 
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersArea(
       std::unique_ptr<std::string> area) override;

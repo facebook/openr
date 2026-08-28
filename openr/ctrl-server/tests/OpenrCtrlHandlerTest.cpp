@@ -729,33 +729,6 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
   }
 
   //
-  // getKvStoreAreaSummary() related
-  //
-  {
-    std::set<std::string> areaSetAll{
-        kPodAreaId, kPlaneAreaId, kSpineAreaId, kTestingAreaName};
-    std::map<std::string, int> areaKVCountMap{};
-
-    // get summary from KvStore for all configured areas (one extra
-    // non-existent area is provided)
-    auto summary =
-        co_await handler_
-            ->co_getKvStoreAreaSummary(
-                std::make_unique<std::set<std::string>>(std::move(areaSetAll)));
-    EXPECT_THAT(*summary, testing::SizeIs(3));
-
-    // map each area to the # of keyVals in each area
-    areaKVCountMap[*summary->at(0).area()] = *summary->at(0).keyValsCount();
-    areaKVCountMap[*summary->at(1).area()] = *summary->at(1).keyValsCount();
-    areaKVCountMap[*summary->at(2).area()] = *summary->at(2).keyValsCount();
-    // test # of keyVals for each area, as per config above.
-    // area names are being implicitly tested as well
-    EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);
-    EXPECT_EQ(2, areaKVCountMap[kPodAreaId]);
-    EXPECT_EQ(2, areaKVCountMap[kPlaneAreaId]);
-  }
-
-  //
   // Peers APIs
   //
   const thrift::PeersMap peers{
@@ -1057,16 +1030,13 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     // get summary from KvStore for all configured areas (one extra
     // non-existent area is provided)
     auto summary =
-        handler_
-            ->semifuture_getKvStoreAreaSummary(
-                std::make_unique<std::set<std::string>>(std::move(areaSetAll)))
-            .get();
-    EXPECT_THAT(*summary, testing::SizeIs(3));
+        co_await getOpenrCtrlClient().co_getKvStoreAreaSummary(areaSetAll);
+    EXPECT_THAT(summary, testing::SizeIs(3));
 
     // map each area to the # of keyVals in each area
-    areaKVCountMap[*summary->at(0).area()] = *summary->at(0).keyValsCount();
-    areaKVCountMap[*summary->at(1).area()] = *summary->at(1).keyValsCount();
-    areaKVCountMap[*summary->at(2).area()] = *summary->at(2).keyValsCount();
+    areaKVCountMap[*summary.at(0).area()] = *summary.at(0).keyValsCount();
+    areaKVCountMap[*summary.at(1).area()] = *summary.at(1).keyValsCount();
+    areaKVCountMap[*summary.at(2).area()] = *summary.at(2).keyValsCount();
     // test # of keyVals for each area, as per config above.
     // area names are being implicitly tested as well
     EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);

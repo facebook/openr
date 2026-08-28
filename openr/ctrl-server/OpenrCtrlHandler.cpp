@@ -981,12 +981,13 @@ OpenrCtrlHandler::semifuture_getKvStorePeersArea(
   return kvStore_->semifuture_getKvStorePeers(std::move(*area));
 }
 
-folly::SemiFuture<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
-OpenrCtrlHandler::semifuture_getKvStoreAreaSummary(
+folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
+OpenrCtrlHandler::co_getKvStoreAreaSummary(
     std::unique_ptr<std::set<std::string>> selectAreas) {
   XCHECK(kvStore_);
-  return kvStore_->semifuture_getKvStoreAreaSummaryInternal(
+  auto result = co_await kvStore_->co_getKvStoreAreaSummaryInternal(
       std::move(*selectAreas));
+  co_return result;
 }
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>
@@ -1457,7 +1458,6 @@ OpenrCtrlHandler::semifuture_clearRibPolicy() {
 }
 
 #if FOLLY_HAS_COROUTINES
-
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
@@ -1502,15 +1502,6 @@ OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
 
   auto result = co_await kvStore_->co_dumpKvStoreHashes(
       std::move(*area), std::move(*filter));
-  co_return result;
-}
-
-folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
-OpenrCtrlHandler::co_getKvStoreAreaSummary(
-    std::unique_ptr<std::set<std::string>> selectAreas) {
-  XCHECK(kvStore_);
-  auto result = co_await kvStore_->co_getKvStoreAreaSummaryInternal(
-      std::move(*selectAreas));
   co_return result;
 }
 
