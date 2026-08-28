@@ -2491,7 +2491,8 @@ CO_TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    getOpenrCtrlClient().sync_persistSelfOriginatedKey(params, kSpineAreaId);
+    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
+        params, kSpineAreaId);
     EXPECT_TRUE((co_await folly::coro::timeout(
                      reader.getCoro(), kKvStorePublicationTimeout))
                     .hasValue());
@@ -2515,7 +2516,8 @@ CO_TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    getOpenrCtrlClient().sync_persistSelfOriginatedKey(params, kSpineAreaId);
+    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
+        params, kSpineAreaId);
     EXPECT_TRUE((co_await folly::coro::timeout(
                      reader.getCoro(), kKvStorePublicationTimeout))
                     .hasValue());
@@ -2530,63 +2532,6 @@ CO_TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
     EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
   }
 }
-
-#if FOLLY_HAS_COROUTINES
-CO_TEST_F(OpenrCtrlFixture, CoPersistSelfOriginatedKeyApi) {
-  const std::string key1 = "co-persist-key1";
-  const std::string value1 = "co-persist-value1";
-  const std::string updatedValue = "co-persist-value-updated";
-  const std::vector<std::string> filterKeys{key1};
-
-  // Test 1: Persist a new key-value pair
-  {
-    auto reader = dispatcher_->getReader({key1});
-    thrift::KeyVals keyVals;
-    keyVals[key1] = createThriftValue(1, nodeName_, value1);
-
-    thrift::KeySetParams params;
-    params.keyVals() = keyVals;
-
-    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
-        params, kSpineAreaId);
-    EXPECT_TRUE((co_await folly::coro::timeout(
-                     reader.getCoro(), kKvStorePublicationTimeout))
-                    .hasValue());
-
-    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
-        filterKeys, kSpineAreaId);
-    auto keyValsRead = *pub.keyVals();
-    EXPECT_EQ(1, keyValsRead.size());
-    EXPECT_EQ(1, keyValsRead.count(key1));
-    EXPECT_EQ(value1, *keyValsRead.at(key1).value());
-    EXPECT_EQ(1, *keyValsRead.at(key1).version());
-    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
-  }
-
-  // Test 2: Update an existing persisted key with new value
-  {
-    auto reader = dispatcher_->getReader({key1});
-    thrift::KeyVals keyVals;
-    keyVals[key1] = createThriftValue(1, nodeName_, updatedValue);
-
-    thrift::KeySetParams params;
-    params.keyVals() = keyVals;
-
-    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
-        params, kSpineAreaId);
-    EXPECT_TRUE((co_await folly::coro::timeout(
-                     reader.getCoro(), kKvStorePublicationTimeout))
-                    .hasValue());
-
-    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
-        filterKeys, kSpineAreaId);
-    auto keyValsRead = *pub.keyVals();
-    EXPECT_EQ(1, keyValsRead.size());
-    EXPECT_EQ(updatedValue, *keyValsRead.at(key1).value());
-    EXPECT_EQ(2, *keyValsRead.at(key1).version());
-  }
-}
-#endif // FOLLY_HAS_COROUTINES
 
 CO_TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
   const std::string key1 = "unset-key1";
@@ -2603,7 +2548,8 @@ CO_TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    getOpenrCtrlClient().sync_persistSelfOriginatedKey(params, kSpineAreaId);
+    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
+        params, kSpineAreaId);
     EXPECT_TRUE((co_await folly::coro::timeout(
                      reader.getCoro(), kKvStorePublicationTimeout))
                     .hasValue());
@@ -2627,68 +2573,6 @@ CO_TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    getOpenrCtrlClient().sync_unsetSelfOriginatedKey(params, kSpineAreaId);
-    EXPECT_TRUE((co_await folly::coro::timeout(
-                     reader.getCoro(), kKvStorePublicationTimeout))
-                    .hasValue());
-
-    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
-        filterKeys, kSpineAreaId);
-    auto keyValsRead = *pub.keyVals();
-    EXPECT_EQ(1, keyValsRead.size());
-    EXPECT_EQ(1, keyValsRead.count(key1));
-    EXPECT_EQ(finalValue, *keyValsRead.at(key1).value());
-    // Version should be incremented from 1 to 2
-    EXPECT_EQ(2, *keyValsRead.at(key1).version());
-    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
-    // Verify the key is no longer in self-originated key list
-    auto selfOriginatedKeys =
-        kvStoreWrapper_->dumpAllSelfOriginated(kSpineAreaId);
-    EXPECT_EQ(0, selfOriginatedKeys.count(key1));
-  }
-}
-
-#if FOLLY_HAS_COROUTINES
-CO_TEST_F(OpenrCtrlFixture, CoUnsetSelfOriginatedKeyApi) {
-  const std::string key1 = "co-unset-key1";
-  const std::string value1 = "co-unset-value1";
-  const std::string finalValue = "co-unset-final-value";
-  const std::vector<std::string> filterKeys{key1};
-
-  // Test 1: Persist a key first
-  {
-    auto reader = dispatcher_->getReader({key1});
-    thrift::KeyVals keyVals;
-    keyVals[key1] = createThriftValue(1, nodeName_, value1);
-
-    thrift::KeySetParams params;
-    params.keyVals() = keyVals;
-
-    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
-        params, kSpineAreaId);
-    EXPECT_TRUE((co_await folly::coro::timeout(
-                     reader.getCoro(), kKvStorePublicationTimeout))
-                    .hasValue());
-
-    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
-        filterKeys, kSpineAreaId);
-    auto keyValsRead = *pub.keyVals();
-    EXPECT_EQ(1, keyValsRead.size());
-    EXPECT_EQ(1, keyValsRead.count(key1));
-    EXPECT_EQ(value1, *keyValsRead.at(key1).value());
-    EXPECT_EQ(1, *keyValsRead.at(key1).version());
-    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
-  }
-
-  // Unset the persisted key with a final value
-  {
-    auto reader = dispatcher_->getReader({key1});
-    thrift::KeyVals keyVals;
-    keyVals[key1] = createThriftValue(1, nodeName_, finalValue);
-
-    thrift::KeySetParams params;
-    params.keyVals() = keyVals;
-
     co_await getOpenrCtrlClient().co_unsetSelfOriginatedKey(
         params, kSpineAreaId);
     EXPECT_TRUE((co_await folly::coro::timeout(
@@ -2704,14 +2588,12 @@ CO_TEST_F(OpenrCtrlFixture, CoUnsetSelfOriginatedKeyApi) {
     // Version should be incremented from 1 to 2
     EXPECT_EQ(2, *keyValsRead.at(key1).version());
     EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
-
     // Verify the key is no longer in self-originated key list
     auto selfOriginatedKeys =
         kvStoreWrapper_->dumpAllSelfOriginated(kSpineAreaId);
     EXPECT_EQ(0, selfOriginatedKeys.count(key1));
   }
 }
-#endif // FOLLY_HAS_COROUTINES
 
 CO_TEST_F(OpenrCtrlFixture, VerifyDataPathTest) {
   thrift::KeyVals kvs(
