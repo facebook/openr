@@ -833,6 +833,24 @@ OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
       std::move(*area), std::move(*filter));
 }
 
+folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+OpenrCtrlHandler::co_setKvStoreKeyValues(
+    std::unique_ptr<thrift::KeySetParams> setParams,
+    std::unique_ptr<std::string> area) {
+  XLOGF(
+      DBG5,
+      "{} for keys: {}; area: {}",
+      __FUNCTION__,
+      toString(*setParams.get()),
+      *area);
+
+  XCHECK(kvStore_) << "no kvstore initialized";
+
+  auto result = co_await kvStore_->co_setKvStoreKeyValues(
+      std::move(*area), std::move(*setParams));
+  co_return result;
+}
+
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
@@ -881,23 +899,6 @@ OpenrCtrlHandler::semifuture_unsetSelfOriginatedKey(
   XCHECK(kvStore_) << "no kvstore initialized";
 
   return kvStore_->semifuture_unsetSelfOriginatedKey(
-      std::move(*area), std::move(*setParams));
-}
-
-folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
-OpenrCtrlHandler::semifuture_setKvStoreKeyValues(
-    std::unique_ptr<thrift::KeySetParams> setParams,
-    std::unique_ptr<std::string> area) {
-  XLOGF(
-      DBG5,
-      "{} for keys: {}; area: {}",
-      __FUNCTION__,
-      toString(*setParams.get()),
-      *area);
-
-  CHECK(kvStore_);
-
-  return kvStore_->semifuture_setKvStoreKeyValues(
       std::move(*area), std::move(*setParams));
 }
 
@@ -1542,24 +1543,6 @@ OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
 
   auto result = co_await kvStore_->co_dumpKvStoreHashes(
       std::move(*area), std::move(*filter));
-  co_return result;
-}
-
-folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
-OpenrCtrlHandler::co_setKvStoreKeyValues(
-    std::unique_ptr<thrift::KeySetParams> setParams,
-    std::unique_ptr<std::string> area) {
-  XLOGF(
-      DBG5,
-      "{} for keys: {}; area: {}",
-      __FUNCTION__,
-      toString(*setParams.get()),
-      *area);
-
-  XCHECK(kvStore_) << "no kvstore initialized";
-
-  auto result = co_await kvStore_->co_setKvStoreKeyValues(
-      std::move(*area), std::move(*setParams));
   co_return result;
 }
 

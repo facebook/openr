@@ -224,6 +224,17 @@ class OpenrCtrlFixture : public ::testing::Test {
         .get();
   }
 
+  thrift::KeySetParams
+  createKeySetParams(
+      const thrift::KeyVals& keyVals, const std::string& nodeId = "") {
+    thrift::KeySetParams setParams;
+    setParams.keyVals() = keyVals;
+    if (!nodeId.empty()) {
+      setParams.nodeIds() = {nodeId};
+    }
+    return setParams;
+  }
+
 #if FOLLY_HAS_COROUTINES
   folly::coro::Task<void>
   co_setKvStoreKeyVals(
@@ -236,35 +247,7 @@ class OpenrCtrlFixture : public ::testing::Test {
         std::make_unique<std::string>(area));
   }
 
-  folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
-  co_setKvStoreKeyValues(
-      const thrift::KeyVals& keyVals, const std::string& area) {
-    thrift::KeySetParams setParams;
-    setParams.keyVals() = keyVals;
-
-    auto result = co_await handler_->co_setKvStoreKeyValues(
-        std::make_unique<thrift::KeySetParams>(setParams),
-        std::make_unique<std::string>(area));
-    co_return result;
-  }
 #endif
-
-  std::unique_ptr<openr::thrift::SetKeyValsResult>
-  setKvStoreKeyValues(
-      const thrift::KeyVals& keyVals,
-      const std::string& area,
-      const std::string& nodeId = "") {
-    thrift::KeySetParams setParams;
-    setParams.keyVals() = keyVals;
-    if (!nodeId.empty()) {
-      setParams.nodeIds() = {nodeId};
-    }
-    return handler_
-        ->semifuture_setKvStoreKeyValues(
-            std::make_unique<thrift::KeySetParams>(setParams),
-            std::make_unique<std::string>(area))
-        .get();
-  }
 
   OpenrCtrlClient&
   getOpenrCtrlClient() {
@@ -556,7 +539,7 @@ TEST_F(OpenrCtrlFixture, DecisionApis) {
   }
 }
 
-TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
+CO_TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(2, "node1", std::string("value1"))},
        {"key11", createThriftValue(1, "node1", std::string("value11"))},
@@ -598,16 +581,15 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
 
   // Success
   {
-    EXPECT_EQ(
-        setKvStoreKeyValues(kvs, kSpineAreaId)->noMergeReasons()->size(), 0);
-    EXPECT_EQ(
-        setKvStoreKeyValues(keyValsPod, kPodAreaId)->noMergeReasons()->size(),
-        0);
-    EXPECT_EQ(
-        setKvStoreKeyValues(keyValsPlane, kPlaneAreaId)
-            ->noMergeReasons()
-            ->size(),
-        0);
+    auto spineResult = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(kvs), kSpineAreaId);
+    EXPECT_EQ(spineResult.noMergeReasons()->size(), 0);
+    auto podResult = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(keyValsPod), kPodAreaId);
+    EXPECT_EQ(podResult.noMergeReasons()->size(), 0);
+    auto planeResult = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(keyValsPlane), kPlaneAreaId);
+    EXPECT_EQ(planeResult.noMergeReasons()->size(), 0);
   }
 
   // LOOP_DETECTED
@@ -616,8 +598,9 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
     thrift::KeyVals loopKvs(
         {{kLoopDetectionKey,
           createThriftValue(1, "node1", std::string("value1"))}});
-    auto result = *setKvStoreKeyValues(loopKvs, kSpineAreaId, nodeName_)
-                       ->noMergeReasons();
+    auto response = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(loopKvs, nodeName_), kSpineAreaId);
+    auto result = *response.noMergeReasons();
     EXPECT_EQ(result.size(), 1);
     EXPECT_EQ(
         thrift::KvStoreNoMergeReason::LOOP_DETECTED, result[kLoopDetectionKey]);
@@ -630,8 +613,9 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
     thrift::KeyVals invalidTtlKvs(
         {{kInvalidTtlKey,
           createThriftValue(1, "node1", std::string("value1"), kInvalidTtl)}});
-    auto result =
-        *setKvStoreKeyValues(invalidTtlKvs, kSpineAreaId)->noMergeReasons();
+    auto response = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(invalidTtlKvs), kSpineAreaId);
+    auto result = *response.noMergeReasons();
     EXPECT_EQ(result.size(), 1);
     EXPECT_EQ(
         thrift::KvStoreNoMergeReason::INVALID_TTL, result[kInvalidTtlKey]);
@@ -644,8 +628,9 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
     thrift::KeyVals oldVersionKvs(
         {{kOldVersionKey,
           createThriftValue(kOldVersion, "node1", std::string("value1"))}});
-    auto result =
-        *setKvStoreKeyValues(oldVersionKvs, kSpineAreaId)->noMergeReasons();
+    auto response = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(oldVersionKvs), kSpineAreaId);
+    auto result = *response.noMergeReasons();
     EXPECT_EQ(result.size(), 1);
     EXPECT_EQ(
         thrift::KvStoreNoMergeReason::OLD_VERSION, result[kOldVersionKey]);
@@ -653,7 +638,9 @@ TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
 
   // NO_NEED_TO_UPDATE
   {
-    auto result = *setKvStoreKeyValues(kvs, kSpineAreaId)->noMergeReasons();
+    auto response = co_await getOpenrCtrlClient().co_setKvStoreKeyValues(
+        createKeySetParams(kvs), kSpineAreaId);
+    auto result = *response.noMergeReasons();
     EXPECT_EQ(result.size(), kvs.size());
     for (const auto& [_, v] : result) {
       EXPECT_EQ(thrift::KvStoreNoMergeReason::NO_NEED_TO_UPDATE, v);
@@ -706,20 +693,14 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
 
   // Key set/get
   // clang-format off
-  {
-    {
-      auto result = co_await co_setKvStoreKeyValues(kvs, kSpineAreaId);
-      EXPECT_EQ(result->noMergeReasons()->size(), 0);
-    }
-
-    {
-      auto result = co_await co_setKvStoreKeyValues(keyValsPod, kPodAreaId);
-      EXPECT_EQ(result->noMergeReasons()->size(), 0);
-    }
-    {
-      auto result = co_await co_setKvStoreKeyValues(keyValsPlane, kPlaneAreaId);
-      EXPECT_EQ(result->noMergeReasons()->size(), 0);
-    }
+  for (const auto& [key, value] : kvs) {
+    kvStoreWrapper_->setKey(kSpineAreaId, key, value);
+  }
+  for (const auto& [key, value] : keyValsPod) {
+    kvStoreWrapper_->setKey(kPodAreaId, key, value);
+  }
+  for (const auto& [key, value] : keyValsPlane) {
+    kvStoreWrapper_->setKey(kPlaneAreaId, key, value);
   }
   {
     thrift::KeyDumpParams params;
