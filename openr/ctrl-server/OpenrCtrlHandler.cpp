@@ -851,8 +851,8 @@ OpenrCtrlHandler::co_setKvStoreKeyValues(
   co_return result;
 }
 
-folly::SemiFuture<folly::Unit>
-OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
+folly::coro::Task<void>
+OpenrCtrlHandler::co_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
   XLOGF(
@@ -864,7 +864,7 @@ OpenrCtrlHandler::semifuture_setKvStoreKeyVals(
 
   XCHECK(kvStore_) << "no kvstore initialized";
 
-  return kvStore_->semifuture_setKvStoreKeyVals(
+  co_await kvStore_->co_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
 }
 
@@ -1457,23 +1457,6 @@ OpenrCtrlHandler::semifuture_clearRibPolicy() {
 }
 
 #if FOLLY_HAS_COROUTINES
-
-folly::coro::Task<void>
-OpenrCtrlHandler::co_setKvStoreKeyVals(
-    std::unique_ptr<thrift::KeySetParams> setParams,
-    std::unique_ptr<std::string> area) {
-  XLOGF(
-      DBG5,
-      "{} for keys: {}; area: {}",
-      __FUNCTION__,
-      toString(*setParams.get()),
-      *area);
-
-  XCHECK(kvStore_) << "no kvstore initialized";
-
-  co_await kvStore_->co_setKvStoreKeyVals(
-      std::move(*area), std::move(*setParams));
-}
 
 folly::coro::Task<void>
 OpenrCtrlHandler::co_persistSelfOriginatedKey(

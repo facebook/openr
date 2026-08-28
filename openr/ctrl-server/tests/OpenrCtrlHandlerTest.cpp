@@ -212,18 +212,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     return prefixEntry;
   }
 
-  void
-  setKvStoreKeyVals(const thrift::KeyVals& keyVals, const std::string& area) {
-    thrift::KeySetParams setParams;
-    setParams.keyVals() = keyVals;
-
-    handler_
-        ->semifuture_setKvStoreKeyVals(
-            std::make_unique<thrift::KeySetParams>(setParams),
-            std::make_unique<std::string>(area))
-        .get();
-  }
-
   thrift::KeySetParams
   createKeySetParams(
       const thrift::KeyVals& keyVals, const std::string& nodeId = "") {
@@ -234,20 +222,6 @@ class OpenrCtrlFixture : public ::testing::Test {
     }
     return setParams;
   }
-
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<void>
-  co_setKvStoreKeyVals(
-      const thrift::KeyVals& keyVals, const std::string& area) {
-    thrift::KeySetParams setParams;
-    setParams.keyVals() = keyVals;
-
-    co_await handler_->co_setKvStoreKeyVals(
-        std::make_unique<thrift::KeySetParams>(setParams),
-        std::make_unique<std::string>(area));
-  }
-
-#endif
 
   OpenrCtrlClient&
   getOpenrCtrlClient() {
@@ -984,9 +958,12 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   // Key set/get
   {
-    setKvStoreKeyVals(kvs, kSpineAreaId);
-    setKvStoreKeyVals(keyValsPod, kPodAreaId);
-    setKvStoreKeyVals(keyValsPlane, kPlaneAreaId);
+    co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+        createKeySetParams(kvs), kSpineAreaId);
+    co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+        createKeySetParams(keyValsPod), kPodAreaId);
+    co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+        createKeySetParams(keyValsPlane), kPlaneAreaId);
   }
 
   {
@@ -1286,7 +1263,8 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
   });
 
   // Key set
-  setKvStoreKeyVals(std::move(kvs), kSpineAreaId);
+  co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+      createKeySetParams(kvs), kSpineAreaId);
 
   //
   // Subscribe and Get API
@@ -2009,7 +1987,8 @@ CO_TEST_F(
   });
 
   // Key set
-  setKvStoreKeyVals(kvs, kSpineAreaId);
+  co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+      createKeySetParams(kvs), kSpineAreaId);
 
   // ignoreTTL = false is specified in filter.
   // Client should receive publication associated with TTL update
@@ -2218,7 +2197,7 @@ CO_TEST_F(
 // We use filters exactly mimicking what is needed for kvstore monitor.
 // Verify both in initial full dump and incremental updates we do not
 // see value.
-TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
+CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithoutValue) {
   thrift::KeyVals keyVals;
   keyVals["key1"] =
       createThriftValue(1, "node1", std::string("value1"), 30000, 1);
@@ -2226,7 +2205,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
       createThriftValue(1, "node1", std::string("value2"), 30000, 1);
 
   // Key set
-  setKvStoreKeyVals(keyVals, kSpineAreaId);
+  co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+      createKeySetParams(keyVals), kSpineAreaId);
 
   // doNotPublishValue = true is specified in filter.
   // ignoreTTL = false is specified in filter.
@@ -2249,7 +2229,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
   for (const auto& key_ : {"key1", "key2"}) {
     EXPECT_EQ(1, (*initialPub->keyVals()).count(key_));
     const auto& val1 = (*initialPub->keyVals())[key_];
-    ASSERT_EQ(false, val1.value().has_value()); /* value is null */
+    EXPECT_FALSE(val1.value().has_value()); /* value is null */
     EXPECT_EQ(1, *val1.version());
     EXPECT_LT(10000, *val1.ttl());
     EXPECT_EQ(1, *val1.ttlVersion());
@@ -2305,7 +2285,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithoutValue) {
 
   // Cancel subscription
   subscription.cancel();
-  std::move(subscription).detach();
+  co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
   // Wait until publisher is destroyed
   while (handler_->getNumKvStorePublishers() != 0) {
@@ -2733,7 +2713,7 @@ CO_TEST_F(OpenrCtrlFixture, CoUnsetSelfOriginatedKeyApi) {
 }
 #endif // FOLLY_HAS_COROUTINES
 
-TEST_F(OpenrCtrlFixture, verifyDataPathTest) {
+CO_TEST_F(OpenrCtrlFixture, VerifyDataPathTest) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
        {"key11",
@@ -2746,35 +2726,30 @@ TEST_F(OpenrCtrlFixture, verifyDataPathTest) {
   auto reader = dispatcher_->getReader();
 
   // set new keyVals in KvStore
-  setKvStoreKeyVals(kvs, kSpineAreaId);
+  co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+      createKeySetParams(kvs), kSpineAreaId);
 
-  folly::EventBase evb;
-  auto& manager = folly::fibers::getFiberManager(evb);
+  auto maybePub = co_await folly::coro::timeout(
+      reader.getCoro(), kKvStorePublicationTimeout);
+  CO_ASSERT_TRUE(maybePub.hasValue());
 
-  manager.addTask([&reader, &kvs]() mutable {
-    auto maybePub = reader.get();
-    EXPECT_TRUE(maybePub.hasValue());
+  auto expectedPublication = createThriftPublication(
+      kvs,
+      {}, /* expiredKeys */
+      {}, /* nodeIds */
+      {} /* keysToUpdate */,
+      kSpineAreaId);
 
-    auto expectedPublication = createThriftPublication(
-        kvs,
-        {}, /* expiredKeys */
-        {}, /* nodeIds */
-        {} /* keysToUpdate */,
-        kSpineAreaId);
-
-    folly::variant_match(
-        std::move(maybePub).value(),
-        [&expectedPublication](thrift::Publication&& pub) {
-          EXPECT_TRUE(
-              equalPublication(std::move(pub), std::move(expectedPublication)));
-        },
-        [](thrift::InitializationEvent&&) {});
-  });
-
-  evb.loop();
+  folly::variant_match(
+      std::move(maybePub).value(),
+      [&expectedPublication](thrift::Publication&& pub) {
+        EXPECT_TRUE(
+            equalPublication(std::move(pub), std::move(expectedPublication)));
+      },
+      [](thrift::InitializationEvent&&) {});
 }
 
-TEST_F(OpenrCtrlFixture, dispatcherApiTest) {
+TEST_F(OpenrCtrlFixture, DispatcherApiTest) {
   std::vector<std::string> filter1{"adj:", "prefix:"};
   std::vector<std::string> filter2{"key7:", "key10:", "key25"};
   std::vector<std::string> filter3{"key3:", "key7"};
@@ -2825,7 +2800,7 @@ checkPublications(thrift::Publication& expected, thrift::Publication& actual) {
 
 // Test Streaming scenario. We inject keys into KvStore and verify that the
 // stream is updated accordingly.
-TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
+CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   std::string kNewEntry = "newEntry";
   std::string kEntry1 = "key1";
   std::string kEntry2 = "key2";
@@ -2836,7 +2811,8 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
       {kEntry2, createThriftValue(1, "node1", std::string("value2"))},
   });
 
-  setKvStoreKeyVals(kvs, kSpineAreaId);
+  co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
+      createKeySetParams(kvs), kSpineAreaId);
 
   // Get AsyncGenerator to process handler client stream response.
   // Filter to only receive publications for the keys we care about.
@@ -2889,8 +2865,8 @@ TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   for (int verifiedIdx = 0;
        verifiedIdx < static_cast<int>(expectedDeltas.size());
        ++verifiedIdx) {
-    auto pub = folly::coro::blockingWait(gen.next());
-    ASSERT_TRUE(pub.has_value());
+    auto pub = co_await gen.next();
+    CO_ASSERT_TRUE(pub.has_value());
     auto pubVal = *pub;
     checkPublications(expectedDeltas[verifiedIdx], pubVal);
   }

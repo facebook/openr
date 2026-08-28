@@ -338,7 +338,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 
-  /*
+  /**
    * API to set key-val pairs by given:
    *  - thrift::KeySetParams;
    *  - a specifc area;
@@ -347,7 +347,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    *  1. update local kvStoreDb;
    *  2. flood the delta update to peers if any;
    */
-  folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
+  folly::coro::Task<void> co_setKvStoreKeyVals(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 
@@ -566,10 +566,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   /* Coroutine APIs */
  public:
 #if FOLLY_HAS_COROUTINES
-  folly::coro::Task<void> co_setKvStoreKeyVals(
-      std::unique_ptr<thrift::KeySetParams> setParams,
-      std::unique_ptr<std::string> area) override;
-
   folly::coro::Task<void> co_persistSelfOriginatedKey(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
