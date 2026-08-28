@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <string_view>
+
 #include <fb303/BaseService.h>
 #include <folly/container/F14Map.h>
 #include <openr/common/Types.h>
@@ -264,21 +266,20 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    * KvStore APIs
    */
 
-  /*
+  /**
    * API to return key-val pairs by given:
    *  - a set of string "keys"; (ATTN: this is NOT regex matching)
    *  - a specific area;
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyValsArea(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsArea(
       std::unique_ptr<std::vector<std::string>> filterKeys,
       std::unique_ptr<std::string> area) override;
 
-  /*
+  /**
    * [Backward Compatibility] Same as above, but use local KvStoreDb's area
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyVals(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
       std::unique_ptr<std::vector<std::string>> filterKeys) override;
 
   /*
@@ -583,14 +584,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<std::string> area) override;
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
-  co_getKvStoreKeyValsArea(
-      std::unique_ptr<std::vector<std::string>> filterKeys,
-      std::unique_ptr<std::string> area) override;
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
-      std::unique_ptr<std::vector<std::string>> filterKeys) override;
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreKeyValsFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
@@ -623,6 +616,12 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // returns the single area name configured for this node or throws if not
   // eaxclty 1 area is configured
   std::unique_ptr<std::string> getSingleAreaOrThrow(std::string const& caller);
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsImpl(
+      std::vector<std::string> filterKeys,
+      std::string area,
+      std::string_view caller);
 
   void processPublication(thrift::Publication&& pub);
   void authorizeConnection();

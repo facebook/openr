@@ -10,8 +10,9 @@
 
 #include <folly/container/F14Map.h>
 #include <folly/coro/BlockingWait.h>
+#include <folly/coro/FutureUtil.h>
 #include <folly/coro/GtestHelpers.h>
-#include <folly/coro/Sleep.h>
+#include <folly/coro/Timeout.h>
 #include <folly/init/Init.h>
 #include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
@@ -40,6 +41,13 @@ AreaId const kPlaneAreaId("plane");
 AreaId const kPodAreaId("pod");
 
 std::set<std::string> const kSpineOnlySet = {kSpineAreaId};
+constexpr std::chrono::seconds kKvStorePublicationTimeout{5};
+
+/**
+ * Keep LinkMonitor's initial adjacency publication outside each test lifetime.
+ * Ctrl-handler tests assert only the KvStore state they explicitly create.
+ */
+constexpr std::chrono::seconds kCtrlHandlerTestAdjacencyHoldTime{3600};
 
 using OpenrCtrlClient = apache::thrift::Client<openr::thrift::OpenrCtrlCpp>;
 } // namespace
@@ -59,6 +67,7 @@ class OpenrCtrlFixture : public ::testing::Test {
     }
     auto tConfig =
         getBasicOpenrConfig(nodeName_, areaConfig, true /* enableV4 */);
+    tConfig.adj_hold_time_s() = kCtrlHandlerTestAdjacencyHoldTime.count();
 
     config = std::make_shared<Config>(tConfig);
 
@@ -317,6 +326,28 @@ CO_TEST_F(OpenrCtrlFixture, GetMyNodeName) {
   getOpenrCtrlClient().sync_getMyNodeName(res);
   EXPECT_EQ(nodeName_, res);
   co_return;
+}
+
+CO_TEST_F(OpenrCtrlFixture, GetKvStoreKeyValsCoro) {
+  const std::string key{"coro-key"};
+  const auto value = createThriftValue(1, nodeName_, std::string("value"));
+  kvStoreWrapper_->setKey(kSpineAreaId, key, value);
+
+  auto& client = getOpenrCtrlClient();
+
+  /**
+   * GCC 12 cannot lower braced temporary vector arguments across co_await.
+   */
+  const std::vector<std::string> filterKeys{key};
+  auto publication =
+      co_await client.co_getKvStoreKeyValsArea(filterKeys, kSpineAreaId);
+  CO_ASSERT_EQ(1, publication.keyVals()->size());
+  EXPECT_EQ(value, publication.keyVals()->at(key));
+
+  const std::vector<std::string> emptyFilterKeys;
+  CO_ASSERT_THROW(
+      co_await client.co_getKvStoreKeyVals(emptyFilterKeys),
+      apache::thrift::TApplicationException);
 }
 
 TEST_F(OpenrCtrlFixture, InitializationApis) {
@@ -691,27 +722,6 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
     }
   }
   {
-    std::vector<std::string> filterKeys{"key11", "key2"};
-    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-        std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals = *pub->keyVals();
-    EXPECT_EQ(2, keyVals.size());
-    EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
-    EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
-  }
-
-  // pod keys
-  {
-    std::vector<std::string> filterKeys{"keyPod1"};
-    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-        std::make_unique<std::string>(kPodAreaId));
-    auto keyVals = *pub->keyVals();
-    EXPECT_EQ(1, keyVals.size());
-    EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
-  }
-  {
     thrift::KeyDumpParams params;
     params.originatorIds()->insert("node3");
     params.keys() = {"key3"};
@@ -952,7 +962,7 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
 }
 #endif // FOLLY_HAS_COROUTINES
 
-TEST_F(OpenrCtrlFixture, KvStoreApis) {
+CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(1, "node1", std::string("value1"))},
        {"key11", createThriftValue(1, "node1", std::string("value11"))},
@@ -1000,13 +1010,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
 
   {
     std::vector<std::string> filterKeys{"key11", "key2"};
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsArea(
-                       std::make_unique<std::vector<std::string>>(
-                           std::move(filterKeys)),
-                       std::make_unique<std::string>(kSpineAreaId))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(2, keyVals.size());
     EXPECT_EQ(kvs.at("key2"), keyVals["key2"]);
     EXPECT_EQ(kvs.at("key11"), keyVals["key11"]);
@@ -1015,13 +1021,9 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   // pod keys
   {
     std::vector<std::string> filterKeys{"keyPod1"};
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsArea(
-                       std::make_unique<std::vector<std::string>>(
-                           std::move(filterKeys)),
-                       std::make_unique<std::string>(kPodAreaId))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kPodAreaId);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(keyValsPod.at("keyPod1"), keyVals["keyPod1"]);
   }
@@ -1283,7 +1285,7 @@ TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 }
 
-TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
+CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
   thrift::KeyVals kvs({
       {"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
       {"key11",
@@ -1329,13 +1331,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         createThriftValue(3, "node1", std::string("value1")));
 
     std::vector<std::string> filterKeys{key};
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsArea(
-                       std::make_unique<std::vector<std::string>>(
-                           std::move(filterKeys)),
-                       std::make_unique<std::string>(kSpineAreaId))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(3, *(keyVals.at(key).version()));
     EXPECT_EQ("value1", keyVals.at(key).value().value());
@@ -1354,7 +1352,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     // NOTE: there may be extra keys from PrefixManager & LinkMonitor)
     EXPECT_LE(
         10, (*responseAndSubscription.response.begin()->keyVals()).size());
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1, (*responseAndSubscription.response.begin()->keyVals()).count(key));
     EXPECT_EQ(
         responseAndSubscription.response.begin()->keyVals()->at(key),
@@ -1421,7 +1419,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -1460,11 +1458,11 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     /* key4 and random_key don't exist already */
     EXPECT_LE(0, (*responseAndSubscription.response.begin()->keyVals()).size());
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         0, (*responseAndSubscription.response.begin()->keyVals()).count(key));
     EXPECT_LE(
         0, (*responseAndSubscription_other.response.begin()->keyVals()).size());
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         0,
         (*responseAndSubscription_other.response.begin()->keyVals())
             .count(key));
@@ -1523,10 +1521,10 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     subscription_other.cancel();
-    std::move(subscription_other).detach();
+    co_await folly::coro::toTask(std::move(subscription_other).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -1555,9 +1553,9 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     /* prefix key is key33. kv store has key33 and key333 */
     EXPECT_LE(2, responseAndSubscription.response.begin()->keyVals()->size());
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1, responseAndSubscription.response.begin()->keyVals()->count(key));
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         responseAndSubscription.response.begin()->keyVals()->count("key333"));
 
@@ -1592,7 +1590,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -1625,10 +1623,10 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .get();
 
     EXPECT_LE(2, (*responseAndSubscription.response.begin()->keyVals()).size());
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         (*responseAndSubscription.response.begin()->keyVals()).count("key33"));
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         (*responseAndSubscription.response.begin()->keyVals()).count("key333"));
 
@@ -1672,7 +1670,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -1707,10 +1705,10 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     EXPECT_LE(3, (*responseAndSubscription.response.begin()->keyVals()).size());
     EXPECT_EQ(
         0, (*responseAndSubscription.response.begin()->keyVals()).count(key));
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         (*responseAndSubscription.response.begin()->keyVals()).count("key1"));
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         (*responseAndSubscription.response.begin()->keyVals()).count("key3"));
 
@@ -1762,7 +1760,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -1798,10 +1796,10 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     EXPECT_LE(3, (*responseAndSubscription.response.begin()->keyVals()).size());
     EXPECT_EQ(
         1, (*responseAndSubscription.response.begin()->keyVals()).count(key));
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         (*responseAndSubscription.response.begin()->keyVals()).count("key1"));
-    ASSERT_EQ(
+    CO_ASSERT_EQ(
         1,
         (*responseAndSubscription.response.begin()->keyVals()).count("key3"));
 
@@ -1857,7 +1855,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -1913,7 +1911,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -2000,7 +1998,7 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -2009,8 +2007,8 @@ TEST_F(OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
   }
 }
 
-TEST_F(
-    OpenrCtrlFixture, subscribeAndGetKvStoreFilteredWithKeysTtlUpdateOption) {
+CO_TEST_F(
+    OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysTtlUpdateOption) {
   thrift::KeyVals kvs({
       {"key1", createThriftValue(1, "node1", std::string("value1"), 30000, 1)},
       {"key11",
@@ -2074,7 +2072,7 @@ TEST_F(
         (*responseAndSubscription.response.begin()->keyVals()).count("key2"));
     const auto& val1 =
         (*responseAndSubscription.response.begin()->keyVals())["key1"];
-    ASSERT_EQ(true, val1.value().has_value()); /* value is non-null */
+    CO_ASSERT_EQ(true, val1.value().has_value()); /* value is non-null */
     EXPECT_EQ(1, *val1.version());
     EXPECT_LT(10000, *val1.ttl());
     EXPECT_EQ(5, *val1.ttlVersion()); /* Reflects updated TTL version */
@@ -2123,7 +2121,7 @@ TEST_F(
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -2174,7 +2172,7 @@ TEST_F(
         (*responseAndSubscription.response.begin()->keyVals()).count("key2"));
     const auto& val1 =
         (*responseAndSubscription.response.begin()->keyVals())["key3"];
-    ASSERT_EQ(true, val1.value().has_value());
+    CO_ASSERT_EQ(true, val1.value().has_value());
     EXPECT_EQ(1, *val1.version());
     EXPECT_LT(10000, *val1.ttl());
     EXPECT_EQ(5, *val1.ttlVersion()); /* Reflects updated TTL version */
@@ -2213,13 +2211,9 @@ TEST_F(
 
     /* Check that the TTL version is updated */
     std::vector<std::string> filterKeys{key};
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsArea(
-                       std::make_unique<std::vector<std::string>>(
-                           std::move(filterKeys)),
-                       std::make_unique<std::string>(kSpineAreaId))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(1, *(keyVals.at(key).version()));
     EXPECT_EQ(true, keyVals.at(key).value().has_value());
@@ -2230,7 +2224,7 @@ TEST_F(
 
     // Cancel subscription
     subscription.cancel();
-    std::move(subscription).detach();
+    co_await folly::coro::toTask(std::move(subscription).futureJoin());
 
     // Wait until publisher is destroyed
     while (handler_->getNumKvStorePublishers() != 0) {
@@ -2521,79 +2515,58 @@ TEST_F(OpenrCtrlFixture, RibPolicy) {
   }
 }
 
-TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
+CO_TEST_F(OpenrCtrlFixture, PersistSelfOriginatedKeyApi) {
   const std::string key1 = "persist-key1";
   const std::string value1 = "persist-value1";
   const std::string updatedValue = "persist-value-updated";
+  const std::vector<std::string> filterKeys{key1};
 
   // Test 1: Persist a new key-value pair
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(0, nodeName_, value1);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    handler_
-        ->semifuture_persistSelfOriginatedKey(
-            std::make_unique<thrift::KeySetParams>(params),
-            std::make_unique<std::string>(kSpineAreaId))
-        .get();
+    getOpenrCtrlClient().sync_persistSelfOriginatedKey(params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    folly::EventBase evb;
-    evb.scheduleAt(
-        [this, &key1, &value1]() {
-          std::vector<std::string> filterKeys{key1};
-          auto pub = handler_
-                         ->semifuture_getKvStoreKeyValsArea(
-                             std::make_unique<std::vector<std::string>>(
-                                 std::move(filterKeys)),
-                             std::make_unique<std::string>(kSpineAreaId))
-                         .get();
-          auto keyVals_read = *pub->keyVals();
-          EXPECT_EQ(1, keyVals_read.size());
-          EXPECT_EQ(1, keyVals_read.count(key1));
-          EXPECT_EQ(value1, *keyVals_read.at(key1).value());
-          EXPECT_EQ(1, *keyVals_read.at(key1).version());
-          EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
-        },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
-    evb.loop();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(value1, *keyValsRead.at(key1).value());
+    EXPECT_EQ(1, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
   }
 
   // Test 2: Update an existing persisted key with new value
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(0, nodeName_, updatedValue);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    handler_
-        ->semifuture_persistSelfOriginatedKey(
-            std::make_unique<thrift::KeySetParams>(params),
-            std::make_unique<std::string>(kSpineAreaId))
-        .get();
+    getOpenrCtrlClient().sync_persistSelfOriginatedKey(params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    folly::EventBase evb;
-    evb.scheduleAt(
-        [this, &key1, &updatedValue]() {
-          std::vector<std::string> filterKeys{key1};
-          auto pub = handler_
-                         ->semifuture_getKvStoreKeyValsArea(
-                             std::make_unique<std::vector<std::string>>(
-                                 std::move(filterKeys)),
-                             std::make_unique<std::string>(kSpineAreaId))
-                         .get();
-          auto keyVals_read = *pub->keyVals();
-          EXPECT_EQ(1, keyVals_read.size());
-          EXPECT_EQ(1, keyVals_read.count(key1));
-          EXPECT_EQ(updatedValue, *keyVals_read.at(key1).value());
-          EXPECT_EQ(2, *keyVals_read.at(key1).version());
-          EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
-        },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
-    evb.loop();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(updatedValue, *keyValsRead.at(key1).value());
+    EXPECT_EQ(2, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
   }
 }
 
@@ -2602,139 +2575,115 @@ CO_TEST_F(OpenrCtrlFixture, CoPersistSelfOriginatedKeyApi) {
   const std::string key1 = "co-persist-key1";
   const std::string value1 = "co-persist-value1";
   const std::string updatedValue = "co-persist-value-updated";
+  const std::vector<std::string> filterKeys{key1};
 
   // Test 1: Persist a new key-value pair
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(1, nodeName_, value1);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    co_await handler_->co_persistSelfOriginatedKey(
-        std::make_unique<thrift::KeySetParams>(params),
-        std::make_unique<std::string>(kSpineAreaId));
+    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
+        params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    /* Wait for throttled key advertisement to complete */
-    co_await folly::coro::sleep(std::chrono::milliseconds(200));
-
-    std::vector<std::string> filterKeys{key1};
-    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-        std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals_read = *pub->keyVals();
-    EXPECT_EQ(1, keyVals_read.size());
-    EXPECT_EQ(1, keyVals_read.count(key1));
-    EXPECT_EQ(value1, *keyVals_read.at(key1).value());
-    EXPECT_EQ(1, *keyVals_read.at(key1).version());
-    EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(value1, *keyValsRead.at(key1).value());
+    EXPECT_EQ(1, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
   }
 
   // Test 2: Update an existing persisted key with new value
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(1, nodeName_, updatedValue);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    co_await handler_->co_persistSelfOriginatedKey(
-        std::make_unique<thrift::KeySetParams>(params),
-        std::make_unique<std::string>(kSpineAreaId));
+    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
+        params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    /* Wait for throttled key advertisement to complete */
-    co_await folly::coro::sleep(std::chrono::milliseconds(200));
-
-    std::vector<std::string> filterKeys{key1};
-    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-        std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals_read = *pub->keyVals();
-    EXPECT_EQ(1, keyVals_read.size());
-    EXPECT_EQ(updatedValue, *keyVals_read.at(key1).value());
-    EXPECT_EQ(2, *keyVals_read.at(key1).version());
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(updatedValue, *keyValsRead.at(key1).value());
+    EXPECT_EQ(2, *keyValsRead.at(key1).version());
   }
 }
 #endif // FOLLY_HAS_COROUTINES
 
-TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
+CO_TEST_F(OpenrCtrlFixture, UnsetSelfOriginatedKeyApi) {
   const std::string key1 = "unset-key1";
   const std::string value1 = "unset-value1";
   const std::string finalValue = "unset-final-value";
+  const std::vector<std::string> filterKeys{key1};
 
   // Persist a key first
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(0, nodeName_, value1);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    handler_
-        ->semifuture_persistSelfOriginatedKey(
-            std::make_unique<thrift::KeySetParams>(params),
-            std::make_unique<std::string>(kSpineAreaId))
-        .get();
+    getOpenrCtrlClient().sync_persistSelfOriginatedKey(params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    folly::EventBase evb;
-    evb.scheduleAt(
-        [this, &key1, &value1]() {
-          std::vector<std::string> filterKeys{key1};
-          auto pub = handler_
-                         ->semifuture_getKvStoreKeyValsArea(
-                             std::make_unique<std::vector<std::string>>(
-                                 std::move(filterKeys)),
-                             std::make_unique<std::string>(kSpineAreaId))
-                         .get();
-          auto keyVals_read = *pub->keyVals();
-          EXPECT_EQ(1, keyVals_read.size());
-          EXPECT_EQ(1, keyVals_read.count(key1));
-          EXPECT_EQ(value1, *keyVals_read.at(key1).value());
-          EXPECT_EQ(1, *keyVals_read.at(key1).version());
-          EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
-        },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
-    evb.loop();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(value1, *keyValsRead.at(key1).value());
+    EXPECT_EQ(1, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
   }
 
   // Unset the persisted key with a final value
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(0, nodeName_, finalValue);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    handler_
-        ->semifuture_unsetSelfOriginatedKey(
-            std::make_unique<thrift::KeySetParams>(params),
-            std::make_unique<std::string>(kSpineAreaId))
-        .get();
+    getOpenrCtrlClient().sync_unsetSelfOriginatedKey(params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    folly::EventBase evb;
-    evb.scheduleAt(
-        [this, &key1, &finalValue]() {
-          std::vector<std::string> filterKeys{key1};
-          auto pub = handler_
-                         ->semifuture_getKvStoreKeyValsArea(
-                             std::make_unique<std::vector<std::string>>(
-                                 std::move(filterKeys)),
-                             std::make_unique<std::string>(kSpineAreaId))
-                         .get();
-          auto keyVals_read = *pub->keyVals();
-          EXPECT_EQ(1, keyVals_read.size());
-          EXPECT_EQ(1, keyVals_read.count(key1));
-          EXPECT_EQ(finalValue, *keyVals_read.at(key1).value());
-          // Version should be incremented from 1 to 2
-          EXPECT_EQ(2, *keyVals_read.at(key1).version());
-          EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
-          // Verify the key is no longer in self-originated key list
-          auto selfOriginatedKeys =
-              kvStoreWrapper_->dumpAllSelfOriginated(kSpineAreaId);
-          EXPECT_EQ(0, selfOriginatedKeys.count(key1));
-        },
-        std::chrono::steady_clock::now() + std::chrono::milliseconds(200));
-    evb.loop();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(finalValue, *keyValsRead.at(key1).value());
+    // Version should be incremented from 1 to 2
+    EXPECT_EQ(2, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
+    // Verify the key is no longer in self-originated key list
+    auto selfOriginatedKeys =
+        kvStoreWrapper_->dumpAllSelfOriginated(kSpineAreaId);
+    EXPECT_EQ(0, selfOriginatedKeys.count(key1));
   }
 }
 
@@ -2743,60 +2692,57 @@ CO_TEST_F(OpenrCtrlFixture, CoUnsetSelfOriginatedKeyApi) {
   const std::string key1 = "co-unset-key1";
   const std::string value1 = "co-unset-value1";
   const std::string finalValue = "co-unset-final-value";
+  const std::vector<std::string> filterKeys{key1};
 
   // Test 1: Persist a key first
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(1, nodeName_, value1);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    co_await handler_->co_persistSelfOriginatedKey(
-        std::make_unique<thrift::KeySetParams>(params),
-        std::make_unique<std::string>(kSpineAreaId));
+    co_await getOpenrCtrlClient().co_persistSelfOriginatedKey(
+        params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    /* Wait for throttled key advertisement to complete */
-    co_await folly::coro::sleep(std::chrono::milliseconds(200));
-
-    std::vector<std::string> filterKeys{key1};
-    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-        std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals_read = *pub->keyVals();
-    EXPECT_EQ(1, keyVals_read.size());
-    EXPECT_EQ(1, keyVals_read.count(key1));
-    EXPECT_EQ(value1, *keyVals_read.at(key1).value());
-    EXPECT_EQ(1, *keyVals_read.at(key1).version());
-    EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(value1, *keyValsRead.at(key1).value());
+    EXPECT_EQ(1, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
   }
 
   // Unset the persisted key with a final value
   {
+    auto reader = dispatcher_->getReader({key1});
     thrift::KeyVals keyVals;
     keyVals[key1] = createThriftValue(1, nodeName_, finalValue);
 
     thrift::KeySetParams params;
     params.keyVals() = keyVals;
 
-    co_await handler_->co_unsetSelfOriginatedKey(
-        std::make_unique<thrift::KeySetParams>(params),
-        std::make_unique<std::string>(kSpineAreaId));
+    co_await getOpenrCtrlClient().co_unsetSelfOriginatedKey(
+        params, kSpineAreaId);
+    EXPECT_TRUE((co_await folly::coro::timeout(
+                     reader.getCoro(), kKvStorePublicationTimeout))
+                    .hasValue());
 
-    /* Wait for throttled key advertisement to complete */
-    co_await folly::coro::sleep(std::chrono::milliseconds(200));
-
-    std::vector<std::string> filterKeys{key1};
-    auto pub = co_await handler_->co_getKvStoreKeyValsArea(
-        std::make_unique<std::vector<std::string>>(std::move(filterKeys)),
-        std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals_read = *pub->keyVals();
-    EXPECT_EQ(1, keyVals_read.size());
-    EXPECT_EQ(1, keyVals_read.count(key1));
-    EXPECT_EQ(finalValue, *keyVals_read.at(key1).value());
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreKeyValsArea(
+        filterKeys, kSpineAreaId);
+    auto keyValsRead = *pub.keyVals();
+    EXPECT_EQ(1, keyValsRead.size());
+    EXPECT_EQ(1, keyValsRead.count(key1));
+    EXPECT_EQ(finalValue, *keyValsRead.at(key1).value());
     // Version should be incremented from 1 to 2
-    EXPECT_EQ(2, *keyVals_read.at(key1).version());
-    EXPECT_EQ(nodeName_, *keyVals_read.at(key1).originatorId());
+    EXPECT_EQ(2, *keyValsRead.at(key1).version());
+    EXPECT_EQ(nodeName_, *keyValsRead.at(key1).originatorId());
 
     // Verify the key is no longer in self-originated key list
     auto selfOriginatedKeys =
