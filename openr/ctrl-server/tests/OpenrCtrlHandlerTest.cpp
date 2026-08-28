@@ -307,6 +307,13 @@ CO_TEST_F(OpenrCtrlFixture, GetKvStoreKeyValsCoro) {
       apache::thrift::TApplicationException);
 }
 
+CO_TEST_F(OpenrCtrlFixture, GetKvStoreHashFilteredRequiresSingleArea) {
+  const thrift::KeyDumpParams filter;
+  CO_ASSERT_THROW(
+      co_await getOpenrCtrlClient().co_getKvStoreHashFiltered(filter),
+      apache::thrift::TApplicationException);
+}
+
 TEST_F(OpenrCtrlFixture, InitializationApis) {
   // Add KVSTORE_SYNCED event into fb303. Initialization not converged yet.
   logInitializationEvent(

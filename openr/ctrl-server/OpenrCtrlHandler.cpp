@@ -809,11 +809,12 @@ OpenrCtrlHandler::semifuture_getKvStoreKeyValsFilteredArea(
           });
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::semifuture_getKvStoreHashFiltered(
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreHashFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  return semifuture_getKvStoreHashFilteredArea(
-      std::move(filter), getSingleAreaOrThrow("getKvStoreHashFiltered"));
+  auto area = getSingleAreaOrThrow(__FUNCTION__);
+  co_return co_await co_getKvStoreHashFilteredImpl(
+      std::move(*filter), std::move(*area), __FUNCTION__);
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::Publication>>
@@ -1481,27 +1482,22 @@ OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
 }
 
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::co_getKvStoreHashFiltered(
-    std::unique_ptr<thrift::KeyDumpParams> filter) {
-  co_return co_await co_getKvStoreHashFilteredArea(
-      std::move(filter), getSingleAreaOrThrow("getKvStoreHashFiltered"));
-}
-
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOGF(
-      DBG5,
-      "{} for keys: {}; area: {}",
-      __FUNCTION__,
-      toString(*filter.get()),
-      *area);
+  co_return co_await co_getKvStoreHashFilteredImpl(
+      std::move(*filter), std::move(*area), __FUNCTION__);
+}
+
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreHashFilteredImpl(
+    thrift::KeyDumpParams filter, std::string area, std::string_view caller) {
+  XLOGF(DBG5, "{} for keys: {}; area: {}", caller, toString(filter), area);
 
   XCHECK(kvStore_);
 
   auto result = co_await kvStore_->co_dumpKvStoreHashes(
-      std::move(*area), std::move(*filter));
+      std::move(area), std::move(filter));
   co_return result;
 }
 
