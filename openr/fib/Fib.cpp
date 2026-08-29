@@ -338,7 +338,25 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
 
 messaging::RQueue<DecisionRouteUpdate>
 Fib::getFibUpdatesReader() {
-  return fibRouteUpdatesQueue_.getReader();
+  /*
+   * This reader feeds the OpenrCtrl Fib snoop streams (fibPublishers_ /
+   * fibDetailSubscribers_). A slow snoop client would otherwise grow this
+   * reader's backlog without bound, so coalesce at push time.
+   *
+   * The reader id is documentary for now: RWQueue::getStats() discards
+   * queueId_, so ReplicateQueue::getReplicationStats() still labels this
+   * reader's messaging.rw_queue.* counters with a positional index (T98477650).
+   * Naming it here means the follow-on getStats() fix makes those counters
+   * attributable without another change to this call site.
+   *
+   * NOTE: this uses coalesceIncrementalRouteUpdates, NOT the
+   * coalesceDecisionRouteUpdates used for the PrefixManager reader. Snoop
+   * clients receive toThrift() output, which drops `type`, so they cannot tell
+   * a full-sync from a delta and an incremental must never be folded into a
+   * pending full-sync. Bounds this reader at two elements in practice.
+   */
+  return fibRouteUpdatesQueue_.getReader(
+      "openrCtrl", coalesceIncrementalRouteUpdates);
 }
 
 void

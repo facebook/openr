@@ -190,8 +190,23 @@ main(int argc, char** argv) {
 
   // Fib -> PrefixManager
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;
-  auto fibRoutesUpdateQueueReader =
-      fibRouteUpdatesQueue.getReader("routeUpdates");
+  /*
+   * Coalesce this reader's backlog at push time so a slow PrefixManager cannot
+   * let the queue grow unbounded under route churn (bounds openr memory). Same
+   * coalescer as the Decision->Fib queue: an incoming FULL_SYNC is
+   * authoritative and replaces the pending element, and later incrementals fold
+   * into it while keeping it whole-table, so the backlog collapses to one
+   * element regardless of PrefixManager's consumption rate.
+   *
+   * The snoop reader of the same queue is wired separately in
+   * Fib::getFibUpdatesReader -- each reader has its own backlog.
+   *
+   * NOTE: the coalescer runs under the reader queue's lock, so it must stay
+   * cheap. This queue has a single producer (Fib), so there is no
+   * cross-producer lock contention.
+   */
+  auto fibRoutesUpdateQueueReader = fibRouteUpdatesQueue.getReader(
+      "routeUpdates", coalesceDecisionRouteUpdates);
 
   // PrefixManager -> Spark
   ReplicateQueue<thrift::InitializationEvent>

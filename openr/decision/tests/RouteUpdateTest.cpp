@@ -12,6 +12,7 @@
 
 #include <openr/common/LsdbUtil.h>
 #include <openr/decision/RouteUpdate.h>
+#include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
 
@@ -242,6 +243,244 @@ TEST(DecisionRouteUpdateMerge, FullSyncBaseDeleteDropsFromSnapshot) {
   // A full-sync never carries explicit delete lists.
   EXPECT_TRUE(base.unicastRoutesToDelete.empty());
   EXPECT_TRUE(base.mplsRoutesToDelete.empty());
+}
+
+/*
+ * An incoming INCREMENTAL is absorbed into the pending element (returns true,
+ * so the queue appends nothing) and the net latest state per prefix wins.
+ */
+TEST(CoalesceDecisionRouteUpdates, IncrementalIsAbsorbed) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+  const auto p2 = folly::IPAddress::createNetwork("10.0.2.0/24");
+
+  DecisionRouteUpdate pending;
+  pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1 /* nexthops */));
+
+  DecisionRouteUpdate incoming;
+  incoming.addRouteToUpdate(makeUnicast("10.0.1.0/24", 2 /* new value */));
+  incoming.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+
+  EXPECT_TRUE(coalesceDecisionRouteUpdates(pending, incoming));
+
+  EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, pending.type);
+  EXPECT_EQ(2, pending.unicastRoutesToUpdate.size());
+  // Latest value for p1 won -> 2 next-hops.
+  ASSERT_EQ(1, pending.unicastRoutesToUpdate.count(p1));
+  EXPECT_EQ(2, pending.unicastRoutesToUpdate.at(p1).nexthops.size());
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p2));
+}
+
+/*
+ * A FULL_SYNC is the authoritative whole-table state, so it supersedes whatever
+ * is pending rather than merging into it.
+ */
+TEST(CoalesceDecisionRouteUpdates, FullSyncReplacesPending) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+  const auto p2 = folly::IPAddress::createNetwork("10.0.2.0/24");
+
+  DecisionRouteUpdate pending;
+  pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+
+  DecisionRouteUpdate incoming;
+  incoming.type = DecisionRouteUpdate::FULL_SYNC;
+  incoming.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+
+  EXPECT_TRUE(coalesceDecisionRouteUpdates(pending, incoming));
+
+  // The pending delta is gone -- only the snapshot survives.
+  EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, pending.type);
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.size());
+  EXPECT_EQ(0, pending.unicastRoutesToUpdate.count(p1));
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p2));
+}
+
+/*
+ * Folding later incrementals onto a pending FULL_SYNC keeps it a FULL_SYNC, so
+ * a coalesced backlog still delivers the whole-table reset signal downstream.
+ * This is the property PrefixManager initialization depends on.
+ */
+TEST(CoalesceDecisionRouteUpdates, FullSyncBaseStaysFullSync) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+  const auto p2 = folly::IPAddress::createNetwork("10.0.2.0/24");
+  const auto p3 = folly::IPAddress::createNetwork("10.0.3.0/24");
+
+  DecisionRouteUpdate pending;
+  pending.type = DecisionRouteUpdate::FULL_SYNC;
+  pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+  pending.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+
+  DecisionRouteUpdate incoming; // default INCREMENTAL
+  incoming.unicastRoutesToDelete.push_back(p1);
+  incoming.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1));
+
+  EXPECT_TRUE(coalesceDecisionRouteUpdates(pending, incoming));
+
+  EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, pending.type);
+  EXPECT_EQ(0, pending.unicastRoutesToUpdate.count(p1));
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p2));
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p3));
+  // A full-sync never carries explicit delete lists.
+  EXPECT_TRUE(pending.unicastRoutesToDelete.empty());
+}
+
+/*
+ * End-to-end through ReplicateQueue: a reader wired with the coalescer
+ * collapses to a single pending element no matter how many updates are pushed
+ * while it is not draining, and coalescing is per-reader -- a plain reader on
+ * the same queue still receives every element.
+ */
+TEST(CoalesceDecisionRouteUpdates, BoundsBacklogPerReader) {
+  messaging::ReplicateQueue<DecisionRouteUpdate> q;
+  auto plain = q.getReader("plain");
+  auto coalesced = q.getReader("coalesced", coalesceDecisionRouteUpdates);
+
+  constexpr size_t kPushes = 50;
+  for (size_t i = 0; i < kPushes; ++i) {
+    DecisionRouteUpdate update;
+    update.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+    q.push(std::move(update));
+  }
+  EXPECT_EQ(kPushes, plain.size());
+  EXPECT_EQ(1, coalesced.size());
+
+  // A FULL_SYNC supersedes the pending delta rather than adding an element.
+  DecisionRouteUpdate fullSync;
+  fullSync.type = DecisionRouteUpdate::FULL_SYNC;
+  fullSync.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+  q.push(std::move(fullSync));
+  EXPECT_EQ(1, coalesced.size());
+
+  /*
+   * Later incrementals fold into the pending full-sync, keeping it whole-table
+   * and still a single element.
+   */
+  for (size_t i = 0; i < kPushes; ++i) {
+    DecisionRouteUpdate update;
+    update.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1));
+    q.push(std::move(update));
+  }
+  EXPECT_EQ(1, coalesced.size());
+
+  const auto snapshot = coalesced.get().value();
+  EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, snapshot.type);
+  EXPECT_EQ(2, snapshot.unicastRoutesToUpdate.size());
+
+  q.close();
+}
+
+/*
+ * Incremental-into-incremental merges exactly as the general coalescer does.
+ */
+TEST(CoalesceIncrementalRouteUpdates, IncrementalIsAbsorbed) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+  const auto p2 = folly::IPAddress::createNetwork("10.0.2.0/24");
+
+  DecisionRouteUpdate pending;
+  pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+
+  DecisionRouteUpdate incoming;
+  incoming.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+
+  EXPECT_TRUE(coalesceIncrementalRouteUpdates(pending, incoming));
+
+  EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, pending.type);
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p1));
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p2));
+}
+
+/*
+ * An incoming FULL_SYNC is appended rather than replacing the pending delta, so
+ * a snoop client still sees the earlier delta before the snapshot.
+ */
+TEST(CoalesceIncrementalRouteUpdates, IncomingFullSyncIsAppended) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+
+  DecisionRouteUpdate pending;
+  pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+
+  DecisionRouteUpdate incoming;
+  incoming.type = DecisionRouteUpdate::FULL_SYNC;
+  incoming.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+
+  EXPECT_FALSE(coalesceIncrementalRouteUpdates(pending, incoming));
+
+  // Neither side mutated -- the caller appends `incoming`.
+  EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, pending.type);
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.size());
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p1));
+}
+
+/*
+ * The case that motivates this coalescer: an incremental is NOT folded into a
+ * pending FULL_SYNC. Folding would apply the delete by dropping the key from
+ * the snapshot without recording it in unicastRoutesToDelete, so a snoop client
+ * -- which only ever sees toThrift() output and cannot read `type` -- would
+ * never learn the route was withdrawn.
+ */
+TEST(CoalesceIncrementalRouteUpdates, FullSyncBaseIsNotMerged) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+
+  DecisionRouteUpdate pending;
+  pending.type = DecisionRouteUpdate::FULL_SYNC;
+  pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+
+  DecisionRouteUpdate incoming; // default INCREMENTAL
+  incoming.unicastRoutesToDelete.push_back(p1);
+
+  EXPECT_FALSE(coalesceIncrementalRouteUpdates(pending, incoming));
+
+  /*
+   * The snapshot is untouched and the withdrawal survives as its own element,
+   * so the delete is still visible to a delta-applying client.
+   */
+  EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, pending.type);
+  EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p1));
+  ASSERT_EQ(1, incoming.unicastRoutesToDelete.size());
+  EXPECT_EQ(p1, incoming.unicastRoutesToDelete.front());
+}
+
+/*
+ * End-to-end through ReplicateQueue: the snoop-style reader settles at two
+ * elements -- the initial FULL_SYNC plus one merged incremental -- no matter
+ * how far behind it falls, and the delete in the incremental is still delivered
+ * explicitly rather than being absorbed into the snapshot.
+ */
+TEST(CoalesceIncrementalRouteUpdates, BoundsSnoopBacklogAtTwo) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+
+  messaging::ReplicateQueue<DecisionRouteUpdate> q;
+  auto snoop = q.getReader("snoop", coalesceIncrementalRouteUpdates);
+
+  // Initial subscription snapshot.
+  DecisionRouteUpdate fullSync;
+  fullSync.type = DecisionRouteUpdate::FULL_SYNC;
+  fullSync.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+  q.push(std::move(fullSync));
+  EXPECT_EQ(1, snoop.size());
+
+  // A withdrawal plus a burst of churn while the client is stalled.
+  DecisionRouteUpdate withdraw;
+  withdraw.unicastRoutesToDelete.push_back(p1);
+  q.push(std::move(withdraw));
+  for (size_t i = 0; i < 50; ++i) {
+    DecisionRouteUpdate update;
+    update.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+    q.push(std::move(update));
+  }
+  EXPECT_EQ(2, snoop.size());
+
+  // The snapshot is delivered intact...
+  const auto first = snoop.get().value();
+  EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, first.type);
+  EXPECT_EQ(1, first.unicastRoutesToUpdate.count(p1));
+
+  // ...followed by a delta that still carries the explicit withdrawal.
+  const auto second = snoop.get().value();
+  EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, second.type);
+  ASSERT_EQ(1, second.unicastRoutesToDelete.size());
+  EXPECT_EQ(p1, second.unicastRoutesToDelete.front());
+
+  q.close();
 }
 
 } // namespace openr

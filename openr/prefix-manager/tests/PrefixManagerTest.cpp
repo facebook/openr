@@ -155,7 +155,7 @@ class PrefixManagerTestFixture : public testing::Test {
         prefixMgrInitializationEventsQueue,
         kvStoreWrapper->getReader(),
         prefixUpdatesQueue.getReader(),
-        fibRouteUpdatesQueue.getReader(),
+        createFibRouteUpdatesReader(),
         cfg);
 
     prefixManagerThread = std::make_unique<std::thread>([this]() {
@@ -178,6 +178,17 @@ class PrefixManagerTestFixture : public testing::Test {
   createConfig() {
     auto tConfig = getBasicOpenrConfig(nodeId_);
     return tConfig;
+  }
+
+  /*
+   * Seam for the Fib->PrefixManager reader. Called from createPrefixManager
+   * immediately before PrefixManager is constructed, which is the only window
+   * in which the reader exists but nothing is draining it -- see
+   * PrefixManagerCoalescedFibUpdatesFixture.
+   */
+  virtual messaging::RQueue<DecisionRouteUpdate>
+  createFibRouteUpdatesReader() {
+    return fibRouteUpdatesQueue.getReader();
   }
 
   // Get number of `advertised` prefixes
@@ -258,6 +269,82 @@ class PrefixManagerTestFixture : public testing::Test {
   std::shared_ptr<messaging::RQueue<DecisionRouteUpdate>>
       earlyStaticRoutesReaderPtr;
 };
+
+/*
+ * Fixture that gives PrefixManager a COALESCING fibRouteUpdatesQueue reader
+ * (as Main.cpp does) and hands it a backlog that has already been coalesced.
+ *
+ * PrefixManager keys OpenR initialization off receiving a FULL_SYNC-typed
+ * update (processFibRouteUpdates), so initialization wedges forever if
+ * coalescing ever downgrades a pending FULL_SYNC to an INCREMENTAL. The backlog
+ * below is seeded FULL_SYNC-first so every subsequent incremental is folded
+ * into the pending snapshot via mergeInPlace -- the path that has to preserve
+ * the type -- and the test asserts the signal still reaches PrefixManager.
+ */
+class PrefixManagerCoalescedFibUpdatesFixture
+    : public PrefixManagerTestFixture {
+ public:
+  void
+  SetUp() override {
+    fb303::fbData->resetAllData();
+
+    initKvStoreWithPrefixManager();
+
+    // ATTN: do NOT wait for PREFIX_DB_SYNCED here -- that is what the test
+    // asserts. The FULL_SYNC is seeded in createFibRouteUpdatesReader below,
+    // so no separate triggerInitializationEventForPrefixManager is needed.
+  }
+
+ protected:
+  messaging::RQueue<DecisionRouteUpdate>
+  createFibRouteUpdatesReader() override {
+    auto reader = fibRouteUpdatesQueue.getReader(
+        "routeUpdates", coalesceDecisionRouteUpdates);
+
+    /*
+     * Build the backlog here, before PrefixManager exists to drain it.
+     * RWQueue::push only consults the coalescer when no reader is blocked in
+     * get(); pushing after PrefixManager::run() would race the reader fiber and
+     * usually hand values over directly, so the coalescing path would not be
+     * exercised at all.
+     */
+    DecisionRouteUpdate fullSync;
+    fullSync.type = DecisionRouteUpdate::FULL_SYNC;
+    fullSync.addRouteToUpdate(RibUnicastEntry(
+        toIPNetwork(addr2),
+        {},
+        prefixEntry2,
+        Constants::kDefaultArea.toString()));
+    fibRouteUpdatesQueue.push(std::move(fullSync));
+
+    for (size_t i = 0; i < kNumBackloggedUpdates; ++i) {
+      DecisionRouteUpdate update;
+      update.addRouteToUpdate(RibUnicastEntry(
+          toIPNetwork(addr1),
+          {},
+          prefixEntry1,
+          Constants::kDefaultArea.toString()));
+      fibRouteUpdatesQueue.push(std::move(update));
+    }
+
+    // Everything collapsed into the single pending FULL_SYNC element.
+    EXPECT_EQ(1, reader.size());
+
+    return reader;
+  }
+
+  static constexpr size_t kNumBackloggedUpdates{20};
+};
+
+/*
+ * A coalesced backlog still delivers the FULL_SYNC, so PrefixManager completes
+ * initialization and publishes PREFIX_DB_SYNCED. Without it this test blocks on
+ * the initialization queue read and times out.
+ */
+TEST_F(
+    PrefixManagerCoalescedFibUpdatesFixture, FullSyncSurvivesCoalescedBacklog) {
+  waitForPrefixDbSyncedEvent();
+}
 
 TEST_F(PrefixManagerTestFixture, AddRemovePrefix) {
   // Expect no throw

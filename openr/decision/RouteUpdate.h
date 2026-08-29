@@ -278,4 +278,32 @@ coalesceDecisionRouteUpdates(
   return true;
 }
 
+/*
+ * Coalescer for consumers that CANNOT distinguish a whole-table snapshot from a
+ * delta, i.e. the Fib snoop stream: DecisionRouteUpdate::toThrift() produces a
+ * thrift::RouteDatabaseDelta, which carries no `type` field.
+ *
+ * Merges only INCREMENTAL into INCREMENTAL and never touches a FULL_SYNC on
+ * either side. Folding an incremental into a pending FULL_SYNC (what
+ * coalesceDecisionRouteUpdates does) would lose information for such a
+ * consumer: mergeInPlace applies a delete by dropping the key from the
+ * snapshot's map WITHOUT recording it in unicastRoutesToDelete, which is
+ * correct whole-table semantics but invisible to a client that can only apply
+ * the message as a delta -- it would silently retain the withdrawn route.
+ *
+ * Fib emits FULL_SYNC only on its initial sync, so in practice this bounds the
+ * snoop reader at two elements: the pending FULL_SYNC plus one merged
+ * incremental.
+ */
+inline bool
+coalesceIncrementalRouteUpdates(
+    DecisionRouteUpdate& existing, DecisionRouteUpdate& incoming) {
+  if (existing.type == DecisionRouteUpdate::FULL_SYNC ||
+      incoming.type == DecisionRouteUpdate::FULL_SYNC) {
+    return false;
+  }
+  existing.mergeInPlace(std::move(incoming));
+  return true;
+}
+
 } // namespace openr
