@@ -182,6 +182,15 @@ class Config {
     return config_.dryrun().value_or(false);
   }
 
+  /*
+   * Push-time coalescing on Open/R's inter-module queues. Disabled by default
+   * so the behavior can be rolled out per-scope via configerator.
+   */
+  bool
+  isQueueCoalescingEnabled() const {
+    return config_.enable_openr_queue_coalescing().value_or(false);
+  }
+
   //
   // area
   //

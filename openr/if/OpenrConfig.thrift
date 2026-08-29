@@ -788,4 +788,20 @@ struct OpenrConfig {
    * blast-radius control to turn coalescing off for a specific scope.
    */
   203: optional bool disable_fib_route_update_coalescing;
+
+  /**
+   * Enable push-time coalescing (state suppression) on Open/R's inter-module
+   * queues, so a slow reader cannot let its backlog -- and thus openr memory --
+   * grow without bound under sustained route churn. Today this gates both
+   * readers of the Fib-produced fibRouteUpdatesQueue: PrefixManager (via
+   * coalesceDecisionRouteUpdates) and the OpenrCtrl snoop stream (via
+   * coalesceIncrementalRouteUpdates); subsequent queues in the memory-hardening
+   * audit will be gated by this same knob.
+   *
+   * Optional (no thrift default) so it is not serialized into every generated
+   * openr config; the effective default (false) is applied in
+   * Config::isQueueCoalescingEnabled via value_or(false). Set this true for
+   * per-scope (configerator) rollout, and unset/false to roll back.
+   */
+  204: optional bool enable_openr_queue_coalescing;
 }

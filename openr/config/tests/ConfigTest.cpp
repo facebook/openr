@@ -688,6 +688,24 @@ TEST(ConfigTest, FibRouteUpdateCoalescingKnob) {
       *configEnabled.getConfig().disable_fib_route_update_coalescing());
 }
 
+TEST(ConfigTest, QueueCoalescingKnob) {
+  // Optional (no thrift default): unset unless a config explicitly sets it, so
+  // the effective value is false -- coalescing off until a scope opts in.
+  auto tConfig = getBasicOpenrConfig();
+  auto config = Config(tConfig);
+  EXPECT_FALSE(config.getConfig().enable_openr_queue_coalescing().has_value());
+  EXPECT_FALSE(config.isQueueCoalescingEnabled());
+
+  // An explicit value is honored verbatim for per-scope (configerator) rollout.
+  auto tConfigKnob = getBasicOpenrConfig();
+  tConfigKnob.enable_openr_queue_coalescing() = true;
+  EXPECT_TRUE(Config(tConfigKnob).isQueueCoalescingEnabled());
+
+  // ...and an explicit false rolls it back.
+  tConfigKnob.enable_openr_queue_coalescing() = false;
+  EXPECT_FALSE(Config(tConfigKnob).isQueueCoalescingEnabled());
+}
+
 TEST(ConfigTest, NonDefaultVrfConfigGetter) {
   std::string mgmtVrf{"mgmtVrf"};
   thrift::ThriftServerConfig thrift_server_config;

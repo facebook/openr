@@ -49,6 +49,7 @@ Fib::Fib(
       thriftPort_(*config->getConfig().fib_port()),
       dryrun_(config->isDryrun()),
       enableClearFibState_(*config->getConfig().enable_clear_fib_state()),
+      enableQueueCoalescing_(config->isQueueCoalescingEnabled()),
       routeDeleteDelay_(*config->getConfig().route_delete_delay_ms()),
       retryRoutesExpBackoff_(
           Constants::kFibInitialBackoff, Constants::kFibMaxBackoff, false),
@@ -354,9 +355,13 @@ Fib::getFibUpdatesReader() {
    * clients receive toThrift() output, which drops `type`, so they cannot tell
    * a full-sync from a delta and an incremental must never be folded into a
    * pending full-sync. Bounds this reader at two elements in practice.
+   *
+   * Gated by the enable_openr_queue_coalescing config knob (off by default) so
+   * the behavior can be rolled out and rolled back per-scope.
    */
   return fibRouteUpdatesQueue_.getReader(
-      "openrCtrl", coalesceIncrementalRouteUpdates);
+      "openrCtrl",
+      enableQueueCoalescing_ ? coalesceIncrementalRouteUpdates : nullptr);
 }
 
 void

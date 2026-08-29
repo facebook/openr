@@ -204,9 +204,14 @@ main(int argc, char** argv) {
    * NOTE: the coalescer runs under the reader queue's lock, so it must stay
    * cheap. This queue has a single producer (Fib), so there is no
    * cross-producer lock contention.
+   *
+   * Gated by the enable_openr_queue_coalescing config knob (off by default) so
+   * the behavior can be rolled out and rolled back per-scope.
    */
   auto fibRoutesUpdateQueueReader = fibRouteUpdatesQueue.getReader(
-      "routeUpdates", coalesceDecisionRouteUpdates);
+      "routeUpdates",
+      config->isQueueCoalescingEnabled() ? coalesceDecisionRouteUpdates
+                                         : nullptr);
 
   // PrefixManager -> Spark
   ReplicateQueue<thrift::InitializationEvent>

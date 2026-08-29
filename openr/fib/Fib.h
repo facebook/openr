@@ -337,6 +337,12 @@ class Fib final : public OpenrEventBase {
   const bool enableClearFibState_{false};
   bool isUnicastRoutesCleared_{false};
 
+  /*
+   * Config knob - coalesce the snoop reader's backlog at push time. Read in
+   * getFibUpdatesReader, which runs once at OpenrCtrlHandler construction.
+   */
+  const bool enableQueueCoalescing_{false};
+
   // Config knob - Minimum delay (in milliseconds) to be incurred before
   // deleting a a route (both unicast and mpls).
   const std::chrono::milliseconds routeDeleteDelay_{0};
