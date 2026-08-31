@@ -304,15 +304,15 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   semifuture_getKvStoreKeyValsFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
-  /*
+  /**
    * API to return key-val HASHes(NO binary value included) only by given:
    *  - thrift::KeyDumpParams;
    *  - a specific area;
    *
    * ATTN: same as above usage of thrift::KeyDumpParams
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreHashFilteredArea(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreHashFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
 
@@ -569,11 +569,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreKeyValsFilteredArea(
-      std::unique_ptr<thrift::KeyDumpParams> filter,
-      std::unique_ptr<std::string> area) override;
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>>
-  co_getKvStoreHashFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
 

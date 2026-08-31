@@ -307,6 +307,39 @@ CO_TEST_F(OpenrCtrlFixture, GetKvStoreKeyValsCoro) {
       apache::thrift::TApplicationException);
 }
 
+CO_TEST(OpenrCtrlHandlerTest, GetKvStoreHashFilteredAreaWithoutKvStore) {
+  thrift::AreaConfig area;
+  area.area_id() = kSpineAreaId;
+  area.include_interface_regexes() = {"po.*"};
+  area.neighbor_regexes() = {".*"};
+  auto config = std::make_shared<Config>(getBasicOpenrConfig(
+      "node-without-kvstore",
+      std::vector<thrift::AreaConfig>{std::move(area)},
+      true /* enableV4 */));
+  OpenrEventBase ctrlEvb;
+  auto handler = std::make_shared<OpenrCtrlHandler>(
+      "node-without-kvstore",
+      folly::F14FastSet<std::string>{},
+      &ctrlEvb,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      nullptr,
+      config,
+      nullptr);
+  apache::thrift::ScopedServerInterfaceThread server(handler, "::1", 0);
+  auto client = server.newClient<OpenrCtrlClient>();
+
+  const thrift::KeyDumpParams filter;
+  CO_ASSERT_THROW(
+      co_await client->co_getKvStoreHashFilteredArea(filter, kSpineAreaId),
+      thrift::KvStoreError);
+}
+
 CO_TEST_F(OpenrCtrlFixture, GetKvStoreHashFilteredRequiresSingleArea) {
   const thrift::KeyDumpParams filter;
   CO_ASSERT_THROW(
@@ -712,29 +745,6 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
     EXPECT_EQ(keyValsPlane.at("keyPlane1"), keyVals["keyPlane1"]);
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
   }
-  {
-    thrift::KeyDumpParams params;
-    params.originatorIds()->insert("node3");
-    params.keys() = {"key3"};
-
-    auto pub =
-        co_await handler_
-            ->co_getKvStoreHashFilteredArea(
-                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
-                std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals = *pub->keyVals();
-    EXPECT_EQ(3, keyVals.size());
-    auto value3 = kvs.at("key3");
-    value3.value().reset();
-    auto value33 = kvs.at("key33");
-    value33.value().reset();
-    auto value333 = kvs.at("key333");
-    value333.value().reset();
-    EXPECT_EQ(value3, keyVals["key3"]);
-    EXPECT_EQ(value33, keyVals["key33"]);
-    EXPECT_EQ(value333, keyVals["key333"]);
-  }
-
   //
   // Peers APIs
   //
@@ -869,30 +879,6 @@ CO_TEST_F(OpenrCtrlFixture, CoKvStoreApis) {
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
   }
 
-  // Operator is OR and params.prefix is empty.
-  // Use HashFiltered
-  {
-    thrift::KeyDumpParams params;
-    params.originatorIds() = {"node3"};
-    params.keys() = {"key3"};
-
-    auto pub =
-        co_await handler_
-            ->co_getKvStoreHashFilteredArea(
-                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
-                std::make_unique<std::string>(kSpineAreaId));
-    auto keyVals = *pub->keyVals();
-    EXPECT_EQ(3, keyVals.size());
-    auto value3 = kvs.at("key3");
-    value3.value().reset();
-    auto value33 = kvs.at("key33");
-    value33.value().reset();
-    auto value333 = kvs.at("key333");
-    value333.value().reset();
-    EXPECT_EQ(value3, keyVals["key3"]);
-    EXPECT_EQ(value33, keyVals["key33"]);
-    EXPECT_EQ(value333, keyVals["key333"]);
-  }
   // clang-format on
 }
 #endif // FOLLY_HAS_COROUTINES
@@ -1007,13 +993,9 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds()->insert("node3");
     params.keys() = {"key3"};
 
-    auto pub =
-        handler_
-            ->semifuture_getKvStoreHashFilteredArea(
-                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
-                std::make_unique<std::string>(kSpineAreaId))
-            .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreHashFilteredArea(
+        params, kSpineAreaId);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(3, keyVals.size());
     auto value3 = kvs.at("key3");
     value3.value().reset();
@@ -1200,13 +1182,9 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     params.originatorIds() = {"node3"};
     params.keys() = {"key3"};
 
-    auto pub =
-        handler_
-            ->semifuture_getKvStoreHashFilteredArea(
-                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
-                std::make_unique<std::string>(kSpineAreaId))
-            .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getOpenrCtrlClient().co_getKvStoreHashFilteredArea(
+        params, kSpineAreaId);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(3, keyVals.size());
     auto value3 = kvs.at("key3");
     value3.value().reset();

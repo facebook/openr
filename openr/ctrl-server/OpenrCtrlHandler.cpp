@@ -24,6 +24,11 @@ namespace fs = std::filesystem;
 namespace fb303 = facebook::fb303;
 
 namespace openr {
+namespace {
+
+constexpr auto kKvStoreNotInitializedError = "KvStore is not initialized";
+
+} // namespace
 
 OpenrCtrlHandler::OpenrCtrlHandler(
     const std::string& nodeName,
@@ -817,21 +822,26 @@ OpenrCtrlHandler::co_getKvStoreHashFiltered(
       std::move(*filter), std::move(*area), __FUNCTION__);
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::semifuture_getKvStoreHashFilteredArea(
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  XLOGF(
-      DBG5,
-      "{} for keys: {}; area: {}",
-      __FUNCTION__,
-      toString(*filter.get()),
-      *area);
+  co_return co_await co_getKvStoreHashFilteredImpl(
+      std::move(*filter), std::move(*area), __FUNCTION__);
+}
 
-  XCHECK(kvStore_);
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+OpenrCtrlHandler::co_getKvStoreHashFilteredImpl(
+    thrift::KeyDumpParams filter, std::string area, std::string_view caller) {
+  XLOGF(DBG5, "{} for keys: {}; area: {}", caller, toString(filter), area);
 
-  return kvStore_->semifuture_dumpKvStoreHashes(
-      std::move(*area), std::move(*filter));
+  if (!kvStore_) {
+    throw thrift::KvStoreError(kKvStoreNotInitializedError);
+  }
+
+  auto result = co_await kvStore_->co_dumpKvStoreHashes(
+      std::move(area), std::move(filter));
+  co_return result;
 }
 
 folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
@@ -1479,26 +1489,6 @@ OpenrCtrlHandler::co_getKvStoreKeyValsFilteredArea(
     co_return std::make_unique<thrift::Publication>();
   }
   co_return std::make_unique<thrift::Publication>(std::move(*pubs->begin()));
-}
-
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::co_getKvStoreHashFilteredArea(
-    std::unique_ptr<thrift::KeyDumpParams> filter,
-    std::unique_ptr<std::string> area) {
-  co_return co_await co_getKvStoreHashFilteredImpl(
-      std::move(*filter), std::move(*area), __FUNCTION__);
-}
-
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
-OpenrCtrlHandler::co_getKvStoreHashFilteredImpl(
-    thrift::KeyDumpParams filter, std::string area, std::string_view caller) {
-  XLOGF(DBG5, "{} for keys: {}; area: {}", caller, toString(filter), area);
-
-  XCHECK(kvStore_);
-
-  auto result = co_await kvStore_->co_dumpKvStoreHashes(
-      std::move(area), std::move(filter));
-  co_return result;
 }
 
 folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
