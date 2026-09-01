@@ -369,17 +369,17 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 
-  /*
-   * API to dump existing peers in a specified area
+  /**
+   * API to dump existing peers in a specified area.
    */
-  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-  semifuture_getKvStorePeersArea(std::unique_ptr<std::string> area) override;
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersArea(
+      std::unique_ptr<std::string> area) override;
 
-  /*
+  /**
    * [Backward Compatibility] Same as above, but use local KvStoreDb's area
    */
-  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-  semifuture_getKvStorePeers() override;
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers()
+      override;
 
   /**
    * API to return structured thrift::KvStoreAreaSummary to include:
@@ -563,16 +563,6 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
     longPollReqs_->clear();
   }
 
-  /* Coroutine APIs */
- public:
-#if FOLLY_HAS_COROUTINES
-  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersArea(
-      std::unique_ptr<std::string> area) override;
-
-  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers()
-      override;
-#endif
-
  private:
   // returns the single area name configured for this node or throws if not
   // eaxclty 1 area is configured
@@ -591,6 +581,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreKeyValsFilteredImpl(
       thrift::KeyDumpParams filter, std::string area, std::string_view caller);
+
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersImpl(
+      std::string area);
 
   void processPublication(thrift::Publication&& pub);
   void authorizeConnection();

@@ -354,7 +354,7 @@ CO_TEST_F(OpenrCtrlFixture, GetKvStoreKeyValsFilteredRequiresSingleArea) {
       apache::thrift::TApplicationException);
 }
 
-CO_TEST(OpenrCtrlHandlerTest, GetKvStoreKeyValsFilteredWithoutKvStore) {
+CO_TEST(OpenrCtrlHandlerTest, KvStoreApisWithoutKvStore) {
   thrift::AreaConfig area;
   area.area_id() = kSpineAreaId;
   area.include_interface_regexes() = {"po.*"};
@@ -385,6 +385,16 @@ CO_TEST(OpenrCtrlHandlerTest, GetKvStoreKeyValsFilteredWithoutKvStore) {
   CO_ASSERT_THROW(
       co_await client->co_getKvStoreKeyValsFiltered(filter),
       thrift::KvStoreError);
+  CO_ASSERT_THROW(co_await client->co_getKvStorePeers(), thrift::KvStoreError);
+  CO_ASSERT_THROW(
+      co_await client->co_getKvStorePeersArea(kSpineAreaId),
+      thrift::KvStoreError);
+}
+
+CO_TEST_F(OpenrCtrlFixture, GetKvStorePeersRequiresSingleArea) {
+  CO_ASSERT_THROW(
+      co_await getOpenrCtrlClient().co_getKvStorePeers(),
+      apache::thrift::TApplicationException);
 }
 
 TEST_F(OpenrCtrlFixture, InitializationApis) {
@@ -705,69 +715,6 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
   // INCONSISTENCY_DETECTED = 6,
 }
 
-#if FOLLY_HAS_COROUTINES
-CO_TEST_F(OpenrCtrlFixture, KvStorePeersArea) {
-  //
-  // Peers APIs
-  //
-  const thrift::PeersMap peers{
-      {"peer1", createPeerSpec(Constants::kPlatformHost.toString())},
-      {"peer2", createPeerSpec(Constants::kPlatformHost.toString())},
-      {"peer3", createPeerSpec(Constants::kPlatformHost.toString())}};
-
-  // do the same with non-default area
-  const thrift::PeersMap peersPod{
-      {"peer11", createPeerSpec(Constants::kPlatformHost.toString())},
-      {"peer21", createPeerSpec(Constants::kPlatformHost.toString())},
-  };
-
-  {
-    for (auto& peer : peers) {
-      kvStoreWrapper_->addPeer(kSpineAreaId, peer.first, peer.second);
-    }
-    for (auto& peerPod : peersPod) {
-      kvStoreWrapper_->addPeer(kPodAreaId, peerPod.first, peerPod.second);
-    }
-
-    auto ret = co_await handler_->co_getKvStorePeersArea(
-        std::make_unique<std::string>(kSpineAreaId));
-
-    EXPECT_EQ(3, ret->size());
-    EXPECT_TRUE(ret->count("peer1"));
-    EXPECT_TRUE(ret->count("peer2"));
-    EXPECT_TRUE(ret->count("peer3"));
-  }
-
-  {
-    kvStoreWrapper_->delPeer(kSpineAreaId, "peer2");
-
-    auto ret = co_await handler_->co_getKvStorePeersArea(
-        std::make_unique<std::string>(kSpineAreaId));
-    EXPECT_EQ(2, ret->size());
-    EXPECT_TRUE(ret->count("peer1"));
-    EXPECT_TRUE(ret->count("peer3"));
-  }
-
-  {
-    auto ret = co_await handler_->co_getKvStorePeersArea(
-        std::make_unique<std::string>(kPodAreaId));
-
-    EXPECT_EQ(2, ret->size());
-    EXPECT_TRUE(ret->count("peer11"));
-    EXPECT_TRUE(ret->count("peer21"));
-  }
-
-  {
-    kvStoreWrapper_->delPeer(kPodAreaId, "peer21");
-
-    auto ret = co_await handler_->co_getKvStorePeersArea(
-        std::make_unique<std::string>(kPodAreaId));
-    EXPECT_EQ(1, ret->size());
-    EXPECT_TRUE(ret->count("peer11"));
-  }
-}
-#endif // FOLLY_HAS_COROUTINES
-
 CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(1, "node1", std::string("value1"))},
@@ -932,49 +879,39 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
       kvStoreWrapper_->addPeer(kPodAreaId, peerPod.first, peerPod.second);
     }
 
-    auto ret = handler_
-                   ->semifuture_getKvStorePeersArea(
-                       std::make_unique<std::string>(kSpineAreaId))
-                   .get();
+    auto ret =
+        co_await getOpenrCtrlClient().co_getKvStorePeersArea(kSpineAreaId);
 
-    EXPECT_EQ(3, ret->size());
-    EXPECT_TRUE(ret->count("peer1"));
-    EXPECT_TRUE(ret->count("peer2"));
-    EXPECT_TRUE(ret->count("peer3"));
+    EXPECT_EQ(3, ret.size());
+    EXPECT_TRUE(ret.count("peer1"));
+    EXPECT_TRUE(ret.count("peer2"));
+    EXPECT_TRUE(ret.count("peer3"));
   }
 
   {
     kvStoreWrapper_->delPeer(kSpineAreaId, "peer2");
 
-    auto ret = handler_
-                   ->semifuture_getKvStorePeersArea(
-                       std::make_unique<std::string>(kSpineAreaId))
-                   .get();
-    EXPECT_EQ(2, ret->size());
-    EXPECT_TRUE(ret->count("peer1"));
-    EXPECT_TRUE(ret->count("peer3"));
+    auto ret =
+        co_await getOpenrCtrlClient().co_getKvStorePeersArea(kSpineAreaId);
+    EXPECT_EQ(2, ret.size());
+    EXPECT_TRUE(ret.count("peer1"));
+    EXPECT_TRUE(ret.count("peer3"));
   }
 
   {
-    auto ret = handler_
-                   ->semifuture_getKvStorePeersArea(
-                       std::make_unique<std::string>(kPodAreaId))
-                   .get();
+    auto ret = co_await getOpenrCtrlClient().co_getKvStorePeersArea(kPodAreaId);
 
-    EXPECT_EQ(2, ret->size());
-    EXPECT_TRUE(ret->count("peer11"));
-    EXPECT_TRUE(ret->count("peer21"));
+    EXPECT_EQ(2, ret.size());
+    EXPECT_TRUE(ret.count("peer11"));
+    EXPECT_TRUE(ret.count("peer21"));
   }
 
   {
     kvStoreWrapper_->delPeer(kPodAreaId, "peer21");
 
-    auto ret = handler_
-                   ->semifuture_getKvStorePeersArea(
-                       std::make_unique<std::string>(kPodAreaId))
-                   .get();
-    EXPECT_EQ(1, ret->size());
-    EXPECT_TRUE(ret->count("peer11"));
+    auto ret = co_await getOpenrCtrlClient().co_getKvStorePeersArea(kPodAreaId);
+    EXPECT_EQ(1, ret.size());
+    EXPECT_TRUE(ret.count("peer11"));
   }
 
   // Not using params.prefix. Instead using keys. params.prefix will be

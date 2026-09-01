@@ -992,17 +992,23 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
   return sf;
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-OpenrCtrlHandler::semifuture_getKvStorePeers() {
-  return semifuture_getKvStorePeersArea(
-      getSingleAreaOrThrow("getKvStorePeers"));
+folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
+OpenrCtrlHandler::co_getKvStorePeers() {
+  auto area = getSingleAreaOrThrow(__FUNCTION__);
+  co_return co_await co_getKvStorePeersImpl(std::move(*area));
 }
 
-folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-OpenrCtrlHandler::semifuture_getKvStorePeersArea(
-    std::unique_ptr<std::string> area) {
-  XCHECK(kvStore_);
-  return kvStore_->semifuture_getKvStorePeers(std::move(*area));
+folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
+OpenrCtrlHandler::co_getKvStorePeersArea(std::unique_ptr<std::string> area) {
+  co_return co_await co_getKvStorePeersImpl(std::move(*area));
+}
+
+folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
+OpenrCtrlHandler::co_getKvStorePeersImpl(std::string area) {
+  if (!kvStore_) {
+    throw thrift::KvStoreError(kKvStoreNotInitializedError);
+  }
+  co_return co_await kvStore_->co_getKvStorePeers(std::move(area));
 }
 
 folly::coro::Task<std::unique_ptr<::std::vector<thrift::KvStoreAreaSummary>>>
@@ -1480,21 +1486,5 @@ folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_clearRibPolicy() {
   return decision_->clearRibPolicy();
 }
-
-#if FOLLY_HAS_COROUTINES
-folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
-OpenrCtrlHandler::co_getKvStorePeersArea(std::unique_ptr<std::string> area) {
-  XCHECK(kvStore_);
-  auto result = co_await kvStore_->co_getKvStorePeers(std::move(*area));
-  co_return result;
-}
-
-folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
-OpenrCtrlHandler::co_getKvStorePeers() {
-  auto result =
-      co_await co_getKvStorePeersArea(getSingleAreaOrThrow("getKvStorePeers"));
-  co_return result;
-}
-#endif // FOLLY_HAS_COROUTINES
 
 } // namespace openr
