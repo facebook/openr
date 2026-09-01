@@ -6,6 +6,63 @@
 cmake_minimum_required(VERSION 3.13)
 project(openr)
 
+# The full profile builds the complete Open/R daemon, tools, tests, and
+# libraries. The exported_libraries profile installs these component libraries:
+# - openr_constants
+# - openr_fbnl
+# - openr_network_util
+# - openr_system_metrics
+# It also installs these generated Thrift libraries:
+# - routing_policy_cpp2
+# - openr_config_cpp2
+# - network_cpp2
+# - platform_cpp2
+# - kv_store_cpp2
+# - types_cpp2
+# - openr_ctrl_cpp2
+# Public Open/R/common headers and Thrift definitions are included. Open/R
+# daemons, tools, tests, and unrelated libraries are omitted.
+set(OPENR_BUILD_PROFILE "full" CACHE STRING
+  "Build profile: full | exported_libraries")
+# Env wins over -D to match FBOSS profile selection and allow containerized
+# OSS builds to override a getdeps cache definition.
+if (NOT "$ENV{OPENR_BUILD_PROFILE}" STREQUAL "")
+  set(OPENR_BUILD_PROFILE "$ENV{OPENR_BUILD_PROFILE}")
+endif()
+if (NOT OPENR_BUILD_PROFILE MATCHES "^(full|exported_libraries)$")
+  message(FATAL_ERROR "Unknown OPENR_BUILD_PROFILE '${OPENR_BUILD_PROFILE}'")
+endif()
+set_property(
+  CACHE OPENR_BUILD_PROFILE
+  PROPERTY STRINGS full exported_libraries
+)
+message(STATUS "Open/R build profile: ${OPENR_BUILD_PROFILE}")
+
+if (OPENR_BUILD_PROFILE STREQUAL "exported_libraries")
+  # Exported static archives must support PIE and shared-library consumers.
+  set(CMAKE_POSITION_INDEPENDENT_CODE ON)
+endif()
+
+# Suppress the existing broad install rules while CMake declares the complete
+# target graph. The exported-libraries install set is enabled near the end of
+# this file after every selected target exists.
+if (NOT OPENR_BUILD_PROFILE STREQUAL "full")
+  set(OPENR_INSTALL_ENABLED FALSE)
+  macro(install)
+    if (OPENR_INSTALL_ENABLED)
+      _install(${ARGV})
+    else()
+      message(STATUS
+        "Profile ${OPENR_BUILD_PROFILE}: skip install ${ARGV}")
+    endif()
+  endmacro()
+
+  # A dependency build must stay narrow even when the root project enables
+  # tests. These cache values are read by option() later in this file.
+  set(BUILD_TOOLS OFF CACHE BOOL "Build Open/R tools" FORCE)
+  set(BUILD_TESTS OFF CACHE BOOL "Build Open/R tests" FORCE)
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
@@ -78,6 +135,29 @@ include_directories(
 #
 
 SET(OPENR_THRIFT_LIBS)
+
+# This is the complete installed surface for downstream library consumers.
+# Use this single list for pruning and installation so the profile cannot
+# build one set of targets while packaging another.
+set(OPENR_EXPORTED_COMPONENT_TARGETS
+  openr_constants
+  openr_fbnl
+  openr_network_util
+  openr_system_metrics
+)
+set(OPENR_EXPORTED_THRIFT_TARGETS
+  routing_policy_cpp2
+  openr_config_cpp2
+  network_cpp2
+  platform_cpp2
+  kv_store_cpp2
+  types_cpp2
+  openr_ctrl_cpp2
+)
+set(OPENR_EXPORTED_TARGETS
+  ${OPENR_EXPORTED_COMPONENT_TARGETS}
+  ${OPENR_EXPORTED_THRIFT_TARGETS}
+)
 
 add_fbthrift_cpp_library(
   routing_policy_cpp2
@@ -186,6 +266,14 @@ SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} openr_ctrl_cpp_cpp2)
 
 add_build_info(build_info)
 
+foreach(OPENR_EXPORTED_THRIFT_TARGET IN LISTS OPENR_EXPORTED_THRIFT_TARGETS)
+  if (NOT OPENR_EXPORTED_THRIFT_TARGET IN_LIST OPENR_THRIFT_LIBS)
+    message(FATAL_ERROR
+      "Exported Thrift target ${OPENR_EXPORTED_THRIFT_TARGET} is not in "
+      "OPENR_THRIFT_LIBS")
+  endif()
+endforeach()
+
 install(TARGETS
   ${OPENR_THRIFT_LIBS}
   DESTINATION lib
@@ -234,6 +322,20 @@ openr_add_link_monitor_libraries()
 openr_add_ctrl_server_library()
 openr_add_main_util_library()
 openr_add_test_support_libraries()
+
+add_custom_target(openr_exported_libraries)
+add_dependencies(openr_exported_libraries
+  ${OPENR_EXPORTED_TARGETS}
+)
+
+if (NOT OPENR_BUILD_PROFILE STREQUAL "full")
+  if (CMAKE_VERSION VERSION_LESS 3.19)
+    message(FATAL_ERROR
+      "OPENR_BUILD_PROFILE ${OPENR_BUILD_PROFILE} needs CMake >= 3.19, "
+      "found ${CMAKE_VERSION}; build the default 'full' profile instead")
+  endif()
+  cmake_language(DEFER CALL openr_prune_to_profile_targets)
+endif()
 
 add_executable(openr_bin
   openr/Main.cpp
@@ -343,6 +445,36 @@ install(TARGETS
 #
 # Install files
 #
+
+if (OPENR_BUILD_PROFILE STREQUAL "exported_libraries")
+  set(OPENR_INSTALL_ENABLED TRUE)
+
+  # add_fbthrift_cpp_library populates PUBLIC_HEADER and HEADER_INSTALL_DIR
+  # with the generated headers and their include destination.
+  foreach(OPENR_THRIFT_LIB IN LISTS OPENR_EXPORTED_THRIFT_TARGETS)
+    get_target_property(
+      OPENR_THRIFT_HEADER_INSTALL_DIR
+      ${OPENR_THRIFT_LIB}
+      HEADER_INSTALL_DIR
+    )
+    if (NOT OPENR_THRIFT_HEADER_INSTALL_DIR)
+      message(FATAL_ERROR
+        "HEADER_INSTALL_DIR is not set for ${OPENR_THRIFT_LIB}")
+    endif()
+    install(
+      TARGETS ${OPENR_THRIFT_LIB}
+      ARCHIVE DESTINATION lib
+      LIBRARY DESTINATION lib
+      PUBLIC_HEADER DESTINATION ${OPENR_THRIFT_HEADER_INSTALL_DIR}
+    )
+  endforeach()
+
+  install(
+    TARGETS ${OPENR_EXPORTED_COMPONENT_TARGETS}
+    ARCHIVE DESTINATION lib
+    LIBRARY DESTINATION lib
+  )
+endif()
 
 # headers
 install(

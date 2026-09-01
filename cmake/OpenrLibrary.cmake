@@ -5,6 +5,40 @@
 
 set(OPENR_CMAKE_HELPER_DIR "${CMAKE_CURRENT_LIST_DIR}")
 
+# Keep only the exported roots in the profile build. Their transitive targets
+# still build when CMake follows dependency edges from these roots.
+function(openr_prune_to_profile_targets)
+  get_property(
+    OPENR_ALL_TARGETS
+    DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    PROPERTY BUILDSYSTEM_TARGETS
+  )
+
+  set(OPENR_DROPPED_TARGET_COUNT 0)
+  set(OPENR_EXPORTED_TARGET_COUNT 0)
+
+  foreach(OPENR_TARGET IN LISTS OPENR_ALL_TARGETS)
+    get_target_property(OPENR_TARGET_TYPE ${OPENR_TARGET} TYPE)
+
+    if (OPENR_TARGET IN_LIST OPENR_EXPORTED_TARGETS)
+      math(EXPR OPENR_EXPORTED_TARGET_COUNT
+        "${OPENR_EXPORTED_TARGET_COUNT} + 1")
+    elseif (NOT OPENR_TARGET_TYPE STREQUAL "INTERFACE_LIBRARY")
+      set_target_properties(
+        ${OPENR_TARGET}
+        PROPERTIES EXCLUDE_FROM_ALL TRUE
+      )
+      math(EXPR OPENR_DROPPED_TARGET_COUNT
+        "${OPENR_DROPPED_TARGET_COUNT} + 1")
+    endif()
+  endforeach()
+
+  message(STATUS
+    "Open/R profile ${OPENR_BUILD_PROFILE}: kept "
+    "${OPENR_EXPORTED_TARGET_COUNT} exported targets, excluded "
+    "${OPENR_DROPPED_TARGET_COUNT}")
+endfunction()
+
 # Define a granular Open/R library.
 #
 # Each source is compiled once in an OBJECT library. The small STATIC target
