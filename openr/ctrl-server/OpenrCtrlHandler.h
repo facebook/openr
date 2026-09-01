@@ -262,7 +262,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::StreamSubscriberInfo>>>
   semifuture_getSubscriberInfo(int64_t type) override;
 
-  /*
+  /**
    * KvStore APIs
    */
 
@@ -282,7 +282,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
       std::unique_ptr<std::vector<std::string>> filterKeys) override;
 
-  /*
+  /**
    * API to return key-val pairs by given:
    *  - thrift::KeyDumpParams;
    *  - a specific area;
@@ -292,16 +292,16 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    *  - originatorIds; (ATTN: this is NOT regex matching)
    *  - operator to support AND/OR condition matching;
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyValsFilteredArea(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
 
-  /*
+  /**
    * [Backward Compatibility] Same as above, but use local KvStoreDb's area
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyValsFiltered(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsFiltered(
       std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
   /**
@@ -566,18 +566,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   /* Coroutine APIs */
  public:
 #if FOLLY_HAS_COROUTINES
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>>
-  co_getKvStoreKeyValsFilteredArea(
-      std::unique_ptr<thrift::KeyDumpParams> filter,
-      std::unique_ptr<std::string> area) override;
-
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersArea(
       std::unique_ptr<std::string> area) override;
-
-  folly::coro::Task<std::unique_ptr<thrift::Publication>>
-  co_getKvStoreKeyValsFiltered(
-      std::unique_ptr<thrift::KeyDumpParams> filter) override;
 
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers()
       override;
@@ -596,6 +586,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreHashFilteredImpl(
+      thrift::KeyDumpParams filter, std::string area, std::string_view caller);
+
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsFilteredImpl(
       thrift::KeyDumpParams filter, std::string area, std::string_view caller);
 
   void processPublication(thrift::Publication&& pub);
