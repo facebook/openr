@@ -9,7 +9,6 @@
 #include <gtest/gtest.h>
 
 #include <folly/container/F14Map.h>
-#include <folly/coro/BlockingWait.h>
 #include <folly/coro/FutureUtil.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/coro/Timeout.h>
