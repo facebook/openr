@@ -1075,9 +1075,8 @@ class KvStore final : public OpenrEventBase {
    * Set of APIs to retrieve internal state including:
    * state/counter/reader/etc.
    */
-  folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-  semifuture_getKvStoreAreaSummaryInternal(
-      std::set<std::string> selectAreas = {});
+  folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+  co_getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
 
   folly::SemiFuture<std::map<std::string, int64_t>> semifuture_getCounters();
 
@@ -1118,9 +1117,6 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::unique_ptr<thrift::Publication>> co_dumpKvStoreHashes(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
-  folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-  co_getKvStoreAreaSummaryInternal(std::set<std::string> selectAreas = {});
-
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
       std::string area);
 
@@ -1139,12 +1135,12 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<thrift::Publication> co_dumpKvStoreHashesImpl(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
-  folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
-  co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
-
 #endif // FOLLY_HAS_COROUTINES
 
  private:
+  folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
+  co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
+
   folly::coro::Task<folly::Unit> co_persistSelfOriginatedKeyInternal(
       std::string area, thrift::KeySetParams keySetParams);
 

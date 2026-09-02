@@ -138,8 +138,8 @@ folly::SemiFuture<folly::Unit> semifuture_deleteKvStorePeers(
  * @params: selectAreas => set of areas to retrieve area summary
  * @return: thrift::KvStoreAreaSummary => counters, key-vals, peers, etc.
  */
-folly::SemiFuture<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
-  semifuture_getKvStoreAreaSummaryInternal(
+folly::coro::Task<std::unique_ptr<std::vector<thrift::KvStoreAreaSummary>>>
+  co_getKvStoreAreaSummaryInternal(
       std::set<std::string> selectAreas = {});
 
 /*

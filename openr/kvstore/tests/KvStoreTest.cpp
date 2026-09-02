@@ -3125,7 +3125,7 @@ TEST_F(KvStoreTestFixture, FullSync) {
  *           \         /
  *  (pod-area) StoreB (plane-area)
  */
-TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
+CO_TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   thrift::AreaConfig pod, plane;
   pod.area_id() = "pod-area";
   pod.neighbor_regexes()->emplace_back(".*");
@@ -3314,19 +3314,19 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     std::set<std::string> areaSetEmpty{};
     std::map<std::string, int> storeBTest{};
 
-    auto summary = storeA->getSummary(areaSetAll);
+    auto summary = co_await storeA->getSummary(areaSetAll);
     EXPECT_EQ(1, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(*summary.at(0).area(), *pod.area_id());
     EXPECT_EQ(keyVal0Size + keyVal1Size, *summary.at(0).keyValsBytes());
 
-    summary = storeA->getSummary(areaSetEmpty);
+    summary = co_await storeA->getSummary(areaSetEmpty);
     EXPECT_EQ(1, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(*summary.at(0).area(), *pod.area_id());
     EXPECT_EQ(keyVal0Size + keyVal1Size, *summary.at(0).keyValsBytes());
 
-    summary = storeB->getSummary(areaSetAll);
+    summary = co_await storeB->getSummary(areaSetAll);
     EXPECT_EQ(2, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(2, *summary.at(1).keyValsCount());
@@ -3339,18 +3339,18 @@ TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     EXPECT_EQ(1, storeBTest.count(*pod.area_id()));
     EXPECT_EQ(keyVal0Size + keyVal1Size, storeBTest[*pod.area_id()]);
 
-    summary = storeB->getSummary(areaSetEmpty);
+    summary = co_await storeB->getSummary(areaSetEmpty);
     EXPECT_EQ(2, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(2, *summary.at(1).keyValsCount());
 
-    summary = storeC->getSummary(areaSetAll);
+    summary = co_await storeC->getSummary(areaSetAll);
     EXPECT_EQ(1, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(*summary.at(0).area(), *plane.area_id());
     EXPECT_EQ(keyVal2Size + keyVal3Size, *summary.at(0).keyValsBytes());
 
-    summary = storeC->getSummary(areaSetEmpty);
+    summary = co_await storeC->getSummary(areaSetEmpty);
     EXPECT_EQ(1, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(*summary.at(0).area(), *plane.area_id());

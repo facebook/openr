@@ -419,10 +419,11 @@ KvStoreWrapper<ClientType>::getPeers(AreaId const& area) {
 }
 
 template <class ClientType>
-std::vector<thrift::KvStoreAreaSummary>
+folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
 KvStoreWrapper<ClientType>::getSummary(std::set<std::string> selectAreas) {
-  return *(
-      kvStore_->semifuture_getKvStoreAreaSummaryInternal(selectAreas).get());
+  auto summary = co_await kvStore_->co_getKvStoreAreaSummaryInternal(
+      std::move(selectAreas));
+  co_return std::move(*summary);
 }
 
 /*

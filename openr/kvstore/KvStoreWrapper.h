@@ -8,6 +8,7 @@
 #pragma once
 
 #include <folly/container/F14Map.h>
+#include <folly/coro/Task.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -199,7 +200,7 @@ class KvStoreWrapper {
   /**
    * API to get summary of each KvStore area provided as input.
    */
-  std::vector<thrift::KvStoreAreaSummary> getSummary(
+  folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>> getSummary(
       std::set<std::string> selectAreas);
 
   /**
