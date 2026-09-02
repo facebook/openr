@@ -1042,8 +1042,8 @@ class KvStore final : public OpenrEventBase {
    * This is an authoritative call - if someone else advertises the same key,
    * KvStore will try to win over it by setting key-value with higher version.
    */
-  folly::SemiFuture<folly::Unit> semifuture_persistSelfOriginatedKey(
-      std::string&& area, thrift::KeySetParams&& keySetParams);
+  folly::coro::Task<folly::Unit> co_persistSelfOriginatedKey(
+      std::string area, thrift::KeySetParams keySetParams);
 
   /*
    * [Public APIs]
@@ -1052,8 +1052,8 @@ class KvStore final : public OpenrEventBase {
    * This call sets a final value (deletion marker) with incremented version
    * and stops ttl-refreshing by clearing from local cache.
    */
-  folly::SemiFuture<folly::Unit> semifuture_unsetSelfOriginatedKey(
-      std::string&& area, thrift::KeySetParams&& keySetParams);
+  folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKey(
+      std::string area, thrift::KeySetParams keySetParams);
 
   /*
    * [Public APIs]
@@ -1124,12 +1124,6 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
       std::string area);
 
-  folly::coro::Task<folly::Unit> co_persistSelfOriginatedKey(
-      std::string&& area, thrift::KeySetParams&& keySetParams);
-
-  folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKey(
-      std::string&& area, thrift::KeySetParams&& keySetParams);
-
   // [private APIs]
  private:
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
@@ -1148,14 +1142,15 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
   co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
 
-  folly::coro::Task<folly::Unit> co_persistSelfOriginatedKeyInternal(
-      std::string&& area, thrift::KeySetParams&& keySetParams);
-
-  folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKeyInternal(
-      std::string&& area, thrift::KeySetParams&& keySetParams);
 #endif // FOLLY_HAS_COROUTINES
 
  private:
+  folly::coro::Task<folly::Unit> co_persistSelfOriginatedKeyInternal(
+      std::string area, thrift::KeySetParams keySetParams);
+
+  folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKeyInternal(
+      std::string area, thrift::KeySetParams keySetParams);
+
   // Define an empty string to keep the linter happy.
   static inline const std::string kEmptyString;
 

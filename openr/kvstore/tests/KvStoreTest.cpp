@@ -208,6 +208,62 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
   EXPECT_EQ(*valueFromStore.ttlVersion(), 0);
 }
 
+CO_TEST_F(KvStoreTestFixture, SelfOriginatedKeyApis) {
+  const std::string nodeId = "self-originated-key-node";
+  auto* kvStore = createKvStore(getTestKvConf(nodeId));
+  kvStore->run();
+
+  const std::string key = "self-originated-key";
+  const std::string persistedValue = "persisted-value";
+  const std::string finalValue = "final-value";
+  const auto makeParams = [&](std::string value) {
+    thrift::KeySetParams params;
+    params.keyVals()->emplace(
+        key,
+        createThriftValue(
+            1, nodeId, std::move(value), Constants::kTtlInfinity, 0));
+    return params;
+  };
+
+  auto persistParams = makeParams(persistedValue);
+  co_await kvStore->getKvStore()->co_persistSelfOriginatedKey(
+      kTestingAreaName, std::move(persistParams));
+  auto selfOriginatedKeys = kvStore->dumpAllSelfOriginated(kTestingAreaName);
+  CO_ASSERT_TRUE(selfOriginatedKeys.contains(key));
+  EXPECT_EQ(persistedValue, *selfOriginatedKeys.at(key).value.value());
+
+  auto unsetParams = makeParams(finalValue);
+  co_await kvStore->getKvStore()->co_unsetSelfOriginatedKey(
+      kTestingAreaName, std::move(unsetParams));
+  EXPECT_EQ(0, kvStore->dumpAllSelfOriginated(kTestingAreaName).count(key));
+}
+
+CO_TEST_F(KvStoreTestFixture, SelfOriginatedKeyTasksRejectInvalidArea) {
+  const std::string nodeId = "self-originated-key-invalid-area";
+  auto* kvStore = createKvStore(getTestKvConf(nodeId));
+  kvStore->run();
+
+  const std::string invalidArea = "invalid-area";
+  const auto makeParams = [&]() {
+    thrift::KeySetParams params;
+    params.keyVals()->emplace(
+        "self-originated-key",
+        createThriftValue(1, nodeId, "value", Constants::kTtlInfinity, 0));
+    return params;
+  };
+
+  auto persistParams = makeParams();
+  CO_ASSERT_THROW(
+      co_await kvStore->getKvStore()->co_persistSelfOriginatedKey(
+          invalidArea, std::move(persistParams)),
+      thrift::KvStoreError);
+  auto unsetParams = makeParams();
+  CO_ASSERT_THROW(
+      co_await kvStore->getKvStore()->co_unsetSelfOriginatedKey(
+          invalidArea, std::move(unsetParams)),
+      thrift::KvStoreError);
+}
+
 /**
  * Validate retrieval of all key-values matching a given prefix.
  */

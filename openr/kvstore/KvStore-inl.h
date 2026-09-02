@@ -704,107 +704,113 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
 }
 
 template <class ClientType>
-folly::SemiFuture<folly::Unit>
-KvStore<ClientType>::semifuture_persistSelfOriginatedKey(
-    std::string&& area, thrift::KeySetParams&& keySetParams) {
-  folly::Promise<folly::Unit> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        keySetParams = std::move(keySetParams),
-                        area]() mutable {
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_persistSelfOriginatedKeyInternal(
+    std::string area, thrift::KeySetParams keySetParams) {
+  auto& kvStoreDb = getAreaDbOrThrow(area, "co_persistSelfOriginatedKey");
+
+  // Persist each key-value pair from keyVals
+  for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
     XLOGF(
-        WARNING,
-        "PersistSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
+        DBG3,
+        "Persist self-originated key requested for AREA: {}, key: {}",
         area,
-        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                             : ""),
-        (keySetParams.timestamp_ms().has_value()
-             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-             : ""));
-    try {
-      auto& kvStoreDb =
-          getAreaDbOrThrow(area, "semifuture_persistSelfOriginatedKey");
+        key);
 
-      // Persist each key-value pair from keyVals
-      for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
-        XLOGF(
-            DBG3,
-            "Persist self-originated key requested for AREA: {}, key: {}",
-            area,
-            key);
-
-        // Extract the value from thrift::Value
-        if (!thriftValue.value().has_value()) {
-          XLOGF(
-              WARNING,
-              "Key {} has no value in keyVals, skipping persist operation",
-              key);
-          continue;
-        }
-
-        // Persist the key-value pair
-        kvStoreDb.persistSelfOriginatedKey(key, *thriftValue.value());
-      }
-
-      p.setValue();
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
+    // Extract the value from thrift::Value
+    if (!thriftValue.value().has_value()) {
+      XLOGF(
+          WARNING,
+          "Key {} has no value in keyVals, skipping persist operation",
+          key);
+      continue;
     }
-  });
-  return sf;
+
+    // Persist the key-value pair
+    kvStoreDb.persistSelfOriginatedKey(key, *thriftValue.value());
+  }
+
+  co_return folly::Unit();
 }
 
 template <class ClientType>
-folly::SemiFuture<folly::Unit>
-KvStore<ClientType>::semifuture_unsetSelfOriginatedKey(
-    std::string&& area, thrift::KeySetParams&& keySetParams) {
-  folly::Promise<folly::Unit> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        keySetParams = std::move(keySetParams),
-                        area]() mutable {
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_persistSelfOriginatedKey(
+    std::string area, thrift::KeySetParams keySetParams) {
+  XLOGF(
+      WARNING,
+      "PersistSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    co_await co_withExecutor(
+        getEvb(),
+        co_persistSelfOriginatedKeyInternal(area, std::move(keySetParams)));
+  } catch (thrift::KvStoreError const& e) {
     XLOGF(
-        WARNING,
-        "UnsetSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
+        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw;
+  }
+  co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_unsetSelfOriginatedKeyInternal(
+    std::string area, thrift::KeySetParams keySetParams) {
+  auto& kvStoreDb = getAreaDbOrThrow(area, "co_unsetSelfOriginatedKey");
+
+  // Unset each key-value pair from keyVals
+  for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
+    XLOGF(
+        DBG3,
+        "Unset self-originated key requested for AREA: {}, key: {}",
         area,
-        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                             : ""),
-        (keySetParams.timestamp_ms().has_value()
-             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-             : ""));
-    try {
-      auto& kvStoreDb =
-          getAreaDbOrThrow(area, "semifuture_unsetSelfOriginatedKey");
+        key);
 
-      // Unset each key-value pair from keyVals
-      for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
-        XLOGF(
-            DBG3,
-            "Unset self-originated key requested for AREA: {}, key: {}",
-            area,
-            key);
-
-        // Extract the value from thrift::Value
-        if (!thriftValue.value().has_value()) {
-          XLOGF(
-              WARNING,
-              "Key {} has no value in keyVals, skipping unset operation",
-              key);
-          continue;
-        }
-
-        // Unset the key-value pair
-        kvStoreDb.unsetSelfOriginatedKey(key, *thriftValue.value());
-      }
-
-      p.setValue();
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
+    // Extract the value from thrift::Value
+    if (!thriftValue.value().has_value()) {
+      XLOGF(
+          WARNING,
+          "Key {} has no value in keyVals, skipping unset operation",
+          key);
+      continue;
     }
-  });
-  return sf;
+
+    // Unset the key-value pair
+    kvStoreDb.unsetSelfOriginatedKey(key, *thriftValue.value());
+  }
+
+  co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_unsetSelfOriginatedKey(
+    std::string area, thrift::KeySetParams keySetParams) {
+  XLOGF(
+      WARNING,
+      "UnsetSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    co_await co_withExecutor(
+        getEvb(),
+        co_unsetSelfOriginatedKeyInternal(area, std::move(keySetParams)));
+  } catch (thrift::KvStoreError const& e) {
+    XLOGF(
+        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw;
+  }
+  co_return folly::Unit();
 }
 
 template <class ClientType>
@@ -4514,116 +4520,5 @@ KvStore<ClientType>::co_getKvStorePeers(std::string area) {
   co_return std::make_unique<thrift::PeersMap>(result);
 }
 
-template <class ClientType>
-folly::coro::Task<folly::Unit>
-KvStore<ClientType>::co_persistSelfOriginatedKeyInternal(
-    std::string&& area, thrift::KeySetParams&& keySetParams) {
-  auto& kvStoreDb = getAreaDbOrThrow(area, "co_persistSelfOriginatedKey");
-
-  // Persist each key-value pair from keyVals
-  for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
-    XLOGF(
-        DBG3,
-        "Persist self-originated key requested for AREA: {}, key: {}",
-        area,
-        key);
-
-    // Extract the value from thrift::Value
-    if (!thriftValue.value().has_value()) {
-      XLOGF(
-          WARNING,
-          "Key {} has no value in keyVals, skipping persist operation",
-          key);
-      continue;
-    }
-
-    // Persist the key-value pair
-    kvStoreDb.persistSelfOriginatedKey(key, *thriftValue.value());
-  }
-
-  co_return folly::Unit();
-}
-
-template <class ClientType>
-folly::coro::Task<folly::Unit>
-KvStore<ClientType>::co_persistSelfOriginatedKey(
-    std::string&& area, thrift::KeySetParams&& keySetParams) {
-  XLOGF(
-      WARNING,
-      "PersistSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
-      area,
-      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                           : ""),
-      (keySetParams.timestamp_ms().has_value()
-           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-           : ""));
-  try {
-    co_await co_withExecutor(
-        getEvb(),
-        co_persistSelfOriginatedKeyInternal(
-            std::move(area), std::move(keySetParams)));
-  } catch (thrift::KvStoreError const& e) {
-    XLOGF(
-        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
-    throw;
-  }
-  co_return folly::Unit();
-}
-
-template <class ClientType>
-folly::coro::Task<folly::Unit>
-KvStore<ClientType>::co_unsetSelfOriginatedKeyInternal(
-    std::string&& area, thrift::KeySetParams&& keySetParams) {
-  auto& kvStoreDb = getAreaDbOrThrow(area, "co_unsetSelfOriginatedKey");
-
-  // Unset each key-value pair from keyVals
-  for (const auto& [key, thriftValue] : *keySetParams.keyVals()) {
-    XLOGF(
-        DBG3,
-        "Unset self-originated key requested for AREA: {}, key: {}",
-        area,
-        key);
-
-    // Extract the value from thrift::Value
-    if (!thriftValue.value().has_value()) {
-      XLOGF(
-          WARNING,
-          "Key {} has no value in keyVals, skipping unset operation",
-          key);
-      continue;
-    }
-
-    // Unset the key-value pair
-    kvStoreDb.unsetSelfOriginatedKey(key, *thriftValue.value());
-  }
-
-  co_return folly::Unit();
-}
-
-template <class ClientType>
-folly::coro::Task<folly::Unit>
-KvStore<ClientType>::co_unsetSelfOriginatedKey(
-    std::string&& area, thrift::KeySetParams&& keySetParams) {
-  XLOGF(
-      WARNING,
-      "UnsetSelfOriginatedKey request for AREA: {}, by sender: {}, at time: {}",
-      area,
-      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                           : ""),
-      (keySetParams.timestamp_ms().has_value()
-           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-           : ""));
-  try {
-    co_await co_withExecutor(
-        getEvb(),
-        co_unsetSelfOriginatedKeyInternal(
-            std::move(area), std::move(keySetParams)));
-  } catch (thrift::KvStoreError const& e) {
-    XLOGF(
-        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
-    throw;
-  }
-  co_return folly::Unit();
-}
 #endif // FOLLY_HAS_COROUTINES
 } // namespace openr
