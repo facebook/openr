@@ -34,7 +34,7 @@ DecisionRouteDb::calculateUpdate(DecisionRouteDb&& newDb) const {
   // unicastRoutesToDelete
   for (auto const& [prefix, _] : unicastRoutes) {
     if (!newDb.unicastRoutes.count(prefix)) {
-      delta.unicastRoutesToDelete.emplace_back(prefix);
+      delta.unicastRoutesToDelete.emplace(prefix);
     }
   }
   return delta;
@@ -79,7 +79,7 @@ void
 SpfSolver::updateStaticUnicastRoutes(
     const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
         unicastRoutesToUpdate,
-    const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete) {
+    const folly::F14FastSet<folly::CIDRNetwork>& unicastRoutesToDelete) {
   // Process IP routes to add or update
   XLOGF_IF(
       INFO,

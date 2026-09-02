@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <array>
+
 #include <gtest/gtest.h>
 
 #include <folly/IPAddress.h>
@@ -44,6 +46,16 @@ makeMpls(int32_t label, int numNextHops) {
   return RibMplsEntry(label, std::move(nhs));
 }
 
+folly::CIDRNetwork
+makeDeleteTestPrefix(size_t index) {
+  return folly::IPAddress::createNetwork(
+      "10." + std::to_string(index / 256) + "." + std::to_string(index % 256) +
+      ".0/24");
+}
+
+using RouteUpdateCoalescer =
+    bool (*)(DecisionRouteUpdate&, DecisionRouteUpdate&);
+
 } // namespace
 
 /*
@@ -81,13 +93,13 @@ TEST(DecisionRouteUpdateMerge, DeleteSupersedesUpdate) {
   base.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
 
   DecisionRouteUpdate next;
-  next.unicastRoutesToDelete.push_back(p1);
+  next.unicastRoutesToDelete.insert(p1);
 
   base.mergeInPlace(std::move(next));
 
   EXPECT_EQ(0, base.unicastRoutesToUpdate.count(p1));
   ASSERT_EQ(1, base.unicastRoutesToDelete.size());
-  EXPECT_EQ(p1, base.unicastRoutesToDelete.front());
+  EXPECT_EQ(1, base.unicastRoutesToDelete.count(p1));
 }
 
 /*
@@ -98,7 +110,7 @@ TEST(DecisionRouteUpdateMerge, UpdateSupersedesDelete) {
   const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
 
   DecisionRouteUpdate base;
-  base.unicastRoutesToDelete.push_back(p1);
+  base.unicastRoutesToDelete.insert(p1);
 
   DecisionRouteUpdate next;
   next.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
@@ -115,10 +127,10 @@ TEST(DecisionRouteUpdateMerge, UpdateSupersedesDelete) {
 TEST(DecisionRouteUpdateMerge, MplsUpdateDeleteReconcile) {
   DecisionRouteUpdate base;
   base.addMplsRouteToUpdate(makeMpls(100, 1));
-  base.mplsRoutesToDelete.push_back(200);
+  base.mplsRoutesToDelete.insert(200);
 
   DecisionRouteUpdate next;
-  next.mplsRoutesToDelete.push_back(100); // delete supersedes prior update
+  next.mplsRoutesToDelete.insert(100); // delete supersedes prior update
   next.addMplsRouteToUpdate(makeMpls(200, 1)); // update supersedes prior delete
 
   base.mergeInPlace(std::move(next));
@@ -126,7 +138,7 @@ TEST(DecisionRouteUpdateMerge, MplsUpdateDeleteReconcile) {
   EXPECT_EQ(0, base.mplsRoutesToUpdate.count(100));
   EXPECT_EQ(1, base.mplsRoutesToUpdate.count(200));
   ASSERT_EQ(1, base.mplsRoutesToDelete.size());
-  EXPECT_EQ(100, base.mplsRoutesToDelete.front());
+  EXPECT_EQ(1, base.mplsRoutesToDelete.count(100));
 }
 
 /*
@@ -140,11 +152,11 @@ TEST(DecisionRouteUpdateMerge, DisjointPreserved) {
 
   DecisionRouteUpdate base;
   base.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
-  base.unicastRoutesToDelete.push_back(p2);
+  base.unicastRoutesToDelete.insert(p2);
 
   DecisionRouteUpdate next;
   next.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1));
-  next.unicastRoutesToDelete.push_back(p4);
+  next.unicastRoutesToDelete.insert(p4);
 
   base.mergeInPlace(std::move(next));
 
@@ -225,9 +237,9 @@ TEST(DecisionRouteUpdateMerge, FullSyncBaseDeleteDropsFromSnapshot) {
   base.addMplsRouteToUpdate(makeMpls(100, 1));
 
   DecisionRouteUpdate next; // default INCREMENTAL
-  next.unicastRoutesToDelete.push_back(p1); // drop p1 from the snapshot
+  next.unicastRoutesToDelete.insert(p1); // drop p1 from the snapshot
   next.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1)); // add p3
-  next.mplsRoutesToDelete.push_back(100); // drop label 100
+  next.mplsRoutesToDelete.insert(100); // drop label 100
 
   base.mergeInPlace(std::move(next));
 
@@ -310,7 +322,7 @@ TEST(CoalesceDecisionRouteUpdates, FullSyncBaseStaysFullSync) {
   pending.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
 
   DecisionRouteUpdate incoming; // default INCREMENTAL
-  incoming.unicastRoutesToDelete.push_back(p1);
+  incoming.unicastRoutesToDelete.insert(p1);
   incoming.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1));
 
   EXPECT_TRUE(coalesceDecisionRouteUpdates(pending, incoming));
@@ -425,7 +437,7 @@ TEST(CoalesceIncrementalRouteUpdates, FullSyncBaseIsNotMerged) {
   pending.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
 
   DecisionRouteUpdate incoming; // default INCREMENTAL
-  incoming.unicastRoutesToDelete.push_back(p1);
+  incoming.unicastRoutesToDelete.insert(p1);
 
   EXPECT_FALSE(coalesceIncrementalRouteUpdates(pending, incoming));
 
@@ -436,7 +448,7 @@ TEST(CoalesceIncrementalRouteUpdates, FullSyncBaseIsNotMerged) {
   EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, pending.type);
   EXPECT_EQ(1, pending.unicastRoutesToUpdate.count(p1));
   ASSERT_EQ(1, incoming.unicastRoutesToDelete.size());
-  EXPECT_EQ(p1, incoming.unicastRoutesToDelete.front());
+  EXPECT_EQ(1, incoming.unicastRoutesToDelete.count(p1));
 }
 
 /*
@@ -460,7 +472,7 @@ TEST(CoalesceIncrementalRouteUpdates, BoundsSnoopBacklogAtTwo) {
 
   // A withdrawal plus a burst of churn while the client is stalled.
   DecisionRouteUpdate withdraw;
-  withdraw.unicastRoutesToDelete.push_back(p1);
+  withdraw.unicastRoutesToDelete.insert(p1);
   q.push(std::move(withdraw));
   for (size_t i = 0; i < 50; ++i) {
     DecisionRouteUpdate update;
@@ -478,9 +490,60 @@ TEST(CoalesceIncrementalRouteUpdates, BoundsSnoopBacklogAtTwo) {
   const auto second = snoop.get().value();
   EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, second.type);
   ASSERT_EQ(1, second.unicastRoutesToDelete.size());
-  EXPECT_EQ(p1, second.unicastRoutesToDelete.front());
+  EXPECT_EQ(1, second.unicastRoutesToDelete.count(p1));
 
   q.close();
+}
+
+namespace {
+
+void
+expectAccumulatesAndResurrectsDeletes(RouteUpdateCoalescer coalescer) {
+  constexpr size_t kNumDeletes{2048};
+  DecisionRouteUpdate pending;
+
+  for (size_t i = 0; i < kNumDeletes; ++i) {
+    DecisionRouteUpdate incoming;
+    incoming.unicastRoutesToDelete.emplace(makeDeleteTestPrefix(i));
+    incoming.mplsRoutesToDelete.emplace(static_cast<int32_t>(i));
+    EXPECT_TRUE(coalescer(pending, incoming));
+  }
+
+  ASSERT_EQ(kNumDeletes, pending.unicastRoutesToDelete.size());
+  ASSERT_EQ(kNumDeletes, pending.mplsRoutesToDelete.size());
+
+  const std::array<size_t, 3> resurrected{0, kNumDeletes / 2, kNumDeletes - 1};
+  DecisionRouteUpdate incoming;
+  for (const auto index : resurrected) {
+    const auto label = static_cast<int32_t>(index);
+    incoming.addRouteToUpdate(makeUnicast(
+        "10." + std::to_string(index / 256) + "." +
+            std::to_string(index % 256) + ".0/24",
+        1));
+    incoming.addMplsRouteToUpdate(makeMpls(label, 1));
+  }
+  EXPECT_TRUE(coalescer(pending, incoming));
+
+  EXPECT_EQ(
+      kNumDeletes - resurrected.size(), pending.unicastRoutesToDelete.size());
+  EXPECT_EQ(
+      kNumDeletes - resurrected.size(), pending.mplsRoutesToDelete.size());
+  for (const auto index : resurrected) {
+    const auto label = static_cast<int32_t>(index);
+    EXPECT_EQ(
+        0, pending.unicastRoutesToDelete.count(makeDeleteTestPrefix(index)));
+    EXPECT_EQ(0, pending.mplsRoutesToDelete.count(label));
+  }
+}
+
+} // namespace
+
+TEST(CoalesceDecisionRouteUpdates, AccumulatesAndResurrectsDeletes) {
+  expectAccumulatesAndResurrectsDeletes(coalesceDecisionRouteUpdates);
+}
+
+TEST(CoalesceIncrementalRouteUpdates, AccumulatesAndResurrectsDeletes) {
+  expectAccumulatesAndResurrectsDeletes(coalesceIncrementalRouteUpdates);
 }
 
 } // namespace openr

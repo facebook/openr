@@ -425,7 +425,7 @@ PrefixManager::populateRouteUpdates(
   } else {
     // If was installed to fib, but now lose in tie break, withdraw from fib.
     if (advertiseStatus.publishedRoute.has_value()) {
-      routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
+      routeUpdatesForDecision.unicastRoutesToDelete.emplace(prefix);
       advertiseStatus.publishedRoute.reset();
     }
   } // else
@@ -552,7 +552,7 @@ PrefixManager::deletePrefixKeysInKvStore(
   if (prefixIter != advertiseStatus_.end()) {
     deleteKvStoreKeyHelper(prefix, prefixIter->second.areas);
     if (prefixIter->second.publishedRoute.has_value()) {
-      routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(prefix);
+      routeUpdatesForDecision.unicastRoutesToDelete.emplace(prefix);
     }
     advertiseStatus_.erase(prefixIter);
   }
@@ -1524,7 +1524,7 @@ PrefixManager::processOriginatedPrefixes() {
         auto it = advertiseStatus_.find(network);
         if (it != advertiseStatus_.end() &&
             it->second.publishedRoute.has_value()) {
-          routeUpdatesForDecision.unicastRoutesToDelete.emplace_back(network);
+          routeUpdatesForDecision.unicastRoutesToDelete.emplace(network);
           it->second.publishedRoute.reset();
         }
       }

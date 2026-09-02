@@ -1332,7 +1332,7 @@ TEST_F(FibTestFixture, SyncFibProgramming) {
     EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
     EXPECT_EQ(1, publication.size()); // modifications
     ASSERT_EQ(1, publication.unicastRoutesToDelete.size());
-    EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
+    EXPECT_EQ(1, publication.unicastRoutesToDelete.count(toIPNetwork(prefix2)));
   }
 
   // Wait for deletion of prefix3, label3 go through
@@ -1441,7 +1441,8 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
       EXPECT_EQ(1, publication.size());
-      EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
+      EXPECT_EQ(
+          1, publication.unicastRoutesToDelete.count(toIPNetwork(prefix2)));
     }
 
     // Set handler healthy
@@ -1482,7 +1483,8 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
       EXPECT_EQ(1, publication.size());
-      EXPECT_EQ(toIPNetwork(prefix1), publication.unicastRoutesToDelete.at(0));
+      EXPECT_EQ(
+          1, publication.unicastRoutesToDelete.count(toIPNetwork(prefix1)));
     }
 
     // Unset dirty state
@@ -1510,7 +1512,7 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
 
     // Withdraw routes
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix2));
+    routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(prefix2));
     routeUpdatesQueue.push(routeUpdate);
 
     // There will be immediate notification about route withdrawl
@@ -1554,7 +1556,7 @@ TEST_F(FibTestFixture, IncrementalRouteProgramming) {
   {
     // Withdraw routes
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix1));
+    routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(prefix1));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get removed
@@ -1618,7 +1620,8 @@ TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
       auto publication = fibRouteUpdatesQueueReader.get().value();
       EXPECT_EQ(DecisionRouteUpdate::INCREMENTAL, publication.type);
       EXPECT_EQ(1, publication.size());
-      EXPECT_EQ(toIPNetwork(prefix2), publication.unicastRoutesToDelete.at(0));
+      EXPECT_EQ(
+          1, publication.unicastRoutesToDelete.count(toIPNetwork(prefix2)));
     }
   }
 
@@ -1649,7 +1652,7 @@ TEST_F(FibTestFixture, RouteProgrammingWithPersistentFailure) {
   {
     // Withdraw routes
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix1));
+    routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(prefix1));
     routeUpdatesQueue.push(routeUpdate);
 
     // Verify that they get removed

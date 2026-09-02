@@ -10,6 +10,7 @@
 #include <string>
 
 #include <folly/container/F14Map.h>
+#include <folly/container/F14Set.h>
 #include <openr/decision/LinkState.h>
 #include <openr/decision/PrefixState.h>
 #include <openr/decision/RibEntry.h>
@@ -121,7 +122,7 @@ class SpfSolver {
   void updateStaticUnicastRoutes(
       const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutesToUpdate,
-      const std::vector<folly::CIDRNetwork>& unicastRoutesToDelete);
+      const folly::F14FastSet<folly::CIDRNetwork>& unicastRoutesToDelete);
 
   // Build route database using given prefix and link states for a given
   // router, myNodeName

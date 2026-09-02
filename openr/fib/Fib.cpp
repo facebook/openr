@@ -409,7 +409,7 @@ Fib::RouteState::createUpdate() {
     }
     auto iter = unicastRoutes.find(itrPrefixes->first);
     if (iter == unicastRoutes.end()) { // Delete
-      update.unicastRoutesToDelete.emplace_back(itrPrefixes->first);
+      update.unicastRoutesToDelete.emplace(itrPrefixes->first);
     } else { // Add or Update
       update.unicastRoutesToUpdate.emplace(itrPrefixes->first, iter->second);
     }
@@ -634,7 +634,7 @@ Fib::updateUnicastRoutes(
         // action because FIB state is unclear e.g. withdraw route from KvStore
         for (auto& [prefix, _] : routeUpdate.unicastRoutesToUpdate) {
           routeState_.dirtyPrefixes.insert_or_assign(prefix, retryAt);
-          routeUpdate.unicastRoutesToDelete.emplace_back(prefix);
+          routeUpdate.unicastRoutesToDelete.emplace(prefix);
         }
 
         // We don't want to advertise failed route add/updates

@@ -415,7 +415,7 @@ BM_RedistributeFibDeleteRoute(
     // All routes are contained in single DecisionRouteUpdate
     DecisionRouteUpdate routeUpdate;
     for (auto& prefixEntry : prefixesToRedistribute) {
-      routeUpdate.unicastRoutesToDelete.emplace_back(
+      routeUpdate.unicastRoutesToDelete.emplace(
           toIPNetwork(*prefixEntry.prefix()));
     }
 

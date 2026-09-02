@@ -1461,7 +1461,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
 
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
+    routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(addr1));
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> expected,
@@ -1644,7 +1644,7 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
   //
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(addr1));
+    routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(addr1));
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     std::map<std::pair<std::string, std::string>, thrift::PrefixEntry> got,
@@ -2051,7 +2051,7 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.addRouteToUpdate(unicastEntryV4_2);
     routeUpdate.addRouteToUpdate(unicastEntryV6_2);
-    routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_2);
+    routeUpdate.unicastRoutesToDelete.emplace(v6Network_2);
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     // Verify 1): PrefixManager -> Decision update
@@ -2175,8 +2175,8 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   XLOG(DBG1, "Starting test step 4...");
   {
     DecisionRouteUpdate routeUpdate;
-    routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
-    routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
+    routeUpdate.unicastRoutesToDelete.emplace(v4Network_1);
+    routeUpdate.unicastRoutesToDelete.emplace(v6Network_1);
     fibRouteUpdatesQueue.push(std::move(routeUpdate));
 
     // Verify 1): PrefixManager -> Decision update
@@ -2751,8 +2751,8 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   }
 
   // Step 3 - withdraw 1 v4 and 1 v6 supporting prefix
-  routeUpdate.unicastRoutesToDelete.emplace_back(v4Network_1);
-  routeUpdate.unicastRoutesToDelete.emplace_back(v6Network_1);
+  routeUpdate.unicastRoutesToDelete.emplace(v4Network_1);
+  routeUpdate.unicastRoutesToDelete.emplace(v6Network_1);
   fibRouteUpdatesQueue.push(routeUpdate);
 
   // Verify 3a PrefixManager -> Decision staticRouteupdate

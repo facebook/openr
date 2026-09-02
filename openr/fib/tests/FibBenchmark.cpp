@@ -244,7 +244,7 @@ BM_FibDeleteUnicastRoute(
       // Delete routes
       DecisionRouteUpdate routeUpdate;
       for (auto& prefix : prefixToDelete) {
-        routeUpdate.unicastRoutesToDelete.emplace_back(toIPNetwork(prefix));
+        routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(prefix));
       }
 
       suspender.dismiss(); // Start measuring benchmark time

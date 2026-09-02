@@ -253,7 +253,7 @@ class DecisionTestFixture : public ::testing::Test {
           RibUnicastEntry(toIPNetwork(*unicastRoute.dest()), std::move(nhs)));
     }
     for (const auto& prefix : *publication.unicastRoutesToDelete()) {
-      routeUpdate.unicastRoutesToDelete.push_back(toIPNetwork(prefix));
+      routeUpdate.unicastRoutesToDelete.insert(toIPNetwork(prefix));
     }
     for (const auto& mplsRoute : *publication.mplsRoutesToUpdate()) {
       auto nhs = folly::F14FastSet<thrift::NextHopThrift>(
@@ -262,7 +262,7 @@ class DecisionTestFixture : public ::testing::Test {
           RibMplsEntry(*mplsRoute.topLabel(), std::move(nhs)));
     }
     for (const auto& label : *publication.mplsRoutesToDelete()) {
-      routeUpdate.mplsRoutesToDelete.push_back(label);
+      routeUpdate.mplsRoutesToDelete.insert(label);
     }
     staticRouteUpdatesQueue.push(routeUpdate);
   }

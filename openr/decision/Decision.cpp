@@ -1048,7 +1048,7 @@ Decision::rebuildRoutes(std::string const& event) {
               myNodeName_, areaLinkStates_, prefixState_, prefix)) {
         update.addRouteToUpdate(std::move(maybeRibEntry).value());
       } else if (routeDb_.unicastRoutes.count(prefix)) {
-        update.unicastRoutesToDelete.emplace_back(prefix);
+        update.unicastRoutesToDelete.emplace(prefix);
       }
     }
     if (ribPolicy_) {
@@ -1060,7 +1060,7 @@ Decision::rebuildRoutes(std::string const& event) {
           start,
           std::chrono::steady_clock::now());
       for (auto const& prefix : changes.deletedRoutes) {
-        update.unicastRoutesToDelete.push_back(prefix);
+        update.unicastRoutesToDelete.insert(prefix);
       }
     }
   }

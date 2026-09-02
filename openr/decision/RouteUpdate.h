@@ -42,11 +42,11 @@ struct DecisionRouteUpdate {
   // Unicast routes
   folly::F14FastMap<folly::CIDRNetwork /* prefix */, RibUnicastEntry>
       unicastRoutesToUpdate;
-  std::vector<folly::CIDRNetwork> unicastRoutesToDelete;
+  folly::F14FastSet<folly::CIDRNetwork> unicastRoutesToDelete;
 
   // MPLS routes
   folly::F14FastMap<int32_t, RibMplsEntry> mplsRoutesToUpdate;
-  std::vector<int32_t> mplsRoutesToDelete;
+  folly::F14FastSet<int32_t> mplsRoutesToDelete;
 
   // Optional prefix type whose unicast/label routes are included in the struct.
   // Used in OpenR initialization process.
@@ -89,9 +89,6 @@ struct DecisionRouteUpdate {
   void
   mergeInPlace(DecisionRouteUpdate&& other) {
     if (type == FULL_SYNC) {
-      // Whole-table snapshot: apply the delta directly onto the update maps. A
-      // delete just drops the key from the snapshot (absence == deleted); we
-      // never accumulate a delete list on a full-sync.
       for (auto& [prefix, route] : other.unicastRoutesToUpdate) {
         unicastRoutesToUpdate.insert_or_assign(prefix, std::move(route));
       }
@@ -105,39 +102,24 @@ struct DecisionRouteUpdate {
         mplsRoutesToUpdate.erase(label);
       }
     } else {
-      // Delta base: reconcile the delete lists via sets so add/delete ordering
-      // is correct.
-      folly::F14FastSet<folly::CIDRNetwork> unicastDeletes(
-          unicastRoutesToDelete.begin(), unicastRoutesToDelete.end());
-      folly::F14FastSet<int32_t> mplsDeletes(
-          mplsRoutesToDelete.begin(), mplsRoutesToDelete.end());
-
-      // Unicast: a newer update supersedes a prior delete of the same prefix.
       for (auto& [prefix, route] : other.unicastRoutesToUpdate) {
-        unicastDeletes.erase(prefix);
+        unicastRoutesToDelete.erase(prefix);
         unicastRoutesToUpdate.insert_or_assign(prefix, std::move(route));
       }
-      // Unicast: a newer delete supersedes a prior update of the same prefix.
       for (const auto& prefix : other.unicastRoutesToDelete) {
         unicastRoutesToUpdate.erase(prefix);
-        unicastDeletes.insert(prefix);
+        unicastRoutesToDelete.insert(prefix);
       }
-      // MPLS: same reconciliation.
       for (auto& [label, route] : other.mplsRoutesToUpdate) {
-        mplsDeletes.erase(label);
+        mplsRoutesToDelete.erase(label);
         mplsRoutesToUpdate.insert_or_assign(label, std::move(route));
       }
       for (const auto& label : other.mplsRoutesToDelete) {
         mplsRoutesToUpdate.erase(label);
-        mplsDeletes.insert(label);
+        mplsRoutesToDelete.insert(label);
       }
-
-      unicastRoutesToDelete.assign(
-          unicastDeletes.begin(), unicastDeletes.end());
-      mplsRoutesToDelete.assign(mplsDeletes.begin(), mplsDeletes.end());
     }
 
-    // Keep the freshest perf events / prefix type from the later update.
     if (other.perfEvents.has_value()) {
       perfEvents = std::move(other.perfEvents);
     }
@@ -184,7 +166,9 @@ struct DecisionRouteUpdate {
     for (const auto& [_, route] : mplsRoutesToUpdate) {
       delta.mplsRoutesToUpdate()->emplace_back(route.toThrift());
     }
-    *delta.mplsRoutesToDelete() = mplsRoutesToDelete;
+    for (const auto& label : mplsRoutesToDelete) {
+      delta.mplsRoutesToDelete()->emplace_back(label);
+    }
     delta.perfEvents().from_optional(perfEvents);
 
     return delta;
@@ -206,7 +190,9 @@ struct DecisionRouteUpdate {
     for (const auto& [_, route] : mplsRoutesToUpdate) {
       deltaDetail.mplsRoutesToUpdate()->emplace_back(route.toThriftDetail());
     }
-    *deltaDetail.mplsRoutesToDelete() = mplsRoutesToDelete;
+    for (const auto& label : mplsRoutesToDelete) {
+      deltaDetail.mplsRoutesToDelete()->emplace_back(label);
+    }
 
     return deltaDetail;
   }
@@ -226,14 +212,14 @@ struct DecisionRouteUpdate {
       for (auto& prefix : prefixes) {
         auto network = toIPNetwork(prefix);
         unicastRoutesToUpdate.erase(network);
-        unicastRoutesToDelete.emplace_back(network);
+        unicastRoutesToDelete.emplace(network);
       }
     }
 
     // Delete mpls routes that failed to program. Also mark them as deleted
     for (auto& label : *fibError.failedAddUpdateMplsLabels()) {
       mplsRoutesToUpdate.erase(label);
-      mplsRoutesToDelete.emplace_back(label);
+      mplsRoutesToDelete.emplace(label);
     }
   }
 
