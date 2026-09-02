@@ -70,8 +70,8 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
    *
    * ATTN: same as above usage of thrift::KeyDumpParams
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreHashFilteredArea(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreHashFilteredArea(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::string> area) override;
 

@@ -1031,8 +1031,7 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
   semifuture_dumpKvStoreSelfOriginatedKeys(std::string area);
 
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_dumpKvStoreHashes(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_dumpKvStoreHashes(
       std::string area, thrift::KeyDumpParams keyDumpParams);
 
   /*
@@ -1114,9 +1113,6 @@ class KvStore final : public OpenrEventBase {
       thrift::KeyDumpParams keyDumpParams,
       std::set<std::string> selectAreas = {});
 
-  folly::coro::Task<std::unique_ptr<thrift::Publication>> co_dumpKvStoreHashes(
-      std::string area, thrift::KeyDumpParams keyDumpParams);
-
   folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
       std::string area);
 
@@ -1132,12 +1128,12 @@ class KvStore final : public OpenrEventBase {
   co_dumpKvStoreKeysImpl(
       thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas);
 
-  folly::coro::Task<thrift::Publication> co_dumpKvStoreHashesImpl(
-      std::string area, thrift::KeyDumpParams keyDumpParams);
-
 #endif // FOLLY_HAS_COROUTINES
 
  private:
+  folly::coro::Task<thrift::Publication> co_dumpKvStoreHashesImpl(
+      std::string area, thrift::KeyDumpParams keyDumpParams);
+
   folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
   co_getKvStoreAreaSummaryImpl(std::set<std::string> selectAreas);
 

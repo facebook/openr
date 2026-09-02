@@ -51,11 +51,11 @@ KvStoreServiceHandler<ClientType>::semifuture_getKvStoreKeyValsFilteredArea(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStoreServiceHandler<ClientType>::semifuture_getKvStoreHashFilteredArea(
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+KvStoreServiceHandler<ClientType>::co_getKvStoreHashFilteredArea(
     std::unique_ptr<thrift::KeyDumpParams> filter,
     std::unique_ptr<std::string> area) {
-  return kvStore_->semifuture_dumpKvStoreHashes(
+  co_return co_await kvStore_->co_dumpKvStoreHashes(
       std::move(*area), std::move(*filter));
 }
 

@@ -225,18 +225,17 @@ KvStoreWrapper<ClientType>::dumpAll(
 }
 
 template <class ClientType>
-folly::F14FastMap<std::string /* key */, thrift::Value>
-KvStoreWrapper<ClientType>::dumpHashes(
-    AreaId const& area, std::string const& prefix) {
+folly::coro::Task<folly::F14FastMap<std::string /* key */, thrift::Value>>
+KvStoreWrapper<ClientType>::dumpHashes(AreaId area, std::string prefix) {
   // Prepare KeyDumpParams
   thrift::KeyDumpParams params;
   params.keys() = {prefix};
   params.senderId() = nodeId_;
 
-  auto pub =
-      *(kvStore_->semifuture_dumpKvStoreHashes(area, std::move(params)).get());
-  const auto& kvs = *pub.keyVals();
-  return folly::F14FastMap<std::string, thrift::Value>(kvs.begin(), kvs.end());
+  auto pub = co_await kvStore_->co_dumpKvStoreHashes(area, std::move(params));
+  const auto& kvs = *pub->keyVals();
+  co_return folly::F14FastMap<std::string, thrift::Value>(
+      kvs.begin(), kvs.end());
 }
 
 template <class ClientType>

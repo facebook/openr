@@ -652,24 +652,22 @@ KvStore<ClientType>::dumpKvStoreHashesImpl(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStore<ClientType>::semifuture_dumpKvStoreHashes(
+folly::coro::Task<thrift::Publication>
+KvStore<ClientType>::co_dumpKvStoreHashesImpl(
     std::string area, thrift::KeyDumpParams keyDumpParams) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        keyDumpParams = std::move(keyDumpParams),
-                        area]() mutable {
-    try {
-      auto result =
-          dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams));
-      p.setValue(std::make_unique<thrift::Publication>(std::move(result)));
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
-    }
-  });
-  return sf;
+  auto result =
+      dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams));
+  co_return result;
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+KvStore<ClientType>::co_dumpKvStoreHashes(
+    std::string area, thrift::KeyDumpParams keyDumpParams) {
+  auto result = co_await co_withExecutor(
+      getEvb(),
+      co_dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams)));
+  co_return std::make_unique<thrift::Publication>(std::move(result));
 }
 
 template <class ClientType>
@@ -4393,15 +4391,6 @@ KvStore<ClientType>::co_dumpKvStoreKeysImpl(
 }
 
 template <class ClientType>
-folly::coro::Task<thrift::Publication>
-KvStore<ClientType>::co_dumpKvStoreHashesImpl(
-    std::string area, thrift::KeyDumpParams keyDumpParams) {
-  auto result =
-      dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams));
-  co_return result;
-}
-
-template <class ClientType>
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 KvStore<ClientType>::co_getKvStoreKeyVals(
     std::string area, thrift::KeyGetParams keyGetParams) {
@@ -4484,16 +4473,6 @@ KvStore<ClientType>::co_dumpKvStoreKeys(
   auto result = co_await co_withExecutor(
       getEvb(), co_dumpKvStoreKeysImpl(std::move(keyDumpParams), selectAreas));
   co_return result;
-}
-
-template <class ClientType>
-folly::coro::Task<std::unique_ptr<thrift::Publication>>
-KvStore<ClientType>::co_dumpKvStoreHashes(
-    std::string area, thrift::KeyDumpParams keyDumpParams) {
-  auto result = co_await co_withExecutor(
-      getEvb(),
-      co_dumpKvStoreHashesImpl(std::move(area), std::move(keyDumpParams)));
-  co_return std::make_unique<thrift::Publication>(result);
 }
 
 template <class ClientType>

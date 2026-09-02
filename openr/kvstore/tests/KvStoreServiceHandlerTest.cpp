@@ -5,8 +5,10 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
@@ -16,6 +18,13 @@
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
+
+namespace {
+
+using KvStoreServiceClient =
+    apache::thrift::Client<openr::thrift::KvStoreService>;
+
+} // namespace
 
 class KvStoreServiceHandlerTestFixture : public ::testing::Test {
  public:
@@ -38,9 +47,23 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
 
   void
   TearDown() override {
+    thriftClient_.reset();
+    thriftServer_.reset();
+
     // release handler_ first with kvStoreWrapper_'s ref count
     handler_.reset();
     kvStoreWrapper_->stop();
+  }
+
+  KvStoreServiceClient&
+  getKvStoreServiceClient() {
+    if (!thriftServer_) {
+      thriftServer_ =
+          std::make_unique<apache::thrift::ScopedServerInterfaceThread>(
+              handler_, "::1", 0);
+      thriftClient_ = thriftServer_->newClient<KvStoreServiceClient>();
+    }
+    return *thriftClient_;
   }
 
  protected:
@@ -49,14 +72,30 @@ class KvStoreServiceHandlerTestFixture : public ::testing::Test {
       kvStoreWrapper_;
   std::shared_ptr<KvStoreServiceHandler<thrift::KvStoreServiceAsyncClient>>
       handler_;
+  std::unique_ptr<apache::thrift::ScopedServerInterfaceThread> thriftServer_;
+  std::unique_ptr<KvStoreServiceClient> thriftClient_;
 };
 
-TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {
-  const auto& name = handler_->getNodeName();
-  EXPECT_EQ(name, nodeName_);
+CO_TEST_F(KvStoreServiceHandlerTestFixture, GetKvStoreHashFilteredArea) {
+  const std::string key{"key1"};
+  const auto value = createThriftValue(1, nodeName_, std::string("value1"));
+  CO_ASSERT_TRUE(kvStoreWrapper_->setKey(kTestingAreaName, key, value));
+
+  thrift::KeyDumpParams params;
+  params.keys() = {key};
+  auto publication =
+      co_await getKvStoreServiceClient().co_getKvStoreHashFilteredArea(
+          params, kTestingAreaName);
+
+  CO_ASSERT_EQ(1, publication.keyVals()->size());
+  EXPECT_FALSE(publication.keyVals()->at(key).value().has_value());
 }
 
-TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
+TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {
+  EXPECT_EQ(nodeName_, handler_->getNodeName());
+}
+
+CO_TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
   thrift::KeyVals kvs(
       {{"key1", createThriftValue(1, nodeName_, std::string("value1"))},
        {"key2", createThriftValue(1, nodeName_, std::string("value2"))},
@@ -66,24 +105,17 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     // set API
     thrift::KeySetParams params;
     params.keyVals() = kvs;
-    handler_
-        ->semifuture_setKvStoreKeyVals(
-            std::make_unique<thrift::KeySetParams>(std::move(params)),
-            std::make_unique<std::string>(kTestingAreaName))
-        .get();
+    co_await getKvStoreServiceClient().co_setKvStoreKeyVals(
+        params, kTestingAreaName);
   }
   {
     // get API without regex matching
     //
     // positive test case
     std::vector<std::string> filterKeys{"key1"};
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsArea(
-                       std::make_unique<std::vector<std::string>>(
-                           std::move(filterKeys)),
-                       std::make_unique<std::string>(kTestingAreaName))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getKvStoreServiceClient().co_getKvStoreKeyValsArea(
+        filterKeys, kTestingAreaName);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(1, keyVals.size());
     EXPECT_EQ(keyVals.at("key1"), kvs.at("key1"));
   }
@@ -92,13 +124,9 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     //
     // negative test case
     std::vector<std::string> filterKeys{"key"};
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsArea(
-                       std::make_unique<std::vector<std::string>>(
-                           std::move(filterKeys)),
-                       std::make_unique<std::string>(kTestingAreaName))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub = co_await getKvStoreServiceClient().co_getKvStoreKeyValsArea(
+        filterKeys, kTestingAreaName);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(0, keyVals.size());
   }
   {
@@ -111,12 +139,9 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     params.oper() = thrift::FilterOperator::OR;
 
     auto pub =
-        handler_
-            ->semifuture_getKvStoreKeyValsFilteredArea(
-                std::make_unique<thrift::KeyDumpParams>(std::move(params)),
-                std::make_unique<std::string>(kTestingAreaName))
-            .get();
-    auto keyVals = *pub->keyVals();
+        co_await getKvStoreServiceClient().co_getKvStoreKeyValsFilteredArea(
+            params, kTestingAreaName);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(3, keyVals.size());
     EXPECT_EQ(keyVals.at("key1"), kvs.at("key1"));
     EXPECT_EQ(keyVals.at("key2"), kvs.at("key2"));
@@ -131,12 +156,10 @@ TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     params.originatorIds() = {"fake_node"};
     params.oper() = thrift::FilterOperator::AND;
 
-    auto pub = handler_
-                   ->semifuture_getKvStoreKeyValsFilteredArea(
-                       std::make_unique<thrift::KeyDumpParams>(params),
-                       std::make_unique<std::string>(kTestingAreaName))
-                   .get();
-    auto keyVals = *pub->keyVals();
+    auto pub =
+        co_await getKvStoreServiceClient().co_getKvStoreKeyValsFilteredArea(
+            params, kTestingAreaName);
+    auto keyVals = *pub.keyVals();
     EXPECT_EQ(0, keyVals.size());
   }
 }

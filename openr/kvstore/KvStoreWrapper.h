@@ -145,8 +145,8 @@ class KvStoreWrapper {
    * API to get dump hashes from KvStore.
    * if we pass a prefix, only return keys that match it
    */
-  folly::F14FastMap<std::string /* key */, thrift::Value> dumpHashes(
-      AreaId const& area, std::string const& prefix = "");
+  folly::coro::Task<folly::F14FastMap<std::string /* key */, thrift::Value>>
+  dumpHashes(AreaId area, std::string prefix = "");
 
   /**
    * API to get dump of self originated key-vals from KvStore.

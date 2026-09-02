@@ -6,6 +6,7 @@
  */
 
 #include <folly/Benchmark.h>
+#include <folly/coro/BlockingWait.h>
 #include <folly/init/Init.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/kvstore/KvStoreWrapper.h>
@@ -95,8 +96,8 @@ class PMToKvStoreBMTestFixture {
   void
   checkPrefixesInKvStore(uint32_t num) {
     while (true) {
-      auto res = kvStoreWrapper_->dumpHashes(
-          kTestingAreaName, Constants::kPrefixDbMarker.toString());
+      auto res = folly::coro::blockingWait(kvStoreWrapper_->dumpHashes(
+          kTestingAreaName, Constants::kPrefixDbMarker.toString()));
       if (res.size() >= num) {
         break;
       }

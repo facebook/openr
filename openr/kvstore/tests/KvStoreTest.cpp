@@ -1503,7 +1503,7 @@ TEST_F(KvStoreTestFixture, CounterReport) {
  * - Applying ttl updates reflects properly
  * - Size of TTL queue and TTL handle map is as expected
  */
-TEST_F(KvStoreTestFixture, TtlVerification) {
+CO_TEST_F(KvStoreTestFixture, TtlVerification) {
   const std::string key{"dummyKey"};
   const auto value = createThriftValue(
       5, /* version */
@@ -1532,7 +1532,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     // We will receive key-expiry publication but no key-advertisement
     auto publication = kvStore->recvPublication();
     EXPECT_EQ(0, publication.keyVals()->size());
-    ASSERT_EQ(1, publication.expiredKeys()->size());
+    CO_ASSERT_EQ(1, publication.expiredKeys()->size());
     EXPECT_EQ(key, publication.expiredKeys()->at(0));
 
     auto counters = fb303::fbData->getCounters();
@@ -1551,7 +1551,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
 
     auto getRes = kvStore->getKey(kTestingAreaName, key);
-    ASSERT_TRUE(getRes.has_value());
+    CO_ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(*thriftValue.ttl(), *getRes->ttl() + 1);
     getRes->ttl() = *thriftValue.ttl();
     getRes->hash() = 0;
@@ -1560,7 +1560,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     // dump keys
     auto dumpRes = kvStore->dumpAll(kTestingAreaName);
     EXPECT_EQ(1, dumpRes.size());
-    ASSERT_EQ(1, dumpRes.count(key));
+    CO_ASSERT_EQ(1, dumpRes.count(key));
     auto& dumpResValue = dumpRes.at(key);
     EXPECT_GE(*thriftValue.ttl(), *dumpResValue.ttl() + 1);
     dumpResValue.ttl() = *thriftValue.ttl();
@@ -1568,9 +1568,9 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(thriftValue, dumpResValue);
 
     // dump hashes
-    auto hashRes = kvStore->dumpHashes(kTestingAreaName);
+    auto hashRes = co_await kvStore->dumpHashes(kTestingAreaName);
     EXPECT_EQ(1, hashRes.size());
-    ASSERT_EQ(1, hashRes.count(key));
+    CO_ASSERT_EQ(1, hashRes.count(key));
     auto& hashResValue = hashRes.at(key);
     EXPECT_GE(*thriftValue.ttl(), *hashResValue.ttl() + 1);
     hashResValue.ttl() = *thriftValue.ttl();
@@ -1581,8 +1581,8 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     // We will receive key-advertisement
     auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals()->size());
-    ASSERT_EQ(0, publication.expiredKeys()->size());
-    ASSERT_EQ(1, publication.keyVals()->count(key));
+    CO_ASSERT_EQ(0, publication.expiredKeys()->size());
+    CO_ASSERT_EQ(1, publication.keyVals()->count(key));
     auto& pubValue = publication.keyVals()->at(key);
     // TTL decremented by 1 before it gets forwarded out
     EXPECT_GE(*thriftValue.ttl(), *pubValue.ttl() + 1);
@@ -1606,7 +1606,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
 
     auto getRes = kvStore->getKey(kTestingAreaName, key);
-    ASSERT_TRUE(getRes.has_value());
+    CO_ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(*thriftValue.ttl(), *getRes->ttl() + 1);
     EXPECT_EQ(*thriftValue.version(), *getRes->version());
     EXPECT_EQ(*thriftValue.originatorId(), *getRes->originatorId());
@@ -1616,8 +1616,8 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     // We will receive update over PUB socket
     auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals()->size());
-    ASSERT_EQ(0, publication.expiredKeys()->size());
-    ASSERT_EQ(1, publication.keyVals()->count(key));
+    CO_ASSERT_EQ(0, publication.expiredKeys()->size());
+    CO_ASSERT_EQ(1, publication.keyVals()->count(key));
     auto& pubValue = publication.keyVals()->at(key);
     // TTL decremented by 1 before it gets forwarded out
     EXPECT_FALSE(pubValue.value().has_value());
@@ -1643,7 +1643,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
 
     // ttl should remain infinite
     auto getRes = kvStore->getKey(kTestingAreaName, key);
-    ASSERT_TRUE(getRes.has_value());
+    CO_ASSERT_TRUE(getRes.has_value());
     EXPECT_EQ(Constants::kTtlInfinity, *getRes->ttl());
     EXPECT_EQ(*thriftValue.version(), *getRes->version());
     EXPECT_EQ(*thriftValue.originatorId(), *getRes->originatorId());
@@ -1653,8 +1653,8 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     // We will receive update over PUB socket
     auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals()->size());
-    ASSERT_EQ(0, publication.expiredKeys()->size());
-    ASSERT_EQ(1, publication.keyVals()->count(key));
+    CO_ASSERT_EQ(0, publication.expiredKeys()->size());
+    CO_ASSERT_EQ(1, publication.keyVals()->count(key));
     auto& pubValue = publication.keyVals()->at(key);
     // TTL should remain infinite
     EXPECT_FALSE(pubValue.value().has_value());
@@ -1679,7 +1679,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
 
     auto getRes = kvStore->getKey(kTestingAreaName, key);
-    ASSERT_TRUE(getRes.has_value());
+    CO_ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(*thriftValue.ttl(), *getRes->ttl() + 1);
     EXPECT_EQ(*thriftValue.version(), *getRes->version());
     EXPECT_EQ(*thriftValue.originatorId(), *getRes->originatorId());
@@ -1689,8 +1689,8 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     // We will receive update over PUB socket
     auto publication = kvStore->recvPublication();
     EXPECT_EQ(1, publication.keyVals()->size());
-    ASSERT_EQ(0, publication.expiredKeys()->size());
-    ASSERT_EQ(1, publication.keyVals()->count(key));
+    CO_ASSERT_EQ(0, publication.expiredKeys()->size());
+    CO_ASSERT_EQ(1, publication.keyVals()->count(key));
     auto& pubValue = publication.keyVals()->at(key);
     // TTL decremented by 1 before it gets forwarded out
     EXPECT_FALSE(pubValue.value().has_value());
@@ -1714,7 +1714,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_TRUE(kvStore->setKey(kTestingAreaName, key, thriftValue));
 
     auto getRes = kvStore->getKey(kTestingAreaName, key);
-    ASSERT_TRUE(getRes.has_value());
+    CO_ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(20000, *getRes->ttl()); // Previous ttl was set to 20s
     EXPECT_LE(10000, *getRes->ttl());
     EXPECT_EQ(*value.version(), *getRes->version());
@@ -1763,7 +1763,7 @@ TEST_F(KvStoreTestFixture, TtlVerification) {
         0 /* hash */);
     kvStore->setKey(kTestingAreaName, "test-key2", thriftVal4);
     auto getRes = kvStore->getKey(kTestingAreaName, "test-key2");
-    ASSERT_TRUE(getRes.has_value());
+    CO_ASSERT_TRUE(getRes.has_value());
     EXPECT_GE(10000, *getRes->ttl()); // Previous ttl was set to 10s
     EXPECT_LE(5000, *getRes->ttl());
     EXPECT_EQ(*thriftVal4.version(), *getRes->version());
@@ -5436,7 +5436,7 @@ TEST_F(KvStoreTestFixture, DumpSelfOriginatedKeysFabricScope) {
 }
 
 /**
- * Verify that semifuture_dumpKvStoreHashes applies fabric filtering based on
+ * Verify that co_dumpKvStoreHashes applies fabric filtering based on
  * the senderId in KeyDumpParams. When a non-fabric sender requests a hash
  * dump, fabric-internal key hashes should be excluded from the response.
  *
@@ -5449,7 +5449,7 @@ TEST_F(KvStoreTestFixture, DumpSelfOriginatedKeysFabricScope) {
  *    non-fabric key
  *  - Hash dump with no senderId → returns hashes for all 3 keys (no filtering)
  */
-TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
+CO_TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
   // Build FabricConfig with leaf/spine regexes
   thrift::FabricConfig thriftFabricConfig;
   thriftFabricConfig.fabric_name() = "bbf01.dfw";
@@ -5494,26 +5494,24 @@ TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
       store->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
       IsTrue());
 
-  // Helper to call semifuture_dumpKvStoreHashes and return the key-value map
+  // Helper to call co_dumpKvStoreHashes and return the key-value map
   const auto dumpHashesWithSender = [&](const std::string& senderId)
-      -> folly::F14FastMap<std::string, thrift::Value> {
+      -> folly::coro::Task<folly::F14FastMap<std::string, thrift::Value>> {
     thrift::KeyDumpParams params;
     if (!senderId.empty()) {
       params.senderId() = senderId;
     }
-    thrift::Publication pub = *store->getKvStore()
-                                   ->semifuture_dumpKvStoreHashes(
-                                       kTestingAreaName.t, std::move(params))
-                                   .get();
-    const auto& kvs = *pub.keyVals();
-    return folly::F14FastMap<std::string, thrift::Value>(
+    auto pub = co_await store->getKvStore()->co_dumpKvStoreHashes(
+        kTestingAreaName.t, std::move(params));
+    const auto& kvs = *pub->keyVals();
+    co_return folly::F14FastMap<std::string, thrift::Value>(
         kvs.begin(), kvs.end());
   };
 
   // Scenario 1: fabric peer sender → hashes for all keys returned
   {
     folly::F14FastMap<std::string, thrift::Value> dump =
-        dumpHashesWithSender("eb01-sp002.dfw1");
+        co_await dumpHashesWithSender("eb01-sp002.dfw1");
     EXPECT_THAT(dump.count(fabricAdjKey), Eq(1));
     EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
     EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
@@ -5522,7 +5520,7 @@ TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
   // Scenario 2: non-fabric peer sender → only non-fabric key hash returned
   {
     folly::F14FastMap<std::string, thrift::Value> dump =
-        dumpHashesWithSender("external-node");
+        co_await dumpHashesWithSender("external-node");
     EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
     EXPECT_THAT(dump.count(fabricAdjKey), Eq(0))
         << "Fabric adj key hash should NOT be dumped for non-fabric sender";
@@ -5533,7 +5531,7 @@ TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
   // Scenario 3: no senderId → hashes for all keys returned (no filtering)
   {
     folly::F14FastMap<std::string, thrift::Value> dump =
-        dumpHashesWithSender("");
+        co_await dumpHashesWithSender("");
     EXPECT_THAT(dump.count(fabricAdjKey), Eq(1));
     EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
     EXPECT_THAT(dump.count(nonFabricKey), Eq(1));

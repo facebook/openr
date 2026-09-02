@@ -6,6 +6,7 @@
  */
 
 #include <folly/container/F14Map.h>
+#include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
@@ -73,7 +74,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
    * @param kNumIter number of full swing iteration of key generation to do
    * @param kNumKeys how many key/values to create
    */
-  void
+  folly::coro::Task<void>
   performKvStoreSyncTest(
       const std::vector<folly::F14FastSet<int>>& adjacencyList,
       const std::string& kOriginBase,
@@ -146,7 +147,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         EXPECT_FALSE(dump.empty());
         // Verify 1. hash is updated in KvStore
         // 2. dumpHashes request returns key values as expected
-        const auto hashDump = store->dumpHashes(kTestingAreaName);
+        const auto hashDump = co_await store->dumpHashes(kTestingAreaName);
         for (const auto& [dumpKey, dumpValue] : dump) {
           EXPECT_TRUE(dumpValue.hash().value() != 0);
           if (!hashDump.contains(dumpKey)) {
@@ -204,7 +205,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         // Verify the global key-value database from all nodes
         for (auto& store : stores_) {
           const auto dump = store->dumpAll(kTestingAreaName);
-          const auto hashDump = store->dumpHashes(kTestingAreaName);
+          const auto hashDump = co_await store->dumpHashes(kTestingAreaName);
           EXPECT_EQ(expectedGlobalKeyVals, dump);
           for (const auto& [key, value] : dump) {
             EXPECT_TRUE(value.hash().value() != 0);
@@ -249,6 +250,7 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
             ttl - Constants::kTtlDecrement.count() - errorMargin, elapsedTime);
       }
     } // for `i < kNumIter`
+    co_return;
   }
 
   // Internal stores
@@ -268,7 +270,7 @@ INSTANTIATE_TEST_CASE_P(
 /**
  * Perform KvStore synchronization test on circular ring topology.
  */
-TEST_P(KvStoreTestTtlFixture, Ring) {
+CO_TEST_P(KvStoreTestTtlFixture, Ring) {
   // how many stores/syncers to create
   const int kNumStores = 16;
 
@@ -279,7 +281,7 @@ TEST_P(KvStoreTestTtlFixture, Ring) {
     adjacencyList.push_back({(i - 1) % kNumStores, (i + 1) % kNumStores});
   }
 
-  performKvStoreSyncTest(
+  co_await performKvStoreSyncTest(
       adjacencyList, "kv_store_ring::store", kNumStores, kNumStores + 1);
 }
 
@@ -291,7 +293,7 @@ TEST_P(KvStoreTestTtlFixture, Ring) {
  * 3   4   5
  * 6   7   8
  */
-TEST_P(KvStoreTestTtlFixture, Graph) {
+CO_TEST_P(KvStoreTestTtlFixture, Graph) {
   // how many stores/syncers to create
   const unsigned int kNumStores = 9;
 
@@ -312,14 +314,14 @@ TEST_P(KvStoreTestTtlFixture, Graph) {
   for (const auto&& [index, set] : adjacencyList | ranges::views::enumerate) {
     XLOGF(DBG1, "{}: {}", index, folly::join(", ", set));
   }
-  performKvStoreSyncTest(
+  co_await performKvStoreSyncTest(
       adjacencyList, "kv_store_graph::store", kNumStores, kNumStores + 1);
 }
 
 /**
  * Perform KvStore synchronization test on full mesh.
  */
-TEST_P(KvStoreTestTtlFixture, FullMesh) {
+CO_TEST_P(KvStoreTestTtlFixture, FullMesh) {
   // how many stores/syncers to create
   const unsigned int kNumStores = 8;
 
@@ -336,7 +338,7 @@ TEST_P(KvStoreTestTtlFixture, FullMesh) {
     adjacencyList.push_back(neighbors);
   }
 
-  performKvStoreSyncTest(
+  co_await performKvStoreSyncTest(
       adjacencyList, "kv_store_fullmesh::store", kNumStores, kNumStores + 1);
 }
 

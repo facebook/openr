@@ -94,8 +94,8 @@ semifuture_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetPara
  *          thrift::KeyDumpParams => parameters to dump ALL K-V pairs
  * @return: thrift::Publication WITHOUT `value`(serialized binary data)
  */
-folly::SemiFuture<std::unique_ptr<std::vector<thrift::Publication>>>
-semifuture_dumpKvStoreHashes(std::string area, thrift::KeyDumpParams keyDumpParams);
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+co_dumpKvStoreHashes(std::string area, thrift::KeyDumpParams keyDumpParams);
 
 /*
  * @params: selectAreas => set of areas to dump keys from
