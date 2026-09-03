@@ -105,8 +105,8 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
   /*
    * API to dump existing peers in a specified area
    */
-  folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-  semifuture_getKvStorePeersArea(std::unique_ptr<std::string> area) override;
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeersArea(
+      std::unique_ptr<std::string> area) override;
 
  private:
   const std::string nodeName_;

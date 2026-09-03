@@ -79,10 +79,10 @@ KvStoreServiceHandler<ClientType>::co_setKvStoreKeyValues(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-KvStoreServiceHandler<ClientType>::semifuture_getKvStorePeersArea(
+folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
+KvStoreServiceHandler<ClientType>::co_getKvStorePeersArea(
     std::unique_ptr<std::string> area) {
-  return kvStore_->semifuture_getKvStorePeers(std::move(*area));
+  co_return co_await kvStore_->co_getKvStorePeers(std::move(*area));
 }
 
 } // namespace openr

@@ -142,6 +142,18 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, SetKvStoreKeyVals) {
       thrift::KvStoreError);
 }
 
+CO_TEST_F(KvStoreServiceHandlerTestFixture, GetKvStorePeersArea) {
+  auto& client = getKvStoreServiceClient();
+  auto peers = co_await client.co_getKvStorePeersArea(kTestingAreaName);
+
+  EXPECT_TRUE(peers.empty());
+
+  const std::string missingArea{"missing-area"};
+  CO_ASSERT_THROW(
+      co_await client.co_getKvStorePeersArea(missingArea),
+      thrift::KvStoreError);
+}
+
 TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {
   EXPECT_EQ(nodeName_, handler_->getNodeName());
 }

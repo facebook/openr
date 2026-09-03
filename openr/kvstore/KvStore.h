@@ -1071,6 +1071,9 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
   semifuture_getKvStorePeers(std::string area);
 
+  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
+      std::string area);
+
   folly::SemiFuture<folly::Unit> semifuture_addUpdateKvStorePeers(
       std::string area, thrift::PeersMap peersToAdd);
 
@@ -1112,9 +1115,6 @@ class KvStore final : public OpenrEventBase {
       thrift::KeyDumpParams keyDumpParams,
       std::set<std::string> selectAreas = {});
 
-  folly::coro::Task<std::unique_ptr<thrift::PeersMap>> co_getKvStorePeers(
-      std::string area);
-
   // [private APIs]
  private:
   folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
@@ -1129,6 +1129,9 @@ class KvStore final : public OpenrEventBase {
 
   folly::coro::Task<thrift::SetKeyValsResult> co_setKvStoreKeyValsInternal(
       std::string area, thrift::KeySetParams keySetParams);
+
+  folly::coro::Task<thrift::PeersMap> co_getKvStorePeersInternal(
+      std::string area);
 
   folly::coro::Task<thrift::Publication> co_dumpKvStoreHashesImpl(
       std::string area, thrift::KeyDumpParams keyDumpParams);
