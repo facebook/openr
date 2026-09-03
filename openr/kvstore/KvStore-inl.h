@@ -730,6 +730,30 @@ KvStore<ClientType>::semifuture_setKvStoreKeyVals(
 
 template <class ClientType>
 folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_setKvStoreKeyVals(
+    std::string area, thrift::KeySetParams keySetParams) {
+  XLOGF(
+      DBG3,
+      "Set key requested for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    co_await co_withExecutor(
+        getEvb(), co_setKvStoreKeyValsInternal(area, std::move(keySetParams)));
+  } catch (thrift::KvStoreError const& e) {
+    XLOGF(
+        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw;
+  }
+  co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
 KvStore<ClientType>::co_persistSelfOriginatedKeyInternal(
     std::string area, thrift::KeySetParams keySetParams) {
   auto& kvStoreDb = getAreaDbOrThrow(area, "co_persistSelfOriginatedKey");
@@ -4405,30 +4429,6 @@ KvStore<ClientType>::co_dumpKvStoreKeysImpl(
     thrift::KeyDumpParams keyDumpParams, std::set<std::string> selectAreas) {
   auto result = dumpKvStoreKeysImpl(std::move(keyDumpParams), selectAreas);
   co_return result;
-}
-
-template <class ClientType>
-folly::coro::Task<folly::Unit>
-KvStore<ClientType>::co_setKvStoreKeyVals(
-    std::string area, thrift::KeySetParams keySetParams) {
-  XLOGF(
-      DBG3,
-      "Set key requested for AREA: {}, by sender: {}, at time: {}",
-      area,
-      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                           : ""),
-      (keySetParams.timestamp_ms().has_value()
-           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-           : ""));
-  try {
-    auto result = co_await co_withExecutor(
-        getEvb(), co_setKvStoreKeyValsInternal(area, std::move(keySetParams)));
-  } catch (thrift::KvStoreError const& e) {
-    XLOGF(
-        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
-    throw;
-  }
-  co_return folly::Unit();
 }
 
 template <class ClientType>

@@ -122,6 +122,26 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, GetKvStoreKeyValsArea) {
   EXPECT_TRUE(publication.keyVals()->empty());
 }
 
+CO_TEST_F(KvStoreServiceHandlerTestFixture, SetKvStoreKeyVals) {
+  const std::string key{"key1"};
+  const auto value = createThriftValue(1, nodeName_, std::string("value1"));
+  thrift::KeySetParams params;
+  params.keyVals()->emplace(key, value);
+
+  co_await getKvStoreServiceClient().co_setKvStoreKeyVals(
+      params, kTestingAreaName);
+
+  const auto keyVals = kvStoreWrapper_->dumpAll(kTestingAreaName);
+  CO_ASSERT_EQ(1, keyVals.count(key));
+  EXPECT_EQ(value, keyVals.at(key));
+
+  const std::string missingArea{"missing-area"};
+  CO_ASSERT_THROW(
+      co_await getKvStoreServiceClient().co_setKvStoreKeyVals(
+          params, missingArea),
+      thrift::KvStoreError);
+}
+
 TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {
   EXPECT_EQ(nodeName_, handler_->getNodeName());
 }
@@ -132,13 +152,10 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
        {"key2", createThriftValue(1, nodeName_, std::string("value2"))},
        {"key3", createThriftValue(1, nodeName_, std::string("value3"))}});
 
-  {
-    // set API
-    thrift::KeySetParams params;
-    params.keyVals() = kvs;
-    co_await getKvStoreServiceClient().co_setKvStoreKeyVals(
-        params, kTestingAreaName);
+  for (const auto& [key, value] : kvs) {
+    CO_ASSERT_TRUE(kvStoreWrapper_->setKey(kTestingAreaName, key, value));
   }
+
   {
     // get API with regex matching
     //

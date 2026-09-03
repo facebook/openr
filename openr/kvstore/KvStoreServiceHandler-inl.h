@@ -60,12 +60,13 @@ KvStoreServiceHandler<ClientType>::co_getKvStoreHashFilteredArea(
 }
 
 template <class ClientType>
-folly::SemiFuture<folly::Unit>
-KvStoreServiceHandler<ClientType>::semifuture_setKvStoreKeyVals(
+folly::coro::Task<void>
+KvStoreServiceHandler<ClientType>::co_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  return kvStore_->semifuture_setKvStoreKeyVals(
+  co_await kvStore_->co_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
+  co_return;
 }
 
 template <class ClientType>

@@ -1020,6 +1020,9 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<folly::Unit> semifuture_setKvStoreKeyVals(
       std::string area, thrift::KeySetParams keySetParams);
 
+  folly::coro::Task<folly::Unit> co_setKvStoreKeyVals(
+      std::string area, thrift::KeySetParams keySetParams);
+
   folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
   co_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams);
 
@@ -1104,9 +1107,6 @@ class KvStore final : public OpenrEventBase {
 // [Public APIs]
 // Coroutine versions
 #if FOLLY_HAS_COROUTINES
-  folly::coro::Task<folly::Unit> co_setKvStoreKeyVals(
-      std::string area, thrift::KeySetParams keySetParams);
-
   folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
   co_dumpKvStoreKeys(
       thrift::KeyDumpParams keyDumpParams,
