@@ -162,7 +162,7 @@ class KvStoreTestFixture : public ::testing::Test {
 /**
  * Validate retrieval of a single key-value from a node's KvStore.
  */
-TEST_F(KvStoreTestFixture, BasicGetKey) {
+CO_TEST_F(KvStoreTestFixture, BasicGetKey) {
   // Create and start KvStore.
   const std::string nodeId = "node-for-retrieval";
   auto kvStore_ = createKvStore(getTestKvConf(nodeId));
@@ -177,11 +177,10 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
 
   thrift::KeyGetParams paramsBefore;
   paramsBefore.keys()->emplace_back(key);
-  auto pub = *kvStore_->getKvStore()
-                  ->semifuture_getKvStoreKeyVals(kTestingAreaName, paramsBefore)
-                  .get();
-  auto it = pub.keyVals()->find(key);
-  EXPECT_EQ(it, pub.keyVals()->end());
+  auto pub = co_await kvStore_->getKvStore()->co_getKvStoreKeyVals(
+      kTestingAreaName, std::move(paramsBefore));
+  auto it = pub->keyVals()->find(key);
+  EXPECT_EQ(it, pub->keyVals()->end());
 
   // Set a key in KvStore.
   const thrift::Value thriftVal = createThriftValue(
@@ -196,12 +195,10 @@ TEST_F(KvStoreTestFixture, BasicGetKey) {
   // Check that value retrieved is same as value that was set.
   thrift::KeyGetParams paramsAfter;
   paramsAfter.keys()->emplace_back(key);
-  auto pubAfter =
-      *kvStore_->getKvStore()
-           ->semifuture_getKvStoreKeyVals(kTestingAreaName, paramsAfter)
-           .get();
-  auto itAfter = pubAfter.keyVals()->find(key);
-  EXPECT_NE(itAfter, pubAfter.keyVals()->end());
+  auto pubAfter = co_await kvStore_->getKvStore()->co_getKvStoreKeyVals(
+      kTestingAreaName, std::move(paramsAfter));
+  auto itAfter = pubAfter->keyVals()->find(key);
+  EXPECT_NE(itAfter, pubAfter->keyVals()->end());
   auto& valueFromStore = itAfter->second;
   EXPECT_EQ(valueFromStore.value(), value);
   EXPECT_EQ(*valueFromStore.version(), 1);
