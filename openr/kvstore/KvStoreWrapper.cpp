@@ -5,7 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <exception>
+#include <utility>
+
+#include <folly/ExceptionWrapper.h>
 #include <folly/container/F14Map.h>
+#include <folly/futures/Promise.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
@@ -171,30 +176,52 @@ KvStoreWrapper<ClientType>::pushToKvStoreUpdatesQueue(
 
 template <class ClientType>
 std::optional<thrift::Value>
-KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string key) {
-  // Prepare KeyGetParams
+KvStoreWrapper<ClientType>::getKey(AreaId const& area, std::string const& key) {
+  if (!kvStore_->isRunning()) {
+    XLOG(ERR, "Cannot get key after KvStore has stopped.");
+    return std::nullopt;
+  }
+
   thrift::KeyGetParams params;
   params.keys()->push_back(key);
 
+  const std::string caller{__FUNCTION__};
+  folly::Promise<thrift::Publication> promise;
+  auto future = promise.getSemiFuture();
+  auto& kvStore = *kvStore_;
+  /**
+   * The callback may remain queued after getKey() times out. stop() joins the
+   * KvStore EventBase thread before destroying kvStore_.
+   */
+  auto getKeyCallback = [&kvStore,
+                         area = area,
+                         params = std::move(params),
+                         caller = caller,
+                         promise = std::move(promise)]() mutable noexcept {
+    XLOGF(DBG3, "Get key requested for AREA: {}", area.t);
+
+    try {
+      promise.setValue(kvStore.getKvStoreKeyValsImpl(area, params, caller));
+    } catch (...) {
+      promise.setException(folly::exception_wrapper(std::current_exception()));
+    }
+  };
+  kvStore.runInEventBaseThread(std::move(getKeyCallback));
+
   thrift::Publication pub;
   try {
-    auto maybeGetKey =
-        kvStore_->semifuture_getKvStoreKeyVals(area, std::move(params))
-            .getTry(Constants::kReadTimeout);
-    if (maybeGetKey.hasValue()) {
-      pub = *(maybeGetKey.value());
-    } else {
-      XLOGF(ERR, "Failed to retrieve key from KvStore. Key: {}", key);
+    auto result = std::move(future).getTry(Constants::kReadTimeout);
+    if (!result.hasValue()) {
+      XLOGF(
+          WARNING,
+          "Exception to get key from kvstore: {}",
+          folly::exceptionStr(result.exception()));
       return std::nullopt;
     }
+    pub = std::move(result).value();
   } catch (const folly::FutureTimeout&) {
     XLOGF(ERR, "Timed out retrieving key: {}", key);
-  } catch (std::exception const& e) {
-    XLOGF(
-        WARNING,
-        "Exception to get key from kvstore: {}",
-        folly::exceptionStr(e));
-    return std::nullopt; // No value found
+    return std::nullopt;
   }
 
   // Return the result
@@ -363,7 +390,7 @@ template <class ClientType>
 bool
 KvStoreWrapper<ClientType>::delPeer(AreaId const& area, std::string peerName) {
   try {
-    kvStore_->semifuture_deleteKvStorePeers(area, {peerName}).get();
+    kvStore_->semifuture_deleteKvStorePeers(area, {std::move(peerName)}).get();
   } catch (std::exception const& e) {
     XLOGF(ERR, "Failed to delete peers: {}", folly::exceptionStr(e));
     return false;

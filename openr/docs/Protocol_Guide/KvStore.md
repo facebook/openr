@@ -70,8 +70,8 @@ and server. Some examples are:
  *          thrift::KeyGetParams => parameters to get specific K-V pairs
  * @return: thrift::Publication
  */
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-semifuture_getKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams)
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+co_getKvStoreKeyVals(std::string area, thrift::KeyGetParams keyGetParams)
 
 /*
  * @params: area => single areaId to set K-V pairs

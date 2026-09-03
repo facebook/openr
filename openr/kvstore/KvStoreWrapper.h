@@ -112,7 +112,8 @@ class KvStoreWrapper {
    * API to retrieve an existing key-value from KvStore. Returns empty if none
    * exists.
    */
-  std::optional<thrift::Value> getKey(AreaId const& area, std::string key);
+  std::optional<thrift::Value> getKey(
+      AreaId const& area, std::string const& key);
 
   /**
    * APIs to set key-values into the KvStore. Returns true on success else

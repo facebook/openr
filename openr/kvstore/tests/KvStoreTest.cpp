@@ -168,7 +168,7 @@ CO_TEST_F(KvStoreTestFixture, BasicGetKey) {
   auto kvStore_ = createKvStore(getTestKvConf(nodeId));
   kvStore_->run();
 
-  const std::string key = "get-key-key";
+  const std::string key = "prefix:node-for-retrieval:[10.0.0.0/8]";
   const std::string value = "get-key-value";
 
   // 1. Get key. Make sure it doesn't exist in KvStore yet.
@@ -203,6 +203,10 @@ CO_TEST_F(KvStoreTestFixture, BasicGetKey) {
   EXPECT_EQ(valueFromStore.value(), value);
   EXPECT_EQ(*valueFromStore.version(), 1);
   EXPECT_EQ(*valueFromStore.ttlVersion(), 0);
+
+  const auto wrapperValue = kvStore_->getKey(kTestingAreaName, key);
+  CO_ASSERT_TRUE(wrapperValue.has_value());
+  EXPECT_EQ(wrapperValue->value(), value);
 }
 
 CO_TEST_F(KvStoreTestFixture, SelfOriginatedKeyApis) {

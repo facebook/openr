@@ -33,6 +33,9 @@
 
 namespace openr {
 
+template <class ClientType>
+class KvStoreWrapper;
+
 /*
  * The KvStoreDb class represents a KV Store database and stores KV pairs in
  * an internal map. KV store DB instance is created for each area.
@@ -1006,14 +1009,6 @@ class KvStore final : public OpenrEventBase {
    *  2) dump hashes;
    *  3) dump self-originated keys;
    */
-  /**
-   * TODO: Remove after `KvStoreWrapper::getKey` and `BasicGetKey` migrate to
-   * `co_getKvStoreKeyVals`.
-   */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyVals(
-      std::string area, thrift::KeyGetParams keyGetParams);
-
   folly::coro::Task<std::unique_ptr<thrift::Publication>> co_getKvStoreKeyVals(
       std::string area, thrift::KeyGetParams keyGetParams);
 
@@ -1124,6 +1119,13 @@ class KvStore final : public OpenrEventBase {
 #endif // FOLLY_HAS_COROUTINES
 
  private:
+  friend class KvStoreWrapper<ClientType>;
+
+  thrift::Publication getKvStoreKeyValsImpl(
+      std::string const& area,
+      thrift::KeyGetParams const& keyGetParams,
+      std::string const& caller);
+
   folly::coro::Task<thrift::Publication> co_getKvStoreKeyValsInternal(
       std::string area, thrift::KeyGetParams keyGetParams);
 

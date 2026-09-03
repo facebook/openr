@@ -429,43 +429,23 @@ KvStore<ClientType>::processPeerUpdates(PeerEvent&& event) {
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStore<ClientType>::semifuture_getKvStoreKeyVals(
-    std::string area, thrift::KeyGetParams keyGetParams) {
-  folly::Promise<std::unique_ptr<thrift::Publication>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        keyGetParams = std::move(keyGetParams),
-                        area]() mutable {
-    XLOGF(DBG3, "Get key requested for AREA: {}", area);
-    try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "getKvStoreKeyVals");
-
-      auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys());
-      updatePublicationTtl(
-          kvStoreDb.getTtlCountdownQueue(),
-          kvParams_.ttlDecr,
-          thriftPub,
-          false);
-
-      p.setValue(std::make_unique<thrift::Publication>(std::move(thriftPub)));
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
-    }
-  });
-  return sf;
+thrift::Publication
+KvStore<ClientType>::getKvStoreKeyValsImpl(
+    std::string const& area,
+    thrift::KeyGetParams const& keyGetParams,
+    std::string const& caller) {
+  auto& kvStoreDb = getAreaDbOrThrow(area, caller);
+  auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys());
+  updatePublicationTtl(
+      kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub, false);
+  return thriftPub;
 }
 
 template <class ClientType>
 folly::coro::Task<thrift::Publication>
 KvStore<ClientType>::co_getKvStoreKeyValsInternal(
     std::string area, thrift::KeyGetParams keyGetParams) {
-  auto& kvStoreDb = getAreaDbOrThrow(area, __FUNCTION__);
-  auto thriftPub = kvStoreDb.getKeyVals(*keyGetParams.keys());
-  updatePublicationTtl(
-      kvStoreDb.getTtlCountdownQueue(), kvParams_.ttlDecr, thriftPub, false);
-  co_return thriftPub;
+  co_return getKvStoreKeyValsImpl(area, keyGetParams, __FUNCTION__);
 }
 
 template <class ClientType>
