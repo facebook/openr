@@ -25,7 +25,7 @@ MockNetlinkFibHandler::MockNetlinkFibHandler() : startTime_(1) {
 
 void
 MockNetlinkFibHandler::addUnicastRoute(
-    int16_t, std::unique_ptr<openr::thrift::UnicastRoute> route) {
+    int16_t, std::unique_ptr<openr::thrift::UnicastRoute> /* route */) {
   CHECK(false) << "Not implemented & not used by Open/R";
 }
 
