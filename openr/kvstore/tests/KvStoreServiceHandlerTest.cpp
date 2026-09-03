@@ -106,6 +106,22 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, SetKvStoreKeyValues) {
   EXPECT_EQ(value, keyVals.at(key));
 }
 
+CO_TEST_F(KvStoreServiceHandlerTestFixture, GetKvStoreKeyValsArea) {
+  const std::string key{"key1"};
+  const auto value = createThriftValue(1, nodeName_, std::string("value1"));
+  CO_ASSERT_TRUE(kvStoreWrapper_->setKey(kTestingAreaName, key, value));
+
+  auto publication =
+      co_await getKvStoreServiceClient().co_getKvStoreKeyValsArea(
+          std::vector<std::string>{key}, kTestingAreaName);
+  CO_ASSERT_EQ(1, publication.keyVals()->size());
+  EXPECT_EQ(value, publication.keyVals()->at(key));
+
+  publication = co_await getKvStoreServiceClient().co_getKvStoreKeyValsArea(
+      std::vector<std::string>{"missing-key"}, kTestingAreaName);
+  EXPECT_TRUE(publication.keyVals()->empty());
+}
+
 TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {
   EXPECT_EQ(nodeName_, handler_->getNodeName());
 }
@@ -122,27 +138,6 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     params.keyVals() = kvs;
     co_await getKvStoreServiceClient().co_setKvStoreKeyVals(
         params, kTestingAreaName);
-  }
-  {
-    // get API without regex matching
-    //
-    // positive test case
-    std::vector<std::string> filterKeys{"key1"};
-    auto pub = co_await getKvStoreServiceClient().co_getKvStoreKeyValsArea(
-        filterKeys, kTestingAreaName);
-    auto keyVals = *pub.keyVals();
-    EXPECT_EQ(1, keyVals.size());
-    EXPECT_EQ(keyVals.at("key1"), kvs.at("key1"));
-  }
-  {
-    // get API without regex matching
-    //
-    // negative test case
-    std::vector<std::string> filterKeys{"key"};
-    auto pub = co_await getKvStoreServiceClient().co_getKvStoreKeyValsArea(
-        filterKeys, kTestingAreaName);
-    auto keyVals = *pub.keyVals();
-    EXPECT_EQ(0, keyVals.size());
   }
   {
     // get API with regex matching

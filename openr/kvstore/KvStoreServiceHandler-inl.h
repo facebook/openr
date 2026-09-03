@@ -25,14 +25,14 @@ KvStoreServiceHandler<ClientType>::KvStoreServiceHandler(
 //
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-KvStoreServiceHandler<ClientType>::semifuture_getKvStoreKeyValsArea(
+folly::coro::Task<std::unique_ptr<thrift::Publication>>
+KvStoreServiceHandler<ClientType>::co_getKvStoreKeyValsArea(
     std::unique_ptr<std::vector<std::string>> filterKeys,
     std::unique_ptr<std::string> area) {
   thrift::KeyGetParams params;
   params.keys() = std::move(*filterKeys);
 
-  return kvStore_->semifuture_getKvStoreKeyVals(
+  co_return co_await kvStore_->co_getKvStoreKeyVals(
       std::move(*area), std::move(params));
 }
 

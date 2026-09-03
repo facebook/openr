@@ -43,8 +43,8 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
    *  - a set of string "keys"; (ATTN: this is NOT regex matching)
    *  - a specific area;
    */
-  folly::SemiFuture<std::unique_ptr<thrift::Publication>>
-  semifuture_getKvStoreKeyValsArea(
+  folly::coro::Task<std::unique_ptr<thrift::Publication>>
+  co_getKvStoreKeyValsArea(
       std::unique_ptr<std::vector<std::string>> filterKeys,
       std::unique_ptr<std::string> area) override;
 
