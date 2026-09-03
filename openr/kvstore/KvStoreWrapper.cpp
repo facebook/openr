@@ -113,7 +113,7 @@ KvStoreWrapper<ClientType>::setKey(
 }
 
 template <class ClientType>
-bool
+folly::coro::Task<bool>
 KvStoreWrapper<ClientType>::setKeys(
     AreaId const& area,
     const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
@@ -127,7 +127,7 @@ KvStoreWrapper<ClientType>::setKeys(
 
   try {
     auto result =
-        kvStore_->semifuture_setKvStoreKeyValues(area, std::move(params)).get();
+        co_await kvStore_->co_setKvStoreKeyValues(area, std::move(params));
     if (result->noMergeReasons()->size() != 0) {
       XLOGF(
           ERR,
@@ -136,9 +136,9 @@ KvStoreWrapper<ClientType>::setKeys(
     }
   } catch (std::exception const& e) {
     XLOGF(ERR, "Exception to set key in kvstore: {}", folly::exceptionStr(e));
-    return false;
+    co_return false;
   }
-  return true;
+  co_return true;
 }
 
 template <class ClientType>

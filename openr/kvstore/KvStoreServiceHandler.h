@@ -97,8 +97,8 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
    *  1. update local kvStoreDb;
    *  2. flood the delta update to peers if any;
    */
-  folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
-  semifuture_setKvStoreKeyValues(
+  folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+  co_setKvStoreKeyValues(
       std::unique_ptr<thrift::KeySetParams> setParams,
       std::unique_ptr<std::string> area) override;
 

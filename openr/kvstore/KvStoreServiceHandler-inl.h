@@ -69,11 +69,11 @@ KvStoreServiceHandler<ClientType>::semifuture_setKvStoreKeyVals(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
-KvStoreServiceHandler<ClientType>::semifuture_setKvStoreKeyValues(
+folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+KvStoreServiceHandler<ClientType>::co_setKvStoreKeyValues(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  return kvStore_->semifuture_setKvStoreKeyValues(
+  co_return co_await kvStore_->co_setKvStoreKeyValues(
       std::move(*area), std::move(*setParams));
 }
 

@@ -86,8 +86,8 @@ semifuture_setKvStoreKeyVals(std::string area, thrift::KeySetParams keySetParams
  *          thrift::KeySetParams => parameters to set specific K-V pairs
  * @return: thrift::SetKvStoreKeyVals
  */
-folly::SemiFuture<thrift::SetKvStoreKeyVals>
-semifuture_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams)
+folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+co_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams)
 
 /*
  * @params: area => single areaId to set K-V pairs

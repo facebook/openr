@@ -6,6 +6,7 @@
  */
 
 #include <folly/Benchmark.h>
+#include <folly/coro/BlockingWait.h>
 #include <folly/init/Init.h>
 #include <folly/logging/Init.h>
 
@@ -255,7 +256,7 @@ BM_KvStoreValueUpdate(
      * Core function to run benchmarking against
      */
     suspender.dismiss(); // Start measuring benchmark time
-    kvStore->setKeys(kTestingAreaName, keyVals);
+    folly::coro::blockingWait(kvStore->setKeys(kTestingAreaName, keyVals));
     // Receive publication from kvStore for new key-update
     auto pub = kvStore->recvPublication();
     CHECK_EQ(numOfUpdateKeys, pub.keyVals()->size());

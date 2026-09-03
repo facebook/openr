@@ -91,6 +91,21 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, GetKvStoreHashFilteredArea) {
   EXPECT_FALSE(publication.keyVals()->at(key).value().has_value());
 }
 
+CO_TEST_F(KvStoreServiceHandlerTestFixture, SetKvStoreKeyValues) {
+  const std::string key{"key1"};
+  const auto value = createThriftValue(1, nodeName_, std::string("value1"));
+  thrift::KeySetParams params;
+  params.keyVals()->emplace(key, value);
+
+  auto result = co_await getKvStoreServiceClient().co_setKvStoreKeyValues(
+      params, kTestingAreaName);
+
+  CO_ASSERT_TRUE(result.noMergeReasons()->empty());
+  const auto keyVals = kvStoreWrapper_->dumpAll(kTestingAreaName);
+  CO_ASSERT_EQ(1, keyVals.count(key));
+  EXPECT_EQ(value, keyVals.at(key));
+}
+
 TEST_F(KvStoreServiceHandlerTestFixture, GetNodeName) {
   EXPECT_EQ(nodeName_, handler_->getNodeName());
 }

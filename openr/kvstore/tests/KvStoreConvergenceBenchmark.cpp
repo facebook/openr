@@ -125,7 +125,8 @@ runExperiment(
 #pragma endregion EventSetup
   } // end of BENCHMARK_SUSPEND
 
-  kvStoreWrappers_.front()->setKeys(kTestingAreaName, keyVals);
+  folly::coro::blockingWait(
+      kvStoreWrappers_.front()->setKeys(kTestingAreaName, keyVals));
   folly::coro::blockingWait(co_waitForConvergence(events_, kvStoreWrappers_));
 
 #pragma region TearDown

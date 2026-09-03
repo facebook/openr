@@ -118,7 +118,7 @@ class KvStoreWrapper {
    * APIs to set key-values into the KvStore. Returns true on success else
    * returns false.
    */
-  bool setKeys(
+  folly::coro::Task<bool> setKeys(
       AreaId const& area,
       const std::vector<std::pair<std::string, thrift::Value>>& keyVals,
       std::optional<std::vector<std::string>> nodeIds = std::nullopt);

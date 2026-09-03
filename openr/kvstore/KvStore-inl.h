@@ -812,35 +812,36 @@ KvStore<ClientType>::co_unsetSelfOriginatedKey(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::SetKeyValsResult>>
-KvStore<ClientType>::semifuture_setKvStoreKeyValues(
+folly::coro::Task<thrift::SetKeyValsResult>
+KvStore<ClientType>::co_setKvStoreKeyValsInternal(
     std::string area, thrift::KeySetParams keySetParams) {
-  folly::Promise<std::unique_ptr<thrift::SetKeyValsResult>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        keySetParams = std::move(keySetParams),
-                        area]() mutable {
+  auto& kvStoreDb = getAreaDbOrThrow(area, __FUNCTION__);
+  co_return kvStoreDb.setKeyVals(
+      std::move(keySetParams), false /* remote update */);
+}
+
+template <class ClientType>
+folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
+KvStore<ClientType>::co_setKvStoreKeyValues(
+    std::string area, thrift::KeySetParams keySetParams) {
+  XLOGF(
+      DBG3,
+      "Set key requested for AREA: {}, by sender: {}, at time: {}",
+      area,
+      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
+                                           : ""),
+      (keySetParams.timestamp_ms().has_value()
+           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
+           : ""));
+  try {
+    auto result = co_await co_withExecutor(
+        getEvb(), co_setKvStoreKeyValsInternal(area, std::move(keySetParams)));
+    co_return std::make_unique<thrift::SetKeyValsResult>(std::move(result));
+  } catch (thrift::KvStoreError const& e) {
     XLOGF(
-        DBG3,
-        "Set key requested for AREA: {}, by sender: {}, at time: {}",
-        area,
-        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                             : ""),
-        (keySetParams.timestamp_ms().has_value()
-             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-             : ""));
-    try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
-      auto r = kvStoreDb.setKeyVals(
-          std::move(keySetParams), false /* remote update */);
-      // ready to return
-      p.setValue(std::make_unique<thrift::SetKeyValsResult>(std::move(r)));
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
-    }
-  });
-  return sf;
+        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
+    throw;
+  }
 }
 
 template <class ClientType>
@@ -4408,16 +4409,6 @@ KvStore<ClientType>::co_getKvStoreKeyVals(
 }
 
 template <class ClientType>
-folly::coro::Task<thrift::SetKeyValsResult>
-KvStore<ClientType>::co_setKvStoreKeyValsInternal(
-    std::string area, thrift::KeySetParams keySetParams) {
-  auto& kvStoreDb = getAreaDbOrThrow(std::move(area), "setKvStoreKeyVals");
-  auto result =
-      kvStoreDb.setKeyVals(std::move(keySetParams), false /* remote update */);
-  co_return result;
-}
-
-template <class ClientType>
 folly::coro::Task<folly::Unit>
 KvStore<ClientType>::co_setKvStoreKeyVals(
     std::string area, thrift::KeySetParams keySetParams) {
@@ -4439,31 +4430,6 @@ KvStore<ClientType>::co_setKvStoreKeyVals(
     throw;
   }
   co_return folly::Unit();
-}
-
-template <class ClientType>
-folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
-KvStore<ClientType>::co_setKvStoreKeyValues(
-    std::string area, thrift::KeySetParams keySetParams) {
-  XLOGF(
-      DBG3,
-      "Set key requested for AREA: {}, by sender: {}, at time: {}",
-      area,
-      (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                           : ""),
-      (keySetParams.timestamp_ms().has_value()
-           ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-           : ""));
-  try {
-    auto result = co_await co_withExecutor(
-        getEvb(), co_setKvStoreKeyValsInternal(area, std::move(keySetParams)));
-    co_return std::make_unique<thrift::SetKeyValsResult>(result);
-  } catch (thrift::KvStoreError const& e) {
-    XLOGF(
-        ERR, "{} got exception: {} for area {}", __FUNCTION__, e.what(), area);
-    throw;
-  }
-  co_return std::make_unique<thrift::SetKeyValsResult>();
 }
 
 template <class ClientType>

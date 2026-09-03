@@ -7,6 +7,7 @@
 
 #include <openr/dispatcher/Dispatcher.h>
 
+#include <folly/coro/GtestHelpers.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/init/Init.h>
 #include <folly/io/async/EventBase.h>
@@ -320,7 +321,7 @@ class DispatcherKnobTestFixture : public DispatcherTestFixture {
  * ensure that Dispatcher is running. A update to KvStore will be made and the
  * test will verify that subscribers of Dispatcher can receive the update.
  */
-TEST_F(DispatcherKnobTestFixture, DataPathTest) {
+CO_TEST_F(DispatcherKnobTestFixture, DataPathTest) {
   EXPECT_TRUE(dispatcher_->isRunning());
 
   auto subscriber1 = dispatcher_->getReader({"adj:"});
@@ -343,7 +344,7 @@ TEST_F(DispatcherKnobTestFixture, DataPathTest) {
   };
 
   // check to ensure keys were set properly
-  EXPECT_TRUE(kvStoreWrapper_->setKeys(kTestingAreaName, keyVals));
+  CO_ASSERT_TRUE(co_await kvStoreWrapper_->setKeys(kTestingAreaName, keyVals));
 
   folly::EventBase evb;
   auto& manager = folly::fibers::getFiberManager(evb);
