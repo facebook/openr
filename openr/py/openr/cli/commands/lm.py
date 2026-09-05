@@ -502,12 +502,15 @@ class LMLinksCmd(LMCmdBase):
     ) -> None:
         links = await client.getInterfaces()
         if only_suppressed:
-            links = links(
+            links = DumpLinksReply(
+                thisNodeName=links.thisNodeName,
+                nodeMetricIncrementVal=links.nodeMetricIncrementVal,
+                isOverloaded=links.isOverloaded,
                 interfaceDetails={
                     k: v
                     for k, v in links.interfaceDetails.items()
                     if v.linkFlapBackOffMs
-                }
+                },
             )
         if json:
             self.print_links_json(links)
