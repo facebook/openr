@@ -34,6 +34,13 @@ jobs:
       with:
         version: "v0.14.0"
 
+    - name: Show disk space at start
+      run: df -h
+    - name: Free up disk space
+      run: sudo rm -rf /usr/local/lib/android
+    - name: Show disk space after freeing up
+      run: df -h
+
     - name: Update system package info
       run: sudo --preserve-env=http_proxy apt-get update
     - name: Install system deps
@@ -146,6 +153,11 @@ jobs:
       if: ${{ steps.paths.outputs.fb303_SOURCE }}
       run: python3 build/fbcode_builder/getdeps.py --allow-system-packages fetch --no-tests fb303
 
+    - name: Free up disk space before build
+      run: |
+        sudo rm -rf /usr/share/dotnet /usr/local/share/powershell /opt/ghc /usr/local/.ghcup
+        df -h
+
     - name: Build openr
       run: python3 build/fbcode_builder/getdeps.py --allow-system-packages build --build-type RelWithDebInfo --src-dir=. openr --project-install-prefix openr:/usr/local
 
@@ -162,6 +174,10 @@ jobs:
 
     - name: Test openr
       run: python3 build/fbcode_builder/getdeps.py --allow-system-packages test --build-type RelWithDebInfo --src-dir=. openr --project-install-prefix openr:/usr/local
+
+    - name: Show disk space at end
+      if: always()
+      run: df -h
 
     - name: Show GitHub Actions cache usage
       if: always()
