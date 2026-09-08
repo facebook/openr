@@ -329,7 +329,7 @@ Fib::getMplsRoutesFiltered(std::vector<int32_t> labels) {
 
   // get the filtered MPLS routes and avoid duplicates
   for (const auto& routes : routeState_.mplsRoutes) {
-    if (labelFilterSet.find(routes.first) != labelFilterSet.end()) {
+    if (labelFilterSet.contains(routes.first)) {
       retRouteVec.emplace_back(routes.second.toThrift());
     }
   }
