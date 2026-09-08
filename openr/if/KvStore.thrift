@@ -156,14 +156,14 @@ struct Value {
  * Map of key to value. This is a representation of KvStore data-base. Using
  * `std::unordered_map` in C++ for efficient lookups.
  */
-@cpp.Type{name = "std::unordered_map<std::string, openr::thrift::Value>"}
+@cpp.Type{template = "std::unordered_map"}
 typedef map<string, Value> KeyVals
 
 /**
  * Map of key to reason for not merging.
  */
 @cpp.Type{
-  name = "std::unordered_map<std::string, openr::thrift::KvStoreNoMergeReason>",
+  template = "std::unordered_map",
 }
 typedef map<string, KvStoreNoMergeReason> NoMergeMap
 
@@ -340,7 +340,7 @@ struct PeerSpec {
 /**
  * Unordered map for efficiency for peer to peer-spec
  */
-@cpp.Type{name = "std::unordered_map<std::string, openr::thrift::PeerSpec>"}
+@cpp.Type{template = "std::unordered_map"}
 typedef map<string, PeerSpec> PeersMap
 
 /**
