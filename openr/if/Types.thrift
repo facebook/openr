@@ -458,7 +458,7 @@ struct PrefixDatabase {
  * and should go away once area migration is complete.
  */
 @cpp.Type{
-  name = "std::unordered_map<std::string, openr::thrift::AdjacencyDatabase>",
+  template = "std::unordered_map",
 }
 typedef map<string, AdjacencyDatabase> AdjDbs
 
