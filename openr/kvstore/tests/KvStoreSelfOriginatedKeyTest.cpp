@@ -10,6 +10,7 @@
 
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
+#include <openr/kvstore/KvStoreRequestQueue.h>
 #include <openr/kvstore/KvStoreWrapper.h>
 
 using namespace openr;
@@ -73,6 +74,105 @@ class KvStoreSelfOriginatedKeyValueRequestFixture : public ::testing::Test {
   messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue_;
 };
 } // namespace
+
+TEST(KvStoreRequestQueueTest, PreservesAllRequestsWhenCoalescingDisabled) {
+  messaging::ReplicateQueue<KeyValueRequest> queue;
+  auto reader =
+      getKvStoreRequestQueueReader(queue, /*enableQueueCoalescing=*/false);
+
+  const AreaId area{"area"};
+  queue.push(PersistKeyValueRequest(area, "key", "old"));
+  queue.push(PersistKeyValueRequest(area, "key", "new"));
+
+  ASSERT_EQ(2, reader.size());
+  auto oldRequest = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<PersistKeyValueRequest>(oldRequest));
+  EXPECT_EQ("old", std::get<PersistKeyValueRequest>(oldRequest).getValue());
+
+  auto newRequest = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<PersistKeyValueRequest>(newRequest));
+  EXPECT_EQ("new", std::get<PersistKeyValueRequest>(newRequest).getValue());
+}
+
+TEST(KvStoreRequestQueueTest, SuppressesStatePerAreaAndKeyWhenEnabled) {
+  messaging::ReplicateQueue<KeyValueRequest> queue;
+  auto reader = getKvStoreRequestQueueReader(
+      queue,
+      /*enableQueueCoalescing=*/true,
+      /*activationThreshold=*/0);
+
+  const AreaId area1{"area1"};
+  const AreaId area2{"area2"};
+  queue.push(PersistKeyValueRequest(area1, "key", "old"));
+  queue.push(PersistKeyValueRequest(area2, "key", "other-area"));
+  queue.push(ClearKeyValueRequest(area1, "key", "deleted", true));
+  queue.push(SetKeyValueRequest(area1, "key", "explicit"));
+  queue.push(PersistKeyValueRequest(area1, "key", "new"));
+  queue.push(PersistKeyValueRequest(area1, "key", "newest"));
+
+  ASSERT_EQ(4, reader.size());
+  auto otherArea = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<PersistKeyValueRequest>(otherArea));
+  EXPECT_EQ(
+      "other-area", std::get<PersistKeyValueRequest>(otherArea).getValue());
+
+  auto clear = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<ClearKeyValueRequest>(clear));
+  EXPECT_EQ("deleted", std::get<ClearKeyValueRequest>(clear).getValue());
+
+  auto set = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<SetKeyValueRequest>(set));
+  EXPECT_EQ("explicit", std::get<SetKeyValueRequest>(set).getValue());
+
+  auto latest = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<PersistKeyValueRequest>(latest));
+  EXPECT_EQ("newest", std::get<PersistKeyValueRequest>(latest).getValue());
+}
+
+TEST(KvStoreRequestQueueTest, LatestPersistSuppressesPendingClear) {
+  for (const bool setValue : {false, true}) {
+    messaging::ReplicateQueue<KeyValueRequest> queue;
+    auto reader = getKvStoreRequestQueueReader(
+        queue,
+        /*enableQueueCoalescing=*/true,
+        /*activationThreshold=*/0);
+
+    const AreaId area{"area"};
+    queue.push(PersistKeyValueRequest(area, "key", "old"));
+    queue.push(
+        ClearKeyValueRequest(area, "key", setValue ? "deleted" : "", setValue));
+    queue.push(PersistKeyValueRequest(area, "key", "latest"));
+
+    ASSERT_EQ(1, reader.size());
+    auto request = reader.get().value();
+    ASSERT_TRUE(std::holds_alternative<PersistKeyValueRequest>(request));
+    EXPECT_EQ("latest", std::get<PersistKeyValueRequest>(request).getValue());
+  }
+}
+
+TEST(KvStoreRequestQueueTest, ActivatesOnlyAboveProductionThreshold) {
+  messaging::ReplicateQueue<KeyValueRequest> queue;
+  auto reader =
+      getKvStoreRequestQueueReader(queue, /*enableQueueCoalescing=*/true);
+  const AreaId area{"area"};
+
+  for (size_t i = 0; i < kKvStoreRequestSuppressionActivationThreshold; ++i) {
+    queue.push(PersistKeyValueRequest(area, "key", std::to_string(i)));
+  }
+  EXPECT_EQ(kKvStoreRequestSuppressionActivationThreshold, reader.size());
+
+  queue.push(PersistKeyValueRequest(
+      area,
+      "key",
+      std::to_string(kKvStoreRequestSuppressionActivationThreshold)));
+
+  ASSERT_EQ(1, reader.size());
+  auto request = reader.get().value();
+  ASSERT_TRUE(std::holds_alternative<PersistKeyValueRequest>(request));
+  EXPECT_EQ(
+      std::to_string(kKvStoreRequestSuppressionActivationThreshold),
+      std::get<PersistKeyValueRequest>(request).getValue());
+}
 
 /**
  * Validate SetKeyValueRequest processing, key-setting, and ttl-refreshing.

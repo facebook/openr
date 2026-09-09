@@ -33,6 +33,7 @@ namespace fs = std::filesystem;
 #include <openr/dispatcher/Dispatcher.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStoreRequestQueue.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/Monitor.h>
@@ -244,7 +245,9 @@ main(int argc, char** argv) {
 
   // PrefixManager/LinkMonitor -> KvStore
   ReplicateQueue<KeyValueRequest> kvRequestQueue;
-  auto kvStoreRequestQueueReader = kvRequestQueue.getReader("kvStore");
+  auto kvStoreRequestQueueReader = getKvStoreRequestQueueReader(
+      kvRequestQueue,
+      /*enableQueueCoalescing=*/config->isQueueCoalescingEnabled());
 
   // Netlink -> LinkMonitor
   ReplicateQueue<fbnl::NetlinkEvent> netlinkEventsQueue;
