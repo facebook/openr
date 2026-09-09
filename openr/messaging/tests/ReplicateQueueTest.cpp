@@ -129,3 +129,29 @@ TEST(ReplicateQueueTest, ReaderCoalescing) {
 
   q.close();
 }
+
+TEST(ReplicateQueueTest, ReaderStateSuppression) {
+  struct StateUpdate {
+    std::string key;
+    int value;
+  };
+
+  ReplicateQueue<StateUpdate> q;
+  auto plain = q.getReader("plain", nullptr);
+  auto suppressed = q.getReader(
+      "suppressed",
+      StateSuppressionPolicy<StateUpdate>{[](const StateUpdate& update) {
+        return StateSuppressionKey{update.key};
+      }});
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"b", 1});
+  q.push(StateUpdate{"a", 2});
+
+  EXPECT_EQ(3, plain.size());
+  EXPECT_EQ(2, suppressed.size());
+  EXPECT_EQ(1, suppressed.get().value().value);
+  EXPECT_EQ(2, suppressed.get().value().value);
+
+  q.close();
+}

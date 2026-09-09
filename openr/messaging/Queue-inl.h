@@ -57,6 +57,15 @@ RWQueue<ValueType>::RWQueue(
     : queueId_(queueId), coalesceFn_(std::move(coalesceFn)) {}
 
 template <typename ValueType>
+RWQueue<ValueType>::RWQueue(
+    const std::string& queueId,
+    StateSuppressionPolicy<ValueType> stateSuppressionPolicy)
+    : queueId_(queueId),
+      stateSuppressionQueue_(
+          std::make_unique<StateSuppressionQueue>(
+              std::move(stateSuppressionPolicy))) {}
+
+template <typename ValueType>
 RWQueue<ValueType>::~RWQueue() {
   close();
 }
@@ -78,6 +87,8 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     pendingRead.data.emplace(std::forward<ValueTypeT>(val));
     pendingRead.baton.post();
     pendingReads_.pop_front();
+  } else if (stateSuppressionQueue_) {
+    stateSuppressionQueue_->push(std::forward<ValueTypeT>(val));
   } else if (coalesceFn_ && !queue_.empty()) {
     // Offer the incoming value to be merged into the pending tail element. If
     // the coalescer consumes it (returns true) nothing is appended, bounding
@@ -162,7 +173,12 @@ RWQueue<ValueType>::getAnyImpl(PendingRead& pendingRead) {
   }
 
   // Perform immediate read if data is available
-  if (queue_.size()) {
+  if (stateSuppressionQueue_ && !stateSuppressionQueue_->empty()) {
+    pendingRead.data.emplace(stateSuppressionQueue_->pop());
+    return true;
+  }
+
+  if (!queue_.empty()) {
     pendingRead.data.emplace(std::move(queue_.front()));
     queue_.pop_front();
     return true;
@@ -181,7 +197,10 @@ RWQueue<ValueType>::close() {
   if (not closed_) {
     closed_ = true;
     // Either one of these must be zero
-    assert(pendingReads_.size() == 0 || queue_.size() == 0);
+    assert(
+        pendingReads_.empty() ||
+        (queue_.empty() &&
+         (!stateSuppressionQueue_ || stateSuppressionQueue_->empty())));
     // Set empy value to all pending reads
     while (pendingReads_.size()) {
       auto& pendingRead = pendingReads_.front().get();
@@ -189,6 +208,9 @@ RWQueue<ValueType>::close() {
       pendingReads_.pop_front();
     }
     queue_.clear();
+    if (stateSuppressionQueue_) {
+      stateSuppressionQueue_->clear();
+    }
   }
 }
 
@@ -209,7 +231,8 @@ template <typename ValueType>
 size_t
 RWQueue<ValueType>::size() {
   std::lock_guard<std::mutex> l(lock_);
-  return queue_.size();
+  return stateSuppressionQueue_ ? stateSuppressionQueue_->size()
+                                : queue_.size();
 }
 
 template <typename ValueType>
@@ -237,7 +260,11 @@ template <typename ValueType>
 RWQueueStats
 RWQueue<ValueType>::getStats() {
   std::lock_guard<std::mutex> l(lock_);
-  return RWQueueStats{"", reads_, writes_, queue_.size()};
+  return RWQueueStats{
+      "",
+      reads_,
+      writes_,
+      stateSuppressionQueue_ ? stateSuppressionQueue_->size() : queue_.size()};
 }
 
 } // namespace openr::messaging

@@ -77,6 +77,22 @@ ReplicateQueue<ValueType>::getReader(
 }
 
 template <typename ValueType>
+RQueue<ValueType>
+ReplicateQueue<ValueType>::getReader(
+    const std::optional<std::string>& readerId,
+    StateSuppressionPolicy<ValueType> stateSuppressionPolicy) {
+  auto lockedReaders = readers_.wlock();
+  if (closed_) {
+    throw std::runtime_error("queue is closed");
+  }
+  lockedReaders->emplace_back(
+      std::make_shared<RWQueue<ValueType>>(
+          readerId ? *readerId : std::string{},
+          std::move(stateSuppressionPolicy)));
+  return RQueue<ValueType>(lockedReaders->back());
+}
+
+template <typename ValueType>
 size_t
 ReplicateQueue<ValueType>::getNumReaders() {
   auto lockedReaders = readers_.wlock();

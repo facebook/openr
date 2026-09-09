@@ -5,6 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <string>
+#include <vector>
+
 #include <folly/Benchmark.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/init/Init.h>
@@ -14,6 +17,24 @@
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
+
+namespace {
+
+struct StateUpdate {
+  std::string key;
+  size_t value;
+  bool barrier;
+};
+
+messaging::StateSuppressionKey
+getStateSuppressionKey(const StateUpdate& update) {
+  return messaging::StateSuppressionKey{
+      update.key,
+      update.barrier ? messaging::StateSuppressionAction::KEY_BARRIER
+                     : messaging::StateSuppressionAction::REPLACE_PENDING};
+}
+
+} // namespace
 
 static void
 BM_RWQueue(
@@ -189,6 +210,55 @@ BM_ReplicateQueue(
   readerThread.join();
 }
 
+static void
+BM_StatePush(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    const bool enableQueueCoalescing,
+    const size_t activationThreshold,
+    const size_t numKeys,
+    const size_t barrierInterval,
+    const size_t count) {
+  folly::BenchmarkSuspender suspender;
+
+  std::vector<std::string> keys;
+  keys.reserve(numKeys);
+  for (size_t i = 0; i < numKeys; ++i) {
+    keys.emplace_back("area:key-" + std::to_string(i));
+  }
+  std::vector<StateUpdate> updates;
+  updates.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    updates.push_back(
+        StateUpdate{
+            keys[i % numKeys],
+            i,
+            barrierInterval != 0 && (i + 1) % barrierInterval == 0});
+  }
+
+  size_t pendingMessages{0};
+  while (iters--) {
+    messaging::ReplicateQueue<StateUpdate> queue;
+    auto reader = enableQueueCoalescing
+        ? queue.getReader(
+              "benchmark",
+              messaging::StateSuppressionPolicy<StateUpdate>{
+                  getStateSuppressionKey, activationThreshold})
+        : queue.getReader("benchmark");
+
+    suspender.dismiss();
+    for (const auto& update : updates) {
+      queue.push(update);
+    }
+    suspender.rehire();
+
+    pendingMessages = reader.size();
+    folly::doNotOptimizeAway(pendingMessages);
+  }
+  counters["pending_messages"] = pendingMessages;
+  counters["suppressed_messages"] = count - pendingMessages;
+}
+
 /**
  * The first parameter is number of readers
  * The second parameter is the number of writers
@@ -211,6 +281,31 @@ BENCHMARK_NAMED_PARAM(BM_ReplicateQueue, M1000000_R10_W1, 10, 1, 1000000);
 BENCHMARK_NAMED_PARAM(BM_ReplicateQueue, M1000000_R100_W1, 100, 1, 1000000);
 BENCHMARK_NAMED_PARAM(BM_ReplicateQueue, M1000000_R1_W10, 1, 10, 100000);
 BENCHMARK_NAMED_PARAM(BM_ReplicateQueue, M1000000_R1_W100, 1, 100, 10000);
+
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Off_Hot100_10K, false, 0, 100, 0, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, On_Hot100_10K, true, 0, 100, 0, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Adaptive_Hot100_10K, true, 64, 100, 0, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Off_Keys50_Writes50, false, 0, 50, 0, 50);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, On_Keys50_Writes50, true, 0, 50, 0, 50);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Adaptive_Keys50_Writes50, true, 64, 50, 0, 50);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Off_Unique_10K, false, 0, 10000, 0, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, On_Unique_10K, true, 0, 10000, 0, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Adaptive_Unique_10K, true, 64, 10000, 0, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Off_Barrier97_10K, false, 0, 100, 97, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, On_Barrier97_10K, true, 0, 100, 97, 10000);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_StatePush, Adaptive_Barrier97_10K, true, 64, 100, 97, 10000);
 
 } // namespace openr
 

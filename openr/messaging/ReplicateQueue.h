@@ -75,6 +75,17 @@ class ReplicateQueue : public ReplicateQueueBase {
           nullptr);
 
   /**
+   * Get a reader that retains only the latest pending suppressible state for
+   * each key. Key barriers remain queued and split suppression history only
+   * for their own key. Suppression starts after the policy's activation
+   * threshold is exceeded and remains active until the reader drains. State
+   * suppression is isolated to this reader.
+   */
+  RQueue<ValueType> getReader(
+      const std::optional<std::string>& readerId,
+      StateSuppressionPolicy<ValueType> stateSuppressionPolicy);
+
+  /**
    * Number of replicated streams/readers
    */
   size_t getNumReaders();

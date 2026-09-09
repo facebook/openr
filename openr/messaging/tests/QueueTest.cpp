@@ -17,6 +17,35 @@
 
 using namespace openr::messaging;
 
+namespace {
+
+struct StateUpdate {
+  std::string key;
+  int value;
+  bool barrier{false};
+
+  bool
+  operator==(const StateUpdate& other) const {
+    return key == other.key && value == other.value && barrier == other.barrier;
+  }
+};
+
+StateSuppressionKey
+getStateSuppressionKey(const StateUpdate& update) {
+  return StateSuppressionKey{
+      update.key,
+      update.barrier ? StateSuppressionAction::KEY_BARRIER
+                     : StateSuppressionAction::REPLACE_PENDING};
+}
+
+StateSuppressionPolicy<StateUpdate>
+getStateSuppressionPolicy(const size_t activationThreshold = 0) {
+  return StateSuppressionPolicy<StateUpdate>{
+      getStateSuppressionKey, activationThreshold};
+}
+
+} // namespace
+
 TEST(RWQueueTest, SizeAndReaders) {
   RWQueue<int> q;
 
@@ -413,4 +442,170 @@ TEST(RWQueueTest, NoCoalescerIsPlainAppend) {
   EXPECT_EQ(2, q.size());
   EXPECT_EQ(1, q.get().value());
   EXPECT_EQ(2, q.get().value());
+}
+
+TEST(RWQueueTest, KeyedStateSuppression) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"b", 1});
+  q.push(StateUpdate{"a", 2});
+  q.push(StateUpdate{"c", 1});
+  q.push(StateUpdate{"b", 2});
+
+  EXPECT_EQ(3, q.size());
+  auto stats = q.getStats();
+  EXPECT_EQ(5, stats.writes);
+  EXPECT_EQ(0, stats.reads);
+  EXPECT_EQ(3, stats.size);
+  EXPECT_EQ((StateUpdate{"a", 2}), q.get().value());
+  auto statsAfterRead = q.getStats();
+  EXPECT_EQ(1, statsAfterRead.reads);
+  EXPECT_EQ(2, statsAfterRead.size);
+  EXPECT_EQ((StateUpdate{"c", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"b", 2}), q.get().value());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionBarrier) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"a", 2, true});
+  q.push(StateUpdate{"a", 3});
+  q.push(StateUpdate{"a", 4});
+
+  EXPECT_EQ(3, q.size());
+  EXPECT_EQ((StateUpdate{"a", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 2, true}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 4}), q.get().value());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionCloseWithPendingState) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"b", 1});
+  q.push(StateUpdate{"a", 2});
+  ASSERT_EQ(2, q.size());
+
+  q.close();
+  EXPECT_EQ(0, q.size());
+  EXPECT_EQ(QueueError::QUEUE_CLOSED, q.get().error());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionWithBlockedReader) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+  folly::EventBase evb;
+  auto& manager = folly::fibers::getFiberManager(evb);
+
+  manager.addTask(
+      [&q]() { EXPECT_EQ((StateUpdate{"a", 1}), q.get().value()); });
+  evb.loopOnce();
+  ASSERT_EQ(1, q.numPendingReads());
+
+  q.push(StateUpdate{"a", 1});
+  evb.loopOnce();
+  EXPECT_EQ(0, q.numPendingReads());
+  EXPECT_EQ(0, q.size());
+
+  q.push(StateUpdate{"a", 2});
+  q.push(StateUpdate{"a", 3});
+  EXPECT_EQ(1, q.size());
+  EXPECT_EQ((StateUpdate{"a", 3}), q.get().value());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionConcurrentProducersAndConsumer) {
+  constexpr size_t kNumProducers{8};
+  constexpr int kUpdatesPerProducer{8192};
+  constexpr int kBarrierInterval{257};
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+
+  std::vector<int> lastSeen(kNumProducers, -1);
+  bool orderPreserved{true};
+  std::thread consumer([&]() {
+    size_t terminalBarriers{0};
+    while (terminalBarriers < kNumProducers) {
+      auto update = q.get().value();
+      const auto producer = static_cast<size_t>(update.key.front() - 'a');
+      if (update.barrier && update.value == kUpdatesPerProducer) {
+        orderPreserved &= lastSeen.at(producer) == kUpdatesPerProducer - 1;
+        ++terminalBarriers;
+        continue;
+      }
+      orderPreserved &= update.value > lastSeen.at(producer);
+      lastSeen.at(producer) = update.value;
+    }
+  });
+
+  std::vector<std::thread> producers;
+  producers.reserve(kNumProducers);
+  for (size_t producer = 0; producer < kNumProducers; ++producer) {
+    producers.emplace_back([&, producer]() {
+      const std::string key(1, static_cast<char>('a' + producer));
+      for (int value = 0; value < kUpdatesPerProducer; ++value) {
+        q.push(StateUpdate{key, value, (value + 1) % kBarrierInterval == 0});
+      }
+      q.push(StateUpdate{key, kUpdatesPerProducer, true});
+    });
+  }
+
+  for (auto& producer : producers) {
+    producer.join();
+  }
+  consumer.join();
+
+  EXPECT_TRUE(orderPreserved);
+  EXPECT_EQ(std::vector<int>(kNumProducers, kUpdatesPerProducer - 1), lastSeen);
+  EXPECT_EQ(kNumProducers * (kUpdatesPerProducer + 1), q.numWrites());
+  EXPECT_EQ(0, q.size());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionActivatesAboveThreshold) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy(3));
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"b", 1});
+  q.push(StateUpdate{"a", 2});
+
+  EXPECT_EQ(3, q.size());
+
+  q.push(StateUpdate{"c", 1});
+
+  EXPECT_EQ(3, q.size());
+  EXPECT_EQ((StateUpdate{"b", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 2}), q.get().value());
+  EXPECT_EQ((StateUpdate{"c", 1}), q.get().value());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionPreservesBarriersAtActivation) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy(4));
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"a", 2, true});
+  q.push(StateUpdate{"a", 3});
+  q.push(StateUpdate{"a", 4});
+  q.push(StateUpdate{"b", 1});
+
+  EXPECT_EQ(4, q.size());
+  EXPECT_EQ((StateUpdate{"a", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 2, true}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 4}), q.get().value());
+  EXPECT_EQ((StateUpdate{"b", 1}), q.get().value());
+}
+
+TEST(RWQueueTest, KeyedStateSuppressionReturnsToFifoAfterDrain) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy(2));
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"a", 2});
+  q.push(StateUpdate{"b", 1});
+  EXPECT_EQ((StateUpdate{"a", 2}), q.get().value());
+  EXPECT_EQ((StateUpdate{"b", 1}), q.get().value());
+
+  q.push(StateUpdate{"c", 1});
+  q.push(StateUpdate{"c", 2});
+
+  EXPECT_EQ(2, q.size());
+  EXPECT_EQ((StateUpdate{"c", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"c", 2}), q.get().value());
 }
