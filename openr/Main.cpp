@@ -186,8 +186,31 @@ main(int argc, char** argv) {
 
   // PrefixManager -> Decision
   ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
+  /*
+   * Coalesce this reader's backlog at push time so a slow Decision cannot let
+   * the queue grow unbounded while PrefixManager churns static routes (bounds
+   * openr memory). Same coalescer as the other two DecisionRouteUpdate queues:
+   * an incoming FULL_SYNC is authoritative and replaces the pending element,
+   * and later incrementals fold into it, so the backlog collapses to one
+   * element regardless of Decision's consumption rate.
+   *
+   * PrefixManager only ever emits INCREMENTAL updates here, so in practice
+   * every push takes the merge path. `prefixType` is accounting metadata that
+   * does not affect how Decision applies the routes, so the merge simply keeps
+   * the newest label.
+   *
+   * NOTE: the coalescer runs under the reader queue's lock, so it must stay
+   * cheap. This queue has a single producer (PrefixManager), so there is no
+   * cross-producer lock contention.
+   *
+   * Gated by the enable_openr_queue_coalescing config knob (off by default) so
+   * the behavior can be rolled out and rolled back per-scope.
+   */
   auto decisionStaticRouteUpdatesQueueReader =
-      staticRouteUpdatesQueue.getReader("decision");
+      staticRouteUpdatesQueue.getReader(
+          "decision",
+          config->isQueueCoalescingEnabled() ? coalesceDecisionRouteUpdates
+                                             : nullptr);
 
   // Fib -> PrefixManager
   ReplicateQueue<DecisionRouteUpdate> fibRouteUpdatesQueue;

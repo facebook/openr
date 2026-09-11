@@ -14,44 +14,12 @@
 
 #include <openr/common/LsdbUtil.h>
 #include <openr/decision/RouteUpdate.h>
+#include <openr/decision/tests/RouteUpdateTestUtils.h>
 #include <openr/messaging/ReplicateQueue.h>
 
 namespace openr {
 
 namespace {
-
-// Build a unicast entry for `cidr` with `numNextHops` distinct next-hops, so
-// the next-hop count can distinguish "which version won" after a merge.
-RibUnicastEntry
-makeUnicast(const std::string& cidr, int numNextHops) {
-  static const std::vector<std::string> kAddrs = {
-      "fe80::1", "fe80::2", "fe80::3", "fe80::4"};
-  folly::F14FastSet<thrift::NextHopThrift> nhs;
-  for (int i = 0; i < numNextHops; ++i) {
-    nhs.insert(createNextHop(
-        toBinaryAddress(folly::IPAddress(kAddrs.at(i))), "iface"));
-  }
-  return RibUnicastEntry(folly::IPAddress::createNetwork(cidr), std::move(nhs));
-}
-
-RibMplsEntry
-makeMpls(int32_t label, int numNextHops) {
-  static const std::vector<std::string> kAddrs = {
-      "fe80::1", "fe80::2", "fe80::3", "fe80::4"};
-  folly::F14FastSet<thrift::NextHopThrift> nhs;
-  for (int i = 0; i < numNextHops; ++i) {
-    nhs.insert(createNextHop(
-        toBinaryAddress(folly::IPAddress(kAddrs.at(i))), "iface"));
-  }
-  return RibMplsEntry(label, std::move(nhs));
-}
-
-folly::CIDRNetwork
-makeDeleteTestPrefix(size_t index) {
-  return folly::IPAddress::createNetwork(
-      "10." + std::to_string(index / 256) + "." + std::to_string(index % 256) +
-      ".0/24");
-}
 
 using RouteUpdateCoalescer =
     bool (*)(DecisionRouteUpdate&, DecisionRouteUpdate&);
@@ -495,6 +463,99 @@ TEST(CoalesceIncrementalRouteUpdates, BoundsSnoopBacklogAtTwo) {
   q.close();
 }
 
+/*
+ * `prefixType` is accounting metadata: it does not change how Decision applies
+ * the routes, so a merge keeps whichever label arrived last. An update that
+ * carries no label leaves the pending one alone, since there is no newer label
+ * to take.
+ */
+TEST(DecisionRouteUpdateMerge, PrefixTypeTakesNewestLabel) {
+  DecisionRouteUpdate base;
+  base.prefixType = thrift::PrefixType::CONFIG;
+
+  DecisionRouteUpdate typed;
+  typed.prefixType = thrift::PrefixType::VIP;
+  base.mergeInPlace(std::move(typed));
+  ASSERT_TRUE(base.prefixType.has_value());
+  EXPECT_EQ(thrift::PrefixType::VIP, *base.prefixType);
+
+  DecisionRouteUpdate untyped;
+  base.mergeInPlace(std::move(untyped));
+  ASSERT_TRUE(base.prefixType.has_value());
+  EXPECT_EQ(thrift::PrefixType::VIP, *base.prefixType);
+}
+
+/*
+ * End-to-end for the PrefixManager->Decision static route reader, over the real
+ * producer mix: a typed initialization update, a burst of untyped steady-state
+ * churn, then a second typed update. Static route updates carry no FULL_SYNC in
+ * practice, so the whole backlog collapses to a single element whatever the
+ * prefix-type mix, and every route survives.
+ */
+TEST(CoalesceDecisionRouteUpdates, StaticRouteBacklogCollapsesToOneElement) {
+  messaging::ReplicateQueue<DecisionRouteUpdate> q;
+  auto plain = q.getReader("plain");
+  auto decision = q.getReader("decision", coalesceDecisionRouteUpdates);
+
+  constexpr size_t kPushes = 50;
+
+  DecisionRouteUpdate configUpdate;
+  configUpdate.prefixType = thrift::PrefixType::CONFIG;
+  configUpdate.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
+  q.push(std::move(configUpdate));
+
+  for (size_t i = 0; i < kPushes; ++i) {
+    DecisionRouteUpdate update;
+    update.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+    q.push(std::move(update));
+  }
+
+  DecisionRouteUpdate vipUpdate;
+  vipUpdate.prefixType = thrift::PrefixType::VIP;
+  vipUpdate.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1));
+  q.push(std::move(vipUpdate));
+
+  EXPECT_EQ(kPushes + 2, plain.size());
+  EXPECT_EQ(1, decision.size());
+
+  const auto merged = decision.get().value();
+  // Every route survives the collapse...
+  EXPECT_EQ(3, merged.unicastRoutesToUpdate.size());
+  // ...and the newest label wins.
+  ASSERT_TRUE(merged.prefixType.has_value());
+  EXPECT_EQ(thrift::PrefixType::VIP, *merged.prefixType);
+
+  q.close();
+}
+
+/*
+ * Interleaving prefix types does not defeat the bound: the label is not part of
+ * the merge decision, so an A,B,A,B stream still settles at one element.
+ */
+TEST(CoalesceDecisionRouteUpdates, InterleavedPrefixTypesStayBounded) {
+  messaging::ReplicateQueue<DecisionRouteUpdate> q;
+  auto decision = q.getReader("decision", coalesceDecisionRouteUpdates);
+
+  constexpr size_t kPushes = 100;
+  for (size_t i = 0; i < kPushes; ++i) {
+    DecisionRouteUpdate update;
+    update.prefixType =
+        (i % 2 == 0) ? thrift::PrefixType::CONFIG : thrift::PrefixType::VIP;
+    update.addRouteToUpdate(makeUnicast(makeTestPrefix(i), 1));
+    q.push(std::move(update));
+  }
+
+  EXPECT_EQ(1, decision.size());
+
+  const auto merged = decision.get().value();
+  EXPECT_EQ(kPushes, merged.unicastRoutesToUpdate.size());
+  // Last push was odd-indexed -> VIP.
+  ASSERT_TRUE(merged.prefixType.has_value());
+  EXPECT_EQ(thrift::PrefixType::VIP, *merged.prefixType);
+
+  q.close();
+}
+
 namespace {
 
 void
@@ -504,7 +565,7 @@ expectAccumulatesAndResurrectsDeletes(RouteUpdateCoalescer coalescer) {
 
   for (size_t i = 0; i < kNumDeletes; ++i) {
     DecisionRouteUpdate incoming;
-    incoming.unicastRoutesToDelete.emplace(makeDeleteTestPrefix(i));
+    incoming.unicastRoutesToDelete.emplace(makeTestPrefix(i));
     incoming.mplsRoutesToDelete.emplace(static_cast<int32_t>(i));
     EXPECT_TRUE(coalescer(pending, incoming));
   }
@@ -530,8 +591,7 @@ expectAccumulatesAndResurrectsDeletes(RouteUpdateCoalescer coalescer) {
       kNumDeletes - resurrected.size(), pending.mplsRoutesToDelete.size());
   for (const auto index : resurrected) {
     const auto label = static_cast<int32_t>(index);
-    EXPECT_EQ(
-        0, pending.unicastRoutesToDelete.count(makeDeleteTestPrefix(index)));
+    EXPECT_EQ(0, pending.unicastRoutesToDelete.count(makeTestPrefix(index)));
     EXPECT_EQ(0, pending.mplsRoutesToDelete.count(label));
   }
 }
