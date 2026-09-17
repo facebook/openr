@@ -44,6 +44,27 @@ getStateSuppressionPolicy(const size_t activationThreshold = 0) {
       getStateSuppressionKey, activationThreshold};
 }
 
+StateSuppressionKey
+getCoalescingSuppressionKey(const StateUpdate& update) {
+  return StateSuppressionKey{
+      update.key,
+      update.barrier ? StateSuppressionAction::KEY_BARRIER
+                     : StateSuppressionAction::MERGE_PENDING};
+}
+
+void
+mergeStateUpdateIntoPending(StateUpdate& pending, StateUpdate& incoming) {
+  pending.value += incoming.value;
+}
+
+StateSuppressionPolicy<StateUpdate>
+getCoalescingSuppressionPolicy() {
+  return StateSuppressionPolicy<StateUpdate>{
+      getCoalescingSuppressionKey,
+      0 /* activationThreshold */,
+      mergeStateUpdateIntoPending};
+}
+
 } // namespace
 
 TEST(RWQueueTest, SizeAndReaders) {
@@ -466,6 +487,23 @@ TEST(RWQueueTest, KeyedStateSuppression) {
   EXPECT_EQ((StateUpdate{"b", 2}), q.get().value());
 }
 
+TEST(RWQueueTest, ReplacePendingDoesNotInvokeMergeCallback) {
+  bool mergeCalled{false};
+  RWQueue<StateUpdate> q(
+      "state-replacement",
+      StateSuppressionPolicy<StateUpdate>{
+          getStateSuppressionKey,
+          0 /* activationThreshold */,
+          [&mergeCalled](StateUpdate&, StateUpdate&) { mergeCalled = true; }});
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"a", 2});
+
+  EXPECT_FALSE(mergeCalled);
+  ASSERT_EQ(1, q.size());
+  EXPECT_EQ((StateUpdate{"a", 2}), q.get().value());
+}
+
 TEST(RWQueueTest, KeyedStateSuppressionBarrier) {
   RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
 
@@ -478,6 +516,82 @@ TEST(RWQueueTest, KeyedStateSuppressionBarrier) {
   EXPECT_EQ((StateUpdate{"a", 1}), q.get().value());
   EXPECT_EQ((StateUpdate{"a", 2, true}), q.get().value());
   EXPECT_EQ((StateUpdate{"a", 4}), q.get().value());
+}
+
+TEST(RWQueueTest, MergePendingFoldsRatherThanDiscards) {
+  RWQueue<StateUpdate> q("state-coalescing", getCoalescingSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"b", 10});
+  q.push(StateUpdate{"a", 2});
+  q.push(StateUpdate{"c", 100});
+  q.push(StateUpdate{"b", 20});
+
+  EXPECT_EQ(3, q.size());
+  /*
+   * a=1 folds into a=2 and the survivor moves to the tail, then b does the
+   * same -- leaving the same survivor order REPLACE_PENDING produces for this
+   * sequence (see KeyedStateSuppression), but with the values summed rather
+   * than the older ones dropped.
+   */
+  EXPECT_EQ((StateUpdate{"a", 3}), q.get().value());
+  EXPECT_EQ((StateUpdate{"c", 100}), q.get().value());
+  EXPECT_EQ((StateUpdate{"b", 30}), q.get().value());
+}
+
+TEST(RWQueueTest, EmptyKeyBarrierClearsAllSuppressionHistory) {
+  RWQueue<StateUpdate> q("state-coalescing", getCoalescingSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"b", 10});
+  q.push(StateUpdate{"", 0, true});
+  q.push(StateUpdate{"a", 2});
+  q.push(StateUpdate{"b", 20});
+  q.push(StateUpdate{"a", 4});
+
+  ASSERT_EQ(5, q.size());
+  EXPECT_EQ((StateUpdate{"a", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"b", 10}), q.get().value());
+  EXPECT_EQ((StateUpdate{"", 0, true}), q.get().value());
+  EXPECT_EQ((StateUpdate{"b", 20}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 6}), q.get().value());
+}
+
+/*
+ * A barrier sharing a key DOES block that key, which is the pre-existing
+ * KEY_BARRIER contract.
+ */
+TEST(RWQueueTest, SharedKeyBarrierBlocksThatKey) {
+  RWQueue<StateUpdate> q("state-coalescing", getCoalescingSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"a", 0, true});
+  q.push(StateUpdate{"a", 2});
+  q.push(StateUpdate{"a", 4});
+
+  EXPECT_EQ(3, q.size());
+  EXPECT_EQ((StateUpdate{"a", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 0, true}), q.get().value());
+  EXPECT_EQ((StateUpdate{"a", 6}), q.get().value());
+}
+
+/*
+ * A merged node is indexed like a replaced one, so popping it must drop its
+ * index entry -- otherwise the next push for that key merges into a freed
+ * list node.
+ */
+TEST(RWQueueTest, MergePendingIndexIsClearedOnPop) {
+  RWQueue<StateUpdate> q("state-coalescing", getCoalescingSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1});
+  q.push(StateUpdate{"a", 2});
+  ASSERT_EQ(1, q.size());
+  EXPECT_EQ((StateUpdate{"a", 3}), q.get().value());
+  ASSERT_EQ(0, q.size());
+
+  q.push(StateUpdate{"a", 5});
+  EXPECT_EQ(1, q.size());
+  EXPECT_EQ((StateUpdate{"a", 5}), q.get().value());
 }
 
 TEST(RWQueueTest, KeyedStateSuppressionCloseWithPendingState) {

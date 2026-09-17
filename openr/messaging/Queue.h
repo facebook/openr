@@ -36,7 +36,16 @@ enum class QueueError {
 enum class StateSuppressionAction {
   /* Replace an older pending value with the same state key. */
   REPLACE_PENDING,
-  /* Retain this value and reset suppression history for its key. */
+  /*
+   * Fold the incoming value into the older pending value with the same state
+   * key, then move that pending value to the tail. Requires
+   * StateSuppressionPolicy::mergeIntoPending.
+   */
+  MERGE_PENDING,
+  /*
+   * Retain this value and reset suppression history for its key. An empty key
+   * resets suppression history for every key.
+   */
   KEY_BARRIER,
 };
 
@@ -63,8 +72,19 @@ struct StateSuppressionPolicy {
   /*
    * Preserve FIFO behavior while the pending depth is at or below this value.
    * A value of zero enables suppression as soon as data is queued.
+   *
+   * This exists because REPLACE_PENDING drops state, so a burst below the
+   * threshold stays observable. A policy providing mergeIntoPending MUST set
+   * this to zero; activation-time merging is not supported.
    */
   size_t activationThreshold{0};
+  /*
+   * Required when `classify` can return MERGE_PENDING. Must fold `incoming`
+   * into `pending`; `pending` survives and moves to the tail while `incoming`
+   * is discarded. Runs under the queue lock; keep it cheap.
+   */
+  std::function<void(ValueType& pending, ValueType& incoming)> mergeIntoPending{
+      nullptr};
 };
 
 // Stats recording of
@@ -146,7 +166,8 @@ class RWQueue {
    * Construct with keyed state suppression. At most one pending suppressible
    * value is retained for each key. A replacement is moved to the tail so the
    * surviving values retain their production order. A key barrier is appended
-   * and prevents later values for that key from replacing earlier state.
+   * and prevents later values for that key from replacing earlier state. An
+   * empty-key barrier protects all earlier state.
    *
    * Suppression begins only after the pending depth exceeds
    * `activationThreshold`. The existing FIFO backlog is classified and
@@ -229,8 +250,18 @@ class RWQueue {
         StateSuppressionPolicy<ValueType> stateSuppressionPolicy)
         : activationThreshold_(stateSuppressionPolicy.activationThreshold),
           suppressionActive_(activationThreshold_ == 0),
-          classifyState_(std::move(stateSuppressionPolicy.classify)) {
+          classifyState_(std::move(stateSuppressionPolicy.classify)),
+          mergeIntoPending_(
+              std::move(stateSuppressionPolicy.mergeIntoPending)) {
       CHECK(classifyState_);
+      /*
+       * activateSuppression() walks the backlog calling indexPendingState,
+       * which coalesces by erasing and splicing nodes underneath that walk.
+       * Compacting an existing backlog this way is not implemented. A
+       * coalescing reader loses no state and has no reason to delay activation.
+       */
+      CHECK(!mergeIntoPending_ || activationThreshold_ == 0)
+          << "mergeIntoPending requires activationThreshold 0";
     }
 
     template <typename ValueTypeT>
@@ -260,7 +291,8 @@ class RWQueue {
          * A barrier may have removed this mapping while leaving the value in
          * the list. Erase only when the index still names this value.
          */
-        if (stateKey.action == StateSuppressionAction::REPLACE_PENDING) {
+        if (stateKey.action == StateSuppressionAction::REPLACE_PENDING ||
+            stateKey.action == StateSuppressionAction::MERGE_PENDING) {
           if (auto it = pendingStateByKey_.find(std::string_view{stateKey.key});
               it != pendingStateByKey_.end() && it->second == stateIt) {
             pendingStateByKey_.erase(it);
@@ -314,24 +346,52 @@ class RWQueue {
     void
     indexPendingState(StateIterator stateIt) {
       CHECK(stateIt->stateKey.has_value());
-      const auto& stateKey = *stateIt->stateKey;
-      if (stateKey.action == StateSuppressionAction::KEY_BARRIER) {
-        pendingStateByKey_.erase(std::string_view{stateKey.key});
+      // Copied: the referenced node may be erased below.
+      const auto action = stateIt->stateKey->action;
+
+      if (action == StateSuppressionAction::KEY_BARRIER) {
+        if (stateIt->stateKey->key.empty()) {
+          pendingStateByKey_.clear();
+        } else {
+          pendingStateByKey_.erase(std::string_view{stateIt->stateKey->key});
+        }
         return;
       }
 
+      auto survivorIt = stateIt;
       /*
        * Erase and append rather than overwrite in place. This preserves the
        * production order of surviving state: A1, B1, A2 becomes B1, A2.
        */
-      if (auto it = pendingStateByKey_.find(std::string_view{stateKey.key});
+      if (auto it =
+              pendingStateByKey_.find(std::string_view{stateIt->stateKey->key});
           it != pendingStateByKey_.end()) {
         const auto previousStateIt = it->second;
         pendingStateByKey_.erase(it);
-        queue_.erase(previousStateIt);
+        if (action == StateSuppressionAction::MERGE_PENDING) {
+          CHECK(mergeIntoPending_)
+              << "MERGE_PENDING requires a mergeIntoPending callback";
+          /*
+           * Fold into the OLDER value so the callback sees the two in
+           * production order, then splice that node to the tail so survivor
+           * ordering matches REPLACE_PENDING.
+           *
+           * Splicing rather than assigning the merged value into this node
+           * keeps ValueType free of any assignability requirement -- RWQueue
+           * is instantiated with types holding const members.
+           */
+          mergeIntoPending_(previousStateIt->value, stateIt->value);
+          queue_.erase(stateIt);
+          queue_.splice(queue_.end(), queue_, previousStateIt);
+          survivorIt = previousStateIt;
+        } else {
+          queue_.erase(previousStateIt);
+        }
       }
-      CHECK(pendingStateByKey_.emplace(std::string_view{stateKey.key}, stateIt)
-                .second);
+      CHECK(
+          pendingStateByKey_
+              .emplace(std::string_view{survivorIt->stateKey->key}, survivorIt)
+              .second);
     }
 
     std::list<PendingState> queue_;
@@ -341,6 +401,8 @@ class RWQueue {
     size_t activationThreshold_{0};
     bool suppressionActive_{true};
     std::function<StateSuppressionKey(const ValueType&)> classifyState_;
+    std::function<void(ValueType& pending, ValueType& incoming)>
+        mergeIntoPending_;
   };
 
   /**
