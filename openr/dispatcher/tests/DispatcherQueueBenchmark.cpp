@@ -5,6 +5,9 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <string>
+#include <vector>
+
 #include <fmt/format.h>
 #include <folly/Benchmark.h>
 #include <folly/fibers/FiberManagerMap.h>
@@ -14,6 +17,7 @@
 
 #include <openr/common/Util.h>
 #include <openr/dispatcher/DispatcherQueue.h>
+#include <openr/dispatcher/PublicationCoalescer.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
@@ -212,6 +216,80 @@ BM_FilterDispatcherQueue(
   readerThread.join();
 }
 
+/*
+ * Saturated-backlog benchmark for push-time coalescing: the reader is never
+ * drained, so this measures the cost of a push and, more importantly, the
+ * resulting pending depth -- which is what bounds openr memory.
+ *
+ * Exports pending_messages and suppressed_messages so the memory win is
+ * visible alongside the CPU cost.
+ */
+static void
+BM_CoalescePublications(
+    folly::UserCounters& counters,
+    uint32_t iters,
+    const bool enableCoalescing,
+    const size_t numKeys,
+    const size_t numAreas,
+    const size_t count,
+    const bool injectInitEvent) {
+  folly::BenchmarkSuspender suspender;
+
+  /*
+   * Prebuild publications so their CONSTRUCTION is excluded from timing.
+   * The per-push variant copy below is still inside the timed region --
+   * DispatcherQueue::push takes an rvalue and copies again per reader --
+   * so the absolute numbers include a publication copy. Both the On and
+   * Off arms pay it identically, so the comparison remains valid.
+   */
+  std::vector<std::string> areas;
+  areas.reserve(numAreas);
+  for (size_t i = 0; i < numAreas; ++i) {
+    areas.emplace_back(fmt::format("area-{}", i));
+  }
+  std::vector<thrift::Publication> publications;
+  publications.reserve(count);
+  for (size_t i = 0; i < count; ++i) {
+    publications.emplace_back(createThriftPublication(
+        {{fmt::format("adj:key-{}", i % numKeys),
+          createThriftValue(1, "node1", fmt::format("value-{}", i))}},
+        {} /* expiredKeys */,
+        std::nullopt /* nodeIds */,
+        std::nullopt /* keysToUpdate */,
+        areas[i % numAreas]));
+  }
+
+  size_t pendingMessages{0};
+  while (iters--) {
+    DispatcherQueue q;
+    std::optional<messaging::StateSuppressionPolicy<KvStorePublication>>
+        policy = std::nullopt;
+    if (enableCoalescing) {
+      policy = getKvStorePublicationSuppressionPolicy();
+    }
+    auto reader = q.getReader({} /* prefixes */, "benchmark", policy);
+
+    suspender.dismiss();
+    for (size_t i = 0; i < publications.size(); ++i) {
+      /*
+       * One event, halfway through, so there is a substantial run of
+       * publications on either side of it.
+       */
+      if (injectInitEvent && i == publications.size() / 2) {
+        q.push(KvStorePublication(thrift::InitializationEvent::KVSTORE_SYNCED));
+      }
+      q.push(KvStorePublication(publications[i]));
+    }
+    suspender.rehire();
+
+    pendingMessages = reader.size();
+    folly::doNotOptimizeAway(pendingMessages);
+  }
+  const size_t totalPushed = count + (injectInitEvent ? 1 : 0);
+  counters["pending_messages"] = pendingMessages;
+  counters["suppressed_messages"] = totalPushed - pendingMessages;
+}
+
 // benchmark testing for DispatcherQueue with no specified filter
 BENCHMARK_NAMED_PARAM(
     BM_NoFilterDispatcherQueue, M1000000_R1_W1, 1, 1, 1000000);
@@ -233,6 +311,86 @@ BENCHMARK_NAMED_PARAM(
 BENCHMARK_NAMED_PARAM(BM_FilterDispatcherQueue, M1000000_R1_W10, 1, 10, 100000);
 BENCHMARK_NAMED_PARAM(
     BM_FilterDispatcherQueue, M1000000_R1_W100, 1, 100, 10000);
+
+/*
+ * Coalescing, single area: the backlog should collapse to one element whose
+ * size is the unique changed-key set, regardless of how many pushes arrive.
+ */
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    Off_Hot100_1Area_10K,
+    false /* enableCoalescing */,
+    100,
+    1,
+    10000,
+    false /* injectInitEvent */);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    On_Hot100_1Area_10K,
+    true /* enableCoalescing */,
+    100,
+    1,
+    10000,
+    false /* injectInitEvent */);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    Off_Unique10K_1Area_10K,
+    false /* enableCoalescing */,
+    10000,
+    1,
+    10000,
+    false /* injectInitEvent */);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    On_Unique10K_1Area_10K,
+    true /* enableCoalescing */,
+    10000,
+    1,
+    10000,
+    false /* injectInitEvent */);
+
+/*
+ * Coalescing across interleaved areas.
+ */
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    Off_Hot100_4Areas_10K,
+    false /* enableCoalescing */,
+    100,
+    4,
+    10000,
+    false /* injectInitEvent */);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    On_Hot100_4Areas_10K,
+    true /* enableCoalescing */,
+    100,
+    4,
+    10000,
+    false /* injectInitEvent */);
+
+/*
+ * One InitializationEvent halfway through the stream. An event is never merged
+ * away, so it always survives as its own element -- but whether the
+ * publications on either side of it can still merge is what separates the two
+ * bounding mechanisms, and shows up here as the pending depth.
+ */
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    On_Hot100_1Area_10K_Event,
+    true /* enableCoalescing */,
+    100,
+    1,
+    10000,
+    true /* injectInitEvent */);
+BENCHMARK_COUNTERS_NAMED_PARAM(
+    BM_CoalescePublications,
+    On_Hot100_4Areas_10K_Event,
+    true /* enableCoalescing */,
+    100,
+    4,
+    10000,
+    true /* injectInitEvent */);
 
 } // namespace openr
 

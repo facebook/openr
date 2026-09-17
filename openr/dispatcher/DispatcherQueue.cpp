@@ -89,18 +89,27 @@ DispatcherQueue::getNumReaders() {
  * when reader is destructed.
  */
 messaging::RQueue<KvStorePublication>
-DispatcherQueue::getReader(const std::vector<std::string>& filters) {
+DispatcherQueue::getReader(
+    const std::vector<std::string>& filters,
+    const std::string& readerId,
+    std::optional<messaging::StateSuppressionPolicy<KvStorePublication>>
+        suppressionPolicy) {
   auto lockedReaders = readers_.wlock();
   if (closed_) {
     throw std::runtime_error("queue is closed");
   }
+
+  auto readerQueue = suppressionPolicy.has_value()
+      ? std::make_shared<messaging::RWQueue<KvStorePublication>>(
+            readerId, std::move(*suppressionPolicy))
+      : std::make_shared<messaging::RWQueue<KvStorePublication>>(readerId);
 
   lockedReaders->emplace_back(
       std::make_shared<std::pair<
           std::shared_ptr<messaging::RWQueue<KvStorePublication>>,
           std::unique_ptr<std::vector<std::string>>>>(
           std::make_pair(
-              std::make_shared<messaging::RWQueue<KvStorePublication>>(),
+              std::move(readerQueue),
               std::make_unique<std::vector<std::string>>(filters))));
 
   return messaging::RQueue<KvStorePublication>(lockedReaders->back()->first);

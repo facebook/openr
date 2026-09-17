@@ -31,6 +31,7 @@ namespace fs = std::filesystem;
 #include <openr/decision/Decision.h>
 #include <openr/decision/RouteUpdate.h>
 #include <openr/dispatcher/Dispatcher.h>
+#include <openr/dispatcher/PublicationCoalescer.h>
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreRequestQueue.h>
@@ -381,18 +382,44 @@ main(int argc, char** argv) {
           kvStoreUpdatesQueue.getReader("dispatcher"),
           *kvStorePublicationsDispatcherQueue));
 
+  /*
+   * Optionally bound each Dispatcher reader's backlog with keyed state
+   * suppression so a slow or stalled reader cannot let dispatcherQueue grow
+   * without bound under KvStore churn. Publications are keyed by area and
+   * MERGED rather than replaced -- a publication is a batch of per-key deltas,
+   * not a snapshot, so replacing would drop keys KvStore never resends.
+   * Classification runs AFTER prefix filtering, so a reader only ever merges
+   * keys it subscribes to.
+   *
+   * NOTE: the classifier and merge run under the reader queue's lock, so they
+   * must stay cheap. This queue has a single producer (the Dispatcher fiber),
+   * so there is no cross-producer lock contention.
+   *
+   * Gated by the enable_openr_queue_coalescing config knob (off by default) so
+   * the behavior can be rolled out and rolled back per-scope.
+   */
+  std::optional<messaging::StateSuppressionPolicy<KvStorePublication>>
+      publicationSuppressionPolicy = std::nullopt;
+  if (config->isQueueCoalescingEnabled()) {
+    publicationSuppressionPolicy = getKvStorePublicationSuppressionPolicy();
+  }
+
   // make Decision/Prefix Manager subscribers of Dispatcher. Decision also needs
   // the fabric drain-status keys, which FabricHelper consumes.
   auto decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
       {Constants::kAdjDbMarker.toString(),
        Constants::kPrefixDbMarker.toString(),
-       FabricConfig::kDrainStatusMarker.toString()});
+       FabricConfig::kDrainStatusMarker.toString()},
+      "decision",
+      publicationSuppressionPolicy);
 
-  auto prefixMgrKvStoreUpdatesReader =
-      dispatcher->getReader({Constants::kPrefixDbMarker.toString()});
+  auto prefixMgrKvStoreUpdatesReader = dispatcher->getReader(
+      {Constants::kPrefixDbMarker.toString()},
+      "prefixManager",
+      publicationSuppressionPolicy);
 
-  auto linkMonitorKvStoreUpdatesReader =
-      dispatcher->getReader({"link-monitor"});
+  auto linkMonitorKvStoreUpdatesReader = dispatcher->getReader(
+      {"link-monitor"}, "linkMonitor", publicationSuppressionPolicy);
 
   watchdog->addQueue(
       *kvStorePublicationsDispatcherQueue, "kvStorePublicationsQueue");

@@ -18,6 +18,7 @@ namespace fs = std::filesystem;
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/OpenrProfiler.h>
 #include <openr/common/Util.h>
+#include <openr/dispatcher/PublicationCoalescer.h>
 #include <openr/kvstore/KvStoreUtil.h>
 #include <openr/monitor/LogSample.h>
 
@@ -66,8 +67,25 @@ OpenrCtrlHandler::OpenrCtrlHandler(
   if (kvStore_) {
     // Add fiber task to receive publication from Dispatcher
     CHECK_NOTNULL(dispatcher_);
+    /*
+     * This reader is unfiltered, so unlike every other Dispatcher subscriber
+     * it also receives TTL refreshes -- making it the largest contributor to
+     * dispatcherQueue's backlog when the ctrl-evb falls behind. Keyed
+     * suppression bounds that backlog to one pending element per area.
+     *
+     * Gated by the enable_openr_queue_coalescing config knob (off by default).
+     * ATTN: config_ is nullable -- embedders and tests construct this handler
+     * without a Config -- so fall back to that disabled default.
+     */
+    std::optional<messaging::StateSuppressionPolicy<KvStorePublication>>
+        suppressionPolicy = std::nullopt;
+    if (config_ && config_->isQueueCoalescingEnabled()) {
+      suppressionPolicy = getKvStorePublicationSuppressionPolicy();
+    }
     auto taskFutureKvStore = ctrlEvb->addFiberTaskFuture(
-        [q = std::move(dispatcher_->getReader()), this]() mutable noexcept {
+        [q = dispatcher_->getReader(
+             {} /* prefixes */, "openrCtrl", std::move(suppressionPolicy)),
+         this]() mutable noexcept {
           XLOG(INFO, "Starting Dispatcher updates processing fiber");
           while (true) {
             auto maybePub = q.get(); // perform read

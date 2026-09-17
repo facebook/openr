@@ -44,9 +44,27 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
    * when reader is destructed. If the vector of prefixes is empty that means
    * there will be no filtering by prefix, and the reader will get every key
    * from Dispatcher. A prefix will be the start of any key coming from KvStore.
+   *
+   * `readerId` names the reader's underlying RWQueue. ATTN: it does NOT yet
+   * surface in getReplicationStats() -- RWQueue::getStats() hardcodes an empty
+   * queueId (T98477650), so stats still fall back to a positional index.
+   *
+   * With `suppressionPolicy` set, this reader keeps at most one pending element
+   * per state key instead of an unbounded FIFO, which bounds the backlog even
+   * when the reader is slow or stalled. Classification runs AFTER prefix
+   * filtering, so the policy only ever sees keys this reader subscribes to.
+   * Only affects THIS reader.
+   *
+   * NOTE: the policy's callbacks run under the reader queue's lock.
+   * dispatcherQueue has a single producer -- the Dispatcher fiber -- so there
+   * is no race between producers, but that same fiber feeds every OTHER
+   * reader, so an expensive classifier or merge delays delivery to all of them.
    */
   messaging::RQueue<KvStorePublication> getReader(
-      const std::vector<std::string>& prefixes = {});
+      const std::vector<std::string>& prefixes = {},
+      const std::string& readerId = "",
+      std::optional<messaging::StateSuppressionPolicy<KvStorePublication>>
+          suppressionPolicy = std::nullopt);
 
   /**
    * Number of replicated streams/readers

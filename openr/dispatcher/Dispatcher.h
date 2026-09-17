@@ -49,9 +49,16 @@ class Dispatcher : public OpenrEventBase {
    * Get new reader stream of the Dispatcher object. Stream will get closed
    * automatically when reader is destructed. Initialize filter for each reader
    * with the default prefix
+   *
+   * `readerId` and `suppressionPolicy` are forwarded to
+   * DispatcherQueue::getReader; see that method for the suppression contract
+   * and its constraints.
    */
   messaging::RQueue<KvStorePublication> getReader(
-      const std::vector<std::string>& prefixes = {});
+      const std::vector<std::string>& prefixes = {},
+      const std::string& readerId = "",
+      std::optional<messaging::StateSuppressionPolicy<KvStorePublication>>
+          suppressionPolicy = std::nullopt);
 
   /**
    * Number of replicated streams/readers
