@@ -1,0 +1,152 @@
+{
+  "seedNote": "seed is a decimal string so a uint64 maximum survives every JSON parser; the derivation hashes it in exactly this form",
+  "comment": "Cross-language golden vectors for the deterministic prefix derivation. Asserted by both the C++ test (openr/tests/scale/tests/DeterministicPrefixGeneratorTest.cpp) and the Python test (openr/tests/scale/scripts/tests/test_scale_key_names.py). If either implementation changes its output, its own test fails here.",
+  "derivation": [
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 128,
+      "address": "fc71:b00f:4932:2e27:96ce:94b:b341:4f8a",
+      "key": "prefix:leaf-0:[fc71:b00f:4932:2e27:96ce:94b:b341:4f8a/128]",
+      "why": "baseline"
+    },
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 1,
+      "bitMaskLen": 128,
+      "address": "fc9a:72fe:6966:81ab:a0f1:9127:62db:6f29",
+      "key": "prefix:leaf-0:[fc9a:72fe:6966:81ab:a0f1:9127:62db:6f29/128]",
+      "why": "index advances the address"
+    },
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 10,
+      "bitMaskLen": 128,
+      "address": "fcb4:4d7f:6e10:15c5:ed1e:16b8:a1be:b230",
+      "key": "prefix:leaf-0:[fcb4:4d7f:6e10:15c5:ed1e:16b8:a1be:b230/128]",
+      "why": "non-adjacent index"
+    },
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 15972,
+      "bitMaskLen": 128,
+      "address": "fc11:e8d3:7019:8816:0:bd59:19ae:e42",
+      "key": "prefix:leaf-0:[fc11:e8d3:7019:8816:0:bd59:19ae:e42/128]",
+      "why": "a single zero 16-bit group MUST NOT be shortened to '::' (RFC 5952 4.2.2)"
+    },
+    {
+      "seed": "12345",
+      "node": "spine-0",
+      "index": 0,
+      "bitMaskLen": 128,
+      "address": "fc34:bb1f:b3c0:723a:d1f5:18bd:d8a:ec98",
+      "key": "prefix:spine-0:[fc34:bb1f:b3c0:723a:d1f5:18bd:d8a:ec98/128]",
+      "why": "node name changes the address at the same index"
+    },
+    {
+      "seed": "12345",
+      "node": "eb-site-19",
+      "index": 0,
+      "bitMaskLen": 128,
+      "address": "fcee:7b62:621d:14d7:6852:fba8:f300:c28d",
+      "key": "prefix:eb-site-19:[fcee:7b62:621d:14d7:6852:fba8:f300:c28d/128]",
+      "why": "hyphenated multi-segment node name"
+    },
+    {
+      "seed": "12345",
+      "node": "control-3",
+      "index": 7,
+      "bitMaskLen": 128,
+      "address": "fc5c:f04a:8261:908f:c41d:d96b:745c:cdb6",
+      "key": "prefix:control-3:[fc5c:f04a:8261:908f:c41d:d96b:745c:cdb6/128]",
+      "why": "control-plane node name"
+    },
+    {
+      "seed": "99999",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 128,
+      "address": "fc44:be28:53ee:c555:5359:3252:735f:b1b6",
+      "key": "prefix:leaf-0:[fc44:be28:53ee:c555:5359:3252:735f:b1b6/128]",
+      "why": "seed changes the address at the same node and index"
+    },
+    {
+      "seed": "0",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 128,
+      "address": "fcc7:3ea4:3bb6:7753:fba6:c31f:26b1:190c",
+      "key": "prefix:leaf-0:[fcc7:3ea4:3bb6:7753:fba6:c31f:26b1:190c/128]",
+      "why": "seed 0 is a valid derivation input; only the CLI reserves 0 to mean random"
+    },
+    {
+      "seed": "18446744073709551615",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 128,
+      "address": "fc80:79c4:a31f:5512:9a26:322e:7cf1:c38",
+      "key": "prefix:leaf-0:[fc80:79c4:a31f:5512:9a26:322e:7cf1:c38/128]",
+      "why": "seed at the uint64 maximum"
+    },
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 64,
+      "address": "fc71:b00f:4932:2e27::",
+      "key": "prefix:leaf-0:[fc71:b00f:4932:2e27::/64]",
+      "why": "masking to /64 zeroes the low half and compresses it"
+    },
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 48,
+      "address": "fc71:b00f:4932::",
+      "key": "prefix:leaf-0:[fc71:b00f:4932::/48]",
+      "why": "masking to /48 leaves a longer trailing zero run"
+    }
+  ],
+  "addressFormatting": [
+    {
+      "bytesHex": "fc000001000000000000000200030004",
+      "address": "fc00:1::2:3:4",
+      "why": "interior run of 3 is the longest run, so it compresses"
+    },
+    {
+      "bytesHex": "fc000001000000020003000400050006",
+      "address": "fc00:1:0:2:3:4:5:6",
+      "why": "a lone zero group stays '0'; '::' MUST NOT shorten just one field"
+    },
+    {
+      "bytesHex": "fc000000000000010002000000000003",
+      "address": "fc00::1:2:0:0:3",
+      "why": "two runs of equal length 2: the leftmost one compresses"
+    },
+    {
+      "bytesHex": "fc000000000000010000000000000002",
+      "address": "fc00:0:0:1::2",
+      "why": "run of 3 beats the earlier run of 2, so the longest wins over leftmost"
+    },
+    {
+      "bytesHex": "fc000001000200030000000000000000",
+      "address": "fc00:1:2:3::",
+      "why": "trailing run compresses, which is what masking to /64 produces"
+    },
+    {
+      "bytesHex": "fc000000000000000000000000000000",
+      "address": "fc00::",
+      "why": "every group but the first is zero"
+    },
+    {
+      "bytesHex": "fc0000010000000000000000000a000b",
+      "address": "fc00:1::a:b",
+      "why": "lowercase hex digits, no leading zeros in a group"
+    }
+  ]
+}
+
