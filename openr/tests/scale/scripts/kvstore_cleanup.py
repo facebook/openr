@@ -86,7 +86,7 @@ import re
 import sys
 import time
 from dataclasses import dataclass
-from typing import Any, Iterable, Mapping, Sequence
+from typing import Any, Awaitable, Callable, Iterable, Mapping, Sequence, TypeVar
 
 from openr.py.openr.cli.utils.options import getDefaultOptions
 from openr.py.openr.clients.openr_client import get_ssl_context
@@ -105,8 +105,25 @@ _DEFAULT_ORIGINATOR_REGEX = r"^(spine|leaf|control|eb-site)-\d+$"
 _DEFAULT_KEY_REGEX = r"^(adj:|prefix:|fakekeys\d+:)"
 
 
+@dataclass(frozen=True)
+class CleanupSummary:
+    """Bounded cleanup result, suitable for runner-side diagnostics."""
+
+    marked_by_host: Mapping[str, int]
+    final_survivors_by_host: Mapping[str, tuple[str, ...]]
+    host_failures: Mapping[str, str]
+
+
 class CleanupError(Exception):
     """The cleanup could not be completed."""
+
+    def __init__(self, message: str, summary: CleanupSummary | None = None) -> None:
+        super().__init__(message)
+        self.summary = summary
+
+
+class _CleanupDeadlineExceeded(asyncio.TimeoutError):
+    """The shared cleanup deadline elapsed before an operation could start."""
 
 
 @dataclass(frozen=True)
@@ -128,6 +145,28 @@ def _is_loopback_host(host: str) -> bool:
         return ipaddress.ip_address(host).is_loopback
     except ValueError:
         return False
+
+
+@dataclass(frozen=True)
+class _HostSnapshot:
+    self_node: str
+    refs: tuple[KeyRef, ...]
+
+
+@dataclass(frozen=True)
+class _Target:
+    label: str
+    host: str
+    port: int
+
+
+_SCALE_NODE = r"(?:spine|leaf|control|eb-site)-\d+"
+_SCALE_KEY_IDENTITY_REGEX = re.compile(
+    rf"^(?:adj:{_SCALE_NODE}|prefix:{_SCALE_NODE}:.*|fakekeys\d+:{_SCALE_NODE})$"
+)
+_POLL_INTERVAL_SECONDS = 2.0
+_MARK_REFRESH_FRACTION = 0.8
+_T = TypeVar("_T")
 
 
 def _client(host: str, port: int) -> Any:
@@ -236,6 +275,28 @@ def _batched(refs: Sequence[KeyRef], size: int) -> Iterable[Sequence[KeyRef]]:
         yield refs[start : start + size]
 
 
+async def _expire_area_rejections(
+    client: Any,
+    area: str,
+    refs: Sequence[KeyRef],
+    ttl_ms: int,
+    batch_size: int,
+) -> dict[str, str]:
+    rejected: dict[str, str] = {}
+    for batch in _batched(refs, batch_size):
+        params = KeySetParams(
+            keyVals={ref.key: _ttl_update(ref, ttl_ms) for ref in batch}
+        )
+        result = await client.setKvStoreKeyValues(params, area)
+        rejected.update(
+            {
+                key: getattr(reason, "name", str(reason))
+                for key, reason in result.noMergeReasons.items()
+            }
+        )
+    return rejected
+
+
 async def expire_area(
     client: Any,
     area: str,
@@ -245,14 +306,10 @@ async def expire_area(
 ) -> dict[str, int]:
     """Send TTL updates for one area. Returns a no-merge reason histogram."""
     histogram: dict[str, int] = {}
-    for batch in _batched(refs, batch_size):
-        params = KeySetParams(
-            keyVals={ref.key: _ttl_update(ref, ttl_ms) for ref in batch}
-        )
-        result = await client.setKvStoreKeyValues(params, area)
-        for reason in result.noMergeReasons.values():
-            name = getattr(reason, "name", str(reason))
-            histogram[name] = histogram.get(name, 0) + 1
+    for reason in (
+        await _expire_area_rejections(client, area, refs, ttl_ms, batch_size)
+    ).values():
+        histogram[reason] = histogram.get(reason, 0) + 1
     return histogram
 
 
@@ -368,54 +425,391 @@ async def verify_host(
     return survivors
 
 
+def _validate_cleanup_inputs(
+    hosts: Sequence[str], ttl_ms: int, wait_sec: int, batch_size: int
+) -> tuple[_Target, ...]:
+    if not hosts or any(
+        not isinstance(token, str) or not token.strip() for token in hosts
+    ):
+        raise ValueError("hosts must be a nonempty sequence of nonempty strings")
+    if ttl_ms <= 0:
+        raise ValueError("ttl_ms must be a positive integer")
+    if wait_sec <= 0:
+        raise ValueError("wait_sec must be a positive integer")
+    if batch_size <= 0:
+        raise ValueError("batch_size must be a positive integer")
+    if wait_sec * 1000 <= ttl_ms:
+        raise ValueError("wait_sec * 1000 must exceed ttl_ms")
+    targets = []
+    for token in hosts:
+        label = token.strip()
+        host, port = parse_host(label)
+        targets.append(_Target(label=label, host=host, port=port))
+    return tuple(targets)
+
+
+def _key_survivors(
+    refs: Iterable[KeyRef], key_re: re.Pattern[str] | None
+) -> tuple[str, ...]:
+    return tuple(
+        sorted(ref.key for ref in refs if key_re is None or key_re.search(ref.key))
+    )
+
+
+async def _scan_target(target: _Target, area: str | None) -> _HostSnapshot:
+    async with _client(target.host, target.port) as client:
+        self_node = await client.getMyNodeName()
+        areas = await discover_areas(client, area)
+        refs = await collect_keys(client, areas)
+    return _HostSnapshot(self_node=self_node, refs=tuple(refs))
+
+
+async def _unreconciled_rejections(
+    client: Any,
+    area: str,
+    refs: Sequence[KeyRef],
+    rejected: Mapping[str, str],
+    ttl_ms: int,
+) -> dict[str, str]:
+    candidates = {
+        key: reason for key, reason in rejected.items() if reason == "NO_NEED_TO_UPDATE"
+    }
+    unreconciled = {
+        key: reason for key, reason in rejected.items() if reason != "NO_NEED_TO_UPDATE"
+    }
+    if not candidates:
+        return unreconciled
+    fresh = await client.getKvStoreHashFilteredArea(KeyDumpParams(), area)
+    refs_by_key = {ref.key: ref for ref in refs}
+    for key, reason in candidates.items():
+        requested = refs_by_key.get(key)
+        resident = fresh.keyVals.get(key)
+        already_applied = (
+            reason == "NO_NEED_TO_UPDATE"
+            and requested is not None
+            and resident is not None
+            and resident.version == requested.version
+            and resident.originatorId == requested.originator
+            and resident.ttlVersion >= requested.ttl_version + 1
+            and 0 < resident.ttl <= ttl_ms
+        )
+        if not already_applied:
+            unreconciled[key] = reason
+    return unreconciled
+
+
+async def _mark_snapshot(
+    target: _Target,
+    snapshot: _HostSnapshot,
+    refs: Sequence[KeyRef],
+    ttl_ms: int,
+    batch_size: int,
+) -> None:
+    if not refs:
+        return
+    by_area: dict[str, list[KeyRef]] = {}
+    for ref in refs:
+        by_area.setdefault(ref.area, []).append(ref)
+    async with _client(target.host, target.port) as client:
+        for current_area, area_refs in sorted(by_area.items()):
+            rejected = await _expire_area_rejections(
+                client, current_area, area_refs, ttl_ms, batch_size
+            )
+            unreconciled = await _unreconciled_rejections(
+                client,
+                current_area,
+                area_refs,
+                rejected,
+                ttl_ms,
+            )
+            if unreconciled:
+                histogram: dict[str, int] = {}
+                for reason in unreconciled.values():
+                    histogram[reason] = histogram.get(reason, 0) + 1
+                raise CleanupError(
+                    f"{target.label}: KvStore rejected {len(unreconciled)}/"
+                    f"{len(area_refs)} TTL updates in area {current_area!r}: "
+                    f"{histogram}"
+                )
+
+
+async def _mark_target(
+    target: _Target,
+    *,
+    area: str | None,
+    ttl_ms: int,
+    batch_size: int,
+    originator_re: re.Pattern[str] | None,
+    key_re: re.Pattern[str] | None,
+) -> tuple[_HostSnapshot, int]:
+    snapshot = await _scan_target(target, area)
+    selected = select_keys(
+        snapshot.refs,
+        snapshot.self_node,
+        originator_re,
+        key_re,
+    )
+    await _mark_snapshot(target, snapshot, selected, ttl_ms, batch_size)
+    return snapshot, len(selected)
+
+
+def _failure_text(error: BaseException) -> str:
+    return f"{type(error).__name__}: {error}"
+
+
+async def _gather_by_target(
+    targets: Sequence[_Target],
+    operation: Callable[[_Target], Awaitable[_T]],
+    *,
+    deadline: float | None = None,
+) -> dict[str, _T | BaseException]:
+    async def bounded(target: _Target) -> _T:
+        if deadline is None:
+            return await operation(target)
+        remaining = deadline - asyncio.get_running_loop().time()
+        if remaining <= 0:
+            raise _CleanupDeadlineExceeded("cleanup deadline exceeded")
+        return await asyncio.wait_for(operation(target), timeout=remaining)
+
+    results = await asyncio.gather(
+        *(bounded(target) for target in targets),
+        return_exceptions=True,
+    )
+    return {target.label: result for target, result in zip(targets, results)}
+
+
+def _cleanup_error(summary: CleanupSummary, wait_sec: int) -> CleanupError:
+    failure_detail = ", ".join(
+        f"{host}={failure}" for host, failure in sorted(summary.host_failures.items())
+    )
+    survivor_detail = ", ".join(
+        f"{host}={keys[:20]}"
+        for host, keys in sorted(summary.final_survivors_by_host.items())
+    )
+    details = "; ".join(
+        detail
+        for detail in (
+            f"host_failures={{ {failure_detail} }}" if failure_detail else "",
+            f"survivors={{ {survivor_detail} }}" if survivor_detail else "",
+        )
+        if detail
+    )
+    return CleanupError(
+        f"scale-key cleanup did not reach stable zero within {wait_sec}s; {details}",
+        summary,
+    )
+
+
+async def _expire_scale_keys_and_verify(  # noqa: C901
+    hosts: Sequence[str],
+    *,
+    area: str | None,
+    ttl_ms: int,
+    wait_sec: int,
+    batch_size: int,
+    originator_re: re.Pattern[str] | None,
+    key_re: re.Pattern[str] | None,
+    verification_key_re: re.Pattern[str] | None,
+) -> CleanupSummary:
+    targets = _validate_cleanup_inputs(hosts, ttl_ms, wait_sec, batch_size)
+    loop = asyncio.get_running_loop()
+    deadline = loop.time() + wait_sec
+    failures: dict[str, str] = {}
+    marked_by_host = {target.label: 0 for target in targets}
+
+    async def mark(target: _Target) -> tuple[_HostSnapshot, int]:
+        return await _mark_target(
+            target,
+            area=area,
+            ttl_ms=ttl_ms,
+            batch_size=batch_size,
+            originator_re=originator_re,
+            key_re=key_re,
+        )
+
+    mark_started = loop.time()
+    mark_results = await _gather_by_target(targets, mark, deadline=deadline)
+    reachable: dict[str, _HostSnapshot] = {}
+    for target in targets:
+        result = mark_results[target.label]
+        if isinstance(result, BaseException):
+            failures[target.label] = _failure_text(result)
+            continue
+        snapshot, count = result
+        reachable[target.label] = snapshot
+        marked_by_host[target.label] = count
+
+    ttl_seconds = ttl_ms / 1000
+    if reachable and loop.time() - mark_started >= ttl_seconds * _MARK_REFRESH_FRACTION:
+        refresh_results = await _gather_by_target(targets, mark, deadline=deadline)
+        for target in targets:
+            result = refresh_results[target.label]
+            if isinstance(result, BaseException):
+                failures[target.label] = _failure_text(result)
+            else:
+                failures.pop(target.label, None)
+                snapshot, count = result
+                reachable[target.label] = snapshot
+                marked_by_host[target.label] += count
+
+    remaining = deadline - loop.time()
+    if remaining > 0 and any(marked_by_host.values()):
+        await asyncio.sleep(min(ttl_seconds, remaining))
+
+    stable_zero_scans = 0
+    final_survivors: dict[str, tuple[str, ...]] = {}
+    while loop.time() < deadline:
+        scan_results = await _gather_by_target(
+            targets,
+            lambda target: _scan_target(target, area),
+            deadline=deadline,
+        )
+        current_snapshots: dict[str, _HostSnapshot] = {}
+        final_survivors = {}
+        for target in targets:
+            result = scan_results[target.label]
+            if isinstance(result, BaseException):
+                if (
+                    isinstance(result, _CleanupDeadlineExceeded)
+                    and target.label in failures
+                ):
+                    continue
+                failures[target.label] = _failure_text(result)
+                continue
+            current_snapshots[target.label] = result
+            failures.pop(target.label, None)
+            survivors = _key_survivors(result.refs, verification_key_re)
+            if survivors:
+                final_survivors[target.label] = survivors
+
+        if (
+            len(current_snapshots) == len(targets)
+            and not failures
+            and not final_survivors
+        ):
+            stable_zero_scans += 1
+            if stable_zero_scans == 2:
+                summary = CleanupSummary(marked_by_host, {}, failures)
+                return summary
+            await asyncio.sleep(
+                min(_POLL_INTERVAL_SECONDS, max(0, deadline - loop.time()))
+            )
+            continue
+
+        stable_zero_scans = 0
+        refreshable = False
+
+        async def refresh(
+            target: _Target,
+            snapshots: Mapping[str, _HostSnapshot] = current_snapshots,
+        ) -> None:
+            nonlocal refreshable
+            snapshot = snapshots.get(target.label)
+            if snapshot is None:
+                return
+            selected = select_keys(
+                snapshot.refs,
+                snapshot.self_node,
+                originator_re,
+                key_re,
+            )
+            if selected:
+                refreshable = True
+                await _mark_snapshot(target, snapshot, selected, ttl_ms, batch_size)
+                marked_by_host[target.label] += len(selected)
+
+        refresh_results = await _gather_by_target(targets, refresh, deadline=deadline)
+        for target in targets:
+            result = refresh_results[target.label]
+            if isinstance(result, BaseException) and target.label in current_snapshots:
+                failures[target.label] = _failure_text(result)
+        if final_survivors and not refreshable:
+            break
+        remaining = deadline - loop.time()
+        if remaining <= 0:
+            break
+        await asyncio.sleep(min(ttl_seconds, remaining))
+
+    summary = CleanupSummary(marked_by_host, final_survivors, failures)
+    raise _cleanup_error(summary, wait_sec)
+
+
+async def expire_scale_keys_and_verify(
+    hosts: Sequence[str],
+    *,
+    area: str | None = None,
+    ttl_ms: int = 30_000,
+    wait_sec: int = 90,
+    batch_size: int = 500,
+) -> CleanupSummary:
+    """Expire trusted scale Values and prove stable key-only zero on every host."""
+    return await _expire_scale_keys_and_verify(
+        hosts,
+        area=area,
+        ttl_ms=ttl_ms,
+        wait_sec=wait_sec,
+        batch_size=batch_size,
+        originator_re=re.compile(_DEFAULT_ORIGINATOR_REGEX),
+        key_re=re.compile(_DEFAULT_KEY_REGEX),
+        verification_key_re=_SCALE_KEY_IDENTITY_REGEX,
+    )
+
+
 async def run(args: argparse.Namespace) -> int:
+    hosts = tuple(token.strip() for token in args.hosts.split(",") if token.strip())
+    if not hosts:
+        raise CleanupError("--hosts is empty")
     originator_re = re.compile(args.originator_regex) if args.originator_regex else None
     key_re = re.compile(args.key_regex) if args.key_regex else None
-    targets = [parse_host(token) for token in args.hosts.split(",") if token.strip()]
-    if not targets:
-        raise CleanupError("--hosts is empty")
-
-    # Phase 1: mark every host BEFORE waiting. Peered nodes re-teach each other
-    # on any full sync, so every host must carry a short TTL before the first one
-    # expires -- otherwise a peer flap during the gap undoes the cleanup.
-    marked: dict[tuple[str, int], list[KeyRef]] = {}
-    for host, port in targets:
-        marked[(host, port)] = await mark_host(host, port, args, originator_re, key_re)
-
-    total = sum(len(refs) for refs in marked.values())
     if not args.apply:
+        targets = _validate_cleanup_inputs(
+            hosts, args.ttl_ms, args.wait_sec, args.batch_size
+        )
+        results = await _gather_by_target(
+            targets,
+            lambda target: mark_host(
+                target.host,
+                target.port,
+                args,
+                originator_re,
+                key_re,
+            ),
+        )
+        failures = {
+            host: _failure_text(result)
+            for host, result in results.items()
+            if isinstance(result, BaseException)
+        }
+        if failures:
+            raise CleanupError(f"dry-run host failures: {failures}")
+        selected_by_host = {
+            host: result
+            for host, result in results.items()
+            if not isinstance(result, BaseException)
+        }
+        total = sum(len(refs) for refs in selected_by_host.values())
         print(f"\nDRY RUN: {total} key(s) would be expired. Re-run with --apply.")
         return 0
-    if total == 0:
-        print("\nNothing to do.")
-        return 0
-
-    # Phase 2: sleep out the TTL before polling. Each poll is a full hash dump of
-    # every host, so polling during the countdown just loads the boxes for
-    # answers we already know.
-    settle = args.ttl_ms / 1000
-    print(f"\nMarked. Sleeping {settle:.0f}s for the TTL to run out...")
-    await asyncio.sleep(settle)
-
-    deadline = max(2, args.wait_sec - settle)
-    print(f"Polling for up to {deadline:.0f}s...")
-    survivors = total
-    while True:
-        survivors = 0
-        for (host, port), refs in marked.items():
-            expected: dict[str, set[str]] = {}
-            for ref in refs:
-                expected.setdefault(ref.area, set()).add(ref.key)
-            survivors += await verify_host(host, port, args, expected)
-        if survivors == 0 or deadline <= 0:
-            break
-        await asyncio.sleep(2)
-        deadline -= 2
-
-    if survivors:
-        print(f"\nFAILED: {survivors} key(s) still resident after {args.wait_sec}s.")
+    try:
+        summary = await _expire_scale_keys_and_verify(
+            hosts,
+            area=args.area,
+            ttl_ms=args.ttl_ms,
+            wait_sec=args.wait_sec,
+            batch_size=args.batch_size,
+            originator_re=originator_re,
+            key_re=key_re,
+            verification_key_re=(
+                _SCALE_KEY_IDENTITY_REGEX
+                if args.key_regex == _DEFAULT_KEY_REGEX
+                else key_re
+            ),
+        )
+    except CleanupError as error:
+        print(f"\nFAILED: {error}")
         return 1
-    print(f"\nOK: {total} key(s) expired.")
+    total = sum(summary.marked_by_host.values())
+    print(f"\nOK: {total} key TTL update(s) sent; stable zero verified.")
     return 0
 
 
