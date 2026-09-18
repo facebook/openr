@@ -58,7 +58,8 @@ class TopologyGenerator {
    * @param numPrefixesPerNode Number of prefixes each router advertises
    * @return Topology with grid connectivity
    */
-  static Topology createGrid(int n, int numPrefixesPerNode = 1);
+  static Topology createGrid(
+      int n, int numPrefixesPerNode = 1, int64_t prefixSeed = 0);
 
   /*
    * Create a datacenter fabric topology.
@@ -80,7 +81,8 @@ class TopologyGenerator {
       int numPlanes,
       int numSswsPerPlane = kDefaultSswsPerPlane,
       int numRswsPerPod = kDefaultRswsPerPod,
-      int numPrefixesPerNode = kDefaultPrefixesPerRouter);
+      int numPrefixesPerNode = kDefaultPrefixesPerRouter,
+      int64_t prefixSeed = 0);
 
   /*
    * Create a simple ring topology.
@@ -91,7 +93,8 @@ class TopologyGenerator {
    * @param numPrefixesPerNode Prefixes per router
    * @return Topology with ring connectivity
    */
-  static Topology createRing(int numRouters, int numPrefixesPerNode = 1);
+  static Topology createRing(
+      int numRouters, int numPrefixesPerNode = 1, int64_t prefixSeed = 0);
 
   /*
    * Load topology from a JSON file.
@@ -161,9 +164,20 @@ class TopologyGenerator {
 
   /*
    * Generate prefixes for a router.
+   *
+   * prefixSeed == 0 keeps the historical behaviour: random prefixes drawn from
+   * prefixGen, which every benchmark and unit test wants. A non-zero seed
+   * derives them from (prefixSeed, nodeName, index) instead, so an off-box tool
+   * can compute the same prefixes -- and therefore the same KvStore key names
+   * -- without observing the injector, and so re-running with the same seed
+   * overwrites the previous run's keys instead of inserting a fresh disjoint
+   * set. prefixGen is left untouched in that case.
    */
   static std::vector<thrift::PrefixEntry> generatePrefixes(
-      const std::string& nodeName, int numPrefixes, PrefixGenerator& prefixGen);
+      const std::string& nodeName,
+      int numPrefixes,
+      PrefixGenerator& prefixGen,
+      int64_t prefixSeed);
 
   /*
    * Helper to get interface name between two routers.
@@ -181,7 +195,8 @@ class TopologyGenerator {
       int numPlanes,
       int numSswsPerPlane,
       int numPrefixesPerNode,
-      PrefixGenerator& prefixGen);
+      PrefixGenerator& prefixGen,
+      int64_t prefixSeed);
 
   static void createFabricFsws(
       Topology& topo,
@@ -190,7 +205,8 @@ class TopologyGenerator {
       int numSswsPerPlane,
       int numRswsPerPod,
       int numPrefixesPerNode,
-      PrefixGenerator& prefixGen);
+      PrefixGenerator& prefixGen,
+      int64_t prefixSeed);
 
   static void createFabricRsws(
       Topology& topo,
@@ -199,7 +215,8 @@ class TopologyGenerator {
       int numSswsPerPlane,
       int numRswsPerPod,
       int numPrefixesPerNode,
-      PrefixGenerator& prefixGen);
+      PrefixGenerator& prefixGen,
+      int64_t prefixSeed);
 };
 
 } // namespace openr

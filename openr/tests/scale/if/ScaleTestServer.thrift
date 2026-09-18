@@ -37,6 +37,12 @@ struct TopologyConfig {
   // patched into all of them as an ABR. Unset / empty / a single name keeps the
   // legacy single-area behavior (default area "0").
   10: optional list<string> areas;
+  // Derive each node's advertised prefixes from (prefixSeed, nodeName, index)
+  // instead of drawing them at random, so an off-box tool can compute the same
+  // prefix key names from the topology fields alone, and so re-injecting with
+  // the same seed overwrites the previous run's keys instead of adding a fresh
+  // disjoint set. Unset or 0 = random prefixes (the historical behaviour).
+  11: optional i64 prefixSeed;
 }
 
 struct InjectionConfig {

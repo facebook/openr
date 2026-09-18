@@ -18,8 +18,19 @@
 #include <folly/logging/xlog.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
+#include <openr/tests/scale/DeterministicPrefixGenerator.h>
 
 namespace openr {
+
+namespace {
+
+/*
+ * Scale-tester prefixes are host routes. The masked address is what lands in
+ * the KvStore key, so an off-box tool deriving key names must mask identically.
+ */
+constexpr uint8_t kScalePrefixMaskLen = 128;
+
+} // namespace
 
 std::string
 TopologyGenerator::getGridNodeName(int row, int col, int n) {
@@ -98,12 +109,23 @@ TopologyGenerator::addBidirectionalAdjacency(
 
 std::vector<thrift::PrefixEntry>
 TopologyGenerator::generatePrefixes(
-    const std::string& /* nodeName */,
+    const std::string& nodeName,
     int numPrefixes,
-    PrefixGenerator& prefixGen) {
+    PrefixGenerator& prefixGen,
+    int64_t prefixSeed) {
   std::vector<thrift::PrefixEntry> prefixes;
   prefixes.reserve(numPrefixes);
-  auto ipPrefixes = prefixGen.ipv6PrefixGenerator(numPrefixes, 128);
+  /*
+   * Seed 0 is reserved to mean "keep drawing random prefixes", so the default
+   * path stays exactly what it was before the seed existed.
+   */
+  auto ipPrefixes = prefixSeed == 0
+      ? prefixGen.ipv6PrefixGenerator(numPrefixes, kScalePrefixMaskLen)
+      : DeterministicPrefixGenerator::generate(
+            static_cast<uint64_t>(prefixSeed),
+            nodeName,
+            numPrefixes,
+            kScalePrefixMaskLen);
 
   for (const auto& ipPrefix : ipPrefixes) {
     prefixes.push_back(createPrefixEntry(
@@ -230,7 +252,8 @@ TopologyGenerator::replicateAcrossAreas(
 }
 
 Topology
-TopologyGenerator::createGrid(int n, int numPrefixesPerNode) {
+TopologyGenerator::createGrid(
+    int n, int numPrefixesPerNode, int64_t prefixSeed) {
   XLOGF(
       INFO,
       "Creating {}x{} grid topology ({} routers, {} prefixes per router)",
@@ -262,7 +285,7 @@ TopologyGenerator::createGrid(int n, int numPrefixesPerNode) {
       router.nodeId = nodeId;
       router.nodeLabel = 100001 + nodeId;
       router.advertisedPrefixes =
-          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen);
+          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen, prefixSeed);
 
       topo.routers.emplace(nodeName, std::move(router));
       topo.routerNames.push_back(nodeName);
@@ -332,7 +355,8 @@ TopologyGenerator::createFabricSsws(
     int numPlanes,
     int numSswsPerPlane,
     int numPrefixesPerNode,
-    PrefixGenerator& prefixGen) {
+    PrefixGenerator& prefixGen,
+    int64_t prefixSeed) {
   int nodeIdCounter = 0;
 
   for (int planeId = 0; planeId < numPlanes; ++planeId) {
@@ -344,7 +368,7 @@ TopologyGenerator::createFabricSsws(
       router.nodeId = nodeIdCounter++;
       router.nodeLabel = kScaleSswMarker * 100000 + planeId * 100 + sswId;
       router.advertisedPrefixes =
-          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen);
+          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen, prefixSeed);
 
       topo.routers.emplace(nodeName, std::move(router));
       topo.routerNames.push_back(nodeName);
@@ -360,7 +384,8 @@ TopologyGenerator::createFabricFsws(
     int numSswsPerPlane,
     int /* numRswsPerPod */,
     int numPrefixesPerNode,
-    PrefixGenerator& prefixGen) {
+    PrefixGenerator& prefixGen,
+    int64_t prefixSeed) {
   int nodeIdCounter = numPlanes * numSswsPerPlane;
 
   for (int podId = 0; podId < numPods; ++podId) {
@@ -372,7 +397,7 @@ TopologyGenerator::createFabricFsws(
       router.nodeId = nodeIdCounter++;
       router.nodeLabel = kScaleFswMarker * 100000 + podId * 100 + fswId;
       router.advertisedPrefixes =
-          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen);
+          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen, prefixSeed);
 
       topo.routers.emplace(nodeName, std::move(router));
       topo.routerNames.push_back(nodeName);
@@ -405,7 +430,8 @@ TopologyGenerator::createFabricRsws(
     int numSswsPerPlane,
     int numRswsPerPod,
     int numPrefixesPerNode,
-    PrefixGenerator& prefixGen) {
+    PrefixGenerator& prefixGen,
+    int64_t prefixSeed) {
   int nodeIdCounter = numPlanes * numSswsPerPlane + numPods * numPlanes;
 
   for (int podId = 0; podId < numPods; ++podId) {
@@ -417,7 +443,7 @@ TopologyGenerator::createFabricRsws(
       router.nodeId = nodeIdCounter++;
       router.nodeLabel = kScaleRswMarker * 100000 + podId * 100 + rswId;
       router.advertisedPrefixes =
-          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen);
+          generatePrefixes(nodeName, numPrefixesPerNode, prefixGen, prefixSeed);
 
       topo.routers.emplace(nodeName, std::move(router));
       topo.routerNames.push_back(nodeName);
@@ -446,7 +472,8 @@ TopologyGenerator::createFabric(
     int numPlanes,
     int numSswsPerPlane,
     int numRswsPerPod,
-    int numPrefixesPerNode) {
+    int numPrefixesPerNode,
+    int64_t prefixSeed) {
   size_t totalRouters = calculateFabricRouterCount(
       numPods, numPlanes, numSswsPerPlane, numRswsPerPod);
 
@@ -473,7 +500,13 @@ TopologyGenerator::createFabric(
    * Create routers in order: SSWs, FSWs, RSWs
    */
   createFabricSsws(
-      topo, numPods, numPlanes, numSswsPerPlane, numPrefixesPerNode, prefixGen);
+      topo,
+      numPods,
+      numPlanes,
+      numSswsPerPlane,
+      numPrefixesPerNode,
+      prefixGen,
+      prefixSeed);
   createFabricFsws(
       topo,
       numPods,
@@ -481,7 +514,8 @@ TopologyGenerator::createFabric(
       numSswsPerPlane,
       numRswsPerPod,
       numPrefixesPerNode,
-      prefixGen);
+      prefixGen,
+      prefixSeed);
   createFabricRsws(
       topo,
       numPods,
@@ -489,7 +523,8 @@ TopologyGenerator::createFabric(
       numSswsPerPlane,
       numRswsPerPod,
       numPrefixesPerNode,
-      prefixGen);
+      prefixGen,
+      prefixSeed);
 
   XLOGF(
       INFO,
@@ -502,7 +537,8 @@ TopologyGenerator::createFabric(
 }
 
 Topology
-TopologyGenerator::createRing(int numRouters, int numPrefixesPerNode) {
+TopologyGenerator::createRing(
+    int numRouters, int numPrefixesPerNode, int64_t prefixSeed) {
   XLOGF(INFO, "Creating ring topology with {} routers", numRouters);
 
   Topology topo;
@@ -522,7 +558,7 @@ TopologyGenerator::createRing(int numRouters, int numPrefixesPerNode) {
     router.nodeId = i;
     router.nodeLabel = 100001 + i;
     router.advertisedPrefixes =
-        generatePrefixes(nodeName, numPrefixesPerNode, prefixGen);
+        generatePrefixes(nodeName, numPrefixesPerNode, prefixGen, prefixSeed);
 
     topo.routers.emplace(nodeName, std::move(router));
     topo.routerNames.push_back(nodeName);

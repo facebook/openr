@@ -38,6 +38,13 @@ struct ScaleTopologyParams {
   int numPods{0};
   int numPrefixesPerNode{0};
   int numSites{0};
+  /*
+   * 0 = random prefixes (the historical behaviour). Non-zero derives them from
+   * (prefixSeed, nodeName, index). Carried as a named field rather than another
+   * positional argument on the topology builders, which already take several
+   * adjacent ints.
+   */
+  int64_t prefixSeed{0};
 };
 
 /*

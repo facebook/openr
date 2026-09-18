@@ -39,6 +39,7 @@ createGenericTopology(const thrift::ScaleTestConfig& cfg) {
   const auto& type = *t.type();
   const int numPrefixesPerNode =
       t.numPrefixesPerNode().value_or(kDefaultPrefixesPerRouter);
+  const int64_t prefixSeed = t.prefixSeed().value_or(0);
 
   if (type == "fabric") {
     if (!t.numPods().has_value()) {
@@ -53,21 +54,24 @@ createGenericTopology(const thrift::ScaleTestConfig& cfg) {
         *t.numSpines(),
         t.numSuperSpines().value_or(kDefaultSswsPerPlane),
         t.numLeaves().value_or(kDefaultRswsPerPod),
-        numPrefixesPerNode);
+        numPrefixesPerNode,
+        prefixSeed);
   }
   if (type == "ring") {
     if (!t.numSpines().has_value()) {
       failInvalid(
           "TopologyConfig.numSpines (used as ring size) must be set for 'ring'");
     }
-    return TopologyGenerator::createRing(*t.numSpines(), numPrefixesPerNode);
+    return TopologyGenerator::createRing(
+        *t.numSpines(), numPrefixesPerNode, prefixSeed);
   }
   if (type == "grid") {
     if (!t.numSpines().has_value()) {
       failInvalid(
           "TopologyConfig.numSpines (used as grid dimension) must be set for 'grid'");
     }
-    return TopologyGenerator::createGrid(*t.numSpines(), numPrefixesPerNode);
+    return TopologyGenerator::createGrid(
+        *t.numSpines(), numPrefixesPerNode, prefixSeed);
   }
   return std::nullopt;
 }
@@ -83,13 +87,16 @@ createGenericTopologyFromParams(const ScaleTopologyParams& p) {
         p.numSpines,
         valueOr(p.numSuperSpines, kDefaultSswsPerPlane),
         valueOr(p.numLeaves, kDefaultRswsPerPod),
-        numPrefixesPerNode);
+        numPrefixesPerNode,
+        p.prefixSeed);
   }
   if (p.type == "ring") {
-    return TopologyGenerator::createRing(p.numSpines, numPrefixesPerNode);
+    return TopologyGenerator::createRing(
+        p.numSpines, numPrefixesPerNode, p.prefixSeed);
   }
   if (p.type == "grid") {
-    return TopologyGenerator::createGrid(p.numSpines, numPrefixesPerNode);
+    return TopologyGenerator::createGrid(
+        p.numSpines, numPrefixesPerNode, p.prefixSeed);
   }
   return std::nullopt;
 }

@@ -81,6 +81,15 @@ DEFINE_int32(
 DEFINE_int32(
     num_prefixes_per_node, 11, "Number of prefixes each router advertises");
 
+DEFINE_int64(
+    prefix_seed,
+    0,
+    "Derive each node's prefixes from (prefix_seed, node name, prefix index) "
+    "instead of drawing them at random. 0 = random (default). A non-zero seed "
+    "makes the injected prefix key names predictable off-box from the topology "
+    "flags alone, and makes re-injection overwrite the previous run's keys "
+    "instead of adding a fresh disjoint set");
+
 DEFINE_string(
     topology_type,
     "bbf-simple",
@@ -561,6 +570,7 @@ main(int argc, char** argv) {
           .numPods = FLAGS_num_pods,
           .numPrefixesPerNode = FLAGS_num_prefixes_per_node,
           .numSites = FLAGS_num_sites,
+          .prefixSeed = FLAGS_prefix_seed,
       });
   if (!maybeTopology.has_value()) {
     XLOGF(ERR, "Unknown topology type: {}", FLAGS_topology_type);
