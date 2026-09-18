@@ -59,7 +59,9 @@ a window in which a peer flap re-teaches the keys.
 Connectivity
 ------------
 Use the mgmt addresses or hostnames from a devserver -- the eb02 <-> eb04 inband
-/127 is point-to-point and deliberately not routable from off-box.
+/127 is point-to-point and deliberately not routable from off-box. Remote
+connections require mTLS; the client certificate and CA are resolved through
+the standard Open/R client options. The cleanup never retries with plaintext.
 
 Examples
 --------
@@ -79,12 +81,15 @@ from __future__ import annotations
 
 import argparse
 import asyncio
+import ipaddress
 import re
 import sys
 import time
 from dataclasses import dataclass
 from typing import Any, Iterable, Mapping, Sequence
 
+from openr.py.openr.cli.utils.options import getDefaultOptions
+from openr.py.openr.clients.openr_client import get_ssl_context
 from openr.thrift.KvStore.thrift_types import KeyDumpParams, KeySetParams, Value
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp
 from thrift.python.client import ClientType, get_client
@@ -116,13 +121,31 @@ class KeyRef:
     ttl_version: int
 
 
+def _is_loopback_host(host: str) -> bool:
+    if host.lower() == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def _client(host: str, port: int) -> Any:
+    options = getDefaultOptions(host, timeout_ms=_TIMEOUT_MS)
+    ssl_context = get_ssl_context(options)
+    if ssl_context is None and not _is_loopback_host(host):
+        raise CleanupError(
+            f"mTLS is required for Open/R cleanup on {host}:{port}, but no "
+            "client TLS configuration is available"
+        )
     return get_client(
         OpenrCtrlCpp,
         host=host,
         port=port,
-        timeout=_TIMEOUT_MS,
+        timeout=_TIMEOUT_MS / 1000,
         client_type=ClientType.THRIFT_ROCKET_CLIENT_TYPE,
+        ssl_context=ssl_context,
+        ssl_timeout=_TIMEOUT_MS / 1000,
     )
 
 
