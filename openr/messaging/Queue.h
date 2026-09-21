@@ -34,6 +34,8 @@ enum class QueueError {
 };
 
 enum class StateSuppressionAction {
+  /* Discard this value without delivering it to the reader. */
+  DROP,
   /* Replace an older pending value with the same state key. */
   REPLACE_PENDING,
   /*
@@ -42,6 +44,13 @@ enum class StateSuppressionAction {
    * StateSuppressionPolicy::mergeIntoPending.
    */
   MERGE_PENDING,
+  /* Retain this value until a later MERGE_PENDING_AND_PURGE action. */
+  PURGEABLE,
+  /*
+   * Merge with older pending state for this key, discard all PURGEABLE values,
+   * and move the merged value to the tail.
+   */
+  MERGE_PENDING_AND_PURGE,
   /*
    * Retain this value and reset suppression history for its key. An empty key
    * resets suppression history for every key.
@@ -79,9 +88,10 @@ struct StateSuppressionPolicy {
    */
   size_t activationThreshold{0};
   /*
-   * Required when `classify` can return MERGE_PENDING. Must fold `incoming`
-   * into `pending`; `pending` survives and moves to the tail while `incoming`
-   * is discarded. Runs under the queue lock; keep it cheap.
+   * Required when `classify` can return MERGE_PENDING or
+   * MERGE_PENDING_AND_PURGE. Must fold `incoming` into `pending`; `pending`
+   * survives and moves to the tail while `incoming` is discarded. Runs under
+   * the queue lock; keep it cheap.
    */
   std::function<void(ValueType& pending, ValueType& incoming)> mergeIntoPending{
       nullptr};
@@ -281,6 +291,11 @@ class RWQueue {
       indexPendingState(std::prev(queue_.end()));
     }
 
+    bool
+    shouldDrop(const ValueType& value) const {
+      return classifyState_(value).action == StateSuppressionAction::DROP;
+    }
+
     ValueType
     pop() {
       auto stateIt = queue_.begin();
@@ -292,7 +307,9 @@ class RWQueue {
          * the list. Erase only when the index still names this value.
          */
         if (stateKey.action == StateSuppressionAction::REPLACE_PENDING ||
-            stateKey.action == StateSuppressionAction::MERGE_PENDING) {
+            stateKey.action == StateSuppressionAction::MERGE_PENDING ||
+            stateKey.action ==
+                StateSuppressionAction::MERGE_PENDING_AND_PURGE) {
           if (auto it = pendingStateByKey_.find(std::string_view{stateKey.key});
               it != pendingStateByKey_.end() && it->second == stateIt) {
             pendingStateByKey_.erase(it);
@@ -349,12 +366,21 @@ class RWQueue {
       // Copied: the referenced node may be erased below.
       const auto action = stateIt->stateKey->action;
 
+      if (action == StateSuppressionAction::DROP) {
+        queue_.erase(stateIt);
+        return;
+      }
+
       if (action == StateSuppressionAction::KEY_BARRIER) {
         if (stateIt->stateKey->key.empty()) {
           pendingStateByKey_.clear();
         } else {
           pendingStateByKey_.erase(std::string_view{stateIt->stateKey->key});
         }
+        return;
+      }
+
+      if (action == StateSuppressionAction::PURGEABLE) {
         return;
       }
 
@@ -368,9 +394,10 @@ class RWQueue {
           it != pendingStateByKey_.end()) {
         const auto previousStateIt = it->second;
         pendingStateByKey_.erase(it);
-        if (action == StateSuppressionAction::MERGE_PENDING) {
+        if (action == StateSuppressionAction::MERGE_PENDING ||
+            action == StateSuppressionAction::MERGE_PENDING_AND_PURGE) {
           CHECK(mergeIntoPending_)
-              << "MERGE_PENDING requires a mergeIntoPending callback";
+              << "merge action requires a mergeIntoPending callback";
           /*
            * Fold into the OLDER value so the callback sees the two in
            * production order, then splice that node to the tail so survivor
@@ -387,6 +414,12 @@ class RWQueue {
         } else {
           queue_.erase(previousStateIt);
         }
+      }
+      if (action == StateSuppressionAction::MERGE_PENDING_AND_PURGE) {
+        queue_.remove_if([](const PendingState& pendingState) {
+          return pendingState.stateKey->action ==
+              StateSuppressionAction::PURGEABLE;
+        });
       }
       CHECK(
           pendingStateByKey_

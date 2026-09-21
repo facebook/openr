@@ -42,6 +42,7 @@ namespace fs = std::filesystem;
 #include <openr/nl/NetlinkProtocolSocket.h>
 #include <openr/platform/NetlinkFibHandler.h>
 #include <openr/prefix-manager/PrefixManager.h>
+#include <openr/prefix-manager/PrefixUpdatesQueue.h>
 #include <openr/spark/IoProvider.h>
 #include <openr/spark/Spark.h>
 #include <openr/watchdog/Watchdog.h>
@@ -255,9 +256,15 @@ main(int argc, char** argv) {
       neighborUpdatesQueue.getReader("linkMonitor");
 
   // Anyone -> PrefixManager
+  /*
+   * With queue coalescing enabled, the optional merged LOOPBACK withdrawal is
+   * kept at the head, stale adds are purged at the next cycle, and other event
+   * or prefix types are dropped from this reader.
+   */
   ReplicateQueue<PrefixEvent> prefixUpdatesQueue;
-  auto prefixMgrPrefixUpdatesQueueReader =
-      prefixUpdatesQueue.getReader("prefixManager");
+  auto prefixMgrPrefixUpdatesQueueReader = getPrefixUpdatesQueueReader(
+      prefixUpdatesQueue,
+      /*enableQueueCoalescing=*/config->isQueueCoalescingEnabled());
 
   // KvStore -> Subscribers
   ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;

@@ -1008,22 +1008,20 @@ LinkMonitor::advertiseRedistAddrs() {
         folly::join(",", areas));
   }
 
-  // Advertise prefixes (one for each area)
+  {
+    PrefixEvent event(
+        PrefixEventType::WITHDRAW_PREFIXES,
+        thrift::PrefixType::LOOPBACK,
+        std::move(toWithdraw));
+    prefixUpdatesQueue_.push(std::move(event));
+  }
+
   for (auto& [areas, prefixEntries] : toAdvertise) {
     PrefixEvent event(
         PrefixEventType::ADD_PREFIXES,
         thrift::PrefixType::LOOPBACK,
         std::move(prefixEntries),
         folly::F14FastSet<std::string>(areas.begin(), areas.end()));
-    prefixUpdatesQueue_.push(std::move(event));
-  }
-
-  // Withdraw prefixes
-  {
-    PrefixEvent event(
-        PrefixEventType::WITHDRAW_PREFIXES,
-        thrift::PrefixType::LOOPBACK,
-        std::move(toWithdraw));
     prefixUpdatesQueue_.push(std::move(event));
   }
 

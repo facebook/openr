@@ -792,11 +792,10 @@ struct OpenrConfig {
   /**
    * Enable push-time coalescing (state suppression) on Open/R's inter-module
    * queues, so a slow reader cannot let its backlog -- and thus openr memory --
-   * grow without bound under sustained route churn. Today this gates both
-   * readers of the Fib-produced fibRouteUpdatesQueue: PrefixManager (via
-   * coalesceDecisionRouteUpdates) and the OpenrCtrl snoop stream (via
-   * coalesceIncrementalRouteUpdates); subsequent queues in the memory-hardening
-   * audit will be gated by this same knob.
+   * grow without bound under sustained route churn. This gates both readers of
+   * the Fib-produced fibRouteUpdatesQueue (PrefixManager and the OpenrCtrl
+   * snoop stream), the KvStore request queue, and the LinkMonitor-produced
+   * prefixUpdatesQueue.
    *
    * Optional (no thrift default) so it is not serialized into every generated
    * openr config; the effective default (false) is applied in

@@ -2566,6 +2566,8 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
   //
   EXPECT_EQ(0, getNextPrefixDb(nodeName, area1_).size());
   EXPECT_EQ(0, getNextPrefixDb(nodeName, area2_).size());
+  auto prefixEventsReader =
+      prefixUpdatesQueue.getReader("loopback-prefix-order");
 
   //
   // Send link UP event(i.e. mixed with VALID and INVALID loopback address)
@@ -2588,6 +2590,10 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
 
   // Get interface updates
   recvAndReplyIfUpdate(); // coalesced updates by throttling
+
+  EXPECT_EQ(
+      PrefixEventType::WITHDRAW_PREFIXES, prefixEventsReader.get()->eventType);
+  EXPECT_EQ(PrefixEventType::ADD_PREFIXES, prefixEventsReader.get()->eventType);
 
   LOG(INFO) << "Testing address advertisements";
 

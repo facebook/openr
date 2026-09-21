@@ -81,6 +81,11 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     return false;
   }
 
+  if (stateSuppressionQueue_ && stateSuppressionQueue_->shouldDrop(val)) {
+    ++writes_;
+    return true;
+  }
+
   if (pendingReads_.size()) {
     // Unblock a pending read
     auto& pendingRead = pendingReads_.front().get();

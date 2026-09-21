@@ -65,6 +65,29 @@ getCoalescingSuppressionPolicy() {
       mergeStateUpdateIntoPending};
 }
 
+StateSuppressionKey
+getResettingSuppressionKey(const StateUpdate& update) {
+  if (update.key == "drop") {
+    return StateSuppressionKey{update.key, StateSuppressionAction::DROP};
+  }
+  if (update.key == "add") {
+    return StateSuppressionKey{update.key, StateSuppressionAction::PURGEABLE};
+  }
+  if (update.barrier) {
+    return StateSuppressionKey{update.key, StateSuppressionAction::KEY_BARRIER};
+  }
+  return StateSuppressionKey{
+      update.key, StateSuppressionAction::MERGE_PENDING_AND_PURGE};
+}
+
+StateSuppressionPolicy<StateUpdate>
+getResettingSuppressionPolicy() {
+  return StateSuppressionPolicy<StateUpdate>{
+      getResettingSuppressionKey,
+      0 /* activationThreshold */,
+      mergeStateUpdateIntoPending};
+}
+
 } // namespace
 
 TEST(RWQueueTest, SizeAndReaders) {
@@ -537,6 +560,53 @@ TEST(RWQueueTest, MergePendingFoldsRatherThanDiscards) {
   EXPECT_EQ((StateUpdate{"a", 3}), q.get().value());
   EXPECT_EQ((StateUpdate{"c", 100}), q.get().value());
   EXPECT_EQ((StateUpdate{"b", 30}), q.get().value());
+}
+
+TEST(RWQueueTest, MergePendingAndPurgeDropsPurgeableValues) {
+  RWQueue<StateUpdate> q("state-reset", getResettingSuppressionPolicy());
+
+  q.push(StateUpdate{"withdraw", 1});
+  q.push(StateUpdate{"add", 10});
+  q.push(StateUpdate{"add", 20});
+  q.push(StateUpdate{"withdraw", 2});
+
+  ASSERT_EQ(1, q.size());
+  EXPECT_EQ((StateUpdate{"withdraw", 3}), q.get().value());
+}
+
+TEST(RWQueueTest, MergePendingAndPurgePreservesBarriers) {
+  RWQueue<StateUpdate> q("state-reset", getResettingSuppressionPolicy());
+
+  q.push(StateUpdate{"withdraw", 1});
+  q.push(StateUpdate{"add", 10});
+  q.push(StateUpdate{"", 100, true});
+  q.push(StateUpdate{"add", 20});
+  q.push(StateUpdate{"withdraw", 2});
+
+  ASSERT_EQ(3, q.size());
+  EXPECT_EQ((StateUpdate{"withdraw", 1}), q.get().value());
+  EXPECT_EQ((StateUpdate{"", 100, true}), q.get().value());
+  EXPECT_EQ((StateUpdate{"withdraw", 2}), q.get().value());
+}
+
+TEST(RWQueueTest, DropSuppressesPendingAndImmediateDelivery) {
+  RWQueue<StateUpdate> q("state-reset", getResettingSuppressionPolicy());
+
+  q.push(StateUpdate{"drop", 1});
+  EXPECT_EQ(0, q.size());
+
+  folly::EventBase evb;
+  auto& manager = folly::fibers::getFiberManager(evb);
+  manager.addTask(
+      [&q]() { EXPECT_EQ((StateUpdate{"withdraw", 2}), q.get().value()); });
+  evb.loopOnce();
+  ASSERT_EQ(1, q.numPendingReads());
+
+  q.push(StateUpdate{"drop", 3});
+  EXPECT_EQ(1, q.numPendingReads());
+  q.push(StateUpdate{"withdraw", 2});
+  evb.loopOnce();
+  EXPECT_EQ(0, q.numPendingReads());
 }
 
 TEST(RWQueueTest, EmptyKeyBarrierClearsAllSuppressionHistory) {
