@@ -337,11 +337,11 @@ if (NOT OPENR_BUILD_PROFILE STREQUAL "full")
   cmake_language(DEFER CALL openr_prune_to_profile_targets)
 endif()
 
-add_executable(openr_bin
+add_executable(openr
   openr/Main.cpp
 )
 
-target_link_libraries(openr_bin
+target_link_libraries(openr
   openr_build_info
   openr_flags
   openr_main_util
@@ -382,9 +382,8 @@ target_link_libraries(openr_bin
 )
 
 install(TARGETS
-  openr_bin
+  openr
   DESTINATION sbin
-  RENAME openr
 )
 
 option(BUILD_TOOLS "BUILD_TOOLS" ON)

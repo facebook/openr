@@ -31,4 +31,4 @@ then
 fi
 
 echo "[$(date)] Attempting to start Open/R using $OPENR_CFG $*"
-openr_bin -v 2 --config "$OPENR_CFG" "$@"
+openr -v 2 --config "$OPENR_CFG" "$@"
