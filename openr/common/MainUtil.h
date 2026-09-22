@@ -64,6 +64,12 @@ std::shared_ptr<apache::thrift::ThriftServer> setUpThriftServer(
     std::shared_ptr<openr::OpenrCtrlHandler>& handler,
     std::shared_ptr<wangle::SSLContextConfig> sslContext);
 
+std::shared_ptr<apache::thrift::ThriftServer> setUpThriftServer(
+    std::shared_ptr<const Config> config,
+    std::shared_ptr<apache::thrift::AsyncProcessorFactory> handler,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext,
+    int32_t port);
+
 void waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server);
 
 } // namespace openr

@@ -55,18 +55,29 @@ setUpThriftServer(
     std::shared_ptr<const Config> config,
     std::shared_ptr<openr::OpenrCtrlHandler>& handler,
     std::shared_ptr<wangle::SSLContextConfig> sslContext) {
-  // Setup OpenrCtrl thrift server
+  const auto port = *config->getThriftServerConfig().openr_ctrl_port();
+  return setUpThriftServer(
+      std::move(config), handler, std::move(sslContext), port);
+}
+
+std::shared_ptr<apache::thrift::ThriftServer>
+setUpThriftServer(
+    std::shared_ptr<const Config> config,
+    std::shared_ptr<apache::thrift::AsyncProcessorFactory> handler,
+    std::shared_ptr<wangle::SSLContextConfig> sslContext,
+    int32_t port) {
   CHECK(handler);
   auto server = std::make_shared<apache::thrift::ThriftServer>();
   server->setInterface(handler);
   server->setNumIOWorkerThreads(1);
-  // Intentionally kept this as (1). If you're changing to higher number please
-  // address thread safety for private member variables in OpenrCtrlHandler
+  /*
+   * Keep one CPU worker until all attached handlers are audited for
+   * concurrent request execution.
+   */
   server->setNumCPUWorkerThreads(1);
   // Enable TOS reflection on the server socket
   server->setTosReflect(true);
-  // Set the port and interface for OpenrCtrl thrift server
-  server->setPort(*config->getThriftServerConfig().openr_ctrl_port());
+  server->setPort(port);
   // Set workers join timeout
   server->setWorkersJoinTimeout(
       std::chrono::seconds{

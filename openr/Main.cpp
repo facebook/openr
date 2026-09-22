@@ -35,6 +35,7 @@ namespace fs = std::filesystem;
 #include <openr/fib/Fib.h>
 #include <openr/kvstore/KvStore.h>
 #include <openr/kvstore/KvStoreRequestQueue.h>
+#include <openr/kvstore/KvStoreServiceHandler.h>
 #include <openr/link-monitor/LinkMonitor.h>
 #include <openr/messaging/ReplicateQueue.h>
 #include <openr/monitor/Monitor.h>
@@ -570,6 +571,27 @@ main(int argc, char** argv) {
   startEventBase(
       allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
+  std::shared_ptr<apache::thrift::AsyncProcessorFactory> kvStorePeerHandler;
+  std::shared_ptr<apache::thrift::ThriftServer> kvStorePeerServer;
+  std::thread kvStorePeerServerThread;
+  const auto kvStorePeerPort = config->getKvStorePeerPort();
+  if (kvStorePeerPort.has_value()) {
+    kvStorePeerHandler =
+        createKvStoreServiceHandler(config->getNodeName(), kvStore);
+    kvStorePeerServer = setUpThriftServer(
+        config, kvStorePeerHandler, sslContext, *kvStorePeerPort);
+    kvStorePeerServerThread = std::thread([&]() noexcept {
+      folly::setThreadName("openr-KvStore");
+      XLOGF(
+          INFO,
+          "Starting KvStore peer Thrift server on port {} ...",
+          *kvStorePeerPort);
+      kvStorePeerServer->serve();
+      XLOG(INFO, "KvStore peer Thrift server thread got stopped.");
+    });
+    waitTillStart(kvStorePeerServer);
+  }
+
   // Start the thrift server
   auto server = setUpThriftServer(config, ctrlHandler, sslContext);
   std::thread serverThread = std::thread([&]() {
@@ -600,7 +622,16 @@ main(int argc, char** argv) {
   addrEventsQueue.close();
   kvStorePublicationsDispatcherQueue->close();
 
-  // Stop & destroy thrift server. Will reduce ref-count on ctrlHandler
+  if (kvStorePeerServer) {
+    kvStorePeerServer->stop();
+    kvStorePeerServerThread.join();
+    kvStorePeerServer.reset();
+    CHECK_EQ(kvStorePeerHandler.use_count(), 1)
+        << "Unexpected ownership of kvStorePeerHandler pointer";
+    kvStorePeerHandler.reset();
+  }
+
+  // Stop & destroy control thrift server. Will reduce ref-count on ctrlHandler
   server->stop();
   serverThread.join();
   server.reset();

@@ -747,6 +747,15 @@ TEST(ConfigTest, DefaultVrfConfigGetterUnsetValue) {
   EXPECT_EQ("", vrf);
 }
 
+TEST(ConfigTest, KvStorePeerPortGetter) {
+  auto tConfig = getBasicOpenrConfig();
+  EXPECT_EQ(std::nullopt, Config(tConfig).getKvStorePeerPort());
+
+  constexpr int32_t kConfiguredPort{12028};
+  tConfig.thrift_server()->kvstore_peer_port() = kConfiguredPort;
+  EXPECT_EQ(kConfiguredPort, Config(tConfig).getKvStorePeerPort());
+}
+
 TEST(ConfigTest, CheckThriftServerConfig) {
   folly::test::TemporaryFile tempFile;
   auto existing_file = tempFile.path().string();

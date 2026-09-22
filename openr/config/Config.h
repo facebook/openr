@@ -290,6 +290,12 @@ class Config {
   getThriftServerConfig() const {
     return *config_.thrift_server();
   }
+
+  std::optional<int32_t>
+  getKvStorePeerPort() const {
+    return getThriftServerConfig().kvstore_peer_port().to_optional();
+  }
+
   bool
   isSecureThriftServerEnabled() const {
     return *getThriftServerConfig().enable_secure_thrift_server();

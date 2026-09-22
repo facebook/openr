@@ -7,6 +7,8 @@
 
 #pragma once
 
+#include <memory>
+
 #include <fb303/BaseService.h>
 #include <openr/if/gen-cpp2/KvStoreService.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
@@ -19,9 +21,10 @@ namespace openr {
  * KvStore instances. KvStore does initial FULL_SYNC and INCREMENTAL_FLOOD
  * via thrift channel I/O. Sample ClientType can be:
  *
- *  1) thrift::KvStoreServiceAsyncClient - this is the general ClientType
- *  2) thrift::OpenrCtrlCppAsyncClient - this is the routing-protocol specific
+ *  1) apache::thrift::Client<thrift::KvStoreService> - this is the general
  *     ClientType
+ *  2) apache::thrift::Client<thrift::OpenrCtrlCpp> - this is the
+ *     routing-protocol specific ClientType
  */
 template <class ClientType>
 class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
@@ -113,6 +116,13 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
   KvStore<ClientType>* kvStore_{nullptr};
 
 }; // class KvStoreServiceHandler
+
+template <class ClientType>
+std::shared_ptr<KvStoreServiceHandler<ClientType>>
+createKvStoreServiceHandler(
+    const std::string& nodeName, KvStore<ClientType>* kvStore) {
+  return std::make_shared<KvStoreServiceHandler<ClientType>>(nodeName, kvStore);
+}
 
 } // namespace openr
 
