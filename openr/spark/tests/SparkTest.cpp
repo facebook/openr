@@ -125,8 +125,8 @@ class SimpleSparkFixture : public SparkFixture {
   createConfig() {
     auto tConfig1 = getBasicOpenrConfig(nodeName1_);
     auto tConfig2 = getBasicOpenrConfig(nodeName2_);
-    tConfig1.thrift_server()->openr_ctrl_port() = 1;
-    tConfig2.thrift_server()->openr_ctrl_port() = 1;
+    tConfig1.thrift_server()->kvstore_peer_port() = 1;
+    tConfig2.thrift_server()->kvstore_peer_port() = 1;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -400,8 +400,8 @@ class SparkV4OverV6MixedModeFixture : public SimpleSparkFixture {
         true /* enableV4 */,
         true /* dryrun */,
         true /* enableV4OverV6Nexthop */);
-    tConfig1.thrift_server()->openr_ctrl_port() = 1;
-    tConfig2.thrift_server()->openr_ctrl_port() = 1;
+    tConfig1.thrift_server()->kvstore_peer_port() = 1;
+    tConfig2.thrift_server()->kvstore_peer_port() = 1;
 
     config1_ = std::make_shared<Config>(tConfig1);
     config2_ = std::make_shared<Config>(tConfig2);
@@ -916,10 +916,9 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
 
   node2_.reset();
 
-  // Recreate Spark instance with a different attribute value of
-  // `openr_ctrl_port`
+  // Recreate Spark instance with a different KvStore peer port.
   auto tConfigTmp = getBasicOpenrConfig(nodeName2_);
-  tConfigTmp.thrift_server()->openr_ctrl_port() = 2;
+  tConfigTmp.thrift_server()->kvstore_peer_port() = 2;
 
   node2_ = createSpark(nodeName2_, std::make_shared<Config>(tConfigTmp));
 
@@ -1360,12 +1359,12 @@ TEST_F(SparkFixture, ReadConfigTest) {
   const std::string nodeStark{"Stark"};
 
   auto tConfig1 = getBasicOpenrConfig(nodeLannister);
-  tConfig1.thrift_server()->openr_ctrl_port() = Constants::kOpenrCtrlPort;
+  tConfig1.thrift_server()->kvstore_peer_port() = Constants::kKvStorePeerPort;
   auto config1 = std::make_shared<Config>(tConfig1);
 
   auto tConfig2 = getBasicOpenrConfig(nodeStark);
   // ATTN: explicitly give a different port
-  tConfig2.thrift_server()->openr_ctrl_port() = 0;
+  tConfig2.thrift_server()->kvstore_peer_port() = 0;
   auto config2 = std::make_shared<Config>(tConfig2);
 
   auto node1 = createSpark(nodeLannister, config1);
@@ -1401,7 +1400,7 @@ TEST_F(SparkFixture, ReadConfigTest) {
     auto& event = events.value().back();
     EXPECT_EQ(iface2, event.localIfName);
     EXPECT_EQ(nodeLannister, event.remoteNodeName);
-    EXPECT_EQ(Constants::kOpenrCtrlPort, event.ctrlThriftPort);
+    EXPECT_EQ(Constants::kKvStorePeerPort, event.ctrlThriftPort);
     ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
   }

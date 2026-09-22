@@ -106,8 +106,8 @@ TEST_F(SparkFabricFixture, FabricInternalInterface) {
 
   openr::thrift::OpenrConfig tConfig1 = getBasicOpenrConfig(nodeName1_);
   openr::thrift::OpenrConfig tConfig2 = getBasicOpenrConfig(nodeName2_);
-  tConfig1.thrift_server()->openr_ctrl_port() = 1;
-  tConfig2.thrift_server()->openr_ctrl_port() = 1;
+  tConfig1.thrift_server()->kvstore_peer_port() = 1;
+  tConfig2.thrift_server()->kvstore_peer_port() = 1;
   tConfig1.fabric_config() = makeFabricConfig();
   tConfig2.fabric_config() = makeFabricConfig();
   config1_ = std::make_shared<Config>(tConfig1);
@@ -159,13 +159,13 @@ TEST_F(SparkFabricFixture, FabricToNonFabricOverExternalInterface) {
 
   // node1: fabric node with FabricConfig
   openr::thrift::OpenrConfig tConfig1 = getBasicOpenrConfig(nodeName1_);
-  tConfig1.thrift_server()->openr_ctrl_port() = 1;
+  tConfig1.thrift_server()->kvstore_peer_port() = 1;
   tConfig1.fabric_config() = makeFabricConfig();
   config1_ = std::make_shared<Config>(tConfig1);
 
   // node2: non-fabric node without FabricConfig
   openr::thrift::OpenrConfig tConfig2 = getBasicOpenrConfig(nonFabricNodeName_);
-  tConfig2.thrift_server()->openr_ctrl_port() = 1;
+  tConfig2.thrift_server()->kvstore_peer_port() = 1;
   config2_ = std::make_shared<Config>(tConfig2);
 
   node1_ = createSpark(nodeName1_, config1_);

@@ -296,7 +296,8 @@ Spark::Spark(
       enableV4_(config->isV4Enabled()),
       v4OverV6Nexthop_(config->isV4OverV6NexthopEnabled()),
       neighborUpdatesQueue_(neighborUpdatesQueue),
-      kOpenrCtrlThriftPort_(*config->getThriftServerConfig().openr_ctrl_port()),
+      kKvStorePeerThriftPort_(config->getKvStorePeerPort().value_or(
+          *config->getThriftServerConfig().openr_ctrl_port())),
       kVersion_(createOpenrVersions(version.first, version.second)),
       ioProvider_(std::move(ioProvider)),
       config_(std::move(config)) {
@@ -982,7 +983,7 @@ Spark::sendHandshakeMsg(
   handshakeMsg.gracefulRestartTime() = gracefulRestartTime_.count();
   handshakeMsg.transportAddressV6() = toBinaryAddress(v6Addr);
   handshakeMsg.transportAddressV4() = toBinaryAddress(v4Addr);
-  handshakeMsg.openrCtrlThriftPort() = kOpenrCtrlThriftPort_;
+  handshakeMsg.openrCtrlThriftPort() = kKvStorePeerThriftPort_;
   // ATTN: send neighborAreaId deduced locally
   handshakeMsg.area() = neighborAreaId;
   handshakeMsg.neighborNodeName() = neighborName;

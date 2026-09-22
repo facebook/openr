@@ -290,6 +290,9 @@ class Constants {
   // Openr Ctrl thrift server port
   static constexpr int32_t kOpenrCtrlPort{2018};
 
+  // KvStore peer thrift server port
+  static constexpr int32_t kKvStorePeerPort{2028};
+
   // Thrift server's queue timeout
   static constexpr std::chrono::milliseconds kThriftServerQueueTimeout{1000};
 

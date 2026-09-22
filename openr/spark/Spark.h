@@ -518,8 +518,8 @@ class Spark final : public OpenrEventBase {
   // Queue to publish neighbor events
   messaging::ReplicateQueue<NeighborInitEvent>& neighborUpdatesQueue_;
 
-  // this is used to inform peers about my kvstore tcp ports
-  const uint16_t kOpenrCtrlThriftPort_{0};
+  // This is used to inform peers about my KvStore thrift port.
+  const int32_t kKvStorePeerThriftPort_{0};
 
   // current version and supported version
   const thrift::OpenrVersions kVersion_;
