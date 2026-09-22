@@ -407,6 +407,12 @@ struct ThriftServerConfig {
   **/
 
   15: optional bool substitute_x509_paths_from_env;
+
+  /**
+   * Optional port used exclusively for Open/R KvStore peer communication.
+   * When unset, peers continue using openr_ctrl_port. Example: 2028.
+   */
+  16: optional i32 kvstore_peer_port;
 }
 
 struct ThriftClientConfig {
