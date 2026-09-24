@@ -341,6 +341,12 @@ add_executable(openr
   openr/Main.cpp
 )
 
+# Thrift codegen writes generated sources into ${CMAKE_BINARY_DIR}/openr, so the
+# daemon cannot link to the default output path of the same name.
+set_target_properties(openr PROPERTIES
+  RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/bin
+)
+
 target_link_libraries(openr
   openr_build_info
   openr_flags
