@@ -56,12 +56,14 @@ using namespace openr;
 
 using openr::messaging::ReplicateQueue;
 
-// jemalloc parameters - http://jemalloc.net/jemalloc.3.html
-// background_thread:false - Disable background jemalloc background thread.
-// prof:true - Memory profiling enabled.
-// prof_active:false - Deactivate memory profiling by default.
-//                     On-the-fly activation is available.
-// prof_prefix - Filename prefix for profile dumps.
+/*
+ * jemalloc parameters - http://jemalloc.net/jemalloc.3.html
+ * background_thread:false - Disable background jemalloc background thread.
+ * prof:true - Memory profiling enabled.
+ * prof_active:false - Deactivate memory profiling by default.
+ *                     On-the-fly activation is available.
+ * prof_prefix - Filename prefix for profile dumps.
+ */
 const char* malloc_conf =
     "background_thread:false,prof:true,prof_active:false,prof_prefix:/tmp/openr_heap";
 
@@ -166,17 +168,19 @@ main(int argc, char** argv) {
 
   // Decision -> Fib
   ReplicateQueue<DecisionRouteUpdate> routeUpdatesQueue;
-  // Optionally coalesce the Fib reader's backlog at push time so a slow/stalled
-  // Fib cannot let this queue grow unbounded under route churn (bounds openr
-  // memory). The coalescer ALWAYS folds the incoming update into the single
-  // pending element, so the backlog collapses to one element regardless of
-  // Fib's consumption rate or the update-type mix.
-  // NOTE: the coalescer runs under the reader queue's lock, so it must stay
-  // cheap. This queue has a single producer (Decision), so there is no
-  // cross-producer lock contention.
-  // Coalescing is ON by default; a scope can opt out via the
-  // disable_fib_route_update_coalescing config knob (per-scope, configerator)
-  // for blast-radius control.
+  /*
+   * Optionally coalesce the Fib reader's backlog at push time so a slow/stalled
+   * Fib cannot let this queue grow unbounded under route churn (bounds openr
+   * memory). The coalescer ALWAYS folds the incoming update into the single
+   * pending element, so the backlog collapses to one element regardless of
+   * Fib's consumption rate or the update-type mix.
+   * NOTE: the coalescer runs under the reader queue's lock, so it must stay
+   * cheap. This queue has a single producer (Decision), so there is no
+   * cross-producer lock contention.
+   * Coalescing is ON by default; a scope can opt out via the
+   * disable_fib_route_update_coalescing config knob (per-scope, configerator)
+   * for blast-radius control.
+   */
   const bool disableFibRouteUpdateCoalescing =
       config->getConfig().disable_fib_route_update_coalescing().value_or(false);
   std::function<bool(DecisionRouteUpdate&, DecisionRouteUpdate&)>
@@ -310,8 +314,10 @@ main(int argc, char** argv) {
         std::make_unique<Watchdog>(config));
   }
 
-  // Create Netlink Protocol object in a new thread
-  // NOTE: Start EventBase only after NetlinkProtocolSocket has been constructed
+  /*
+   * Create Netlink Protocol object in a new thread
+   * NOTE: Start EventBase only after NetlinkProtocolSocket has been constructed
+   */
   auto nlOpenrEvb = std::make_unique<OpenrEventBase>();
   auto nlSock = std::make_unique<openr::fbnl::NetlinkProtocolSocket>(
       nlOpenrEvb->getEvb(), netlinkEventsQueue);
@@ -412,8 +418,10 @@ main(int argc, char** argv) {
     publicationSuppressionPolicy = getKvStorePublicationSuppressionPolicy();
   }
 
-  // make Decision/Prefix Manager subscribers of Dispatcher. Decision also needs
-  // the fabric drain-status keys, which FabricHelper consumes.
+  /*
+   * make Decision/Prefix Manager subscribers of Dispatcher. Decision also needs
+   * the fabric drain-status keys, which FabricHelper consumes.
+   */
   auto decisionKvStoreUpdatesQueueReader = dispatcher->getReader(
       {Constants::kAdjDbMarker.toString(),
        Constants::kPrefixDbMarker.toString(),
@@ -520,9 +528,11 @@ main(int argc, char** argv) {
     acceptableNamesSet.insert(acceptableNames.begin(), acceptableNames.end());
   }
 
-  // Wait for the above three modules to start and run before running
-  // SPF in Decision module.  This is to make sure the Decision module
-  // receives itself as one of the nodes before running the spf.
+  /*
+   * Wait for the above three modules to start and run before running
+   * SPF in Decision module.  This is to make sure the Decision module
+   * receives itself as one of the nodes before running the spf.
+   */
 
   // Start Decision
   auto decision = startEventBase(
@@ -551,8 +561,10 @@ main(int argc, char** argv) {
           fibRouteUpdatesQueue));
   watchdog->addQueue(fibRouteUpdatesQueue, "fibRouteUpdatesQueue");
 
-  // Create Open/R control handler
-  // NOTE: Start EventBase only after OpenrCtrlHandler has been constructed
+  /*
+   * Create Open/R control handler
+   * NOTE: Start EventBase only after OpenrCtrlHandler has been constructed
+   */
   auto ctrlOpenrEvb = std::make_unique<OpenrEventBase>();
   auto ctrlHandler = std::make_shared<openr::OpenrCtrlHandler>(
       config->getNodeName(),
