@@ -40,10 +40,12 @@ namespace openr {
 
 using apache::thrift::CompactSerializer;
 
-//
-// Start the decision thread and simulate KvStore communications
-// Expect proper RouteDatabase publications to appear
-//
+/*
+ *
+ * Start the decision thread and simulate KvStore communications
+ * Expect proper RouteDatabase publications to appear
+ *
+ */
 class DecisionWrapper {
  public:
   explicit DecisionWrapper(const std::string& nodeName) {
@@ -84,9 +86,11 @@ class DecisionWrapper {
     LOG(INFO) << "Decision thread got stopped";
   }
 
-  //
-  // member methods
-  //
+  /*
+   *
+   * member methods
+   *
+   */
 
   DecisionRouteUpdate
   recvMyRouteDb() {
@@ -128,9 +132,11 @@ class DecisionWrapper {
   }
 
  private:
-  //
-  // private member methods
-  //
+  /*
+   *
+   * private member methods
+   *
+   */
 
   folly::F14FastMap<std::string, thrift::RouteDatabase>
   dumpRouteDb(const std::vector<std::string>& allNodes) {
@@ -144,12 +150,16 @@ class DecisionWrapper {
     return routeMap;
   }
 
-  //
-  // private member variables
-  //
+  /*
+   *
+   * private member variables
+   *
+   */
 
-  // Thrift serializer object for serializing/deserializing of thrift objects
-  // to/from bytes
+  /*
+   * Thrift serializer object for serializing/deserializing of thrift objects
+   * to/from bytes
+   */
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
@@ -293,9 +303,11 @@ void createRswsAdjacencies(
     const int numOfRswsPerPod,
     folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames);
 
-//
-// Create a fabric topology
-//
+/*
+ *
+ * Create a fabric topology
+ *
+ */
 thrift::Publication createFabric(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     const int numOfPods,
@@ -305,10 +317,12 @@ thrift::Publication createFabric(
     const int numOfRswsPerPod,
     folly::F14FastMap<std::string, std::vector<std::string>>& listOfNodenames);
 
-//
-// Randomly choose one rsw from a random pod,
-// toggle it's overload bit in AdjacencyDb
-//
+/*
+ *
+ * Randomly choose one rsw from a random pod,
+ * toggle it's overload bit in AdjacencyDb
+ *
+ */
 void updateRandomFabricAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
@@ -316,20 +330,24 @@ void updateRandomFabricAdjs(
     const int numOfFswsPerPod,
     const int numOfRswsPerPod);
 
-//
-// Choose a random nodeId for update or revert the last updated nodeId:
-// toggle it's advertisement of default route
-//
+/*
+ *
+ * Choose a random nodeId for update or revert the last updated nodeId:
+ * toggle it's advertisement of default route
+ *
+ */
 void updateRandomGridPrefixes(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
     const int n,
     folly::BenchmarkSuspender& suspender);
 
-//
-// Choose a random nodeId for update or revert the last updated nodeId:
-// toggle it's overload bit in AdjacencyDb
-//
+/*
+ *
+ * Choose a random nodeId for update or revert the last updated nodeId:
+ * toggle it's overload bit in AdjacencyDb
+ *
+ */
 void updateRandomGridAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
@@ -342,9 +360,11 @@ void generatePrefixUpdatePublication(
         listOfNodenames,
     thrift::Publication& initialPub);
 
-//
-// Benchmark tests for grid topology
-//
+/*
+ *
+ * Benchmark tests for grid topology
+ *
+ */
 void BM_DecisionGridInitialUpdate(
     folly::UserCounters& counters,
     uint32_t iters,
@@ -367,9 +387,11 @@ void BM_DecisionGridAdjUpdates(
     thrift::PrefixForwardingAlgorithm forwardingAlgorithm,
     uint32_t numberOfPrefixes);
 
-//
-// Benchmark test for fabric topology.
-//
+/*
+ *
+ * Benchmark test for fabric topology.
+ *
+ */
 
 void BM_DecisionFabricInitialUpdate(
     folly::UserCounters& counters,

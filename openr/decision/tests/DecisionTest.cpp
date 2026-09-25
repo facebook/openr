@@ -53,8 +53,10 @@ const auto addr1V4ConfigPrefixEntry =
 const auto addr2VipPrefixEntry =
     createPrefixEntry(addr1, thrift::PrefixType::VIP);
 
-// timeout to wait until decision debounce
-// (i.e. spf recalculation, route rebuild) finished
+/*
+ * timeout to wait until decision debounce
+ * (i.e. spf recalculation, route rebuild) finished
+ */
 const std::chrono::milliseconds debounceTimeoutMin{10};
 const std::chrono::milliseconds debounceTimeoutMax{250};
 
@@ -66,10 +68,12 @@ apache::thrift::optional_field_ref<thrift::PerfEvents const&>
 
 namespace openr {
 
-//
-// Start the decision thread and simulate KvStore communications
-// Expect proper RouteDatabase publications to appear
-//
+/*
+ *
+ * Start the decision thread and simulate KvStore communications
+ * Expect proper RouteDatabase publications to appear
+ *
+ */
 class DecisionTestFixture : public ::testing::Test {
  protected:
   void
@@ -99,8 +103,10 @@ class DecisionTestFixture : public ::testing::Test {
     kvStoreSyncEventSent = false;
     adjacencyDbSyncEventSent = false;
 
-    // Override default rib policy file with file based on thread id.
-    // This ensures stress run will use different file for each run.
+    /*
+     * Override default rib policy file with file based on thread id.
+     * This ensures stress run will use different file for each run.
+     */
     FLAGS_rib_policy_file = fmt::format(
         "/dev/shm/rib_policy.txt.{}",
         std::hash<std::thread::id>{}(std::this_thread::get_id()));
@@ -135,8 +141,10 @@ class DecisionTestFixture : public ::testing::Test {
         true /* dryrun */,
         false /* enableV4OverV6Nexthop */);
 
-    // timeout to wait until decision debounce
-    // (i.e. spf recalculation, route rebuild) finished
+    /*
+     * timeout to wait until decision debounce
+     * (i.e. spf recalculation, route rebuild) finished
+     */
     tConfig.decision_config()->debounce_min_ms() = debounceTimeoutMin.count();
     tConfig.decision_config()->debounce_max_ms() = debounceTimeoutMax.count();
     tConfig.enable_best_route_selection() = true;
@@ -156,9 +164,11 @@ class DecisionTestFixture : public ::testing::Test {
     peerUpdatesQueue.push(std::move(peerEvent));
   }
 
-  //
-  // member methods
-  //
+  /*
+   *
+   * member methods
+   *
+   */
 
   void
   verifyReceivedRoutes(const folly::CIDRNetwork& network, bool isRemoved) {
@@ -320,12 +330,16 @@ class DecisionTestFixture : public ::testing::Test {
         *lhs.unicastRoutesToDelete() == *rhs.unicastRoutesToDelete();
   }
 
-  //
-  // member variables
-  //
+  /*
+   *
+   * member variables
+   *
+   */
 
-  // Thrift serializer object for serializing/deserializing of thrift objects
-  // to/from bytes
+  /*
+   * Thrift serializer object for serializing/deserializing of thrift objects
+   * to/from bytes
+   */
   CompactSerializer serializer{};
 
   std::shared_ptr<Config> config;
@@ -408,8 +422,10 @@ TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {
       {} /* nodeIds*/,
       {} /* keysToUpdate */);
   sendKvPublication(publication);
-  // NOTE: this is just to make sure pulication is processed by decision
-  // before checking drain state inside LSDB
+  /*
+   * NOTE: this is just to make sure pulication is processed by decision
+   * before checking drain state inside LSDB
+   */
   recvRouteUpdates();
 
   /*
@@ -469,8 +485,10 @@ TEST_F(DecisionTestFixture, DecisionHardDrainStateTest) {
       {} /* nodeIds*/,
       {} /* keysToUpdate */);
   sendKvPublication(publication);
-  // NOTE: this is just to make sure pulication is processed by decision
-  // before checking drain state inside LSDB
+  /*
+   * NOTE: this is just to make sure pulication is processed by decision
+   * before checking drain state inside LSDB
+   */
   recvRouteUpdates();
 
   /*
@@ -542,8 +560,10 @@ TEST_F(DecisionTestFixture, DecisionSoftDrainStateTest) {
       {} /* nodeIds*/,
       {} /* keysToUpdate */);
   sendKvPublication(publication);
-  // NOTE: this is just to make sure pulication is processed by decision
-  // before checking drain state inside LSDB
+  /*
+   * NOTE: this is just to make sure pulication is processed by decision
+   * before checking drain state inside LSDB
+   */
   recvRouteUpdates();
 
   /*
@@ -671,18 +691,22 @@ TEST_F(
   EXPECT_TRUE(pendingUpdate->unicastRoutesToDelete.empty());
 }
 
-// The following topology is used:
-//
-// 1---2---3
-//
-// We upload the link 1---2 with the initial sync and later publish
-// the 2---3 link information. We then request the full routing dump
-// from the decision process via respective socket.
+/*
+ * The following topology is used:
+ *
+ * 1---2---3
+ *
+ * We upload the link 1---2 with the initial sync and later publish
+ * the 2---3 link information. We then request the full routing dump
+ * from the decision process via respective socket.
+ */
 
 TEST_F(DecisionTestFixture, BasicOperations) {
-  //
-  // publish the link state info to KvStore
-  //
+  /*
+   *
+   * publish the link state info to KvStore
+   *
+   */
 
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
@@ -710,13 +734,17 @@ TEST_F(DecisionTestFixture, BasicOperations) {
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr2))],
       NextHops({createNextHopFromAdj(adj12, false, 10)}));
-  //
-  // publish the link state info to KvStore via the KvStore pub socket
-  // we simulate adding a new router R3
-  //
+  /*
+   *
+   * publish the link state info to KvStore via the KvStore pub socket
+   * we simulate adding a new router R3
+   *
+   */
 
-  // Some tricks here; we need to bump the time-stamp on router 2's data, so
-  // it can override existing; for router 3 we publish new key-value
+  /*
+   * Some tricks here; we need to bump the time-stamp on router 2's data, so
+   * it can override existing; for router 3 we publish new key-value
+   */
 
   publication = createThriftPublication(
       {{"adj:3", createAdjValue(serializer, "3", 1, {adj32}, false, 3)},
@@ -1048,20 +1076,26 @@ TEST_F(DecisionTestFixture, MissingBidirectionalAdjacency) {
 }
 
 TEST_F(DecisionTestFixture, UnblockInitialRoutesTimeout) {
-  // Publish adjacency 1->2 but not 2-> 1. This will cause bidirectional
-  // adjacency check to fail.
+  /*
+   * Publish adjacency 1->2 but not 2-> 1. This will cause bidirectional
+   * adjacency check to fail.
+   */
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
        createPrefixKeyValue("1", 1, addr1),
        createPrefixKeyValue("2", 1, addr2)},
       {} /* expired keys */);
   sendKvPublication(publication);
-  // If we wait long enough, the timeout will expire and route computation will
-  // be unblocked.
+  /*
+   * If we wait long enough, the timeout will expire and route computation will
+   * be unblocked.
+   */
   recvRouteUpdates();
   facebook::fb303::fbData->flushAllData();
-  // For some reason, we have to call getCounters first or else hasCounter will
-  // return false.
+  /*
+   * For some reason, we have to call getCounters first or else hasCounter will
+   * return false.
+   */
   facebook::fb303::fbData->getCounters();
   EXPECT_TRUE(
       facebook::fb303::fbData->hasCounter(
@@ -1113,9 +1147,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
   auto routeV4 = createUnicastRoute(toIpPrefix(prefixV4), {nhV4});
   auto routeV6 = createUnicastRoute(toIpPrefix(prefixV6), {nhV6});
 
-  // Send adj publication
-  // ATTN: to trigger `buildRouteDb()`. Must provide LinkState
-  //      info containing self-node id("1")
+  /*
+   * Send adj publication
+   * ATTN: to trigger `buildRouteDb()`. Must provide LinkState
+   *      info containing self-node id("1")
+   */
   auto scheduleAt = std::chrono::milliseconds{0};
   evb.scheduleTimeout(scheduleAt, [&]() noexcept {
     sendKvPublication(createThriftPublication(
@@ -1126,9 +1162,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
         {}));
   });
 
-  //
-  // Test1: advertise prefixes from `PrefixManager`
-  //
+  /*
+   *
+   * Test1: advertise prefixes from `PrefixManager`
+   *
+   */
   evb.scheduleTimeout(scheduleAt += 3 * debounceTimeoutMax, [&]() noexcept {
     auto routeDbDelta = recvRouteUpdates();
 
@@ -1170,9 +1208,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
             testing::UnorderedElementsAre(nhV6));
       });
 
-  //
-  // Test2: advertise SAME prefixes from `Decision`
-  //
+  /*
+   *
+   * Test2: advertise SAME prefixes from `Decision`
+   *
+   */
   evb.scheduleTimeout(
       scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
         LOG(INFO) << "Advertising SAME prefixes from Decision";
@@ -1202,9 +1242,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
             Not(testing::UnorderedElementsAre(nhV6)));
       });
 
-  //
-  // Test3: withdraw prefixes from `PrefixManager`
-  //
+  /*
+   *
+   * Test3: withdraw prefixes from `PrefixManager`
+   *
+   */
   evb.scheduleTimeout(
       scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
         LOG(INFO) << "Withdrawing static prefixes from PrefixManager";
@@ -1237,9 +1279,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
             Not(testing::UnorderedElementsAre(nhV6)));
       });
 
-  //
-  // Test4: re-advertise prefixes from `PrefixManager`
-  //
+  /*
+   *
+   * Test4: re-advertise prefixes from `PrefixManager`
+   *
+   */
   evb.scheduleTimeout(
       scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
         LOG(INFO) << "Re-advertising static prefixes from PrefixManager";
@@ -1272,9 +1316,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
             Not(testing::UnorderedElementsAre(nhV6)));
       });
 
-  //
-  // Test5: withdraw prefixes from `Decision`
-  //
+  /*
+   *
+   * Test5: withdraw prefixes from `Decision`
+   *
+   */
   evb.scheduleTimeout(
       scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
         LOG(INFO) << "Withdrawing prefixes from Decision";
@@ -1306,9 +1352,11 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
             testing::UnorderedElementsAre(nhV6));
       });
 
-  //
-  // Test6: withdraw prefixes from `PrefixManager`
-  //
+  /*
+   *
+   * Test6: withdraw prefixes from `PrefixManager`
+   *
+   */
   evb.scheduleTimeout(
       scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
         LOG(INFO) << "Withdrawing prefixes from PrefixManager";
@@ -1333,10 +1381,12 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
             testing::UnorderedElementsAre(networkV4, networkV6));
       });
 
-  //
-  // Test7: Received self-advertised publication from KvStore. No routes will be
-  // generated.
-  //
+  /*
+   *
+   * Test7: Received self-advertised publication from KvStore. No routes will be
+   * generated.
+   *
+   */
   evb.scheduleTimeout(
       scheduleAt += std::chrono::milliseconds(100), [&]() noexcept {
         sendKvPublication(createThriftPublication(
@@ -1357,21 +1407,25 @@ TEST_F(DecisionTestFixture, RouteOrigination) {
   evb.run();
 }
 
-// The following topology is used:
-//  1--- A ---2
-//  |         |
-//  B         A
-//  |         |
-//  3--- B ---4
-//
-// area A: adj12, adj24
-// area B: adj13, adj34
+/*
+ * The following topology is used:
+ *  1--- A ---2
+ *  |         |
+ *  B         A
+ *  |         |
+ *  3--- B ---4
+ *
+ * area A: adj12, adj24
+ * area B: adj13, adj34
+ */
 TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
-  //
-  // publish area A adj and prefix
-  // "1" originate addr1 into A
-  // "2" originate addr2 into A
-  //
+  /*
+   *
+   * publish area A adj and prefix
+   * "1" originate addr1 into A
+   * "2" originate addr2 into A
+   *
+   */
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
        {"adj:2", createAdjValue(serializer, "2", 1, {adj21, adj24}, false, 2)},
@@ -1386,11 +1440,13 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
   sendKvPublication(publication);
   recvRouteUpdates();
 
-  //
-  // publish area B adj and prefix
-  // "3" originate addr3 into B
-  // "4" originate addr4 into B
-  //
+  /*
+   *
+   * publish area B adj and prefix
+   * "3" originate addr3 into B
+   * "4" originate addr4 into B
+   *
+   */
   publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj13}, false, 1)},
        {"adj:3", createAdjValue(serializer, "3", 1, {adj31, adj34}, false, 3)},
@@ -1467,9 +1523,11 @@ TEST_F(DecisionTestFixture, MultiAreaBestPathCalculation) {
             routeToAddr2, routeToAddr3, routeToAddr1));
   }
 
-  //
-  // "1" originate addr1 into B
-  //
+  /*
+   *
+   * "1" originate addr1 into B
+   *
+   */
   publication = createThriftPublication(
       {createPrefixKeyValue("1", 1, addr1, "B")},
       {}, /* expiredKeys */
@@ -1516,8 +1574,10 @@ TEST_F(DecisionTestFixture, AreaLinkStatesAccumulatePerDistinctArea) {
 
   for (int32_t i = 0; i < kNumAreas; ++i) {
     const std::string area = fmt::format("transient-area-{}", i);
-    // Each area advertises a unique prefix so every publication changes the DUT
-    // route table and reliably emits a route delta to drain.
+    /*
+     * Each area advertises a unique prefix so every publication changes the DUT
+     * route table and reliably emits a route delta to drain.
+     */
     const auto uniquePrefix =
         toIpPrefix(fmt::format("2401:db00:{:x}::/64", i + 1));
     auto publication = createThriftPublication(
@@ -1532,9 +1592,11 @@ TEST_F(DecisionTestFixture, AreaLinkStatesAccumulatePerDistinctArea) {
     recvRouteUpdates();
   }
 
-  // Authoritative evb-synced barrier on the last area's prefix; FIFO processing
-  // guarantees every prior publication is applied before we read decision
-  // state.
+  /*
+   * Authoritative evb-synced barrier on the last area's prefix; FIFO processing
+   * guarantees every prior publication is applied before we read decision
+   * state.
+   */
   const auto lastPrefix =
       toIpPrefix(fmt::format("2401:db00:{:x}::/64", kNumAreas));
   verifyReceivedRoutes(toIPNetwork(lastPrefix), false /* isRemoved */);
@@ -1660,20 +1722,24 @@ TEST_F(DecisionTestFixture, MultiAreaRouteEventChurn) {
   }
 }
 
-// MultiArea Tology topology is used:
-//  1--- A ---2
-//  |
-//  B
-//  |
-//  3
-//
-// area A: adj12
-// area B: adj13
+/*
+ * MultiArea Tology topology is used:
+ *  1--- A ---2
+ *  |
+ *  B
+ *  |
+ *  3
+ *
+ * area A: adj12
+ * area B: adj13
+ */
 TEST_F(DecisionTestFixture, SelfRedistributePrefixPublication) {
-  //
-  // publish area A adj and prefix
-  // "2" originate addr2 into A
-  //
+  /*
+   *
+   * publish area A adj and prefix
+   * "2" originate addr2 into A
+   *
+   */
   auto originKeyStr =
       PrefixKey("2", toIPNetwork(addr2), kTestingAreaName).getPrefixKeyV2();
   auto originPfx = createPrefixEntry(addr2);
@@ -1693,9 +1759,11 @@ TEST_F(DecisionTestFixture, SelfRedistributePrefixPublication) {
   sendKvPublication(publication);
   recvRouteUpdates();
 
-  //
-  // publish area B adj and prefix
-  //
+  /*
+   *
+   * publish area B adj and prefix
+   *
+   */
   publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj13}, false, 1)},
        {"adj:3", createAdjValue(serializer, "3", 1, {adj31}, false, 3)}},
@@ -1706,11 +1774,13 @@ TEST_F(DecisionTestFixture, SelfRedistributePrefixPublication) {
   sendKvPublication(publication);
   recvRouteUpdates();
 
-  //
-  // "1" reditribute addr2 into B
-  //   - this should not cause prefix db update
-  //   - not route update
-  //
+  /*
+   *
+   * "1" reditribute addr2 into B
+   *   - this should not cause prefix db update
+   *   - not route update
+   *
+   */
   auto redistributeKeyStr =
       PrefixKey("1", toIPNetwork(addr2), "B").getPrefixKeyV2();
   auto redistributePfx = createPrefixEntry(addr2, thrift::PrefixType::RIB);
@@ -1826,8 +1896,10 @@ TEST_F(DecisionTestFixture, RibPolicy) {
         0, *routeDb->unicastRoutes()->front().nextHops()->front().weight());
   }
 
-  // Set the policy with empty weight. Expect route remains intact and error
-  // counter is reported
+  /*
+   * Set the policy with empty weight. Expect route remains intact and error
+   * counter is reported
+   */
   policy.statements()->at(0).action()->set_weight()->neighbor_to_weight()["2"] =
       0;
   EXPECT_NO_THROW(decision->setRibPolicy(policy).get());
@@ -2240,8 +2312,10 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
   OpenrEventBase evb;
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 2 * saveRibPolicyMaxMs), [&]() {
-        // Wait for 2 * saveRibPolicyMaxMs.
-        // This makes sure expired rib policy is saved to file.
+        /*
+         * Wait for 2 * saveRibPolicyMaxMs.
+         * This makes sure expired rib policy is saved to file.
+         */
         messaging::ReplicateQueue<PeerEvent> peerUpdatesQueue;
         messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue;
         messaging::ReplicateQueue<DecisionRouteUpdate> staticRouteUpdatesQueue;
@@ -2311,18 +2385,22 @@ TEST_F(DecisionTestFixture, SaveReadStaleRibPolicy) {
   decisionThread->join();
 }
 
-// The following topology is used:
-//
-//         100
-//  1--- ---------- 2
-//   \_           _/
-//      \_ ____ _/
-//          800
+/*
+ * The following topology is used:
+ *
+ *         100
+ *  1--- ---------- 2
+ *   \_           _/
+ *      \_ ____ _/
+ *          800
+ */
 
-// We upload parallel link 1---2 with the initial sync and later bring down
-// the one with lower metric. We then verify updated route database is
-// received
-//
+/*
+ * We upload parallel link 1---2 with the initial sync and later bring down
+ * the one with lower metric. We then verify updated route database is
+ * received
+ *
+ */
 
 TEST_F(DecisionTestFixture, ParallelLinks) {
   auto parallelAdj12_1 =
@@ -2429,17 +2507,21 @@ TEST_F(DecisionTestFixture, ParallelLinks) {
       NextHops({createNextHopFromAdj(parallelAdj12_2, false, 800)}));
 }
 
-// The following topology is used:
-//
-// 1---2---3---4
-//
-// We upload the link 1---2 with the initial sync and later publish
-// the 2---3 & 3---4 link information. We expect it to trigger SPF only once.
-//
+/*
+ * The following topology is used:
+ *
+ * 1---2---3---4
+ *
+ * We upload the link 1---2 with the initial sync and later publish
+ * the 2---3 & 3---4 link information. We expect it to trigger SPF only once.
+ *
+ */
 TEST_F(DecisionTestFixture, PubDebouncing) {
-  //
-  // publish the link state info to KvStore
-  //
+  /*
+   *
+   * publish the link state info to KvStore
+   *
+   */
 
   auto publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12})},
@@ -2462,13 +2544,17 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   EXPECT_EQ(1, counters["decision.spf_runs.count"]);
   EXPECT_EQ(1, counters["decision.route_build_runs.count"]);
 
-  //
-  // publish the link state info to KvStore via the KvStore pub socket
-  // we simulate adding a new router R3
-  //
+  /*
+   *
+   * publish the link state info to KvStore via the KvStore pub socket
+   * we simulate adding a new router R3
+   *
+   */
 
-  // Some tricks here; we need to bump the time-stamp on router 2's data, so
-  // it can override existing; for router 3 we publish new key-value
+  /*
+   * Some tricks here; we need to bump the time-stamp on router 2's data, so
+   * it can override existing; for router 3 we publish new key-value
+   */
   publication = createThriftPublication(
       {{"adj:3", createAdjValue(serializer, "3", 1, {adj32})},
        {"adj:2", createAdjValue(serializer, "2", 3, {adj21, adj23})},
@@ -2480,8 +2566,10 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
 
   // we simulate adding a new router R4
 
-  // Some tricks here; we need to bump the time-stamp on router 3's data, so
-  // it can override existing;
+  /*
+   * Some tricks here; we need to bump the time-stamp on router 3's data, so
+   * it can override existing;
+   */
 
   publication = createThriftPublication(
       {{"adj:4", createAdjValue(serializer, "4", 1, {adj43})},
@@ -2496,9 +2584,11 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   EXPECT_EQ(2, counters["decision.spf_runs.count"]);
   EXPECT_EQ(2, counters["decision.route_build_runs.count"]);
 
-  //
-  // Only publish prefix updates
-  //
+  /*
+   *
+   * Only publish prefix updates
+   *
+   */
   auto getRouteForPrefixCount =
       counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
@@ -2515,12 +2605,16 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       getRouteForPrefixCount + 1,
       counters["decision.get_route_for_prefix.count"]);
 
-  //
-  // publish adj updates right after prefix updates
-  // Decision is supposed to only trigger spf recalculation
+  /*
+   *
+   * publish adj updates right after prefix updates
+   * Decision is supposed to only trigger spf recalculation
+   */
 
-  // Some tricks here; we need to bump the time-stamp on router 4's data, so
-  // it can override existing;
+  /*
+   * Some tricks here; we need to bump the time-stamp on router 4's data, so
+   * it can override existing;
+   */
   publication = createThriftPublication(
       {createPrefixKeyValue("4", 2, addr4),
        createPrefixKeyValue("4", 2, addr5)},
@@ -2538,12 +2632,16 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
   EXPECT_EQ(3, counters["decision.spf_runs.count"]);
   EXPECT_EQ(3, counters["decision.route_build_runs.count"]);
 
-  //
-  // publish multiple prefix updates in a row
-  // Decision is supposed to process prefix update only once
+  /*
+   *
+   * publish multiple prefix updates in a row
+   * Decision is supposed to process prefix update only once
+   */
 
-  // Some tricks here; we need to bump the version on router 4's data, so
-  // it can override existing;
+  /*
+   * Some tricks here; we need to bump the version on router 4's data, so
+   * it can override existing;
+   */
 
   getRouteForPrefixCount = counters.at("decision.get_route_for_prefix.count");
   publication = createThriftPublication(
@@ -2577,15 +2675,19 @@ TEST_F(DecisionTestFixture, PubDebouncing) {
       counters["decision.get_route_for_prefix.count"]);
 }
 
-//
-// Send unrelated key-value pairs to Decision
-// Make sure they do not trigger SPF runs, but rather ignored
-//
+/*
+ *
+ * Send unrelated key-value pairs to Decision
+ * Make sure they do not trigger SPF runs, but rather ignored
+ *
+ */
 TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
-  //
-  // publish the link state info to KvStore, but use different markers
-  // those must be ignored by the decision module
-  //
+  /*
+   *
+   * publish the link state info to KvStore, but use different markers
+   * those must be ignored by the decision module
+   *
+   */
   auto publication = createThriftPublication(
       {{"adj2:1", createAdjValue(serializer, "1", 1, {adj12})},
        {"adji2:2", createAdjValue(serializer, "2", 1, {adj21})},
@@ -2609,15 +2711,19 @@ TEST_F(DecisionTestFixture, NoSpfOnIrrelevantPublication) {
   EXPECT_EQ(0, counters["decision.spf_runs.count"]);
 }
 
-//
-// Send duplicate key-value pairs to Decision
-// Make sure subsquent duplicates are ignored.
-//
+/*
+ *
+ * Send duplicate key-value pairs to Decision
+ * Make sure subsquent duplicates are ignored.
+ *
+ */
 TEST_F(DecisionTestFixture, NoSpfOnDuplicatePublication) {
-  //
-  // publish initial link state info to KvStore, This should trigger the
-  // SPF run.
-  //
+  /*
+   *
+   * publish initial link state info to KvStore, This should trigger the
+   * SPF run.
+   *
+   */
   auto const publication = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12})},
        {"adj:2", createAdjValue(serializer, "2", 1, {adj21})},
@@ -2678,10 +2784,12 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   auto localAdj21 =
       createAdjacency("1", "2/1", "1/2", "fe80::1", "192.168.0.1", 10, 0);
 
-  //
-  // publish initial link state info to KvStore, This should trigger the
-  // SPF run.
-  //
+  /*
+   *
+   * publish initial link state info to KvStore, This should trigger the
+   * SPF run.
+   *
+   */
   auto publication = createThriftPublication(
       {{"adj:1",
         createAdjValue(serializer, "1", 1, {localAdj14, localAdj12, adj13})},
@@ -2712,8 +2820,10 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
     EXPECT_EQ("2", routeDetails.bestKey()->node().value());
   }
 
-  // Query new information
-  // validate routers
+  /*
+   * Query new information
+   * validate routers
+   */
   auto routeMapList = dumpRouteDb({"1", "2", "3", "4"});
   EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   RouteMap routeMap;
@@ -2819,8 +2929,10 @@ TEST_F(DecisionTestFixture, DuplicatePrefixes) {
   sendKvPublication(publication);
   recvRouteUpdates();
 
-  // Query new information
-  // validate routers
+  /*
+   * Query new information
+   * validate routers
+   */
   routeMapList = dumpRouteDb({"1", "2", "3", "4"});
   EXPECT_EQ(4, routeMapList.size()); // 1 route per neighbor
   routeMap.clear();
@@ -2904,18 +3016,22 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
         fmt::format("adj:{}", src), createAdjValue(serializer, src, 1, adjs));
   }
 
-  //
-  // publish initial link state info to KvStore, This should trigger the
-  // SPF run.
-  //
+  /*
+   *
+   * publish initial link state info to KvStore, This should trigger the
+   * SPF run.
+   *
+   */
   sendKvPublication(initialPub);
 
-  //
-  // Hammer Decision with lot of duplicate publication for 2 * ThrottleTimeout
-  // We want to ensure that we hammer Decision for atleast once during it's
-  // SPF run. This will cause lot of pending publications on Decision. This
-  // is not going to cause any SPF computation
-  //
+  /*
+   *
+   * Hammer Decision with lot of duplicate publication for 2 * ThrottleTimeout
+   * We want to ensure that we hammer Decision for atleast once during it's
+   * SPF run. This will cause lot of pending publications on Decision. This
+   * is not going to cause any SPF computation
+   *
+   */
   thrift::Publication duplicatePub;
   duplicatePub.area() = kTestingAreaName;
   duplicatePub.keyVals()[keyToDup] = initialPub.keyVals()->at(keyToDup);
@@ -2938,10 +3054,12 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // Route to all nodes except mine.
   EXPECT_EQ(999, routeUpdates1.unicastRoutesToUpdate.size());
 
-  //
-  // Advertise prefix update. Decision gonna take some good amount of time to
-  // process this last update (as it has many queued updates).
-  //
+  /*
+   *
+   * Advertise prefix update. Decision gonna take some good amount of time to
+   * process this last update (as it has many queued updates).
+   *
+   */
   thrift::Publication newPub;
   newPub.area() = kTestingAreaName;
 
@@ -2954,17 +3072,21 @@ TEST_F(DecisionTestFixture, DecisionSubReliability) {
   // Expect no routes delta
   EXPECT_EQ(0, routeUpdates2.unicastRoutesToUpdate.size());
 
-  //
-  // Verify counters information
-  //
+  /*
+   *
+   * Verify counters information
+   *
+   */
 
   auto counters = fb303::fbData->getCounters();
   EXPECT_EQ(1, counters["decision.spf_runs.count"]);
 }
 
-//
-// This test aims to verify counter reporting from Decision module
-//
+/*
+ *
+ * This test aims to verify counter reporting from Decision module
+ *
+ */
 TEST_F(DecisionTestFixture, CountersTest) {
   // Verifiy some initial/default counters
   {
@@ -3007,8 +3129,10 @@ TEST_F(DecisionTestFixture, CountersTest) {
   pubKvs.emplace(createPrefixKeyValue("4", 1, addr4));
   pubKvs.emplace(createPrefixKeyValue("4", 1, bgpPrefixEntry2));
 
-  // Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
-  // Node2 has partial adjacency
+  /*
+   * Node1 connects to 2/3, Node2 connects to 1, Node3 connects to 1
+   * Node2 has partial adjacency
+   */
   auto publication0 = createThriftPublication(pubKvs, {}, {}, {});
   sendKvPublication(publication0);
   const auto routeDb = recvRouteUpdates();
@@ -3062,11 +3186,13 @@ TEST_F(DecisionTestFixture, ExceedMaxBackoff) {
   sendKvPublication(publication);
 }
 
-//
-// Mixed type prefix announcements (e.g. prefix1 with type BGP and type RIB )
-// are allowed when enableBestRouteSelection_ = true,
-// Otherwise prefix will be skipped in route programming.
-//
+/*
+ *
+ * Mixed type prefix announcements (e.g. prefix1 with type BGP and type RIB )
+ * are allowed when enableBestRouteSelection_ = true,
+ * Otherwise prefix will be skipped in route programming.
+ *
+ */
 TEST_F(DecisionTestFixture, PrefixWithMixedTypeRoutes) {
   // Verifiy some initial/default counters
   {
@@ -3101,8 +3227,10 @@ TEST_F(DecisionTestFixture, PrefixWithMixedTypeRoutes) {
     recvRouteUpdates();
   }
 
-  // Node2 annouce prefix in BGP type,
-  // Node3 announce prefix in Rib type
+  /*
+   * Node2 annouce prefix in BGP type,
+   * Node3 announce prefix in Rib type
+   */
   {
     auto bgpPrefixEntry = createPrefixEntry(
         toIpPrefix("10.1.0.0/16"),
@@ -3169,11 +3297,13 @@ class InitialRibBuildTestFixture : public DecisionTestFixture {
  *   label route of node 2.
  */
 TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
-  // Send adj publication (current node is 1).
-  // * adjacency "1->2" can only be used by node 2,
-  // * adjacency "2->1" can only be used by node 1.
-  // Link 1<->2 is not up since "1->2" cannot be used by node 1.
-  // However, the two adjacencies will unblock
+  /*
+   * Send adj publication (current node is 1).
+   * * adjacency "1->2" can only be used by node 2,
+   * * adjacency "2->1" can only be used by node 1.
+   * Link 1<->2 is not up since "1->2" cannot be used by node 1.
+   * However, the two adjacencies will unblock
+   */
   sendKvPublication(
       createThriftPublication(
           {{"adj:1",
@@ -3191,14 +3321,18 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
-        // KvStore publication is not process yet since initial peers are not
-        // received.
+        /*
+         * KvStore publication is not process yet since initial peers are not
+         * received.
+         */
         auto adjDb = decision->getDecisionAdjacenciesFiltered().get();
         ASSERT_EQ(adjDb->size(), 0);
 
-        // Add initial UP peers "2" and "3".
-        // Initial RIB computation will be blocked until dual directional
-        // adjacencies are received for both peers.
+        /*
+         * Add initial UP peers "2" and "3".
+         * Initial RIB computation will be blocked until dual directional
+         * adjacencies are received for both peers.
+         */
         thrift::PeersMap peers;
         peers.emplace("2", thrift::PeerSpec());
         peers.emplace("3", thrift::PeerSpec());
@@ -3268,8 +3402,10 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
         // Initial RIB computation not triggered yet.
         EXPECT_EQ(0, routeUpdatesQueueReader.size());
 
-        // Initial UP peer "3" goes down. Open/R initialization does not wait
-        // for adjacency with the peer.
+        /*
+         * Initial UP peer "3" goes down. Open/R initialization does not wait
+         * for adjacency with the peer.
+         */
         PeerEvent newPeerEvent{
             {kTestingAreaName, AreaPeerEvent({} /*peersToAdd*/, {"3"})}};
         peerUpdatesQueue.push(std::move(newPeerEvent));
@@ -3279,16 +3415,20 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() {
-        // Initial RIB computation is triggered.
-        // Generated static routes and node label route for node 1.
+        /*
+         * Initial RIB computation is triggered.
+         * Generated static routes and node label route for node 1.
+         */
         auto routeDbDelta = recvRouteUpdates();
 
         // Static config originated route and static VIP route.
         EXPECT_EQ(2, routeDbDelta.unicastRoutesToUpdate.size());
 
-        // Send adj publication.
-        // Updated adjacency for peer "2" is received,
-        // * adjacency "1->2" can be used by all nodes.
+        /*
+         * Send adj publication.
+         * Updated adjacency for peer "2" is received,
+         * * adjacency "1->2" can be used by all nodes.
+         */
         sendKvPublication(createThriftPublication(
             {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)}},
             {},
@@ -3975,9 +4115,11 @@ TEST(DecisionPendingUpdates, perfEvents) {
       "DECISION_RECEIVED");
 }
 
-//
-// Tests for Decision::updateKeyInLsdb covering different return paths.
-//
+/*
+ *
+ * Tests for Decision::updateKeyInLsdb covering different return paths.
+ *
+ */
 
 // TTL-only update (value is empty) -> returns false, no state change.
 TEST_F(DecisionTestFixture, UpdateKeyInLsdb_TtlOnlyUpdate) {
@@ -4030,8 +4172,10 @@ TEST_F(DecisionTestFixture, UpdateKeyInLsdb_ValidAdjKey) {
   EXPECT_THAT(areaLinkState.hasNode("2"), IsTrue());
 }
 
-// Valid prefix DB key with exactly one entry -> returns true, state changes.
-// Note: prefix updates modify pendingUpdates_ rather than areaLinkState.
+/*
+ * Valid prefix DB key with exactly one entry -> returns true, state changes.
+ * Note: prefix updates modify pendingUpdates_ rather than areaLinkState.
+ */
 TEST_F(DecisionTestFixture, UpdateKeyInLsdb_ValidPrefixKey) {
   thrift::Publication basePub = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
@@ -4058,8 +4202,10 @@ TEST_F(DecisionTestFixture, UpdateKeyInLsdb_ValidPrefixKey) {
   EXPECT_THAT(getPendingUpdatesCount(), Gt(pendingCountBefore));
 }
 
-// Prefix DB with wrong entry count (0 entries) -> returns false,
-// increments decision.error counter, no state change.
+/*
+ * Prefix DB with wrong entry count (0 entries) -> returns false,
+ * increments decision.error counter, no state change.
+ */
 TEST_F(DecisionTestFixture, UpdateKeyInLsdb_WrongPrefixEntryCount) {
   thrift::Publication basePub = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
@@ -4157,8 +4303,10 @@ TEST_F(DecisionTestFixture, UpdateKeyInLsdb_DeserializationFailure) {
   EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
 }
 
-// Key with unrecognized prefix (neither "adj:" nor "prefix:") -> returns false,
-// no state change.
+/*
+ * Key with unrecognized prefix (neither "adj:" nor "prefix:") -> returns false,
+ * no state change.
+ */
 TEST_F(DecisionTestFixture, UpdateKeyInLsdb_UnknownKeyPrefix) {
   thrift::Publication basePub = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},
@@ -4185,8 +4333,10 @@ TEST_F(DecisionTestFixture, UpdateKeyInLsdb_UnknownKeyPrefix) {
   EXPECT_THAT(getPendingUpdatesCount(), Eq(pendingCountBefore));
 }
 
-// Prefix DB key with deletePrefix=true -> returns true, state changes.
-// Note: prefix updates modify pendingUpdates_ rather than areaLinkState.
+/*
+ * Prefix DB key with deletePrefix=true -> returns true, state changes.
+ * Note: prefix updates modify pendingUpdates_ rather than areaLinkState.
+ */
 TEST_F(DecisionTestFixture, UpdateKeyInLsdb_PrefixDelete) {
   thrift::Publication basePub = createThriftPublication(
       {{"adj:1", createAdjValue(serializer, "1", 1, {adj12}, false, 1)},

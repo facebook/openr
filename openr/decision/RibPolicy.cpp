@@ -13,9 +13,11 @@
 
 namespace openr {
 
-//
-// RibPolicyStatement
-//
+/*
+ *
+ * RibPolicyStatement
+ *
+ */
 
 RibPolicyStatement::RibPolicyStatement(const thrift::RibPolicyStatement& stmt)
     : name_(*stmt.name()),
@@ -92,8 +94,10 @@ RibPolicyStatement::match(const RibUnicastEntry& route) const {
     }
   }
 
-  // Attempt to match the route on prefix if populated in the RibPolicy
-  // statement
+  /*
+   * Attempt to match the route on prefix if populated in the RibPolicy
+   * statement
+   */
   bool prefixMatch{false};
   if (prefixSet_.empty()) {
     prefixMatch = true;
@@ -120,10 +124,12 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   auto const& weightAction = action_.set_weight().value();
   folly::F14FastSet<thrift::NextHopThrift> newNexthops;
   for (auto& nh : route.nexthops) {
-    // Next-hop inherits a RibPolicy weight with the following precedence
-    // 1. Neighbor weight
-    // 2. Area weight
-    // 3. Default weight
+    /*
+     * Next-hop inherits a RibPolicy weight with the following precedence
+     * 1. Neighbor weight
+     * 2. Area weight
+     * 3. Default weight
+     */
     auto new_weight = *weightAction.default_weight();
     if (nh.area()) {
       new_weight = folly::get_default(
@@ -143,9 +149,11 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
     // We skip the next-hop with weight=0
   }
 
-  // Retain existing next-hops if new next-hops is empty
-  // NOTE: In future we may modify this code to also support dropping
-  //       routes with no-invalid next-hops
+  /*
+   * Retain existing next-hops if new next-hops is empty
+   * NOTE: In future we may modify this code to also support dropping
+   *       routes with no-invalid next-hops
+   */
   if (newNexthops.empty()) {
     XLOGF(
         WARNING,
@@ -162,9 +170,11 @@ RibPolicyStatement::applyAction(RibUnicastEntry& route) const {
   return true;
 }
 
-//
-// RibPolicy
-//
+/*
+ *
+ * RibPolicy
+ *
+ */
 
 RibPolicy::RibPolicy(thrift::RibPolicy const& policy)
     : validUntilTs_(

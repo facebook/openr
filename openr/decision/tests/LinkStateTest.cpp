@@ -146,8 +146,10 @@ TEST(LinkStateTest, BasicOperation) {
 }
 
 TEST(LinkStateTest, linkUsable) {
-  // Topology: 1 -- 2 -- 3
-  // n1 is being initlized
+  /*
+   * Topology: 1 -- 2 -- 3
+   * n1 is being initlized
+   */
   std::string n1 = "node1";
   std::string n2 = "node2";
   std::string n3 = "node3";
@@ -232,11 +234,13 @@ TEST(LinkStateTest, pathAInPathB) {
 }
 
 TEST(LinkStateTest, WithFabricHelper) {
-  // Test that addFabricHelper works and triggers fabric helper code paths
-  // This covers:
-  // - addFabricHelper() method
-  // - fabricHelper_->getRealOtherNodeName() in maybeMakeLink
-  // - fabricHelper_->updateExternalNodeToLeafMap() in updateAdjacencyDatabase
+  /*
+   * Test that addFabricHelper works and triggers fabric helper code paths
+   * This covers:
+   * - addFabricHelper() method
+   * - fabricHelper_->getRealOtherNodeName() in maybeMakeLink
+   * - fabricHelper_->updateExternalNodeToLeafMap() in updateAdjacencyDatabase
+   */
 
   // Create a FabricConfig
   thrift::FabricConfig thriftCfg;
@@ -260,8 +264,10 @@ TEST(LinkStateTest, WithFabricHelper) {
   thrift::AdjacencyDatabase leafAdjDb =
       openr::createAdjDb("bbf01-ld001.dfw1", {leafToExt}, 1);
 
-  // Update with leaf's adjacency database
-  // This triggers fabricHelper_->updateExternalNodeToLeafMap()
+  /*
+   * Update with leaf's adjacency database
+   * This triggers fabricHelper_->updateExternalNodeToLeafMap()
+   */
   LinkState::LinkStateChange update1 =
       state.updateAdjacencyDatabase(leafAdjDb, kTestingAreaName);
   EXPECT_THAT(update1.topologyChanged, IsFalse());
@@ -272,8 +278,10 @@ TEST(LinkStateTest, WithFabricHelper) {
   thrift::AdjacencyDatabase extAdjDb =
       openr::createAdjDb("eb01.rva1", {extToFabric}, 2);
 
-  // Update with external node's adjacency database
-  // This triggers fabricHelper_->getRealOtherNodeName() in maybeMakeLink
+  /*
+   * Update with external node's adjacency database
+   * This triggers fabricHelper_->getRealOtherNodeName() in maybeMakeLink
+   */
   LinkState::LinkStateChange update2 =
       state.updateAdjacencyDatabase(extAdjDb, kTestingAreaName);
   EXPECT_THAT(update2.topologyChanged, IsTrue());
@@ -286,13 +294,15 @@ TEST(LinkStateTest, WithFabricHelper) {
 
 TEST(LinkStateTest, getKthPaths) {
   {
-    //      10
-    //   1------2
-    //   |      |\
-    //  5|   15 | | 35
-    //   |      |/
-    //   3------4
-    //      20
+    /*
+     *      10
+     *   1------2
+     *   |      |\
+     *  5|   15 | | 35
+     *   |      |/
+     *   3------4
+     *      20
+     */
     auto linkState = openr::getLinkState({
         {1, {{2, 10}, {3, 5}}},
         {2, {{1, 10}, {4, 15}, {4, 35}}},
@@ -321,16 +331,18 @@ TEST(LinkStateTest, getKthPaths) {
   }
 
   {
-    // full mesh with parellel links, metric is hop count
-    //
-    //   1=========2
-    //  || \\   // ||
-    //  ||  \\ //  ||
-    //  ||   \X/   ||
-    //  ||  // \\  ||
-    //  || //   \\ ||
-    //   3=========4
-    //
+    /*
+     * full mesh with parellel links, metric is hop count
+     *
+     *   1=========2
+     *  || \\   // ||
+     *  ||  \\ //  ||
+     *  ||   \X/   ||
+     *  ||  // \\  ||
+     *  || //   \\ ||
+     *   3=========4
+     *
+     */
     auto linkState = openr::getLinkState({
         {1, {2, 2, 3, 3, 4, 4}},
         {2, {1, 1, 3, 3, 4, 4}},

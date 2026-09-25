@@ -35,8 +35,10 @@ struct DecisionRouteUpdate {
     FULL_SYNC,
   };
 
-  // Type of this route update. Client should reset state if type of received
-  // route update is FULL_SYNC
+  /*
+   * Type of this route update. Client should reset state if type of received
+   * route update is FULL_SYNC
+   */
   Type type{INCREMENTAL}; // Incremental route update is default behavior
 
   // Unicast routes
@@ -48,8 +50,10 @@ struct DecisionRouteUpdate {
   folly::F14FastMap<int32_t, RibMplsEntry> mplsRoutesToUpdate;
   folly::F14FastSet<int32_t> mplsRoutesToDelete;
 
-  // Optional prefix type whose unicast/label routes are included in the struct.
-  // Used in OpenR initialization process.
+  /*
+   * Optional prefix type whose unicast/label routes are included in the struct.
+   * Used in OpenR initialization process.
+   */
   std::optional<thrift::PrefixType> prefixType{std::nullopt};
 
   // Optional perf events associated with this route update

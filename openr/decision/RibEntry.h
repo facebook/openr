@@ -45,8 +45,10 @@ struct RibUnicastEntry : RibEntry {
   std::string bestArea;
   // install to fib or not
   bool doNotInstall{false};
-  // Counter Id assigned to this route. Assignment comes from the
-  // RibPolicyStatement that matches to this route.
+  /*
+   * Counter Id assigned to this route. Assignment comes from the
+   * RibPolicyStatement that matches to this route.
+   */
   std::optional<thrift::RouteCounterID> counterID{std::nullopt};
   bool localRouteConsidered{false};
 
@@ -162,8 +164,10 @@ struct RibMplsEntry : RibEntry {
    */
   void
   filterNexthopsToUniqueAction() {
-    // Optimization for single nexthop case. POP_AND_LOOKUP is supported by
-    // this optimization
+    /*
+     * Optimization for single nexthop case. POP_AND_LOOKUP is supported by
+     * this optimization
+     */
     if (nexthops.size() <= 1) {
       return;
     }
@@ -173,8 +177,10 @@ struct RibMplsEntry : RibEntry {
     for (auto const& nextHop : nexthops) {
       CHECK(nextHop.mplsAction().has_value());
       auto& action = *nextHop.mplsAction()->action();
-      // Action can't be push (we don't push labels in MPLS routes)
-      // or POP with multiple nexthops. It must be either SWAP or PHP
+      /*
+       * Action can't be push (we don't push labels in MPLS routes)
+       * or POP with multiple nexthops. It must be either SWAP or PHP
+       */
       CHECK(
           action == thrift::MplsActionCode::SWAP ||
           action == thrift::MplsActionCode::PHP);

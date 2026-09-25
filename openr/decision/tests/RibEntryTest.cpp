@@ -66,8 +66,10 @@ TEST(RibEntryTest, RibMplsEntry_filterNexthopsToUniqueAction) {
       ribEntry.nexthops,
       folly::F14FastSet<thrift::NextHopThrift>({path1_2_2_pop}));
 
-  // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
-  // Metric is ignored
+  /*
+   * PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
+   * Metric is ignored
+   */
   ribEntry.nexthops = {
       path1_2_1_swap, path1_2_2_php, path1_3_1_swap, path1_2_2_php};
   ribEntry.filterNexthopsToUniqueAction();
@@ -75,8 +77,10 @@ TEST(RibEntryTest, RibMplsEntry_filterNexthopsToUniqueAction) {
       ribEntry.nexthops,
       folly::F14FastSet<thrift::NextHopThrift>({path1_2_2_php, path1_2_2_php}));
 
-  // PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
-  // Metric is ignored
+  /*
+   * PHP (direct next-hops) are preferred over SWAP (indirect next-hops)
+   * Metric is ignored
+   */
   ribEntry.nexthops = {
       path1_2_1_php, path1_2_2_swap, path1_3_1_php, path1_3_2_swap};
   ribEntry.filterNexthopsToUniqueAction();

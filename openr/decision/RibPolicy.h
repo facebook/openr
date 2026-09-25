@@ -46,9 +46,11 @@ class RibPolicyStatement {
  private:
   const std::string name_;
 
-  // Unordered set for efficient lookup on matching
-  // NOTE: The matching requires the same prefix representation (fully
-  // qualified)
+  /*
+   * Unordered set for efficient lookup on matching
+   * NOTE: The matching requires the same prefix representation (fully
+   * qualified)
+   */
   folly::F14FastSet<folly::CIDRNetwork> prefixSet_;
 
   // Tag set. Unordered set for efficient lookup.

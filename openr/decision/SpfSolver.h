@@ -107,8 +107,10 @@ class DecisionRouteDb {
 // The class to compute shortest-paths using Dijkstra algorithm
 class SpfSolver {
  public:
-  // these need to be defined in the .cpp so they can refer
-  // to the actual implementation of SpfSolverImpl
+  /*
+   * these need to be defined in the .cpp so they can refer
+   * to the actual implementation of SpfSolverImpl
+   */
   SpfSolver(
       const std::string& myNodeName,
       bool enableV4,
@@ -116,17 +118,21 @@ class SpfSolver {
       bool v4OverV6Nexthop = false);
   ~SpfSolver();
 
-  //
-  // util function to update IP static route
-  //
+  /*
+   *
+   * util function to update IP static route
+   *
+   */
   void updateStaticUnicastRoutes(
       const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>&
           unicastRoutesToUpdate,
       const folly::F14FastSet<folly::CIDRNetwork>& unicastRoutesToDelete);
 
-  // Build route database using given prefix and link states for a given
-  // router, myNodeName
-  // Returns std::nullopt if myNodeName doesn't have any prefix database
+  /*
+   * Build route database using given prefix and link states for a given
+   * router, myNodeName
+   * Returns std::nullopt if myNodeName doesn't have any prefix database
+   */
   std::optional<DecisionRouteDb> buildRouteDb(
       const std::string& myNodeName,
       folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
@@ -231,8 +237,10 @@ class SpfSolver {
       const NodeAndArea& nodeArea,
       folly::F14FastMap<std::string, LinkState> const& areaLinkStates) const;
 
-  // Give source node-name and dstNodeNames, this function returns the set of
-  // nexthops towards these set of dstNodeNames
+  /*
+   * Give source node-name and dstNodeNames, this function returns the set of
+   * nexthops towards these set of dstNodeNames
+   */
   BestNextHopMetrics getNextHopsWithMetric(
       const std::string& srcNodeName,
       const std::set<NodeAndArea>& dstNodeAreas,
@@ -253,26 +261,34 @@ class SpfSolver {
   // Collection to store static IP UNICAST routes
   StaticUnicastRoutes staticUnicastRoutes_;
 
-  // Cache of best route selection.
-  // - Cleared when topology changes
-  // - Updated for the prefix whenever a route is created for it
+  /*
+   * Cache of best route selection.
+   * - Cleared when topology changes
+   * - Updated for the prefix whenever a route is created for it
+   */
   folly::F14FastMap<folly::CIDRNetwork, RouteSelectionResult> bestRoutesCache_;
 
   const std::string myNodeName_;
 
-  // is v4 enabled. If yes then Decision will forward v4 prefixes with v4
-  // nexthops to Fib module for programming. Else it will just drop them.
+  /*
+   * is v4 enabled. If yes then Decision will forward v4 prefixes with v4
+   * nexthops to Fib module for programming. Else it will just drop them.
+   */
   const bool enableV4_{false};
 
   const bool enableBestRouteSelection_{false};
 
-  // is v4 over v6 nexthop enabled. If yes then Decision will forward v4
-  // prefixes with v6 nexthops to Fib module for programming. Else it will just
-  // use v4 over v4 nexthop.
+  /*
+   * is v4 over v6 nexthop enabled. If yes then Decision will forward v4
+   * prefixes with v6 nexthops to Fib module for programming. Else it will just
+   * use v4 over v4 nexthop.
+   */
   const bool v4OverV6Nexthop_{false};
 
-  // per class placeholder for test code injection
-  // only need to be setup once here
+  /*
+   * per class placeholder for test code injection
+   * only need to be setup once here
+   */
 #ifdef SpfSolver_TEST_FRIENDS
   SpfSolver_TEST_FRIENDS
 #endif

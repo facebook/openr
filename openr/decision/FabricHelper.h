@@ -59,26 +59,32 @@ class FabricHelper {
   // Returns the name of fabric node that is currently the master generator.
   std::string getFabricMasterGenerator() const;
 
-  // Returns a pair of:
-  //   bool: True the changed keys contain a leaf, spine or control node's key
-  //   std::unordered_set<std::string>: Set of leaf node names whose keys
-  //   changed
-  //
-  // Note: Only a spine or a control nodes' adjacency changes, returns
-  // {true,{}}. The bool is used to determine if the fabric master generator may
-  // have changed.
+  /*
+   * Returns a pair of:
+   *   bool: True the changed keys contain a leaf, spine or control node's key
+   *   std::unordered_set<std::string>: Set of leaf node names whose keys
+   *   changed
+   *
+   * Note: Only a spine or a control nodes' adjacency changes, returns
+   * {true,{}}. The bool is used to determine if the fabric master generator may
+   * have changed.
+   */
   std::pair<bool, std::unordered_set<std::string>> getFabricChanges(
       const std::unordered_set<std::string>& changedKeys) const;
 
-  // Clears external adjacencies and returns KV unset requests if anything
-  // changed. Returns an empty vector if nothing was cleared.
+  /*
+   * Clears external adjacencies and returns KV unset requests if anything
+   * changed. Returns an empty vector if nothing was cleared.
+   */
   std::vector<ClearKeyValueRequest> clearFabricKvs();
 
-  // Updates this fabric's synthetic key-values in response to the changed keys,
-  // including this fabric's drain status. Refreshes the tracked fabric master
-  // generator and pushes the resulting requests onto the kvRequestQueue.
-  // Generates keys only if `myNodeName_ == fabricMasterName_` (this node is the
-  // fabric master); otherwise clears previously generated keys.
+  /*
+   * Updates this fabric's synthetic key-values in response to the changed keys,
+   * including this fabric's drain status. Refreshes the tracked fabric master
+   * generator and pushes the resulting requests onto the kvRequestQueue.
+   * Generates keys only if `myNodeName_ == fabricMasterName_` (this node is the
+   * fabric master); otherwise clears previously generated keys.
+   */
   void updateFabricKv(
       const std::unordered_set<std::string>& changedKeys,
       const thrift::Publication& thriftPub);
@@ -103,16 +109,20 @@ class FabricHelper {
   bool updateFabricAdjacencies(
       const std::unordered_set<std::string>& changedNodes);
 
-  // Updates this fabric's drain status from the given publication. Returns true
-  // if the fabric's drain status changed.
+  /*
+   * Updates this fabric's drain status from the given publication. Returns true
+   * if the fabric's drain status changed.
+   */
   bool updateFabricDrainStatus(const thrift::Publication& thriftPub);
 
   // Returns true if the fabric's drainStatus changed.
   bool setDrainStatus(const thrift::InstanceDrainStatus& drainStatus);
 
-  // Updates external adjacencies of the changed leaves and stores the
-  // fabric node's drain status. Returns updated KV set requests for the fabric;
-  // empty vector if nothing changed.
+  /*
+   * Updates external adjacencies of the changed leaves and stores the
+   * fabric node's drain status. Returns updated KV set requests for the fabric;
+   * empty vector if nothing changed.
+   */
   std::vector<PersistKeyValueRequest> updateChangedFabricKvs(
       const std::unordered_set<std::string>& changedLeafNames,
       bool isDrainStatusChanged);
@@ -141,22 +151,28 @@ class FabricHelper {
   // The area for the adjacencies.
   const std::string area_;
 
-  // Name of the local node this Open/R instance runs on. Used to determine
-  // whether this node is the fabric master generator.
+  /*
+   * Name of the local node this Open/R instance runs on. Used to determine
+   * whether this node is the fabric master generator.
+   */
   const std::string myNodeName_;
 
   // The drain status key for this fabric.
   const std::string drainStatusKey_;
 
-  // Name of the node currently generating this fabric's synthetic key-values.
-  // Refreshed on each updateFabricKv(); empty until first computed.
+  /*
+   * Name of the node currently generating this fabric's synthetic key-values.
+   * Refreshed on each updateFabricKv(); empty until first computed.
+   */
   std::string fabricMasterName_;
 
   // Queue onto which generated/cleared fabric key-value requests are pushed.
   messaging::ReplicateQueue<KeyValueRequest>& kvRequestQueue_;
 
-  // Current drain status of this fabric node from KvStore. Defaults to
-  // undrained.
+  /*
+   * Current drain status of this fabric node from KvStore. Defaults to
+   * undrained.
+   */
   thrift::InstanceDrainStatus fabricDrainStatus_;
 
   apache::thrift::CompactSerializer serializer_;

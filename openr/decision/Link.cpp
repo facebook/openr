@@ -31,8 +31,10 @@ std::hash<openr::Link::LinkSet>::operator()(
     openr::Link::LinkSet const& set) const {
   size_t hash = 0;
   for (auto const& link : set) {
-    // Note: XOR is associative and communitive so we get a consitent hash no
-    // matter the order of the set
+    /*
+     * Note: XOR is associative and communitive so we get a consitent hash no
+     * matter the order of the set
+     */
     hash ^= std::hash<openr::Link>()(*link);
   }
   return hash;
@@ -268,15 +270,19 @@ Link::setOverloadFromNode(const std::string& nodeName, bool overload) {
   } else {
     throw std::invalid_argument(nodeName);
   }
-  // since we don't support simplex overloads, we only signal topo change if
-  // this is true
+  /*
+   * since we don't support simplex overloads, we only signal topo change if
+   * this is true
+   */
   return wasUp != isUp();
 }
 
 bool
 Link::setLinkUsability(const Link& newLink) {
-  // copy newLink's usablity
-  // make sure that they represent the same link
+  /*
+   * copy newLink's usablity
+   * make sure that they represent the same link
+   */
   CHECK(*this == newLink); // checking hash (ordered names are checked)
   bool wasUp = isUp();
   usable_ = newLink.usable_;

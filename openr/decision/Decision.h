@@ -305,8 +305,10 @@ class Decision : public OpenrEventBase {
   // Pointer to RibPolicy
   std::unique_ptr<RibPolicy> ribPolicy_;
 
-  // Timer associated with RibPolicy. Triggered when ribPolicy is expired. This
-  // aims to revert the policy effects on programmed routes.
+  /*
+   * Timer associated with RibPolicy. Triggered when ribPolicy is expired. This
+   * aims to revert the policy effects on programmed routes.
+   */
   std::unique_ptr<folly::AsyncTimeout> ribPolicyTimer_;
 
   // The pointer to the SPF path calculator

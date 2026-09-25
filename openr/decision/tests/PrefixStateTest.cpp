@@ -113,10 +113,12 @@ TEST_F(PrefixStateTestFixture, BasicOperation) {
 TEST(PrefixState, GetReceivedRoutes) {
   PrefixState state;
 
-  //
-  // Add prefix entries
-  // prefix1 -> (node0, area0), (node0, area1), (node1, area1)
-  //
+  /*
+   *
+   * Add prefix entries
+   * prefix1 -> (node0, area0), (node0, area1), (node1, area1)
+   *
+   */
   const auto prefixEntry = createPrefixEntry(toIpPrefix("10.0.0.0/8"));
   PrefixKey k1("node0", toIPNetwork(*prefixEntry.prefix()), "area0");
   state.updatePrefix(k1, prefixEntry);
@@ -129,9 +131,11 @@ TEST(PrefixState, GetReceivedRoutes) {
   bestKey.node() = "";
   bestKey.area() = "";
 
-  //
-  // Empty filter
-  //
+  /*
+   *
+   * Empty filter
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     auto routes = state.getReceivedRoutesFiltered(filter);
@@ -144,9 +148,11 @@ TEST(PrefixState, GetReceivedRoutes) {
     EXPECT_EQ(3, routeDetail.routes()->size());
   }
 
-  //
-  // Filter on prefix
-  //
+  /*
+   *
+   * Filter on prefix
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     filter.prefixes() = std::vector<thrift::IpPrefix>{*prefixEntry.prefix()};
@@ -161,9 +167,11 @@ TEST(PrefixState, GetReceivedRoutes) {
     EXPECT_EQ(3, routeDetail.routes()->size());
   }
 
-  //
-  // Filter on non-existing prefix
-  //
+  /*
+   *
+   * Filter on non-existing prefix
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     filter.prefixes() =
@@ -173,9 +181,11 @@ TEST(PrefixState, GetReceivedRoutes) {
     EXPECT_EQ(0, routes.size());
   }
 
-  //
-  // Filter with empty prefix list. Should return empty list
-  //
+  /*
+   *
+   * Filter with empty prefix list. Should return empty list
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     filter.prefixes() = std::vector<thrift::IpPrefix>();
@@ -185,9 +195,11 @@ TEST(PrefixState, GetReceivedRoutes) {
     EXPECT_EQ(0, routes.size());
   }
 
-  //
-  // Filter on the prefix and node-name
-  //
+  /*
+   *
+   * Filter on the prefix and node-name
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     filter.prefixes() = std::vector<thrift::IpPrefix>{*prefixEntry.prefix()};
@@ -207,9 +219,11 @@ TEST(PrefixState, GetReceivedRoutes) {
     EXPECT_EQ("area1", route.key()->area().value());
   }
 
-  //
-  // Filter on the area-name
-  //
+  /*
+   *
+   * Filter on the area-name
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     filter.areaName() = "area0";
@@ -228,9 +242,11 @@ TEST(PrefixState, GetReceivedRoutes) {
     EXPECT_EQ("area0", route.key()->area().value());
   }
 
-  //
-  // Filter on unknown area or node
-  //
+  /*
+   *
+   * Filter on unknown area or node
+   *
+   */
   {
     thrift::ReceivedRouteFilter filter;
     filter.areaName() = "unknown";

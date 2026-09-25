@@ -18,22 +18,28 @@ namespace openr {
 
 inline bool
 adjUsable(const thrift::Adjacency& adj, const std::string& nodeName) {
-  // if onlyUsedByOther is set, then only the node that is "other" can
-  // use this adj
+  /*
+   * if onlyUsedByOther is set, then only the node that is "other" can
+   * use this adj
+   */
 
-  // Motivation: when neighbor A is initializing, we want to prevent routing
-  // traffic to/through A, but we want to let A to route through us (B). Thus,
-  // before A is fully initialized, we will have adj {self: B, other: A,
-  // adjOnlyUsedByOtherNode: true} this prevents all nodes except A using this
-  // adj
+  /*
+   * Motivation: when neighbor A is initializing, we want to prevent routing
+   * traffic to/through A, but we want to let A to route through us (B). Thus,
+   * before A is fully initialized, we will have adj {self: B, other: A,
+   * adjOnlyUsedByOtherNode: true} this prevents all nodes except A using this
+   * adj
+   */
 
-  // Case1: we are adjacent to an initilizing node, returns false (other !=
-  //      self)
-  // Case2: we are the initilizing node and neighbor is not, return true;
-  //      (other == self)
-  // Case3: we are not adjacent to the initilizing node, return
-  //      false; (other != self)
-  // Case4: Initilized: return true;
+  /*
+   * Case1: we are adjacent to an initilizing node, returns false (other !=
+   *      self)
+   * Case2: we are the initilizing node and neighbor is not, return true;
+   *      (other == self)
+   * Case3: we are not adjacent to the initilizing node, return
+   *      false; (other != self)
+   * Case4: Initilized: return true;
+   */
   if (*adj.adjOnlyUsedByOtherNode() && *adj.otherNodeName() != nodeName) {
     return false;
   }
@@ -66,13 +72,17 @@ class LinkState {
  public:
   explicit LinkState(const std::string& area, const std::string& myNodeName);
 
-  // Class holding a network node's SPF result. and useful apis to get and set
-  //   - nexthops toward the node
-  //   - ultimate link and previous nodes on shortest paths towards node
+  /*
+   * Class holding a network node's SPF result. and useful apis to get and set
+   *   - nexthops toward the node
+   *   - ultimate link and previous nodes on shortest paths towards node
+   */
   class NodeSpfResult {
    public:
-    // Represents a link in a path towards a node. For an SPF result, we can use
-    // these to trace paths back to the source from any connected node
+    /*
+     * Represents a link in a path towards a node. For an SPF result, we can use
+     * these to trace paths back to the source from any connected node
+     */
     class PathLink {
      public:
       PathLink(std::shared_ptr<Link> const& l, std::string const& n)
@@ -130,13 +140,15 @@ class LinkState {
 
   using Path = std::vector<std::shared_ptr<Link>>;
 
-  // Shortest paths API:
-  // - getSpfResult()
-  // - getKthPaths()
-  //
-  // each is memoized all params. memoization invalidated for any topolgy
-  // altering calls, i.e. if pdateAdjacencyDatabase(), or
-  // deleteAdjacencyDatabase() returns with LinkState::topologyChanged set true
+  /*
+   * Shortest paths API:
+   * - getSpfResult()
+   * - getKthPaths()
+   *
+   * each is memoized all params. memoization invalidated for any topolgy
+   * altering calls, i.e. if pdateAdjacencyDatabase(), or
+   * deleteAdjacencyDatabase() returns with LinkState::topologyChanged set true
+   */
   SpfResult const& getSpfResult(
       const std::string& nodeName, bool useLinkMetric = true) const;
 
@@ -154,14 +166,16 @@ class LinkState {
       spfResults_;
 
  public:
-  // Trace edge-disjoint paths from dest to src.
-  // I.e., no two paths returned from this function can share any links
-  //
-  // Assertion: k >= 1
-  // For k = 1, the above algorithm is perfomered considering all links in the
-  // network.
-  // For k > 1, the algorithm is performed considering all links except links on
-  // paths in the set {p in getKthPaths(src, dest, i) | 1 <= i < k}.
+  /*
+   * Trace edge-disjoint paths from dest to src.
+   * I.e., no two paths returned from this function can share any links
+   *
+   * Assertion: k >= 1
+   * For k = 1, the above algorithm is perfomered considering all links in the
+   * network.
+   * For k > 1, the algorithm is performed considering all links except links on
+   * paths in the set {p in getKthPaths(src, dest, i) | 1 <= i < k}.
+   */
   std::vector<LinkState::Path> const& getKthPaths(
       const std::string& src, const std::string& dest, size_t k) const;
 
@@ -173,8 +187,10 @@ class LinkState {
       kthPathResults_;
 
  public:
-  // non-const public methods
-  // IMPT: clear memoization structures as appropirate in these functions
+  /*
+   * non-const public methods
+   * IMPT: clear memoization structures as appropirate in these functions
+   */
   class LinkStateChange {
    public:
     LinkStateChange() = default;
@@ -193,8 +209,10 @@ class LinkState {
 
     // Whether topology has changed
     bool topologyChanged{false};
-    // Newly added links in the topology. Today it is only populated in
-    // `updateAdjacencyDatabase()`.
+    /*
+     * Newly added links in the topology. Today it is only populated in
+     * `updateAdjacencyDatabase()`.
+     */
     std::vector<std::shared_ptr<Link>> addedLinks;
     // Whether attributes of links have changed
     bool linkAttributesChanged{false};
@@ -208,8 +226,10 @@ class LinkState {
       std::string area,
       bool inInitialization = false);
 
-  // delete a node's adjacency database
-  // return true if this has caused any change in graph
+  /*
+   * delete a node's adjacency database
+   * return true if this has caused any change in graph
+   */
   LinkStateChange deleteAdjacencyDatabase(const std::string& nodeName);
 
   // Populates the FabricHelper object.
@@ -226,8 +246,10 @@ class LinkState {
 
   // const public methods
 
-  // returns metric from a to b,
-  // if nodes b is not reachable from a, returns std::nullopt
+  /*
+   * returns metric from a to b,
+   * if nodes b is not reachable from a, returns std::nullopt
+   */
   std::optional<LinkStateMetric> getMetricFromAToB(
       std::string const& a,
       std::string const& b,
@@ -266,11 +288,13 @@ class LinkState {
     return adjacencyDatabases_;
   }
 
-  // check if path A is part of path B.
-  // Example:
-  // path A: a->b->c
-  // path B: d->a->b->c->d
-  // return True
+  /*
+   * check if path A is part of path B.
+   * Example:
+   * path A: a->b->c
+   * path B: d->a->b->c->d
+   * return True
+   */
   static bool
   pathAInPathB(Path const& a, Path const& b) {
     if (a.size() <= b.size()) {
@@ -291,8 +315,10 @@ class LinkState {
  private:
   // helpers to update the link state graph
 
-  // find one path from dest to src for a given SpfResult
-  // ingnore links already in linksToIgnore
+  /*
+   * find one path from dest to src for a given SpfResult
+   * ingnore links already in linksToIgnore
+   */
   std::optional<Path> traceOnePath(
       std::string const& src,
       std::string const& dest,
@@ -347,8 +373,10 @@ class LinkState {
   std::vector<std::shared_ptr<Link>> orderedLinksFromNode(
       const std::string& nodeName) const;
 
-  // Returns the leaf node's name if the other node name stored in the
-  // adj is the fabric name; otherwise, returns the other node name from adj.
+  /*
+   * Returns the leaf node's name if the other node name stored in the
+   * adj is the fabric name; otherwise, returns the other node name from adj.
+   */
   std::string getRealOtherNodeName(
       const std::string& nodeName, const thrift::Adjacency& adj) const;
 
@@ -361,24 +389,30 @@ class LinkState {
   // [hard-drain]
   folly::F14FastMap<std::string /* nodeName */, bool> nodeOverloads_;
 
-  // [soft-drain]
-  // track nodeMetricInc per node, 0 means not softdrained. Higher the value,
-  // less it is preferred
+  /*
+   * [soft-drain]
+   * track nodeMetricInc per node, 0 means not softdrained. Higher the value,
+   * less it is preferred
+   */
   folly::F14FastMap<std::string /* nodeName */, uint64_t>
       nodeMetricIncrementVals_;
 
   // the latest AdjacencyDatabase we've received from each node
   folly::F14FastMap<std::string, thrift::AdjacencyDatabase> adjacencyDatabases_;
 
-  // Object that holds Fabric related data and methods. Initialized only if this
-  // node is a Fabric node.
+  /*
+   * Object that holds Fabric related data and methods. Initialized only if this
+   * node is a Fabric node.
+   */
   std::optional<FabricHelper> fabricHelper_;
 }; // class LinkState
 
-// Classes needed for running Dijkstra to build an SPF graph starting at a root
-// node to all other nodes the link state topology. In addition to implementing
-// the priority queue element at the heart of Dijkstra's algorithm, this
-// structure also allows us to store appication specfic data: nexthops.
+/*
+ * Classes needed for running Dijkstra to build an SPF graph starting at a root
+ * node to all other nodes the link state topology. In addition to implementing
+ * the priority queue element at the heart of Dijkstra's algorithm, this
+ * structure also allows us to store appication specfic data: nexthops.
+ */
 class DijkstraQSpfNode {
  public:
   DijkstraQSpfNode(const std::string& n, LinkStateMetric m)
@@ -448,9 +482,11 @@ class DijkstraQ {
 
   void
   reMake() {
-    // this is a bit slow but is rarely called in our application. In fact,
-    // in networks where the metric is hop count, this will never be called
-    // and the Dijkstra run is no different than BFS
+    /*
+     * this is a bit slow but is rarely called in our application. In fact,
+     * in networks where the metric is hop count, this will never be called
+     * and the Dijkstra run is no different than BFS
+     */
     std::make_heap(heap_.begin(), heap_.end(), DijkstraQNodeGreater);
   }
 };

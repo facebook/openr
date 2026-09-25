@@ -26,13 +26,15 @@ using namespace ::openr;
 
 DEFINE_bool(stress_test, false, "pass this to run the stress test");
 
-// DEPRECATED: utility functions provided for old test callsites that once used
-// PrefixState::updatePrefixDatabase() expecting all node route advertisments to
-// be synced.
-//
-// In newly written tests, prefer
-// PrefixState::updatePrefix() and PrefixState::deletePrefix() for writing
-// PrefixState::getReceivedRoutesFiltered() for reading
+/*
+ * DEPRECATED: utility functions provided for old test callsites that once used
+ * PrefixState::updatePrefixDatabase() expecting all node route advertisments to
+ * be synced.
+ *
+ * In newly written tests, prefer
+ * PrefixState::updatePrefix() and PrefixState::deletePrefix() for writing
+ * PrefixState::getReceivedRoutesFiltered() for reading
+ */
 
 thrift::PrefixDatabase
 getPrefixDbForNode(
@@ -106,10 +108,12 @@ getUnicastNextHops(const thrift::UnicastRoute& r) {
   return *r.nextHops();
 }
 
-//
-// Create a broken topology where R1 and R2 connect no one
-// Expect no routes coming out of the spfSolver
-//
+/*
+ *
+ * Create a broken topology where R1 and R2 connect no one
+ * Expect no routes coming out of the spfSolver
+ *
+ */
 TEST(ShortestPathTest, UnreachableNodes) {
   // no adjacency
   auto adjacencyDb1 = createAdjDb("1", {}, 0);
@@ -262,11 +266,13 @@ TEST(SpfSolver, DrainedNodeLeastPreferred) {
   }
 }
 
-//
-// R1 and R2 are adjacent, and R1 has this declared in its
-// adjacency database. However, R1 is missing the AdjDb from
-// R2. It should not be able to compute path to R2 in this case.
-//
+/*
+ *
+ * R1 and R2 are adjacent, and R1 has this declared in its
+ * adjacency database. However, R1 is missing the AdjDb from
+ * R2. It should not be able to compute path to R2 in this case.
+ *
+ */
 TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
 
@@ -282,10 +288,12 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
       kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
-  //
-  // Feed SPF solver with R1's AdjDb and all prefixes, but do not
-  // mention the R2's AdjDb. Add R2's prefixes though.
-  //
+  /*
+   *
+   * Feed SPF solver with R1's AdjDb and all prefixes, but do not
+   * mention the R2's AdjDb. Add R2's prefixes though.
+   *
+   */
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
@@ -297,12 +305,14 @@ TEST(ShortestPathTest, MissingNeighborAdjacencyDb) {
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
 }
 
-//
-// R1 and R2 are adjacent, and R1 has this declared in its
-// adjacency database. R1 received AdjacencyDatabase from R2,
-// but it missing adjacency to R1. We should not see routes
-// from R1 to R2.
-//
+/*
+ *
+ * R1 and R2 are adjacent, and R1 has this declared in its
+ * adjacency database. R1 received AdjacencyDatabase from R2,
+ * but it missing adjacency to R1. We should not see routes
+ * from R1 to R2.
+ *
+ */
 TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   auto adjacencyDb1 = createAdjDb("1", {adj12}, 0);
   auto adjacencyDb2 = createAdjDb("2", {}, 0);
@@ -319,10 +329,12 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
       kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
-  //
-  // Feed SPF solver with R1's AdjDb and all prefixes, but do not
-  // mention the R2's AdjDb. Add R2's prefixes though.
-  //
+  /*
+   *
+   * Feed SPF solver with R1's AdjDb and all prefixes, but do not
+   * mention the R2's AdjDb. Add R2's prefixes though.
+   *
+   */
 
   EXPECT_FALSE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                    .topologyChanged);
@@ -342,9 +354,11 @@ TEST(ShortestPathTest, EmptyNeighborAdjacencyDb) {
   EXPECT_EQ(0, routeDb->unicastRoutes.size());
 }
 
-//
-// Query route for unknown neighbor. It should return none
-//
+/*
+ *
+ * Query route for unknown neighbor. It should return none
+ *
+ */
 TEST(ShortestPathTest, UnknownNode) {
   std::string nodeName("1");
   SpfSolver spfSolver(
@@ -390,9 +404,11 @@ TEST(SpfSolver, NodeSoftDrainedChoice) {
       kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
-  //
-  // Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
-  //
+  /*
+   *
+   * Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
+   *
+   */
   {
     auto res =
         linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
@@ -521,9 +537,11 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
       kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
-  //
-  // Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
-  //
+  /*
+   *
+   * Feed SPF solver with R1, R2, R3 adjacency + prefix dbs
+   *
+   */
   {
     auto res =
         linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName);
@@ -554,9 +572,11 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
   EXPECT_TRUE(updatePrefixDatabase(prefixState, localPrefixDb2).empty());
   EXPECT_FALSE(updatePrefixDatabase(prefixState, localPrefixDb3).empty());
 
-  //
-  // dump routes for all nodes. expect one unicast route, no overload
-  //
+  /*
+   *
+   * dump routes for all nodes. expect one unicast route, no overload
+   *
+   */
   {
     auto routeDb = spfSolver.buildRouteDb("2", areaLinkStates, prefixState);
     ASSERT_TRUE(routeDb.has_value());
@@ -599,8 +619,10 @@ TEST(SpfSolver, NodeOverloadRouteChoice) {
     EXPECT_EQ(1, routeDb->unicastRoutes.size());
     const auto ribEntry = routeDb->unicastRoutes.at(toIPNetwork(addr1));
     EXPECT_EQ(prefix3, ribEntry.bestPrefixEntry);
-    // let others know that local route has been considered when picking the
-    // route (and lost)
+    /*
+     * let others know that local route has been considered when picking the
+     * route (and lost)
+     */
     EXPECT_TRUE(ribEntry.localRouteConsidered);
   }
   {
@@ -629,9 +651,11 @@ TEST(SpfSolver, AdjacencyUpdate) {
       kTestingAreaName.t, LinkState(kTestingAreaName, nodeName));
   auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
-  //
-  // Feed SPF solver with R1 and R2's adjacency + prefix dbs
-  //
+  /*
+   *
+   * Feed SPF solver with R1 and R2's adjacency + prefix dbs
+   *
+   */
 
   {
     auto res =
@@ -648,10 +672,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb1).empty());
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2).empty());
 
-  //
-  // dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
-  // each (node1-label, node2-label)
-  //
+  /*
+   *
+   * dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
+   * each (node1-label, node2-label)
+   *
+   */
   auto routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
@@ -660,10 +686,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
 
-  //
-  // Update adjacency database of node 1 by changing it's nexthops and verift
-  // that update properly responds to the event
-  //
+  /*
+   *
+   * Update adjacency database of node 1 by changing it's nexthops and verift
+   * that update properly responds to the event
+   *
+   */
   adjacencyDb1.adjacencies()[0].nextHopV6() =
       toBinaryAddress("fe80::1234:b00c");
   {
@@ -673,10 +701,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
     EXPECT_TRUE(res.linkAttributesChanged);
   }
 
-  //
-  // dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
-  // each (node1-label, node2-label)
-  //
+  /*
+   *
+   * dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
+   * each (node1-label, node2-label)
+   *
+   */
 
   routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
@@ -686,10 +716,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
   ASSERT_TRUE(routeDb.has_value());
   EXPECT_EQ(1, routeDb->unicastRoutes.size());
 
-  //
-  // Update adjacency database of node 2 by changing it's nexthops and verift
-  // that update properly responds to the event (no spf trigger needed)
-  //
+  /*
+   *
+   * Update adjacency database of node 2 by changing it's nexthops and verift
+   * that update properly responds to the event (no spf trigger needed)
+   *
+   */
   *adjacencyDb2.adjacencies()[0].nextHopV6() =
       toBinaryAddress("fe80::5678:b00c");
   {
@@ -699,10 +731,12 @@ TEST(SpfSolver, AdjacencyUpdate) {
     EXPECT_TRUE(res.linkAttributesChanged);
   }
 
-  //
-  // dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
-  // each (node1-label, node2-label)
-  //
+  /*
+   *
+   * dump routes for both nodes, expect 3 route entries (1 unicast, 2 label) on
+   * each (node1-label, node2-label)
+   *
+   */
 
   routeDb = spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   ASSERT_TRUE(routeDb.has_value());
@@ -737,9 +771,11 @@ TEST(BGPRedistribution, IgpMetric) {
   auto& linkState = areaLinkStates.at(kTestingAreaName.t);
   PrefixState prefixState;
 
-  //
-  // Create BGP prefix
-  //
+  /*
+   *
+   * Create BGP prefix
+   *
+   */
   const auto bgpPrefix2 = createPrefixEntry(
       addr1,
       thrift::PrefixType::BGP,
@@ -753,9 +789,11 @@ TEST(BGPRedistribution, IgpMetric) {
       thrift::PrefixForwardingType::IP,
       thrift::PrefixForwardingAlgorithm::SP_ECMP);
 
-  //
-  // Setup adjacencies
-  //
+  /*
+   *
+   * Setup adjacencies
+   *
+   */
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 0);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 0);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 0);
@@ -766,9 +804,11 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
                   .topologyChanged);
 
-  //
-  // Update prefix databases
-  //
+  /*
+   *
+   * Update prefix databases
+   *
+   */
   auto prefixDb2WithBgp =
       createPrefixDb("2", {createPrefixEntry(addr2), bgpPrefix2});
   auto prefixDb3WithBgp =
@@ -776,9 +816,11 @@ TEST(BGPRedistribution, IgpMetric) {
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb2WithBgp).empty());
   EXPECT_FALSE(updatePrefixDatabase(prefixState, prefixDb3WithBgp).empty());
 
-  //
-  // Step-1 prefix1 -> {node2, node3}
-  //
+  /*
+   *
+   * Step-1 prefix1 -> {node2, node3}
+   *
+   */
   auto decisionRouteDb =
       *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   auto routeDb = decisionRouteDb.toThrift();
@@ -793,9 +835,11 @@ TEST(BGPRedistribution, IgpMetric) {
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
 
-  //
-  // Increase cost towards node3 to 20; prefix -> {node2}
-  //
+  /*
+   *
+   * Increase cost towards node3 to 20; prefix -> {node2}
+   *
+   */
   adjacencyDb1.adjacencies()[1].metric() = 20;
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                   .topologyChanged);
@@ -811,10 +855,12 @@ TEST(BGPRedistribution, IgpMetric) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
 
-  //
-  // mark link towards node2 as drained; prefix1 -> {node3}
-  // No route towards addr2 (node2's loopback)
-  //
+  /*
+   *
+   * mark link towards node2 as drained; prefix1 -> {node3}
+   * No route towards addr2 (node2's loopback)
+   *
+   */
   adjacencyDb1.adjacencies()[0].isOverloaded() = true;
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                   .topologyChanged);
@@ -831,10 +877,12 @@ TEST(BGPRedistribution, IgpMetric) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj13, false, 20))))));
 
-  //
-  // Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
-  // No route towards addr2 (node2's loopback)
-  //
+  /*
+   *
+   * Set cost towards node2 to 20 (still drained); prefix1 -> {node3}
+   * No route towards addr2 (node2's loopback)
+   *
+   */
   adjacencyDb1.adjacencies()[0].metric() = 20;
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                   .topologyChanged);
@@ -850,9 +898,11 @@ TEST(BGPRedistribution, IgpMetric) {
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj13, false, 20))))));
 
-  //
-  // Undrain link; prefix1 -> {node2, node3}
-  //
+  /*
+   *
+   * Undrain link; prefix1 -> {node2, node3}
+   *
+   */
   adjacencyDb1.adjacencies()[0].isOverloaded() = false;
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb1, kTestingAreaName)
                   .topologyChanged);
@@ -879,11 +929,13 @@ TEST(Decision, IgpCost) {
   folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 
-  // Test topology: spine
-  // Setup adjacencies: note each link cost is 10
-  // 1     4 (SSW)
-  // |  x  |
-  // 2     3 (FSW)
+  /*
+   * Test topology: spine
+   * Setup adjacencies: note each link cost is 10
+   * 1     4 (SSW)
+   * |  x  |
+   * 2     3 (FSW)
+   */
 
   // Setup adjacency
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
@@ -939,10 +991,12 @@ TEST(Decision, BestRouteSelection) {
   folly::F14FastMap<std::string, LinkState> areaLinkStates;
   PrefixState prefixState;
 
-  //
-  // Setup adjacencies
-  // 2 <--> 1 <--> 3
-  //
+  /*
+   *
+   * Setup adjacencies
+   * 2 <--> 1 <--> 3
+   *
+   */
   auto adjacencyDb1 = createAdjDb("1", {adj12, adj13}, 1);
   auto adjacencyDb2 = createAdjDb("2", {adj21}, 2);
   auto adjacencyDb3 = createAdjDb("3", {adj31}, 3);
@@ -956,11 +1010,13 @@ TEST(Decision, BestRouteSelection) {
   EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjacencyDb3, kTestingAreaName)
                   .topologyChanged);
 
-  //
-  // Setup prefixes. node2 and node3 announces the same prefix with same metrics
-  // and different types. The type shouldn't have any effect on best route
-  // selection.
-  //
+  /*
+   *
+   * Setup prefixes. node2 and node3 announces the same prefix with same metrics
+   * and different types. The type shouldn't have any effect on best route
+   * selection.
+   *
+   */
   const auto node2Prefix = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 0, 0));
   const auto node3Prefix = createPrefixEntryWithMetrics(
@@ -972,14 +1028,18 @@ TEST(Decision, BestRouteSelection) {
       updatePrefixDatabase(prefixState, createPrefixDb("3", {node3Prefix}))
           .empty());
 
-  //
-  // Verifies that best routes cache is empty
-  //
+  /*
+   *
+   * Verifies that best routes cache is empty
+   *
+   */
   EXPECT_TRUE(spfSolver.getBestRoutesCache().empty());
 
-  //
-  // Case-1 node1 ECMP towards {node2, node3}
-  //
+  /*
+   *
+   * Case-1 node1 ECMP towards {node2, node3}
+   *
+   */
   auto decisionRouteDb =
       *spfSolver.buildRouteDb("1", areaLinkStates, prefixState);
   auto routeDb = decisionRouteDb.toThrift();
@@ -994,9 +1054,11 @@ TEST(Decision, BestRouteSelection) {
                   createNextHopFromAdj(adj12, false, 10),
                   createNextHopFromAdj(adj13, false, 10))))));
 
-  //
-  // Verify that prefix-state report two best routes
-  //
+  /*
+   *
+   * Verify that prefix-state report two best routes
+   *
+   */
   {
     auto bestRoutesCache = spfSolver.getBestRoutesCache();
     ASSERT_EQ(1, bestRoutesCache.count(toIPNetwork(addr1)));
@@ -1007,9 +1069,11 @@ TEST(Decision, BestRouteSelection) {
     EXPECT_EQ("2", bestRoutes.bestNodeArea.first);
   }
 
-  //
-  // Case-2 node1 prefers node2 (prefix metrics)
-  //
+  /*
+   *
+   * Case-2 node1 prefers node2 (prefix metrics)
+   *
+   */
   const auto node2PrefixPreferred = createPrefixEntryWithMetrics(
       addr1, thrift::PrefixType::DEFAULT, createMetrics(200, 100, 0));
   EXPECT_FALSE(updatePrefixDatabase(
@@ -1027,9 +1091,11 @@ TEST(Decision, BestRouteSelection) {
               getUnicastNextHops,
               testing::UnorderedElementsAre(
                   createNextHopFromAdj(adj12, false, 10))))));
-  //
-  // Verify that prefix-state report only one best route
-  //
+  /*
+   *
+   * Verify that prefix-state report only one best route
+   *
+   */
   {
     auto bestRoutesCache = spfSolver.getBestRoutesCache();
     ASSERT_EQ(1, bestRoutesCache.count(toIPNetwork(addr1)));
@@ -1040,13 +1106,15 @@ TEST(Decision, BestRouteSelection) {
   }
 }
 
-//
-// Test topology:
-// connected bidirectionally
-//  1 <----> 2 <----> 3
-// partitioned
-//  1 <----  2  ----> 3
-//
+/*
+ *
+ * Test topology:
+ * connected bidirectionally
+ *  1 <----> 2 <----> 3
+ * partitioned
+ *  1 <----  2  ----> 3
+ *
+ */
 class ConnectivityTest : public ::testing::TestWithParam<bool> {};
 
 TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
@@ -1101,12 +1169,14 @@ TEST_P(ConnectivityTest, GraphConnectedOrPartitioned) {
 INSTANTIATE_TEST_CASE_P(
     PartitionedTopologyInstance, ConnectivityTest, ::testing::Bool());
 
-//
-// Overload node test in a linear topology with shortest path calculation
-//
-// 1<--->2<--->3
-//   10     10
-//
+/*
+ *
+ * Overload node test in a linear topology with shortest path calculation
+ *
+ * 1<--->2<--->3
+ *   10     10
+ *
+ */
 TEST(ConnectivityTest, NodeHardDrainTest) {
   std::string nodeName("1");
   SpfSolver spfSolver(nodeName, false /* disable v4 */);
@@ -1231,8 +1301,10 @@ TEST(ConnectivityTest, InterfaceSoftDrainTest) {
    * node3 -> {node1(metric = 10), node2(metric = 10)}
    */
   {
-    // Update adjDb to add node1 -> node3 to form bi-dir adj. Expect topo
-    // change.
+    /*
+     * Update adjDb to add node1 -> node3 to form bi-dir adj. Expect topo
+     * change.
+     */
     auto adjDb1 = createAdjDb("1", {adj12_1, adj13}, 1);
     EXPECT_TRUE(linkState.updateAdjacencyDatabase(adjDb1, kTestingAreaName)
                     .topologyChanged);
@@ -1267,8 +1339,10 @@ TEST(ConnectivityTest, InterfaceSoftDrainTest) {
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr3))],
       NextHops({createNextHopFromAdj(adj23, false, 10)}));
-  // SPF will choose the max metric between node1 and node2. Hence create ECMP
-  // towards node1 and node3
+  /*
+   * SPF will choose the max metric between node1 and node2. Hence create ECMP
+   * towards node1 and node3
+   */
   EXPECT_EQ(
       routeMap[make_pair("2", toString(addr1))],
       NextHops(
@@ -1296,17 +1370,19 @@ TEST(ConnectivityTest, InterfaceSoftDrainTest) {
                    .topologyChanged);
 }
 
-//
-// Test topology:
-//
-//  1------2
-//  | \     |
-//  |   \   |
-//  3------4
-//
-// Test both IP v4 & v6
-// 1,2,3,4 are simply meshed with each other with 1 parallet links
-//
+/*
+ *
+ * Test topology:
+ *
+ *  1------2
+ *  | \     |
+ *  |   \   |
+ *  3------4
+ *
+ * Test both IP v4 & v6
+ * 1,2,3,4 are simply meshed with each other with 1 parallet links
+ *
+ */
 class SimpleRingMeshTopologyFixture
     : public ::testing::TestWithParam<
           std::tuple<bool, std::optional<thrift::PrefixType>>> {
@@ -1366,16 +1442,18 @@ class SimpleRingMeshTopologyFixture
   PrefixState prefixState;
 };
 
-//
-// Test topology:
-//
-//  1------2
-//  |      |
-//  |      |
-//  3------4
-//
-// Test both IP v4 & v6
-//
+/*
+ *
+ * Test topology:
+ *
+ *  1------2
+ *  |      |
+ *  |      |
+ *  3------4
+ *
+ * Test both IP v4 & v6
+ *
+ */
 class SimpleRingTopologyFixture
     : public ::testing::TestWithParam<
           std::tuple<bool, std::optional<thrift::PrefixType>>> {
@@ -1522,9 +1600,11 @@ TEST_P(SimpleRingTopologyFixture, ShortestPathTest) {
            createNextHopFromAdj(adj43, v4Enabled, 20)}));
 }
 
-//
-// Use the same topology, but test multi-path routing
-//
+/*
+ *
+ * Use the same topology, but test multi-path routing
+ *
+ */
 TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
   CustomSetUp();
   auto routeMap = getRouteMap(
@@ -1586,10 +1666,12 @@ TEST_P(SimpleRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj43, v4Enabled, 20)}));
 }
 
-//
-// attach nodes to outside world, e.g., POP
-// verify all non-POP nodes find their closest POPs
-//
+/*
+ *
+ * attach nodes to outside world, e.g., POP
+ * verify all non-POP nodes find their closest POPs
+ *
+ */
 TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
   CustomSetUp();
   // Advertise default prefixes from node-1 and node-4
@@ -1608,11 +1690,13 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
   // Unicast routes => 4 * (4 - 1) + 2 (default routes) = 14
   EXPECT_EQ(14, routeMap.size());
 
-  // validate router 1
-  // no default route boz it's attached
-  // i.e., spfSolver(false), bcoz we set node 1 to be "1" distance away from the
-  // dummy node and its neighbors are all further away, thus there is no route
-  // to the dummy node
+  /*
+   * validate router 1
+   * no default route boz it's attached
+   * i.e., spfSolver(false), bcoz we set node 1 to be "1" distance away from the
+   * dummy node and its neighbors are all further away, thus there is no route
+   * to the dummy node
+   */
   EXPECT_EQ(0, routeMap.count({"1", defaultRoutePrefix}));
 
   // validate router 2
@@ -1629,16 +1713,20 @@ TEST_P(SimpleRingTopologyFixture, AttachedNodesTest) {
           {createNextHopFromAdj(adj31, v4Enabled, 10),
            createNextHopFromAdj(adj34, v4Enabled, 10)}));
 
-  // validate router 4
-  // no default route boz it's attached
+  /*
+   * validate router 4
+   * no default route boz it's attached
+   */
   EXPECT_EQ(0, routeMap.count({"4", defaultRoutePrefix}));
 }
 
-//
-// Verify overload bit setting of a node's adjacency DB with multipath
-// enabled. Make node-3 and node-2 overloaded and verify routes.
-// It will disconnect node-1 with node-4 but rests should be reachable
-//
+/*
+ *
+ * Verify overload bit setting of a node's adjacency DB with multipath
+ * enabled. Make node-3 and node-2 overloaded and verify routes.
+ * It will disconnect node-1 with node-4 but rests should be reachable
+ *
+ */
 TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
   CustomSetUp();
   adjacencyDb2.isOverloaded() = true;
@@ -1695,10 +1783,12 @@ TEST_P(SimpleRingTopologyFixture, OverloadNodeTest) {
       NextHops({createNextHopFromAdj(adj43, v4Enabled, 10)}));
 }
 
-//
-// Verify overload bit setting of individual adjacencies with multipath
-// enabled. node-3 will get disconnected
-//
+/*
+ *
+ * Verify overload bit setting of individual adjacencies with multipath
+ * enabled. node-3 will get disconnected
+ *
+ */
 TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
   CustomSetUp();
   adjacencyDb3.adjacencies()[0].isOverloaded() = true; // make adj31 overloaded
@@ -1734,8 +1824,10 @@ TEST_P(SimpleRingTopologyFixture, OverloadLinkTest) {
       routeMap[make_pair("2", toString(v4Enabled ? addr1V4 : addr1))],
       NextHops({createNextHopFromAdj(adj21, v4Enabled, 10)}));
 
-  // validate router 3
-  // no routes for router 3
+  /*
+   * validate router 3
+   * no routes for router 3
+   */
   EXPECT_EQ(
       routeMap[make_pair("3", toString(v4Enabled ? addr4V4 : addr4))],
       NextHops({createNextHopFromAdj(adj34, v4Enabled, 10)}));
@@ -1973,9 +2065,11 @@ TEST_F(ParallelAdjRingTopologyFixture, ShortestPathTest) {
            createNextHopFromAdj(adj43_1, false, 22)}));
 }
 
-//
-// Use the same topology, but test multi-path routing
-//
+/*
+ *
+ * Use the same topology, but test multi-path routing
+ *
+ */
 TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
   CustomSetUp();
   auto routeMap = getRouteMap(
@@ -1984,8 +2078,10 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
   // Unicast routes => 4 * (4 - 1) = 12
   EXPECT_EQ(12, routeMap.size());
 
-  // validate router 1
-  // adj "2/3" is also selected in spite of large metric
+  /*
+   * validate router 1
+   * adj "2/3" is also selected in spite of large metric
+   */
   EXPECT_EQ(
       routeMap[make_pair("1", toString(addr4))],
       NextHops(
@@ -2044,20 +2140,22 @@ TEST_F(ParallelAdjRingTopologyFixture, MultiPathTest) {
            createNextHopFromAdj(adj43_1, false, 22)}));
 }
 
-//
-// Test topology:
-//
-//  n * n grid
-// A box m has up to 4 interfaces named 0/1, 0/2, 0/3, and 0/4
-//                       m + n
-//                         |
-//                        0/4
-//                         |
-//         m-1 ----0/3---- m ----0/1---- m + 1
-//                         |
-//                        0/2
-//                         |
-//                       m - n
+/*
+ *
+ * Test topology:
+ *
+ *  n * n grid
+ * A box m has up to 4 interfaces named 0/1, 0/2, 0/3, and 0/4
+ *                       m + n
+ *                         |
+ *                        0/4
+ *                         |
+ *         m-1 ----0/3---- m ----0/1---- m + 1
+ *                         |
+ *                        0/2
+ *                         |
+ *                       m - n
+ */
 
 // add adjacencies to neighbor at grid(i, j)
 void
@@ -2163,15 +2261,19 @@ TEST_P(GridTopologyFixture, ShortestPathTest) {
 
   auto routeMap = getRouteMap(spfSolver, allNodes, areaLinkStates, prefixState);
 
-  // unicastRoutes => n^2 * (n^2 - 1)
-  // Total => n^4 - n^2
+  /*
+   * unicastRoutes => n^2 * (n^2 - 1)
+   * Total => n^4 - n^2
+   */
   EXPECT_EQ(n * n * n * n - n * n, routeMap.size());
 
   int src{0}, dst{0};
   NextHops nextHops;
-  // validate route
-  // 1) from corner to corner
-  // primary diagnal
+  /*
+   * validate route
+   * 1) from corner to corner
+   * primary diagnal
+   */
   src = 0;
   dst = n * n - 1;
   LOG(INFO) << "distance " << src << " -> " << dst << ": "
@@ -2255,9 +2357,11 @@ TEST(SpfSolverUnitTest, GetReachablePrefixEntriesTest) {
 
   // no locally originated prefix is found
   EXPECT_FALSE(localPrefixConsidered);
-  // ribPrefix1 is kept: It is in a different area "other-area"
-  // ribPrefix2 is removed: It is in the same area (kTestingAreaName) while
-  // SPF result cannot find the node (other-node)
+  /*
+   * ribPrefix1 is kept: It is in a different area "other-area"
+   * ribPrefix2 is removed: It is in the same area (kTestingAreaName) while
+   * SPF result cannot find the node (other-node)
+   */
   EXPECT_EQ(1, prefixEntries.size());
 
   auto configPrefix = createPrefixEntry(addr1, thrift::PrefixType::CONFIG);

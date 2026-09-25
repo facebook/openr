@@ -118,8 +118,10 @@ SpfSolver::createRouteForPrefixOrGetStaticRoute(
     folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     PrefixState const& prefixState,
     folly::CIDRNetwork const& prefix) {
-  // route output from `PrefixState` has higher priority over
-  // static unicast routes
+  /*
+   * route output from `PrefixState` has higher priority over
+   * static unicast routes
+   */
   if (auto maybeRoute = createRouteForPrefix(
           myNodeName, areaLinkStates, prefixState, prefix)) {
     return maybeRoute;
@@ -138,11 +140,13 @@ SpfSolver::getReachablePrefixEntries(
     const std::string& myNodeName,
     folly::F14FastMap<std::string, LinkState> const& areaLinkStates,
     const PrefixEntries& allPrefixEntries) {
-  //
-  // Create list of prefix-entries from reachable nodes only
-  // NOTE: We're copying prefix-entries and it can be expensive. Using
-  // pointers for storing prefix information can be efficient (CPU & Memory)
-  //
+  /*
+   *
+   * Create list of prefix-entries from reachable nodes only
+   * NOTE: We're copying prefix-entries and it can be expensive. Using
+   * pointers for storing prefix information can be efficient (CPU & Memory)
+   *
+   */
   auto prefixEntries = folly::copy(allPrefixEntries);
   bool localPrefixConsidered{false};
   for (auto& [area, linkState] : areaLinkStates) {
@@ -151,14 +155,18 @@ SpfSolver::getReachablePrefixEntries(
     // Delete entries of unreachable nodes from prefixEntries
     for (auto it = prefixEntries.cbegin(); it != prefixEntries.cend();) {
       const auto& [prefixNode, prefixArea] = it->first;
-      // TODO: remove this when tie-breaking process completely done in Decision
-      // instead of PrefixManager
-      // This indicates that when we calculated the
-      // best path, we have considered locally originated prefix as well
+      /*
+       * TODO: remove this when tie-breaking process completely done in Decision
+       * instead of PrefixManager
+       * This indicates that when we calculated the
+       * best path, we have considered locally originated prefix as well
+       */
       if ((myNodeName == prefixNode) && (it->second->area_stack()->empty())) {
-        // Notice that a prefix is local if
-        // - the prefixNode == myNodeName
-        // - the area_stack is empty (not received from other area)
+        /*
+         * Notice that a prefix is local if
+         * - the prefixNode == myNodeName
+         * - the area_stack is empty (not received from other area)
+         */
         localPrefixConsidered = true;
       }
       // Only check reachability within the area that prefixNode belongs to.
@@ -253,8 +261,10 @@ SpfSolver::createRouteForPrefix(
     return std::nullopt;
   }
 
-  // TODO: What if there are multiple best areas populating for the single
-  // prefix?
+  /*
+   * TODO: What if there are multiple best areas populating for the single
+   * prefix?
+   */
   folly::F14FastSet<std::string> areaWithBestRoutes;
   for (const auto& [areaId, _] : areaLinkStates) {
     if (hasBestRoutesInArea(
@@ -277,8 +287,10 @@ SpfSolver::createRouteForPrefix(
   for (const auto& area : areaWithBestRoutes) {
     const auto& linkState = areaLinkStates.find(area);
     if (linkState == areaLinkStates.end()) {
-      // If the route computation rules are default, then area path computation
-      // rules will only contains valid areas.
+      /*
+       * If the route computation rules are default, then area path computation
+       * rules will only contains valid areas.
+       */
       continue;
     }
 
@@ -361,8 +373,10 @@ SpfSolver::selectBestRoutes(
   CHECK(prefixEntries.size()) << "No prefixes for best route selection";
   RouteSelectionResult ret;
 
-  // Filter out nodes that are hard drained (overloaded set), noop if all
-  // destination are overloaded
+  /*
+   * Filter out nodes that are hard drained (overloaded set), noop if all
+   * destination are overloaded
+   */
   auto filteredPrefixes = filterHardDrainedNodes(prefixEntries, areaLinkStates);
   auto softDrainedNodes = getSoftDrainedNodes(prefixEntries, areaLinkStates);
 
@@ -374,8 +388,10 @@ SpfSolver::selectBestRoutes(
         softDrainedNodes);
     ret.bestNodeArea = selectBestNodeArea(ret.allNodeAreas, myNodeName);
   } else {
-    // If it is openr route, all nodes are considered as best nodes.
-    // Except for drained
+    /*
+     * If it is openr route, all nodes are considered as best nodes.
+     * Except for drained
+     */
     for (auto const& [nodeAndArea, prefixEntry] : filteredPrefixes) {
       ret.allNodeAreas.emplace(nodeAndArea);
     }
@@ -383,10 +399,12 @@ SpfSolver::selectBestRoutes(
   }
 
   if (isNodeDrained(ret.bestNodeArea, areaLinkStates)) {
-    // Decision will change RibEntry's drain_metric to 1 if isBestNodeDrained is
-    // true, when it creates routeDB. So nodes in other areas would know
-    // that this forwarding path has a drained node when RibEntry is
-    // redistributed
+    /*
+     * Decision will change RibEntry's drain_metric to 1 if isBestNodeDrained is
+     * true, when it creates routeDB. So nodes in other areas would know
+     * that this forwarding path has a drained node when RibEntry is
+     * redistributed
+     */
     ret.isBestNodeDrained = true;
   }
 
@@ -507,8 +525,10 @@ SpfSolver::addBestPaths(
     return std::nullopt;
   }
 
-  // Apply min-nexthop requirements. Ignore the route from programming if
-  // min-nexthop requirement is not met.
+  /*
+   * Apply min-nexthop requirements. Ignore the route from programming if
+   * min-nexthop requirement is not met.
+   */
   auto minNextHop = getMinNextHopThreshold(routeSelectionResult, prefixEntries);
   if (minNextHop.has_value() && minNextHop.value() > nextHops.size()) {
     XLOGF(
@@ -522,8 +542,10 @@ SpfSolver::addBestPaths(
 
   auto entry =
       *(prefixEntries.at(routeSelectionResult.bestNodeArea)); // copy intended
-  // We don't modify original prefixEntries (referenced from prefixState)
-  // because they reflect the prefix entries we received from others.
+  /*
+   * We don't modify original prefixEntries (referenced from prefixState)
+   * because they reflect the prefix entries we received from others.
+   */
   if (routeSelectionResult.isBestNodeDrained) {
     *entry.metrics()->drain_metric() = 1;
   }

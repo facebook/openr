@@ -105,8 +105,10 @@ TEST(RibPolicyStatement, ApplyAction) {
 
     EXPECT_TRUE(policyStatement.applyAction(entry));
 
-    // We should only see two next-hops. `area1` next-hop will be removed
-    // because it's weight is set to `0`
+    /*
+     * We should only see two next-hops. `area1` next-hop will be removed
+     * because it's weight is set to `0`
+     */
     ASSERT_EQ(2, entry.nexthops.size());
 
     auto nhDefaultModified = nhDefault;
@@ -220,8 +222,10 @@ TEST(RibPolicy, ApiTest) {
     // Verify ttl. It must be less or equal
     EXPECT_LE(*thriftPolicyCopy.ttl_secs(), *thriftPolicy.ttl_secs());
 
-    // NOTE: Make ttl equal for comparing policy. Everything else
-    // must be same
+    /*
+     * NOTE: Make ttl equal for comparing policy. Everything else
+     * must be same
+     */
     thriftPolicyCopy.ttl_secs() = *thriftPolicy.ttl_secs();
     EXPECT_EQ(thriftPolicyCopy, thriftPolicy);
   }

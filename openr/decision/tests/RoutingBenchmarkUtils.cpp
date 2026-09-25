@@ -412,9 +412,11 @@ createRswsAdjacencies(
   listOfNodenames.emplace("rsw", std::move(nodeNames));
 }
 
-//
-// Create a fabric topology
-//
+/*
+ *
+ * Create a fabric topology
+ *
+ */
 thrift::Publication
 createFabric(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
@@ -428,8 +430,10 @@ createFabric(
   thrift::Publication initialPub;
   initialPub.area() = kTestingAreaName;
 
-  // ssw: each ssw connects to one fsw of each pod
-  // auto numOfPlanes = numOfFswsPerPod;
+  /*
+   * ssw: each ssw connects to one fsw of each pod
+   * auto numOfPlanes = numOfFswsPerPod;
+   */
   createSswsAdjacencies(
       decisionWrapper,
       initialPub,
@@ -440,8 +444,10 @@ createFabric(
       numOfSswsPerPlane,
       listOfNodenames);
 
-  // fsw: each fsw connects to all ssws within a plane,
-  // each fsw also connects to all rsws within its pod
+  /*
+   * fsw: each fsw connects to all ssws within a plane,
+   * each fsw also connects to all rsws within its pod
+   */
   createFswsAdjacencies(
       decisionWrapper,
       initialPub,
@@ -468,10 +474,12 @@ createFabric(
   return initialPub;
 }
 
-//
-// Randomly choose one rsw from a random pod,
-// toggle it's overload bit in AdjacencyDb
-//
+/*
+ *
+ * Randomly choose one rsw from a random pod,
+ * toggle it's overload bit in AdjacencyDb
+ *
+ */
 void
 updateRandomFabricAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
@@ -483,10 +491,12 @@ updateRandomFabricAdjs(
   auto podId = selectedNode.has_value() ? selectedNode.value().first
                                         : folly::Random::rand32() % numOfPods;
 
-  //
-  // If there has been an update, revert the update,
-  // otherwise, choose a random rsw for update
-  //
+  /*
+   *
+   * If there has been an update, revert the update,
+   * otherwise, choose a random rsw for update
+   *
+   */
   auto rswIdInPod = selectedNode.has_value()
       ? selectedNode.value().second
       : folly::Random::rand32() % numOfRswsPerPod;
@@ -511,17 +521,21 @@ updateRandomFabricAdjs(
   sendRecvAdjUpdate(decisionWrapper, rwsNodeName, adjsRsw, overloadBit);
 }
 
-//
-// Choose a random nodeId for update or revert the last updated nodeId:
-// toggle it's overload bit in AdjacencyDb
-//
+/*
+ *
+ * Choose a random nodeId for update or revert the last updated nodeId:
+ * toggle it's overload bit in AdjacencyDb
+ *
+ */
 void
 updateRandomGridAdjs(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
     std::optional<std::pair<int, int>>& selectedNode,
     const int n) {
-  // If there has been an update, revert the update,
-  // otherwise, choose a random nodeId for update
+  /*
+   * If there has been an update, revert the update,
+   * otherwise, choose a random nodeId for update
+   */
   auto row = selectedNode.has_value() ? selectedNode.value().first
                                       : folly::Random::rand32() % n;
   auto col = selectedNode.has_value() ? selectedNode.value().second
@@ -539,10 +553,12 @@ updateRandomGridAdjs(
   sendRecvAdjUpdate(decisionWrapper, nodeName, adjs, overloadBit);
 }
 
-//
-// Choose a random nodeId for update or revert the last updated nodeId:
-// toggle it's advertisement of default route
-//
+/*
+ *
+ * Choose a random nodeId for update or revert the last updated nodeId:
+ * toggle it's advertisement of default route
+ *
+ */
 void
 updateRandomGridPrefixes(
     const std::shared_ptr<DecisionWrapper>& decisionWrapper,
@@ -552,8 +568,10 @@ updateRandomGridPrefixes(
   PrefixGenerator prefixGenerator;
   apache::thrift::CompactSerializer serializer;
 
-  // Generate one pub for all update prefixes
-  // For each node, generate `numOfUpdatePrefixes` keyVals
+  /*
+   * Generate one pub for all update prefixes
+   * For each node, generate `numOfUpdatePrefixes` keyVals
+   */
   thrift::KeyVals keyVals;
   for (int row = 0; row < n; ++row) {
     for (int col = 0; col < n; ++col) {
@@ -726,9 +744,11 @@ BM_DecisionGridPrefixUpdates(
   }
 }
 
-//
-// Benchmark test for fabric topology.
-//
+/*
+ *
+ * Benchmark test for fabric topology.
+ *
+ */
 void
 BM_DecisionFabricInitialUpdate(
     folly::UserCounters& counters,
@@ -767,13 +787,17 @@ BM_DecisionFabricInitialUpdate(
         numberOfPrefixes, listOfNodenames, initialPub);
 
     suspender.dismiss(); // Start measuring benchmark time
-    //
-    // Publish initial link state info to KvStore, This should trigger the
-    // SPF run.
-    //
+    /*
+     *
+     * Publish initial link state info to KvStore, This should trigger the
+     * SPF run.
+     *
+     */
     decisionWrapper->sendKvPublication(initialPub);
-    // Trigger initial route build by pushing initialization event
-    // to kvStoreUpdatesQueue
+    /*
+     * Trigger initial route build by pushing initialization event
+     * to kvStoreUpdatesQueue
+     */
     decisionWrapper->sendKvStoreSyncedEvent();
 
     // Receive RouteUpdate from Decision
@@ -820,13 +844,17 @@ BM_DecisionFabricPrefixUpdates(
     generatePrefixUpdatePublication(
         numberOfPrefixes, listOfNodenames, initialPub);
 
-    //
-    // Publish initial link state info to KvStore, This should trigger the
-    // SPF run.
-    //
+    /*
+     *
+     * Publish initial link state info to KvStore, This should trigger the
+     * SPF run.
+     *
+     */
     decisionWrapper->sendKvPublication(initialPub);
-    // Trigger initial route build by pushing initialization event
-    // to kvStoreUpdatesQueue
+    /*
+     * Trigger initial route build by pushing initialization event
+     * to kvStoreUpdatesQueue
+     */
     decisionWrapper->sendKvStoreSyncedEvent();
 
     // Receive RouteUpdate from Decision

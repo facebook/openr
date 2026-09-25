@@ -166,13 +166,15 @@ LinkState::mayHaveLinkEventPropagationTime(
   if (adjDb.linkStatusRecords().has_value()) { // link status
     auto linkStatus =
         adjDb.linkStatusRecords()->linkStatusMap()->find(linkName);
-    // Ignore link propagation time for a first publication from peer
-    // because links may have been up long before, but we are getting
-    // them as part of first publication
-    //
-    // Timestamp is updated when link status changes (over Netlink). But
-    // at router boot-up, link doesn't change status, and so timestamp is
-    // not set and equals to 0 (default value). We ignore this situation.
+    /*
+     * Ignore link propagation time for a first publication from peer
+     * because links may have been up long before, but we are getting
+     * them as part of first publication
+     *
+     * Timestamp is updated when link status changes (over Netlink). But
+     * at router boot-up, link doesn't change status, and so timestamp is
+     * not set and equals to 0 (default value). We ignore this situation.
+     */
     if ((linkStatus != adjDb.linkStatusRecords()->linkStatusMap()->end()) &&
         *linkStatus->second.unixTs()) {
       int64_t propagationTime =
@@ -285,9 +287,11 @@ LinkState::updateAdjacencyDatabase(
   // replace
   adjacencyDatabases_[nodeName] = newAdjacencyDb;
 
-  // for comparing old and new state, we order the links based on the tuple
-  // <nodeName1, iface1, nodeName2, iface2>, this allows us to easily discern
-  // topology changes in the single loop below
+  /*
+   * for comparing old and new state, we order the links based on the tuple
+   * <nodeName1, iface1, nodeName2, iface2>, this allows us to easily discern
+   * topology changes in the single loop below
+   */
   auto oldLinks = orderedLinksFromNode(nodeName);
   auto newLinks = getOrderedLinkSet(newAdjacencyDb);
 
@@ -313,12 +317,16 @@ LinkState::updateAdjacencyDatabase(
   while (newIter != newLinks.end() || oldIter != oldLinks.end()) {
     if (newIter != newLinks.end() &&
         (oldIter == oldLinks.end() || **newIter < **oldIter)) {
-      // newIter is pointing at a Link not currently present, record this as a
-      // link to add and advance newIter
+      /*
+       * newIter is pointing at a Link not currently present, record this as a
+       * link to add and advance newIter
+       */
       change.topologyChanged |= (*newIter)->isUp();
-      // even if we are holding a change, we apply the change to our link state
-      // and check for holds when running spf. this ensures we don't add the
-      // same hold twice
+      /*
+       * even if we are holding a change, we apply the change to our link state
+       * and check for holds when running spf. this ensures we don't add the
+       * same hold twice
+       */
       addLink(*newIter);
       change.addedLinks.emplace_back(*newIter);
       std::string propagationTimeStr = mayHaveLinkEventPropagationTime(
@@ -338,10 +346,12 @@ LinkState::updateAdjacencyDatabase(
     }
     if (oldIter != oldLinks.end() &&
         (newIter == newLinks.end() || **oldIter < **newIter)) {
-      // oldIter is pointing at a Link that is no longer present, record this
-      // as a link to remove and advance oldIter.
-      // If this link was previously overloaded or had a hold up, this does not
-      // change the topology.
+      /*
+       * oldIter is pointing at a Link that is no longer present, record this
+       * as a link to remove and advance oldIter.
+       * If this link was previously overloaded or had a hold up, this does not
+       * change the topology.
+       */
       change.topologyChanged |= (*oldIter)->isUp();
       removeLink(*oldIter);
       std::string propagationTimeStr = mayHaveLinkEventPropagationTime(
@@ -359,9 +369,11 @@ LinkState::updateAdjacencyDatabase(
       ++oldIter;
       continue;
     }
-    // The newIter and oldIter point to the same link. This link did not go up
-    // or down. The topology may still have changed though if the link overlaod
-    // or metric changed
+    /*
+     * The newIter and oldIter point to the same link. This link did not go up
+     * or down. The topology may still have changed though if the link overlaod
+     * or metric changed
+     */
     auto& newLink = **newIter;
     auto& oldLink = **oldIter;
 
@@ -623,10 +635,12 @@ LinkState::runSpf(
         otherNode = q.get(otherNodeName);
       }
       if (otherNode->metric() >= recordedNodeMetric + metric) {
-        // recordedNodeName is either along an alternate shortest path towards
-        // otherNodeName or is along a new shorter path. In either case,
-        // otherNodeName should use recordedNodeName's nextHops until it finds
-        // some shorter path
+        /*
+         * recordedNodeName is either along an alternate shortest path towards
+         * otherNodeName or is along a new shorter path. In either case,
+         * otherNodeName should use recordedNodeName's nextHops until it finds
+         * some shorter path
+         */
         if (otherNode->metric() > recordedNodeMetric + metric) {
           // if this is strictly better, forget about any other paths
           otherNode->result.reset(recordedNodeMetric + metric);

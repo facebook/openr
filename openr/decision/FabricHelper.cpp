@@ -77,10 +77,12 @@ FabricHelper::updateExternalNodeToLeafMap(
   }
 }
 
-// Returns the name of the master generator node. The master generator is the
-// node that is
-// - not disconnected from the rest of the nodes, and
-// - has the lexicographically highest name string.
+/*
+ * Returns the name of the master generator node. The master generator is the
+ * node that is
+ * - not disconnected from the rest of the nodes, and
+ * - has the lexicographically highest name string.
+ */
 std::string
 FabricHelper::getFabricMasterGenerator() const {
   std::string master;
@@ -169,8 +171,10 @@ FabricHelper::clearFabricKvs() {
 
   std::vector<ClearKeyValueRequest> requests;
   const std::string& fabricName = getFabricName();
-  // Erase the local key from KvStore, but do not flood a ttl=0 key
-  // by setting setValue=false in ClearKeyValueRequest.
+  /*
+   * Erase the local key from KvStore, but do not flood a ttl=0 key
+   * by setting setValue=false in ClearKeyValueRequest.
+   */
   requests.emplace_back(
       AreaId{area_}, fmt::format("{}{}", Constants::kAdjDbMarker, fabricName));
   for (const std::string& fabricPrefix : fabricConfig_.getFabricPrefixes()) {
@@ -233,8 +237,10 @@ FabricHelper::updateChangedFabricKvs(
     return {};
   }
 
-  // Soft-drain: nodeMetricIncrementVal makes the fabric node less preferred by
-  // increasing its adjacency metrics.
+  /*
+   * Soft-drain: nodeMetricIncrementVal makes the fabric node less preferred by
+   * increasing its adjacency metrics.
+   */
   const int32_t nodeMetricIncrementVal =
       *fabricDrainStatus_.nodeMetricIncrementVal();
 
@@ -243,17 +249,21 @@ FabricHelper::updateChangedFabricKvs(
     for (const thrift::Adjacency& adj : adjacencies) {
       thrift::Adjacency& fabricAdj =
           fabricAdjDb.adjacencies()->emplace_back(adj);
-      // Increment the adjacency metric by nodeMetricIncrementVal so transit
-      // through the soft-drained fabric node is made less preferred.
+      /*
+       * Increment the adjacency metric by nodeMetricIncrementVal so transit
+       * through the soft-drained fabric node is made less preferred.
+       */
       fabricAdj.metric() = *fabricAdj.metric() + nodeMetricIncrementVal;
     }
   }
   const std::string& fabricName = getFabricName();
   fabricAdjDb.thisNodeName() = fabricName;
   fabricAdjDb.area() = area_;
-  // Stamp the fabric node's drain status onto the generated AdjacencyDatabase:
-  //  - isOverloaded          -> hard-drain (node removed from transit);
-  //  - nodeMetricIncrementVal -> soft-drain (node made less preferred).
+  /*
+   * Stamp the fabric node's drain status onto the generated AdjacencyDatabase:
+   *  - isOverloaded          -> hard-drain (node removed from transit);
+   *  - nodeMetricIncrementVal -> soft-drain (node made less preferred).
+   */
   fabricAdjDb.isOverloaded() = *fabricDrainStatus_.isOverloaded();
   fabricAdjDb.nodeMetricIncrementVal() = nodeMetricIncrementVal;
 
@@ -310,9 +320,11 @@ FabricHelper::updateFabricKv(
     }
     return;
   }
-  // This node is the fabric master. The fabric's own drain status (advertised
-  // under "drainStatus:<fabricName>") is held by the FabricHelper and stamped
-  // onto the generated fabric AdjacencyDatabase.
+  /*
+   * This node is the fabric master. The fabric's own drain status (advertised
+   * under "drainStatus:<fabricName>") is held by the FabricHelper and stamped
+   * onto the generated fabric AdjacencyDatabase.
+   */
   std::vector<PersistKeyValueRequest> setRequests =
       updateChangedFabricKvs(changedLeafNames, isDrainStatusChanged);
   if (!setRequests.empty()) {

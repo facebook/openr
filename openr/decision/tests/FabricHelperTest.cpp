@@ -74,8 +74,10 @@ class FabricHelperTestFixture : public ::testing::Test {
     return helper.updateFabricDrainStatus(thriftPub);
   }
 
-  // Decodes the generated fabric AdjacencyDatabase (key "adj:<fabricName>")
-  // from a set of persist requests. Returns a default-constructed db if absent.
+  /*
+   * Decodes the generated fabric AdjacencyDatabase (key "adj:<fabricName>")
+   * from a set of persist requests. Returns a default-constructed db if absent.
+   */
   thrift::AdjacencyDatabase
   decodeFabricAdjDb(const std::vector<PersistKeyValueRequest>& requests) {
     const std::string adjKey =
@@ -115,9 +117,11 @@ class FabricHelperTestFixture : public ::testing::Test {
 
 namespace {
 
-//
-// FabricHelper unit tests
-//
+/*
+ *
+ * FabricHelper unit tests
+ *
+ */
 
 TEST_F(FabricHelperTestFixture, GetFabricName) {
   FabricHelper helper = makeHelper();
@@ -137,9 +141,11 @@ TEST_F(FabricHelperTestFixture, GetRealOtherNodeName_NotFabric) {
 TEST_F(FabricHelperTestFixture, GetRealOtherNodeName_FabricWithMapping) {
   FabricHelper helper = makeHelper();
 
-  // Simulate bbf01-ld001.dfw1 reporting adjacency to eb01.rva1.
-  // bbf01-ld001.dfw1's adj: otherNodeName="eb01.rva1", ifName="po1000",
-  // otherIfName="po1001"
+  /*
+   * Simulate bbf01-ld001.dfw1 reporting adjacency to eb01.rva1.
+   * bbf01-ld001.dfw1's adj: otherNodeName="eb01.rva1", ifName="po1000",
+   * otherIfName="po1001"
+   */
   thrift::Adjacency leafAdj = createAdjacency(
       "eb01.rva1", "po1000", "po1001", "fe80::2", "10.0.0.2", 1, 0);
   thrift::AdjacencyDatabase leafAdjDb =
@@ -369,19 +375,23 @@ TEST_F(FabricHelperTestFixture, UpdateExternalNodeToLeafMap_MultipleLeaves) {
   EXPECT_THAT(leafToExt.at("bbf01-ld002.dfw1"), Eq(extToLeaf));
 }
 
-//
-// LinkState::maybeMakeLink with FabricHelper integration tests
-//
+/*
+ *
+ * LinkState::maybeMakeLink with FabricHelper integration tests
+ *
+ */
 
 TEST_F(FabricHelperTestFixture, MaybeMakeLink_WithFabricName) {
-  //
-  // Topology: eb01.iad1 -- bbf01-ld001.dfw1 ("bbf01.dfw1")
-  //
-  // eb01.iad1 sees adjacency to "bbf01.dfw1"
-  // bbf01-ld001.dfw1 sees adjacency to "eb01.iad1"
-  // FabricHelper should resolve "bbf01.dfw1" to "bbf01-ld001.dfw1" so the
-  // bidirectional link is detected.
-  //
+  /*
+   *
+   * Topology: eb01.iad1 -- bbf01-ld001.dfw1 ("bbf01.dfw1")
+   *
+   * eb01.iad1 sees adjacency to "bbf01.dfw1"
+   * bbf01-ld001.dfw1 sees adjacency to "eb01.iad1"
+   * FabricHelper should resolve "bbf01.dfw1" to "bbf01-ld001.dfw1" so the
+   * bidirectional link is detected.
+   *
+   */
 
   // bbf01-ld001.dfw1's adjacency to eb01.iad1
   thrift::Adjacency leafToExt = createAdjacency(
@@ -400,14 +410,18 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_WithFabricName) {
   LinkState state{kTestingAreaName, "eb01.iad1"};
   state.addFabricHelper(fabricCfg_, "eb01.iad1", kvRequestQueue_);
 
-  // First, update with leaf's adjDb — this populates the external-to-leaf
-  // mapping AND stores bbf01-ld001.dfw1's adjacency database.
+  /*
+   * First, update with leaf's adjDb — this populates the external-to-leaf
+   * mapping AND stores bbf01-ld001.dfw1's adjacency database.
+   */
   LinkState::LinkStateChange update1 =
       state.updateAdjacencyDatabase(leafAdjDb, kTestingAreaName);
   EXPECT_THAT(update1.topologyChanged, IsFalse());
 
-  // Now update with eb01.iad1's adjDb — maybeMakeLink should resolve
-  // "bbf01.dfw1" to "bbf01-ld001.dfw1" and create a bidirectional link.
+  /*
+   * Now update with eb01.iad1's adjDb — maybeMakeLink should resolve
+   * "bbf01.dfw1" to "bbf01-ld001.dfw1" and create a bidirectional link.
+   */
   LinkState::LinkStateChange update2 =
       state.updateAdjacencyDatabase(extAdjDb, kTestingAreaName);
   EXPECT_THAT(update2.topologyChanged, IsTrue());
@@ -424,11 +438,13 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_WithFabricName) {
 }
 
 TEST_F(FabricHelperTestFixture, MaybeMakeLink_WithoutFabricHelper_NoLink) {
-  //
-  // Same topology as above but WITHOUT FabricHelper installed.
-  // Since eb01.iad1 reports adjacency to "bbf01.dfw1" and there's no node
-  // named "bbf01.dfw1", no link should be created.
-  //
+  /*
+   *
+   * Same topology as above but WITHOUT FabricHelper installed.
+   * Since eb01.iad1 reports adjacency to "bbf01.dfw1" and there's no node
+   * named "bbf01.dfw1", no link should be created.
+   *
+   */
 
   thrift::Adjacency leafToExt = createAdjacency(
       "eb01.iad1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 100);
@@ -453,12 +469,14 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_WithoutFabricHelper_NoLink) {
 }
 
 TEST_F(FabricHelperTestFixture, MaybeMakeLink_LeafToSpine) {
-  //
-  // Topology: bbf01-ld001.dfw1 -- bbf01-sp001.dfw1
-  //
-  // Both sides report the correct node names directly (no fabric name
-  // resolution needed). A bidirectional link should be created.
-  //
+  /*
+   *
+   * Topology: bbf01-ld001.dfw1 -- bbf01-sp001.dfw1
+   *
+   * Both sides report the correct node names directly (no fabric name
+   * resolution needed). A bidirectional link should be created.
+   *
+   */
 
   // bbf01-ld001.dfw1's adjacency to bbf01-sp001.dfw1
   thrift::Adjacency leafToSpine = createAdjacency(
@@ -499,9 +517,11 @@ TEST_F(FabricHelperTestFixture, MaybeMakeLink_LeafToSpine) {
   EXPECT_THAT(link->getMetricFromNode("bbf01-sp001.dfw1"), Eq(10));
 }
 
-//
-// getFabricMasterGenerator unit tests
-//
+/*
+ *
+ * getFabricMasterGenerator unit tests
+ *
+ */
 
 TEST_F(FabricHelperTestFixture, GetFabricMasterGenerator_EmptyLinkMap) {
   FabricHelper helper = makeHelper();
@@ -510,13 +530,15 @@ TEST_F(FabricHelperTestFixture, GetFabricMasterGenerator_EmptyLinkMap) {
 }
 
 TEST_F(FabricHelperTestFixture, TestGetFabricMasterGenerator) {
-  // Topology:
-  //   Fabric nodes: ld001 -- sp001, ld002 -- sp001 (connected)
-  //                 sp002 (disconnected, lexicographically highest fabric node)
-  //   Non-fabric nodes: eb01.rva1 -- eb01.ftw1 (connected, should be ignored)
-  //
-  // Expected: sp002 is skipped (disconnected), non-fabric nodes are ignored,
-  //           sp001 is the highest connected fabric node.
+  /*
+   * Topology:
+   *   Fabric nodes: ld001 -- sp001, ld002 -- sp001 (connected)
+   *                 sp002 (disconnected, lexicographically highest fabric node)
+   *   Non-fabric nodes: eb01.rva1 -- eb01.ftw1 (connected, should be ignored)
+   *
+   * Expected: sp002 is skipped (disconnected), non-fabric nodes are ignored,
+   *           sp001 is the highest connected fabric node.
+   */
 
   // Link: ld001 <-> sp001
   thrift::Adjacency ld001ToSp = createAdjacency(
@@ -566,9 +588,11 @@ TEST_F(FabricHelperTestFixture, TestGetFabricMasterGenerator) {
   EXPECT_THAT(helper.getFabricMasterGenerator(), Eq("bbf01-sp001.dfw1"));
 }
 
-//
-// getFabricChanges unit tests
-//
+/*
+ *
+ * getFabricChanges unit tests
+ *
+ */
 
 TEST_F(FabricHelperTestFixture, GetFabricChanges_EmptyKeys) {
   FabricHelper helper = makeHelper();
@@ -621,9 +645,11 @@ TEST_F(FabricHelperTestFixture, GetFabricChanges_MixedKeys) {
       UnorderedElementsAre("bbf01-ld001.dfw1", "bbf01-ld002.dfw1"));
 }
 
-//
-// clearFabricKvs unit tests
-//
+/*
+ *
+ * clearFabricKvs unit tests
+ *
+ */
 
 TEST_F(FabricHelperTestFixture, ClearFabricKvs_AlreadyEmpty) {
   FabricHelper helper = makeHelper();
@@ -652,9 +678,11 @@ TEST_F(FabricHelperTestFixture, ClearFabricKvs_WithEntries) {
   EXPECT_THAT(getExternalAdjacencies(helper), IsEmpty());
 }
 
-//
-// updateChangedFabricKvs unit tests
-//
+/*
+ *
+ * updateChangedFabricKvs unit tests
+ *
+ */
 
 TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_NoAdjacencies) {
   FabricHelper helper = makeHelper();
@@ -843,8 +871,10 @@ TEST_F(FabricHelperTestFixture, UpdateChangedFabricKvs_StampsDrainStatus) {
 TEST_F(
     FabricHelperTestFixture,
     UpdateChangedFabricKvs_StampsPerAdjacencyOverloadForDrainedLeaf) {
-  // Two leaves each with one external adjacency; only ld001 is hard-drained
-  // at the node level (AdjacencyDatabase.isOverloaded).
+  /*
+   * Two leaves each with one external adjacency; only ld001 is hard-drained
+   * at the node level (AdjacencyDatabase.isOverloaded).
+   */
   thrift::Adjacency drainedLeafToExt = createAdjacency(
       "eb01.rva1", "po1000", "po1001", "fe80::1", "10.0.0.1", 10, 0);
   adjacencyDatabases_["bbf01-ld001.dfw1"] = createAdjDb(
@@ -868,8 +898,10 @@ TEST_F(
   const thrift::AdjacencyDatabase fabricAdjDb =
       decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves));
 
-  // The adjacency inherited from the drained leaf is stamped overloaded; the
-  // one from the healthy leaf is left untouched.
+  /*
+   * The adjacency inherited from the drained leaf is stamped overloaded; the
+   * one from the healthy leaf is left untouched.
+   */
   std::map<std::string, bool> overloadByExtNode;
   for (const thrift::Adjacency& adj : *fabricAdjDb.adjacencies()) {
     overloadByExtNode[*adj.otherNodeName()] = *adj.isOverloaded();
@@ -884,8 +916,10 @@ TEST_F(
     UpdateChangedFabricKvs_PerAdjacencyOverloadLifecycle) {
   const std::string leaf = "bbf01-ld001.dfw1";
 
-  // Runs one update round for `changed` and returns the generated fabric
-  // AdjacencyDatabase as {externalNode -> adj.isOverloaded}.
+  /*
+   * Runs one update round for `changed` and returns the generated fabric
+   * AdjacencyDatabase as {externalNode -> adj.isOverloaded}.
+   */
   auto fabricOverloadByExtNode =
       [&](FabricHelper& helper, const std::unordered_set<std::string>& changed)
       -> std::map<std::string, bool> {
@@ -912,8 +946,10 @@ TEST_F(
       (std::map<std::string, bool>{
           {"eb01.rva1", false}, {"eb02.rva1", false}}));
 
-  // (2) linkA becomes overloaded (arriving with other unrelated updates); the
-  //     node itself is still healthy.
+  /*
+   * (2) linkA becomes overloaded (arriving with other unrelated updates); the
+   *     node itself is still healthy.
+   */
   linkA.isOverloaded() = true;
   adjacencyDatabases_[leaf] = createAdjDb(leaf, {linkA, linkB}, 2);
   EXPECT_EQ(
@@ -949,8 +985,10 @@ TEST_F(
   const std::string leaf = "bbf01-ld001.dfw1";
   const std::unordered_set<std::string> changed = {leaf};
 
-  // Returns the generated fabric AdjacencyDatabase as
-  // {externalNode -> adj.isOverloaded}.
+  /*
+   * Returns the generated fabric AdjacencyDatabase as
+   * {externalNode -> adj.isOverloaded}.
+   */
   auto fabricOverloadByExtNode =
       [&](FabricHelper& helper) -> std::map<std::string, bool> {
     const thrift::AdjacencyDatabase fabricAdjDb =
@@ -990,9 +1028,11 @@ TEST_F(
       fabricOverloadByExtNode(helper),
       (std::map<std::string, bool>{{"eb01.rva1", true}, {"eb02.rva1", true}}));
 
-  // (4) The drained link flips (link2 overloaded, link1 not) while the node
-  //     stays overloaded. Both links still resolve to overloaded, so the fabric
-  //     output is unchanged and NO new FabricAdjacencyDb is generated.
+  /*
+   * (4) The drained link flips (link2 overloaded, link1 not) while the node
+   *     stays overloaded. Both links still resolve to overloaded, so the fabric
+   *     output is unchanged and NO new FabricAdjacencyDb is generated.
+   */
   link1.isOverloaded() = false;
   link2.isOverloaded() = true;
   adjacencyDatabases_[leaf] =
@@ -1093,15 +1133,19 @@ TEST_F(
   drainStatus.nodeMetricIncrementVal() = 100;
   ASSERT_TRUE(setDrainStatus(helper, drainStatus));
 
-  // Publish this fabric's drain status key with bytes that cannot be
-  // deserialized into a DrainStatus (invalid compact-protocol field header).
+  /*
+   * Publish this fabric's drain status key with bytes that cannot be
+   * deserialized into a DrainStatus (invalid compact-protocol field header).
+   */
   thrift::Value badVal;
   badVal.value() = std::string(4, '\xff');
   thrift::Publication badPub;
   badPub.keyVals() = {{"drainStatus:bbf01.dfw1", badVal}};
 
-  // The parse failure is swallowed: no change is reported and the previously
-  // set drain status is left untouched (still increment 100, not reset to 0).
+  /*
+   * The parse failure is swallowed: no change is reported and the previously
+   * set drain status is left untouched (still increment 100, not reset to 0).
+   */
   EXPECT_FALSE(updateFabricDrainStatus(helper, badPub));
   EXPECT_EQ(
       *decodeFabricAdjDb(updateChangedFabricKvs(helper, changedLeaves, true))
@@ -1111,8 +1155,10 @@ TEST_F(
 
 TEST_F(
     FabricHelperTestFixture, UpdateFabricKv_ReadsDrainStatusFromPublication) {
-  // Make this node (myNodeName_ = bbf01-sp001.dfw1) the fabric master by making
-  // it the only connected fabric node.
+  /*
+   * Make this node (myNodeName_ = bbf01-sp001.dfw1) the fabric master by making
+   * it the only connected fabric node.
+   */
   thrift::Adjacency spToLd = createAdjacency(
       "bbf01-ld001.dfw1", "po10200", "po10100", "fe80::1", "10.0.0.1", 10, 0);
   thrift::Adjacency ldToSp = createAdjacency(
@@ -1147,8 +1193,10 @@ TEST_F(
 
   helper.updateFabricKv(/*changedKeys=*/{}, pub);
 
-  // As master, the drain status from the publication is stamped onto the
-  // generated fabric AdjacencyDatabase pushed to the request queue.
+  /*
+   * As master, the drain status from the publication is stamped onto the
+   * generated fabric AdjacencyDatabase pushed to the request queue.
+   */
   auto maybeRequest = reader.get();
   ASSERT_TRUE(maybeRequest.hasValue());
   const auto& persist = std::get<PersistKeyValueRequest>(maybeRequest.value());

@@ -24,13 +24,17 @@ class PrefixState {
     return prefixes_;
   }
 
-  // returns set of changed prefixes (i.e. a node started advertising or any
-  // attributes changed)
+  /*
+   * returns set of changed prefixes (i.e. a node started advertising or any
+   * attributes changed)
+   */
   folly::F14FastSet<folly::CIDRNetwork> updatePrefix(
       PrefixKey const& key, thrift::PrefixEntry const& entry);
 
-  // returns set of changed prefixes (i.e. a node withdrew a prefix) will be
-  // empty if node/area did not previosuly advertise
+  /*
+   * returns set of changed prefixes (i.e. a node withdrew a prefix) will be
+   * empty if node/area did not previosuly advertise
+   */
   folly::F14FastSet<folly::CIDRNetwork> deletePrefix(PrefixKey const& key);
 
   std::vector<thrift::ReceivedRouteDetail> getReceivedRoutesFiltered(
@@ -47,13 +51,17 @@ class PrefixState {
       PrefixEntries const& prefixEntries);
 
  private:
-  // TODO: Also maintain clean list of reachable prefix entries. A node might
-  // become un-reachable we might still have their prefix entries, until gets
-  // expired in KvStore. This will simplify logic in route computation where
-  // we exclude unreachable nodes.
+  /*
+   * TODO: Also maintain clean list of reachable prefix entries. A node might
+   * become un-reachable we might still have their prefix entries, until gets
+   * expired in KvStore. This will simplify logic in route computation where
+   * we exclude unreachable nodes.
+   */
 
-  // Data structure to maintain mapping from:
-  //  IpPrefix -> collection of originator(i.e. [node, area] combination)
+  /*
+   * Data structure to maintain mapping from:
+   *  IpPrefix -> collection of originator(i.e. [node, area] combination)
+   */
   folly::F14FastMap<folly::CIDRNetwork, PrefixEntries> prefixes_;
 };
 } // namespace openr
