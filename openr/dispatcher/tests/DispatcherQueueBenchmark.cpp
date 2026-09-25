@@ -31,26 +31,34 @@ BM_NoFilterDispatcherQueue(
     const size_t kCount) {
   auto suspender = folly::BenchmarkSuspender();
 
-  //
-  // Total number of reads performed
-  //
+  /*
+   *
+   * Total number of reads performed
+   *
+   */
   std::atomic<size_t> totalReads{0};
 
-  //
-  // Queue under testing. We will use KvStorePublication type.
-  //
+  /*
+   *
+   * Queue under testing. We will use KvStorePublication type.
+   *
+   */
   DispatcherQueue q;
 
-  //
-  // Create publication object to push to DispatcherQueue.
-  //
+  /*
+   *
+   * Create publication object to push to DispatcherQueue.
+   *
+   */
   auto publication = createThriftPublication(
       {{"key1", createThriftValue(1, "node1", "value1")}}, {}, {}, {});
 
-  //
-  // Add reader tasks. Reader would continue to read as long as queue is open
-  // NOTE: We have all readers in their own event base & thread
-  //
+  /*
+   *
+   * Add reader tasks. Reader would continue to read as long as queue is open
+   * NOTE: We have all readers in their own event base & thread
+   *
+   */
   folly::EventBase readerEvb;
   auto& readerManager = folly::fibers::getFiberManager(readerEvb);
   for (size_t i = 0; i < kNumReaders; ++i) {
@@ -69,21 +77,27 @@ BM_NoFilterDispatcherQueue(
     });
   }
 
-  //
-  // Start reader thread. This will not return until all reader tasks are
-  // completed.
-  //
+  /*
+   *
+   * Start reader thread. This will not return until all reader tasks are
+   * completed.
+   *
+   */
   std::thread readerThread([&readerEvb] { readerEvb.loop(); });
 
-  //
-  // Iterate multiple times. In each iterate we
-  //
+  /*
+   *
+   * Iterate multiple times. In each iterate we
+   *
+   */
   while (iters--) {
-    //
-    // Add writer tasks. Each writer will write `kCount` elements. So overall
-    // each reader would read `kCount * kNumWriters` elements. Aka each reader
-    // would read every element written by every reader.
-    //
+    /*
+     *
+     * Add writer tasks. Each writer will write `kCount` elements. So overall
+     * each reader would read `kCount * kNumWriters` elements. Aka each reader
+     * would read every element written by every reader.
+     *
+     */
     folly::EventBase writerEvb;
     auto& writerManager = folly::fibers::getFiberManager(writerEvb);
     for (size_t i = 0; i < kNumWriters; ++i) {
@@ -96,9 +110,11 @@ BM_NoFilterDispatcherQueue(
       });
     }
 
-    //
-    // Run writer-loop & wait until reader reads everything
-    //
+    /*
+     *
+     * Run writer-loop & wait until reader reads everything
+     *
+     */
     const size_t expectedReads = kCount * kNumWriters * kNumReaders;
     totalReads = 0;
     suspender.dismiss();
@@ -109,15 +125,19 @@ BM_NoFilterDispatcherQueue(
     suspender.rehire();
   } // while
 
-  //
-  // Close queue & wait for all readers to terminate
-  //
+  /*
+   *
+   * Close queue & wait for all readers to terminate
+   *
+   */
   q.close();
   readerThread.join();
 }
 
-// benchmark for DispatcherQueue where a prefix is provided to filter the keys
-// in the KvStorePublication
+/*
+ * benchmark for DispatcherQueue where a prefix is provided to filter the keys
+ * in the KvStorePublication
+ */
 static void
 BM_FilterDispatcherQueue(
     uint32_t iters,
@@ -126,19 +146,25 @@ BM_FilterDispatcherQueue(
     const size_t kCount) {
   auto suspender = folly::BenchmarkSuspender();
 
-  //
-  // Total number of reads performed
-  //
+  /*
+   *
+   * Total number of reads performed
+   *
+   */
   std::atomic<size_t> totalReads{0};
 
-  //
-  // Queue under testing. We will use KvStorePublication type.
-  //
+  /*
+   *
+   * Queue under testing. We will use KvStorePublication type.
+   *
+   */
   DispatcherQueue q;
 
-  //
-  // Create publication object to push to DispatcherQueue.
-  //
+  /*
+   *
+   * Create publication object to push to DispatcherQueue.
+   *
+   */
   auto publication = createThriftPublication(
       {{"key1", createThriftValue(1, "node1", "value1")},
        {"key-1", createThriftValue(2, "node-1", "value-1")}},
@@ -146,10 +172,12 @@ BM_FilterDispatcherQueue(
       {},
       {});
 
-  //
-  // Add reader tasks. Reader would continue to read as long as queue is open
-  // NOTE: We have all readers in their own event base & thread
-  //
+  /*
+   *
+   * Add reader tasks. Reader would continue to read as long as queue is open
+   * NOTE: We have all readers in their own event base & thread
+   *
+   */
   folly::EventBase readerEvb;
   auto& readerManager = folly::fibers::getFiberManager(readerEvb);
   for (size_t i = 0; i < kNumReaders; ++i) {
@@ -169,21 +197,27 @@ BM_FilterDispatcherQueue(
         });
   }
 
-  //
-  // Start reader thread. This will not return until all reader tasks are
-  // completed.
-  //
+  /*
+   *
+   * Start reader thread. This will not return until all reader tasks are
+   * completed.
+   *
+   */
   std::thread readerThread([&readerEvb] { readerEvb.loop(); });
 
-  //
-  // Iterate multiple times. In each iterate we
-  //
+  /*
+   *
+   * Iterate multiple times. In each iterate we
+   *
+   */
   while (iters--) {
-    //
-    // Add writer tasks. Each writer will write `kCount` elements. So overall
-    // each reader would read `kCount * kNumWriters` elements. Aka each reader
-    // would read every element written by every reader.
-    //
+    /*
+     *
+     * Add writer tasks. Each writer will write `kCount` elements. So overall
+     * each reader would read `kCount * kNumWriters` elements. Aka each reader
+     * would read every element written by every reader.
+     *
+     */
     folly::EventBase writerEvb;
     auto& writerManager = folly::fibers::getFiberManager(writerEvb);
     for (size_t i = 0; i < kNumWriters; ++i) {
@@ -196,9 +230,11 @@ BM_FilterDispatcherQueue(
       });
     }
 
-    //
-    // Run writer-loop & wait until reader reads everything
-    //
+    /*
+     *
+     * Run writer-loop & wait until reader reads everything
+     *
+     */
     const size_t expectedReads = kCount * kNumWriters * kNumReaders;
     totalReads = 0;
     suspender.dismiss();
@@ -209,9 +245,11 @@ BM_FilterDispatcherQueue(
     suspender.rehire();
   } // while
 
-  //
-  // Close queue & wait for all readers to terminate
-  //
+  /*
+   *
+   * Close queue & wait for all readers to terminate
+   *
+   */
   q.close();
   readerThread.join();
 }

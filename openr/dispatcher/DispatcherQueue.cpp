@@ -155,8 +155,10 @@ DispatcherQueue::getReplicationStats() {
 std::optional<KvStorePublication>
 DispatcherQueue::filterKeys(
     KvStorePublication& publication, std::vector<std::string>& filters) {
-  // avoid filtering for cases where there are no prefixes
-  // an empty vector of prefixes means provide all keys to the reader
+  /*
+   * avoid filtering for cases where there are no prefixes
+   * an empty vector of prefixes means provide all keys to the reader
+   */
   if (filters.empty()) {
     return KvStorePublication(publication);
   }
@@ -174,8 +176,10 @@ DispatcherQueue::filterKeys(
         auto& keyVals = *pub.keyVals();
         for (auto it = keyVals.begin(); it != keyVals.end(); ++it) {
           if (matchPrefix(it->first, filters) && it->second.value()) {
-            // add keys that start with the any of the prefixes
-            // and keys that have values
+            /*
+             * add keys that start with the any of the prefixes
+             * and keys that have values
+             */
             filteredKeyVals.emplace(it->first, it->second);
           }
         }
@@ -188,11 +192,15 @@ DispatcherQueue::filterKeys(
           }
         }
 
-        // only return the KvStorePublication if filteredExpiredKeys or
-        // filteredKeyVals are non-empty
+        /*
+         * only return the KvStorePublication if filteredExpiredKeys or
+         * filteredKeyVals are non-empty
+         */
         if (!filteredExpiredKeys.empty() || !filteredKeyVals.empty()) {
-          // set the all of the fields if publication should be replicated to
-          // reader
+          /*
+           * set the all of the fields if publication should be replicated to
+           * reader
+           */
           filteredPublication.nodeIds().copy_from(pub.nodeIds());
           filteredPublication.tobeUpdatedKeys().copy_from(
               pub.tobeUpdatedKeys());

@@ -60,9 +60,11 @@ TEST(DispatcherQueueTest, EventReadWriteTest) {
         ++numReads;
         ++totalReads;
         if (totalReads == kTotalWrites * kNumReaders) {
-          // Before closing the replicated queue (and hence internal RWQueues),
-          // get replication stats and verify that replication reads match
-          // the overall reads we expect
+          /*
+           * Before closing the replicated queue (and hence internal RWQueues),
+           * get replication stats and verify that replication reads match
+           * the overall reads we expect
+           */
           std::vector<messaging::RWQueueStats> stats = q.getReplicationStats();
           for (auto& stat : stats) {
             replicatedReads += stat.reads;
@@ -144,9 +146,11 @@ TEST(DispatcherQueueTest, PublicationReadWriteTest) {
         ++numReads;
         ++totalReads;
         if (totalReads == kTotalWrites * kNumReaders) {
-          // Before closing the replicated queue (and hence internal RWQueues),
-          // get replication stats and verify that replication reads match
-          // the overall reads we expect
+          /*
+           * Before closing the replicated queue (and hence internal RWQueues),
+           * get replication stats and verify that replication reads match
+           * the overall reads we expect
+           */
           std::vector<messaging::RWQueueStats> stats = q.getReplicationStats();
           for (auto& stat : stats) {
             replicatedReads += stat.reads;
@@ -251,9 +255,11 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
   manager.addTask([&reader1, &serializer_, &adj32]() mutable {
     auto maybePub = reader1.get();
 
-    // no empty keyVals should be in the publication
-    // no keys that don't match the prefix should be in publication
-    // keyVals and expiredKeys should be non-empty
+    /*
+     * no empty keyVals should be in the publication
+     * no keys that don't match the prefix should be in publication
+     * keyVals and expiredKeys should be non-empty
+     */
     auto expectedPublication = createThriftPublication(
         {{"adj:3", createAdjValue(serializer_, "3", 1, {adj32}, false, 3)},
          {"adj:4", createAdjValue(serializer_, "4", 1, {}, false, 4)}},
@@ -298,8 +304,10 @@ TEST(DispatcherQueueTest, FilterPublicationReadWriteTest) {
         [](thrift::InitializationEvent) {});
   });
 
-  // nothing should be pushed to this reader since no non-empty publications
-  // match the filter
+  /*
+   * nothing should be pushed to this reader since no non-empty publications
+   * match the filter
+   */
   manager.addTask([&reader4]() mutable { EXPECT_EQ(reader4.size(), 0); });
 
   evb.loop();
@@ -367,8 +375,10 @@ TEST(DispatcherQueueTest, DispatcherQueueFilterApiTest) {
   }
 
   {
-    // attempt to get filters when readers are all out of scope
-    // getFilters functions should remove all of the readers
+    /*
+     * attempt to get filters when readers are all out of scope
+     * getFilters functions should remove all of the readers
+     */
     auto filters = q.getFilters();
     EXPECT_EQ(filters->size(), 0);
   }
