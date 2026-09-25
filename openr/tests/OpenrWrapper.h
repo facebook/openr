@@ -110,8 +110,10 @@ class OpenrWrapper {
   OpenrWrapper(OpenrWrapper const&) = delete;
   OpenrWrapper& operator=(OpenrWrapper const&) = delete;
 
-  // Thrift serializer object for serializing/deserializing of thrift objects
-  // to/from bytes
+  /*
+   * Thrift serializer object for serializing/deserializing of thrift objects
+   * to/from bytes
+   */
   Serializer serializer_;
 
   // container of all threads

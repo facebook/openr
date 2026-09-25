@@ -73,19 +73,25 @@ class MockIoProvider final : public IoProvider {
     }
   }
 
-  // This is invoked periodically by MockIoProvider thread. It checks for
-  // messages and if they are active then sends them onto pipe for appropriate
-  // spark-thread to consume with kernel timestamp.
+  /*
+   * This is invoked periodically by MockIoProvider thread. It checks for
+   * messages and if they are active then sends them onto pipe for appropriate
+   * spark-thread to consume with kernel timestamp.
+   */
   void processMailboxes();
 
-  // define interface pairs which are connected. an interface will send
-  // packets to all connected interfaces. E.g. if we have x-> y, z then
-  // packet sent off of x will be delivered to y, z
+  /*
+   * define interface pairs which are connected. an interface will send
+   * packets to all connected interfaces. E.g. if we have x-> y, z then
+   * packet sent off of x will be delivered to y, z
+   */
   void setConnectedPairs(ConnectedIfPairs connectedIfPairs);
 
-  //
-  // The usual IO jazz
-  //
+  /*
+   *
+   * The usual IO jazz
+   *
+   */
 
   int socket(int domain, int type, int protocol) override;
 
@@ -105,9 +111,11 @@ class MockIoProvider final : public IoProvider {
       const void* optval,
       socklen_t optlen) override;
 
-  //
-  // User provides us a mapping of interface names and ifIndex pairs
-  //
+  /*
+   *
+   * User provides us a mapping of interface names and ifIndex pairs
+   *
+   */
   void addIfNameIfIndex(const IfNameAndifIndex& entries);
 
   /*
@@ -161,8 +169,10 @@ class MockIoProvider final : public IoProvider {
 
   ConnectedIfPairs connectedIfPairs_{};
 
-  // Map of send/recv fds. All fds used below belong to recv-fd which is being
-  // polled by Spark (or returned to spark).
+  /*
+   * Map of send/recv fds. All fds used below belong to recv-fd which is being
+   * polled by Spark (or returned to spark).
+   */
   std::map<int /* recv-fd */, int /* send-fd */> pipeFds_;
 
   // the mapping from fd to the interface name that owns it
@@ -173,8 +183,10 @@ class MockIoProvider final : public IoProvider {
 
   std::map<std::string /* ifName */, int /* ifIndex */> ifNameToIfIndex_{};
 
-  // maps the fds that have joined the interface: we can have same fd
-  // joining on multiple interfaces
+  /*
+   * maps the fds that have joined the interface: we can have same fd
+   * joining on multiple interfaces
+   */
   std::map<int /* ifIndex */, int /* fd */> ifIndexToFd_{};
 
   struct IoMessage {
@@ -206,8 +218,10 @@ class MockIoProvider final : public IoProvider {
     // Time point when this message needs to be delivered.
     const std::chrono::steady_clock::time_point deliveryTime;
 
-    // Have we sent a ping for this message to Spark via pipe ? This boolean
-    // flag helps avoiding sending duplicate pings.
+    /*
+     * Have we sent a ping for this message to Spark via pipe ? This boolean
+     * flag helps avoiding sending duplicate pings.
+     */
     bool clientNotified{false};
   };
 

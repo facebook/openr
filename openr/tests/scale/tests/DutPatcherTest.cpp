@@ -178,10 +178,12 @@ TEST(DutPatcherTest, PatchDutNoOpAdjacenciesWhenInterfacesEmpty) {
 }
 
 TEST(DutPatcherTest, MissingNeighborsReportsNamesAbsentFromTopology) {
-  // A neighbor-name scheme that does not match the topology (e.g. BBF leaf-N
-  // names against a topology that lacks them) must be reported, preserving
-  // input order, so the caller can fail loudly instead of operating on a
-  // neighbor set inconsistent with the topology.
+  /*
+   * A neighbor-name scheme that does not match the topology (e.g. BBF leaf-N
+   * names against a topology that lacks them) must be reported, preserving
+   * input order, so the caller can fail loudly instead of operating on a
+   * neighbor set inconsistent with the topology.
+   */
   auto topo = makeTopology(); // spine-0, leaf-0, leaf-1, leaf-2
   const std::vector<std::string> neighbors{
       "leaf-0", "spine-9", "leaf-2", "leaf-99"};
@@ -206,8 +208,10 @@ TEST(DutPatcherTest, BuildDutNeighborNamesMultiAreaNamespacesPerArea) {
 }
 
 TEST(DutPatcherTest, MultiAreaPatchConnectsDutToEachAreasBorderNodes) {
-  // Base single-area topology with the role-based names the patcher expects,
-  // replicated into two areas exactly as Session does for a multi-area run.
+  /*
+   * Base single-area topology with the role-based names the patcher expects,
+   * replicated into two areas exactly as Session does for a multi-area run.
+   */
   auto base = makeTopology(); // spine-0, leaf-0..2
   auto multi = TopologyGenerator::replicateAcrossAreas(base, {"pod", "plane"});
 
@@ -225,8 +229,10 @@ TEST(DutPatcherTest, MultiAreaPatchConnectsDutToEachAreasBorderNodes) {
   DutPatcher::patchDutIntoTopology(multi, "dut.test", names, {"eth0"});
   ASSERT_GT(multi.routers.count("dut.test"), 0u);
 
-  // The DUT peers with a node in BOTH areas (it is an ABR), and each
-  // neighbor->DUT adjacency lives on the neighbor's own area-tagged router.
+  /*
+   * The DUT peers with a node in BOTH areas (it is an ABR), and each
+   * neighbor->DUT adjacency lives on the neighbor's own area-tagged router.
+   */
   std::set<std::string> peerAreas;
   for (const auto& name : names) {
     const auto& nbr = multi.routers.at(name);

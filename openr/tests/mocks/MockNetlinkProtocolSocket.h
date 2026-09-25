@@ -108,20 +108,28 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
   }
 
  private:
-  // map<ifIndex -> Link>
-  // NOTE: using map for ordered entries
+  /*
+   * map<ifIndex -> Link>
+   * NOTE: using map for ordered entries
+   */
   std::map<int, fbnl::Link> links_;
 
-  // map<ifIndex -> list<IfAddress>>
-  // NOTE: using map for ordered entries
+  /*
+   * map<ifIndex -> list<IfAddress>>
+   * NOTE: using map for ordered entries
+   */
   std::map<int, std::list<fbnl::IfAddress>> ifAddrs_;
 
-  // map<ifIndex -> list<Neighbor>>
-  // NOTE: using map for ordered entries
+  /*
+   * map<ifIndex -> list<Neighbor>>
+   * NOTE: using map for ordered entries
+   */
   std::map<int, fbnl::Neighbor> nbrs_;
 
-  // map<protocolId -> map<prefix/label, Route>
-  // NOTE: using map for ordered entries
+  /*
+   * map<protocolId -> map<prefix/label, Route>
+   * NOTE: using map for ordered entries
+   */
   std::unordered_map<uint8_t, std::map<folly::CIDRNetwork, fbnl::Route>>
       unicastRoutes_;
   std::unordered_map<uint8_t, std::map<uint32_t, fbnl::Route>> mplsRoutes_;

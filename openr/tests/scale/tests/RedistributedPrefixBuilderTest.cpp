@@ -31,8 +31,10 @@ TEST(
 TEST(RedistributedPrefixBuilderTest, MultiHopKeepsTraversalOrderAndCountsHops) {
   auto entry = buildRedistributedPrefixEntry(
       toIpPrefix("2401:db00:1::/64"), {"pod", "plane", "spine"});
-  // index 0 is the originating area; distance counts ABR hops, which equals the
-  // number of areas the prefix traversed.
+  /*
+   * index 0 is the originating area; distance counts ABR hops, which equals the
+   * number of areas the prefix traversed.
+   */
   EXPECT_THAT(
       entry.area_stack().value(),
       ::testing::ElementsAre("pod", "plane", "spine"));
@@ -43,8 +45,10 @@ TEST(RedistributedPrefixBuilderTest, MultiHopKeepsTraversalOrderAndCountsHops) {
 TEST(
     RedistributedPrefixBuilderTest,
     RedistributeOnceAppendsAreaAndBumpsDistance) {
-  // One ABR hop has already been applied; a second atomic hop appends the new
-  // source area and bumps the distance again.
+  /*
+   * One ABR hop has already been applied; a second atomic hop appends the new
+   * source area and bumps the distance again.
+   */
   auto entry =
       buildRedistributedPrefixEntry(toIpPrefix("2401:db00:2::/64"), {"A"});
   redistributePrefixOnce(entry, "B");
@@ -63,8 +67,10 @@ TEST(RedistributedPrefixBuilderTest, AddRedistributedPrefixesAppendsToRouter) {
   VirtualRouter r;
   r.nodeName = "abr-proxy";
   r.area = "dut-area";
-  // The proxy already advertises one (redistributed) prefix; the new ones
-  // append.
+  /*
+   * The proxy already advertises one (redistributed) prefix; the new ones
+   * append.
+   */
   r.advertisedPrefixes.push_back(
       buildRedistributedPrefixEntry(toIpPrefix("2401:db00:9::/64"), {"seed"}));
 
@@ -82,9 +88,11 @@ TEST(RedistributedPrefixBuilderTest, AddRedistributedPrefixesAppendsToRouter) {
 }
 
 TEST(RedistributedPrefixBuilderTest, RedistributeResetsNonTransitiveAttrs) {
-  // A caller may hand redistributePrefixOnce an entry carrying non-default
-  // non-transitive attributes; crossing an area boundary must reset all of
-  // them, exactly as production PrefixManager::resetNonTransitiveAttrs does.
+  /*
+   * A caller may hand redistributePrefixOnce an entry carrying non-default
+   * non-transitive attributes; crossing an area boundary must reset all of
+   * them, exactly as production PrefixManager::resetNonTransitiveAttrs does.
+   */
   auto entry =
       buildRedistributedPrefixEntry(toIpPrefix("2401:db00:4::/64"), {"A"});
   entry.forwardingType() = thrift::PrefixForwardingType::SR_MPLS;

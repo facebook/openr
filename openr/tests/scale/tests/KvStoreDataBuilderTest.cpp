@@ -55,8 +55,10 @@ makeStarTopology() {
   return topo;
 }
 
-// Deserialize an adj:<node> Value into the set of its remaining adjacency
-// remote-node names.
+/*
+ * Deserialize an adj:<node> Value into the set of its remaining adjacency
+ * remote-node names.
+ */
 std::set<std::string>
 remoteNamesOf(const thrift::Value& value) {
   apache::thrift::CompactSerializer serializer;
@@ -81,8 +83,10 @@ areaOf(const thrift::Value& value) {
 } // namespace
 
 TEST(KvStoreDataBuilderTest, BuildAdjKeyValueWithLinksDownOmitsTheWholeSet) {
-  // The set-based builder must drop EVERY listed neighbor (this is what keeps
-  // an endpoint symmetric when it has multiple operator-downed links).
+  /*
+   * The set-based builder must drop EVERY listed neighbor (this is what keeps
+   * an endpoint symmetric when it has multiple operator-downed links).
+   */
   const auto topo = makeStarTopology();
   auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
       topo.routers.at("a"), topo, {"b", "c"}, /*version=*/7);
@@ -101,8 +105,10 @@ TEST(KvStoreDataBuilderTest, BuildAdjKeyValueWithLinksDownEmptySetKeepsAll) {
 }
 
 TEST(KvStoreDataBuilderTest, BuildAdjKeyValueWithLinkDownDropsExactlyOne) {
-  // The single-name overload delegates to the set version and drops only that
-  // one neighbor.
+  /*
+   * The single-name overload delegates to the set version and drops only that
+   * one neighbor.
+   */
   const auto topo = makeStarTopology();
   auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinkDown(
       topo.routers.at("a"), topo, "b", /*version=*/2);
@@ -110,8 +116,10 @@ TEST(KvStoreDataBuilderTest, BuildAdjKeyValueWithLinkDownDropsExactlyOne) {
 }
 
 TEST(KvStoreDataBuilderTest, BuildersTagRouterArea) {
-  // adj keys must be tagged with the router's own area so the DUT files them in
-  // the right per-area KvStore.
+  /*
+   * adj keys must be tagged with the router's own area so the DUT files them in
+   * the right per-area KvStore.
+   */
   auto topo = makeStarTopology();
   topo.routers.at("a").area = "pod";
 

@@ -75,8 +75,10 @@ class ScaleTestServerHandler
   // Snapshot the current session under rlock, then release.
   std::shared_ptr<Session> snapshot() const;
 
-  // Compute how many ports a session will reserve. Conservative flat
-  // advance avoids TIME_WAIT collisions across rapid stop/start cycles.
+  /*
+   * Compute how many ports a session will reserve. Conservative flat
+   * advance avoids TIME_WAIT collisions across rapid stop/start cycles.
+   */
   static int portsPerSession();
 
   folly::Synchronized<std::shared_ptr<Session>> session_;

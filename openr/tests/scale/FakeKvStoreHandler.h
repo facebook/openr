@@ -167,9 +167,11 @@ class FakeKvStoreHandler : public thrift::KvStoreServiceSvIf {
   std::string neighborName_;
   std::string area_;
 
-  // COW storage: at most one of these is active at a time.
-  // sharedStore_ holds the immutable shared base (COW path).
-  // ownedStore_ holds a private mutable copy (materialized on first write).
+  /*
+   * COW storage: at most one of these is active at a time.
+   * sharedStore_ holds the immutable shared base (COW path).
+   * ownedStore_ holds a private mutable copy (materialized on first write).
+   */
   std::shared_ptr<const thrift::KeyVals> sharedStore_;
   std::optional<thrift::KeyVals> ownedStore_;
 

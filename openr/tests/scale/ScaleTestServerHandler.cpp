@@ -13,8 +13,10 @@ namespace openr {
 
 namespace {
 
-// Default fb303 counter regex used by the legacy ScaleTestServer.cpp tick
-// loop. Surfaced when callers do not supply a regexFilter.
+/*
+ * Default fb303 counter regex used by the legacy ScaleTestServer.cpp tick
+ * loop. Surfaced when callers do not supply a regexFilter.
+ */
 constexpr auto kDefaultCounterRegex =
     "process\\.cpu\\.peak_pct|process\\.cpu\\.pct|"
     "process\\.memory\\.rss|"
@@ -64,13 +66,15 @@ ScaleTestServerHandler::snapshot() const {
 void
 ScaleTestServerHandler::sync_startTest(
     std::unique_ptr<thrift::ScaleTestConfig> config) {
-  // Fast reject BEFORE reserving a port or doing any DUT-visible work.
-  // Session::start() is not a dry run — it connects to and injects KvStore keys
-  // into the real DUT and binds ports. Without this pre-check, a second/stray
-  // startTest would run that full setup against the SAME DUT (corrupting the
-  // active session's view) and leak its reserved port, only to then throw
-  // AlreadyRunningError. Re-checked under wlock at publish below to close the
-  // (single-operator-unlikely) start/start race.
+  /*
+   * Fast reject BEFORE reserving a port or doing any DUT-visible work.
+   * Session::start() is not a dry run — it connects to and injects KvStore keys
+   * into the real DUT and binds ports. Without this pre-check, a second/stray
+   * startTest would run that full setup against the SAME DUT (corrupting the
+   * active session's view) and leak its reserved port, only to then throw
+   * AlreadyRunningError. Re-checked under wlock at publish below to close the
+   * (single-operator-unlikely) start/start race.
+   */
   if (*session_.rlock()) {
     throw makeAlreadyRunning();
   }
@@ -79,14 +83,18 @@ ScaleTestServerHandler::sync_startTest(
   const int basePort =
       nextBasePort_.fetch_add(portsPerSession(), std::memory_order_relaxed);
 
-  // Build + start the candidate OUTSIDE the daemon lock. start() may throw
-  // thrift::SetupError, which propagates back to the caller untouched; the
-  // candidate is then destroyed without ever being published.
+  /*
+   * Build + start the candidate OUTSIDE the daemon lock. start() may throw
+   * thrift::SetupError, which propagates back to the caller untouched; the
+   * candidate is then destroyed without ever being published.
+   */
   auto candidate = std::make_shared<Session>(*config, basePort);
   candidate->start();
 
-  // Publish under wlock, re-checking in case another startTest won the race
-  // after our fast read above.
+  /*
+   * Publish under wlock, re-checking in case another startTest won the race
+   * after our fast read above.
+   */
   auto wlocked = session_.wlock();
   if (*wlocked) {
     throw makeAlreadyRunning();
@@ -96,16 +104,18 @@ ScaleTestServerHandler::sync_startTest(
 
 void
 ScaleTestServerHandler::sync_stopTest() {
-  // Move the shared_ptr out under wlock, release the lock, THEN drop the
-  // local. This lets the Session dtor (which may block on scheduler/spark
-  // shutdown) run without holding the daemon lock.
-  //
-  // Note: stopTest is NOT a hard barrier. An operation that already took a
-  // snapshot() before this call keeps the Session alive via the refcount and
-  // may still complete against it after stopTest returns (no use-after-free —
-  // Session's per-op methods are internally locked). This is acceptable for the
-  // single-operator scale harness; if strict stop semantics are ever needed,
-  // add a "stopping" flag that rejects new ops once stopTest begins.
+  /*
+   * Move the shared_ptr out under wlock, release the lock, THEN drop the
+   * local. This lets the Session dtor (which may block on scheduler/spark
+   * shutdown) run without holding the daemon lock.
+   *
+   * Note: stopTest is NOT a hard barrier. An operation that already took a
+   * snapshot() before this call keeps the Session alive via the refcount and
+   * may still complete against it after stopTest returns (no use-after-free —
+   * Session's per-op methods are internally locked). This is acceptable for the
+   * single-operator scale harness; if strict stop semantics are ever needed,
+   * add a "stopping" flag that rejects new ops once stopTest begins.
+   */
   std::shared_ptr<Session> victim;
   {
     auto wlocked = session_.wlock();
@@ -252,8 +262,10 @@ ScaleTestServerHandler::sync_getDutCounters(
     return;
   }
   auto monitor = snap->getDutMonitor();
-  // snap goes out of scope here; we hold only `monitor` for the (potentially
-  // long) blocking thrift call below. Daemon lock was never held.
+  /*
+   * snap goes out of scope here; we hold only `monitor` for the (potentially
+   * long) blocking thrift call below. Daemon lock was never held.
+   */
   if (!monitor) {
     return;
   }

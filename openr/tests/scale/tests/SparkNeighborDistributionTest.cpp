@@ -106,8 +106,10 @@ TEST(
 
 TEST(
     DistributeSparkNeighborsTest, FewerNeighborsThanInterfacesPlacesAllOnLast) {
-  // 1 neighbor / 3 interfaces => floor(1/3)=0 each, remainder (the single
-  // neighbor) lands on the last interface.
+  /*
+   * 1 neighbor / 3 interfaces => floor(1/3)=0 each, remainder (the single
+   * neighbor) lands on the last interface.
+   */
   const auto plan =
       distributeSparkNeighbors(makeInterfaces(3), makeNeighbors(1));
   ASSERT_EQ(plan.size(), 1u);

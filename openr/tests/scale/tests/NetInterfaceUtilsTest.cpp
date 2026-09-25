@@ -15,8 +15,10 @@ namespace openr {
 
 namespace {
 
-// Build an in6_addr from a fe80:: link-local with the given bytes 11 and 12
-// (the EUI-64 marker bytes are 0xff 0xfe).
+/*
+ * Build an in6_addr from a fe80:: link-local with the given bytes 11 and 12
+ * (the EUI-64 marker bytes are 0xff 0xfe).
+ */
 struct in6_addr
 makeAddr(uint8_t byte11, uint8_t byte12) {
   struct in6_addr addr{};

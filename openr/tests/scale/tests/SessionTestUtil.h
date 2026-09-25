@@ -15,13 +15,17 @@
 
 namespace openr::test {
 
-// Pure-topology config: no DUT connect, no fake kvstore, no spark — suitable
-// for ctor-only / pure-logic tests.
+/*
+ * Pure-topology config: no DUT connect, no fake kvstore, no spark — suitable
+ * for ctor-only / pure-logic tests.
+ */
 thrift::ScaleTestConfig MakeTestConfig();
 
-// Walks the session's topology and returns the first (router, adjacency)
-// pair found. Throws std::runtime_error if the topology has no adjacencies.
-// Used by downLink/upLink tests.
+/*
+ * Walks the session's topology and returns the first (router, adjacency)
+ * pair found. Throws std::runtime_error if the topology has no adjacencies.
+ * Used by downLink/upLink tests.
+ */
 std::pair<std::string, std::string> FindAdjacentPair(const Session& session);
 
 } // namespace openr::test

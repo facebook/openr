@@ -29,32 +29,40 @@ namespace openr {
  */
 class DutPatcher {
  public:
-  // Compute the list of node names that the DUT will peer with, based on its
-  // role and the configured topology shape.
+  /*
+   * Compute the list of node names that the DUT will peer with, based on its
+   * role and the configured topology shape.
+   */
   static std::vector<std::string> buildDutNeighborNames(
       const thrift::ScaleTestConfig& cfg);
 
-  // When the DUT is a leaf it replaces leaf-0 in the topology. Strip that
-  // node and any adjacencies/interfaces that reference it.
+  /*
+   * When the DUT is a leaf it replaces leaf-0 in the topology. Strip that
+   * node and any adjacencies/interfaces that reference it.
+   */
   static void stripReplacedLeaf(Topology& topo);
 
-  // Insert the DUT into the topology and append a neighbor->DUT adjacency to
-  // each of the DUT's neighbors. Neighbors are distributed in contiguous
-  // blocks across the configured interfaces (`numNeighbors / numInterfaces`
-  // per interface; the last interface absorbs the remainder) so each
-  // interface carries roughly equal load.
+  /*
+   * Insert the DUT into the topology and append a neighbor->DUT adjacency to
+   * each of the DUT's neighbors. Neighbors are distributed in contiguous
+   * blocks across the configured interfaces (`numNeighbors / numInterfaces`
+   * per interface; the last interface absorbs the remainder) so each
+   * interface carries roughly equal load.
+   */
   static void patchDutIntoTopology(
       Topology& topo,
       const std::string& dutNodeName,
       const std::vector<std::string>& dutNeighborNames,
       const std::vector<std::string>& interfaces);
 
-  // Returns the subset of dutNeighborNames that are NOT present as routers in
-  // topo, preserving input order. A non-empty result means the DUT-neighbor
-  // naming scheme does not match the topology type (e.g. generic
-  // fabric/ring/grid node names vs. the BBF leaf-N / spine-N scheme that
-  // buildDutNeighborNames emits), so the caller can fail loudly instead of
-  // operating on a neighbor set inconsistent with the topology.
+  /*
+   * Returns the subset of dutNeighborNames that are NOT present as routers in
+   * topo, preserving input order. A non-empty result means the DUT-neighbor
+   * naming scheme does not match the topology type (e.g. generic
+   * fabric/ring/grid node names vs. the BBF leaf-N / spine-N scheme that
+   * buildDutNeighborNames emits), so the caller can fail loudly instead of
+   * operating on a neighbor set inconsistent with the topology.
+   */
   static std::vector<std::string> missingNeighbors(
       const Topology& topo, const std::vector<std::string>& dutNeighborNames);
 };

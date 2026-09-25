@@ -26,9 +26,11 @@ namespace {
 
 constexpr int kFakeKvStoreIoThreads = 32;
 
-// Thread-pool size for background link-flap workers. A flap occupies one thread
-// for its whole duration, so this caps the number of concurrent flaps; beyond
-// it, additional flaps queue. Plenty for the single-operator scale harness.
+/*
+ * Thread-pool size for background link-flap workers. A flap occupies one thread
+ * for its whole duration, so this caps the number of concurrent flaps; beyond
+ * it, additional flaps queue. Plenty for the single-operator scale harness.
+ */
 constexpr size_t kFlapThreads = 8;
 
 /*
@@ -95,8 +97,10 @@ validateAndBuildTopology(const thrift::ScaleTestConfig& cfg) {
   return topo;
 }
 
-// Returns true iff `topology_` has a router named `a` with an
-// adjacency to `b`. Used to validate downLink/upLink arguments.
+/*
+ * Returns true iff `topology_` has a router named `a` with an
+ * adjacency to `b`. Used to validate downLink/upLink arguments.
+ */
 bool
 hasAdjacency(const Topology& topo, const std::string& a, const std::string& b) {
   auto it = topo.routers.find(a);
@@ -111,16 +115,20 @@ hasAdjacency(const Topology& topo, const std::string& a, const std::string& b) {
   return false;
 }
 
-// Links are undirected; sort the endpoint pair so (a,b) and (b,a) hash to
-// the same key in downedLinks_.
+/*
+ * Links are undirected; sort the endpoint pair so (a,b) and (b,a) hash to
+ * the same key in downedLinks_.
+ */
 std::pair<std::string, std::string>
 normalizeLinkKey(const std::string& a, const std::string& b) {
   return a < b ? std::make_pair(a, b) : std::make_pair(b, a);
 }
 
-// Neighbors of `name` whose incident link is currently in `downedLinks`. Used
-// to rebuild name's adj DB with ALL still-downed incident links omitted, so an
-// endpoint with multiple operator-downed links stays symmetric with its peers.
+/*
+ * Neighbors of `name` whose incident link is currently in `downedLinks`. Used
+ * to rebuild name's adj DB with ALL still-downed incident links omitted, so an
+ * endpoint with multiple operator-downed links stays symmetric with its peers.
+ */
 std::set<std::string>
 downedNeighborsOf(
     const std::set<std::pair<std::string, std::string>>& downedLinks,
@@ -175,10 +183,12 @@ Session::Session(const thrift::ScaleTestConfig& cfg, int basePortOverride)
       scheduler_(std::make_unique<folly::FunctionScheduler>()) {}
 
 Session::~Session() {
-  // Stop and join any background flap workers BEFORE the runtime members
-  // (injector_/kvManager_/sparkFaker_) are destroyed, so an in-flight flap can
-  // never touch freed state. flapCv_ wakes workers parked in their inter-toggle
-  // wait immediately; join() then waits for all running flap tasks to finish.
+  /*
+   * Stop and join any background flap workers BEFORE the runtime members
+   * (injector_/kvManager_/sparkFaker_) are destroyed, so an in-flight flap can
+   * never touch freed state. flapCv_ wakes workers parked in their inter-toggle
+   * wait immediately; join() then waits for all running flap tasks to finish.
+   */
   {
     std::lock_guard<std::mutex> g(flapMutex_);
     flapStop_ = true;
@@ -703,9 +713,11 @@ Session::downNode(const std::string& name) {
       continue; // we don't manage the DUT's adj DB
     }
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
-    // Drop this neighbor's adjacency to the downed node AND keep any of its
-    // OTHER operator-downed links omitted — otherwise rebuilding it here would
-    // silently resurrect those links.
+    /*
+     * Drop this neighbor's adjacency to the downed node AND keep any of its
+     * OTHER operator-downed links omitted — otherwise rebuilding it here would
+     * silently resurrect those links.
+     */
     auto omit = downedNeighborsOf(downedLinks_, adj.remoteRouterName);
     omit.insert(name);
     auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
@@ -780,9 +792,11 @@ Session::upNode(const std::string& name) {
   }
   XLOGF(INFO, "[CMD] KvStore: restored adj:{}", name);
 
-  // Restore adj DBs of all neighbors to include the recovered node, while
-  // keeping every neighbor's own still-downed links omitted (including the link
-  // back to `name` if it is itself still operator-downed).
+  /*
+   * Restore adj DBs of all neighbors to include the recovered node, while
+   * keeping every neighbor's own still-downed links omitted (including the link
+   * back to `name` if it is itself still operator-downed).
+   */
   const auto& recoveredRouter = topology_.getRouter(name);
   for (const auto& adj : recoveredRouter.adjacencies) {
     if (topology_.routers.count(adj.remoteRouterName) == 0) {
@@ -792,10 +806,12 @@ Session::upNode(const std::string& name) {
       continue; // we don't manage the DUT's adj DB
     }
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
-    // Rebuild this neighbor omitting ALL of ITS still-downed links (this set
-    // already includes `name` when the link to it remains down). Using only the
-    // link to `name` would silently resurrect the neighbor's other downed
-    // links.
+    /*
+     * Rebuild this neighbor omitting ALL of ITS still-downed links (this set
+     * already includes `name` when the link to it remains down). Using only the
+     * link to `name` would silently resurrect the neighbor's other downed
+     * links.
+     */
     auto [key, value] = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
         topology_.getRouter(adj.remoteRouterName),
         topology_,
@@ -814,9 +830,11 @@ Session::upNode(const std::string& name) {
         allKeyVals.size());
   }
 
-  // downedLinks_ entries incident on this node are intentionally NOT cleared:
-  // operator link-down intent persists across the node flap (the links above
-  // were rebuilt as still-down). Only the node itself is marked up.
+  /*
+   * downedLinks_ entries incident on this node are intentionally NOT cleared:
+   * operator link-down intent persists across the node flap (the links above
+   * were rebuilt as still-down). Only the node itself is marked up.
+   */
   downedNodes_.erase(name);
   XLOGF(INFO, "[CMD] {} is now UP", name);
 }
@@ -830,9 +848,11 @@ Session::downLink(const std::string& a, const std::string& b) {
     e.message() = "cannot manipulate links to the DUT directly";
     throw e;
   }
-  // Drive validation from topology_ — the canonical, never-mutated
-  // source of truth. Unknown endpoint nodes throw UnknownNodeError; missing
-  // adjacency or already-down state throws UnknownAdjacencyError.
+  /*
+   * Drive validation from topology_ — the canonical, never-mutated
+   * source of truth. Unknown endpoint nodes throw UnknownNodeError; missing
+   * adjacency or already-down state throws UnknownAdjacencyError.
+   */
   if (topology_.routers.count(a) == 0) {
     thrift::UnknownNodeError e;
     e.message() = fmt::format("Unknown node: {}", a);
@@ -861,15 +881,19 @@ Session::downLink(const std::string& a, const std::string& b) {
     throw e;
   }
 
-  // Record in downedLinks_ BEFORE building the keys so each endpoint's adj DB
-  // omits ALL of its still-downed incident links (not just this one) — keeping
-  // both sides symmetric when an endpoint already has other operator-downed
-  // links. Also lets dtor / external observers see the in-flight state.
+  /*
+   * Record in downedLinks_ BEFORE building the keys so each endpoint's adj DB
+   * omits ALL of its still-downed incident links (not just this one) — keeping
+   * both sides symmetric when an endpoint already has other operator-downed
+   * links. Also lets dtor / external observers see the in-flight state.
+   */
   downedLinks_.insert(link);
 
-  // One cmdVersion bump per key for monotonicity in the DUT's KvStore. Note:
-  // fetch_add returns the prior value; +1 gives the post-increment value,
-  // matching the monotonic semantics used by downNode/upNode.
+  /*
+   * One cmdVersion bump per key for monotonicity in the DUT's KvStore. Note:
+   * fetch_add returns the prior value; +1 gives the post-increment value,
+   * matching the monotonic semantics used by downNode/upNode.
+   */
   const int64_t vA = cmdVersion_.fetch_add(1) + 1;
   const int64_t vB = cmdVersion_.fetch_add(1) + 1;
   auto keyA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
@@ -909,15 +933,19 @@ Session::downLink(const std::string& a, const std::string& b) {
     }
     XLOGF(INFO, "[CMD] Link {}<->{} is now DOWN", a, b);
   } catch (...) {
-    // Best-effort rollback to BOTH sinks: re-push the full adj keys for both
-    // endpoints to the DUT and the fake KvStore, and drop the in-memory
-    // record. If the rollback push also fails, swallow — stopTest+startTest
-    // provides a clean reset.
+    /*
+     * Best-effort rollback to BOTH sinks: re-push the full adj keys for both
+     * endpoints to the DUT and the fake KvStore, and drop the in-memory
+     * record. If the rollback push also fails, swallow — stopTest+startTest
+     * provides a clean reset.
+     */
     downedLinks_.erase(link);
     try {
-      // Rebuild with each endpoint's REMAINING still-downed links preserved
-      // (downedNeighborsOf now excludes the just-erased link), so a failed
-      // downLink does not clobber other operator-downed links on a or b.
+      /*
+       * Rebuild with each endpoint's REMAINING still-downed links preserved
+       * (downedNeighborsOf now excludes the just-erased link), so a failed
+       * downLink does not clobber other operator-downed links on a or b.
+       */
       const int64_t rvA = cmdVersion_.fetch_add(1) + 1;
       const int64_t rvB = cmdVersion_.fetch_add(1) + 1;
       auto rollbackA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
@@ -984,18 +1012,22 @@ Session::upLink(const std::string& a, const std::string& b) {
     throw e;
   }
 
-  // Rebuild both endpoints' adj keys restoring the a<->b edge, but keeping any
-  // OTHER still-downed links incident on a or b omitted (so bringing one link
-  // up doesn't silently resurrect the endpoint's other operator-downed links).
-  // downedNeighborsOf still includes the link being brought up, so exclude it.
+  /*
+   * Rebuild both endpoints' adj keys restoring the a<->b edge, but keeping any
+   * OTHER still-downed links incident on a or b omitted (so bringing one link
+   * up doesn't silently resurrect the endpoint's other operator-downed links).
+   * downedNeighborsOf still includes the link being brought up, so exclude it.
+   */
   auto aStillDown = downedNeighborsOf(downedLinks_, a);
   aStillDown.erase(b);
   auto bStillDown = downedNeighborsOf(downedLinks_, b);
   bStillDown.erase(a);
 
-  // One cmdVersion bump per key for monotonicity in the DUT's KvStore. Note:
-  // fetch_add returns the prior value; +1 gives the post-increment value,
-  // matching the monotonic semantics used by downNode/upNode.
+  /*
+   * One cmdVersion bump per key for monotonicity in the DUT's KvStore. Note:
+   * fetch_add returns the prior value; +1 gives the post-increment value,
+   * matching the monotonic semantics used by downNode/upNode.
+   */
   const int64_t vA = cmdVersion_.fetch_add(1) + 1;
   const int64_t vB = cmdVersion_.fetch_add(1) + 1;
   auto keyA = KvStoreDataBuilder::buildAdjKeyValueWithLinksDown(
@@ -1089,9 +1121,11 @@ Session::injectAllOrThrow(const thrift::KeyVals& kv, const char* op) {
   }
   const size_t injected = injector_->injectKeyVals(kv);
   if (injected != kv.size()) {
-    // Short write (injectKeyVals does not throw on RPC failure). Surface it so
-    // a partial bulk write to the DUT is never reported to the operator as
-    // success. No rollback for bulk: recover with stopTest + startTest.
+    /*
+     * Short write (injectKeyVals does not throw on RPC failure). Surface it so
+     * a partial bulk write to the DUT is never reported to the operator as
+     * success. No rollback for bulk: recover with stopTest + startTest.
+     */
     throw std::runtime_error(
         fmt::format(
             "{} injection incomplete: {} of {} keys written to DUT "
@@ -1106,8 +1140,10 @@ void
 Session::downNodes(const std::vector<std::string>& names) {
   std::lock_guard<std::mutex> g(mutationMutex_);
 
-  // Validate the whole batch up front; reject atomically (nothing applied).
-  // std::set both dedups repeated names and gives a stable iteration order.
+  /*
+   * Validate the whole batch up front; reject atomically (nothing applied).
+   * std::set both dedups repeated names and gives a stable iteration order.
+   */
   std::set<std::string> batch;
   for (const auto& name : names) {
     if (name == dutNodeName_) {
@@ -1131,8 +1167,10 @@ Session::downNodes(const std::vector<std::string>& names) {
     return;
   }
 
-  // Apply the new downed state BEFORE rebuilding so omitSetFor() reflects the
-  // final set (a neighbor adjacent to several downed nodes omits all of them).
+  /*
+   * Apply the new downed state BEFORE rebuilding so omitSetFor() reflects the
+   * final set (a neighbor adjacent to several downed nodes omits all of them).
+   */
   for (const auto& name : batch) {
     downedNodes_.insert(name);
   }
@@ -1152,8 +1190,10 @@ Session::downNodes(const std::vector<std::string>& names) {
       injector_->removeNode(name, v);
     }
   }
-  // Rebuild every still-up neighbor of any downed node exactly once, then
-  // inject as a single wave so the DUT processes one convergence event.
+  /*
+   * Rebuild every still-up neighbor of any downed node exactly once, then
+   * inject as a single wave so the DUT processes one convergence event.
+   */
   std::set<std::string> affected;
   for (const auto& name : batch) {
     for (const auto& adj : topology_.getRouter(name).adjacencies) {
@@ -1210,8 +1250,10 @@ Session::upNodes(const std::vector<std::string>& names) {
     return;
   }
 
-  // Restore state first so omitSetFor() no longer omits these nodes. Operator
-  // downLink intent persists: links still in downedLinks_ stay omitted below.
+  /*
+   * Restore state first so omitSetFor() no longer omits these nodes. Operator
+   * downLink intent persists: links still in downedLinks_ stay omitted below.
+   */
   for (const auto& name : batch) {
     downedNodes_.erase(name);
   }
@@ -1220,8 +1262,10 @@ Session::upNodes(const std::vector<std::string>& names) {
       sparkFaker_->recoverNeighbor(name);
     }
   }
-  // Rebuild the restored nodes' own adj DBs AND every still-up neighbor, once
-  // each, against the post-restore state.
+  /*
+   * Rebuild the restored nodes' own adj DBs AND every still-up neighbor, once
+   * each, against the post-restore state.
+   */
   std::set<std::string> toBuild(batch.begin(), batch.end());
   for (const auto& name : batch) {
     for (const auto& adj : topology_.getRouter(name).adjacencies) {
@@ -1305,8 +1349,10 @@ Session::downLinks(const std::vector<thrift::LinkRef>& links) {
   for (const auto& link : batch) {
     downedLinks_.insert(link);
   }
-  // Endpoints are all up (validated), so each gets rebuilt once against the
-  // final downed-link state and injected as a single wave.
+  /*
+   * Endpoints are all up (validated), so each gets rebuilt once against the
+   * final downed-link state and injected as a single wave.
+   */
   thrift::KeyVals kv;
   for (const auto& node : endpoints) {
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
@@ -1377,8 +1423,10 @@ Session::upLinks(const std::vector<thrift::LinkRef>& links) {
   for (const auto& link : batch) {
     downedLinks_.erase(link);
   }
-  // All endpoints are up; rebuild each once against the post-restore state
-  // (other still-downed links/nodes incident on an endpoint stay omitted).
+  /*
+   * All endpoints are up; rebuild each once against the post-restore state
+   * (other still-downed links/nodes incident on an endpoint stay omitted).
+   */
   thrift::KeyVals kv;
   for (const auto& node : endpoints) {
     const int64_t v = cmdVersion_.fetch_add(1) + 1;
@@ -1425,9 +1473,11 @@ Session::flapLinks(
     return; // nothing to do
   }
 
-  // Validate the whole set synchronously (same preconditions as downLinks) so
-  // the CALLER gets immediate feedback — the background worker re-validates
-  // each cycle but can only log, not throw back to the RPC.
+  /*
+   * Validate the whole set synchronously (same preconditions as downLinks) so
+   * the CALLER gets immediate feedback — the background worker re-validates
+   * each cycle but can only log, not throw back to the RPC.
+   */
   {
     std::lock_guard<std::mutex> g(mutationMutex_);
     std::set<std::pair<std::string, std::string>> seen;
@@ -1475,16 +1525,20 @@ Session::flapLinks(
   if (flapStop_) {
     return; // session is shutting down; don't start new work
   }
-  // Lazily create the flap thread pool (sessions that never flap pay nothing).
-  // The pool recycles threads, so completed flaps don't accumulate over a long
-  // session; ~Session() join()s it after signalling flapStop_.
+  /*
+   * Lazily create the flap thread pool (sessions that never flap pay nothing).
+   * The pool recycles threads, so completed flaps don't accumulate over a long
+   * session; ~Session() join()s it after signalling flapStop_.
+   */
   if (!flapExecutor_) {
     flapExecutor_ =
         std::make_unique<folly::CPUThreadPoolExecutor>(kFlapThreads);
   }
-  // Copy `links` into the worker. Each cycle drives the symmetric bulk
-  // downLinks/upLinks (a flap is bidirectional). Exceptions (e.g. a racing
-  // operator op) abort THIS flap only — they must not escape the task.
+  /*
+   * Copy `links` into the worker. Each cycle drives the symmetric bulk
+   * downLinks/upLinks (a flap is bidirectional). Exceptions (e.g. a racing
+   * operator op) abort THIS flap only — they must not escape the task.
+   */
   flapExecutor_->add([this, links, cycles, wait]() {
     try {
       for (int i = 0; i < cycles; ++i) {
@@ -1514,8 +1568,10 @@ Session::flapLinks(
     } catch (const std::exception& ex) {
       XLOGF(ERR, "[flap] aborted ({} links): {}", links.size(), ex.what());
     }
-    // Test hook: signal completion so tests can wait deterministically (no
-    // sleep-poll). Copy under the lock, invoke outside it. No-op in production.
+    /*
+     * Test hook: signal completion so tests can wait deterministically (no
+     * sleep-poll). Copy under the lock, invoke outside it. No-op in production.
+     */
     std::function<void()> cb;
     {
       std::lock_guard<std::mutex> lk(flapMutex_);
@@ -1574,8 +1630,10 @@ Session::getNeighborStats() const {
   std::lock_guard<std::mutex> g(mutationMutex_);
   thrift::NeighborStats out;
   if (!sparkFaker_) {
-    // simulateNeighbors=false: all-zero counters, empty neighbor list (the IDL
-    // default-initializes the numeric fields to 0).
+    /*
+     * simulateNeighbors=false: all-zero counters, empty neighbor list (the IDL
+     * default-initializes the numeric fields to 0).
+     */
     return out;
   }
   /*

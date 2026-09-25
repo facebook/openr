@@ -128,8 +128,10 @@ class OpenrFixture : public ::testing::Test {
     mockIoProvider->stop();
     mockIoProviderThread->join();
 
-    // DO NOT explicitly call stop() method for Open/R instances
-    // as DESCTRUCTOR in OpenrWrapper will take care of them.
+    /*
+     * DO NOT explicitly call stop() method for Open/R instances
+     * as DESCTRUCTOR in OpenrWrapper will take care of them.
+     */
   }
 
   /**
@@ -198,25 +200,29 @@ TEST_F(OpenrFixture, InitializationWithStandaloneNode) {
   evb.run();
 }
 
-//
-// Test topology:
-//
-//  1------2
-//  |      |
-//  |      |
-//  3------4
-//
-// Test on v4 for now
-//
+/*
+ *
+ * Test topology:
+ *
+ *  1------2
+ *  |      |
+ *  |      |
+ *  3------4
+ *
+ * Test on v4 for now
+ *
+ */
 class SimpleRingTopologyFixture : public OpenrFixture,
                                   public ::testing::WithParamInterface<bool> {};
 
 INSTANTIATE_TEST_CASE_P(
     SimpleRingTopologyInstance, SimpleRingTopologyFixture, ::testing::Bool());
 
-//
-// Verify system metrics
-//
+/*
+ *
+ * Verify system metrics
+ *
+ */
 TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   // define interface names for the test
   mockIoProvider->addIfNameIfIndex(
@@ -259,8 +265,10 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
   // wait until all aquamen got synced on kvstore
   std::this_thread::sleep_for(kMaxOpenrSyncTime);
 
-  // Wait for calling getCPUpercentage() twice for calculating the cpu% counter.
-  // Check if counters contain the uptime, cpu and memory usage counters.
+  /*
+   * Wait for calling getCPUpercentage() twice for calculating the cpu% counter.
+   * Check if counters contain the uptime, cpu and memory usage counters.
+   */
   auto counters1 = openr1->getCounters();
   while (true) {
     if (counters1.find(cpuKey) != counters1.end()) {
@@ -273,8 +281,10 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
     counters1 = openr1->getCounters();
     std::this_thread::yield();
   }
-  // allocate memory to go beyond memory limit and check if watchdog
-  // catches the over the limit condition
+  /*
+   * allocate memory to go beyond memory limit and check if watchdog
+   * catches the over the limit condition
+   */
   uint32_t memUsage = static_cast<uint32_t>(counters1[memKey] / 1e6);
 
   if (memUsage < testMemLimitMB) {

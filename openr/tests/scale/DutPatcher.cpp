@@ -16,8 +16,10 @@ namespace openr {
 
 namespace {
 
-// Node ID for the DUT entry. Chosen well above any simulated router ID so
-// it never collides.
+/*
+ * Node ID for the DUT entry. Chosen well above any simulated router ID so
+ * it never collides.
+ */
 constexpr int kDutNodeId = 99999;
 
 // Role-based DUT neighbor names for a single area (the legacy scheme).
@@ -39,8 +41,10 @@ buildBaseDutNeighborNames(const thrift::ScaleTestConfig& cfg) {
     for (int i = 0; i < *t.numSpines(); ++i) {
       names.emplace_back(fmt::format("spine-{}", i));
     }
-    // DUT plays the role of leaf-0. Connect only to the eb-site that owns
-    // leaf-0 (site index 0).
+    /*
+     * DUT plays the role of leaf-0. Connect only to the eb-site that owns
+     * leaf-0 (site index 0).
+     */
     if (*t.numSites() > 0) {
       names.emplace_back("eb-site-0");
     }
@@ -114,8 +118,10 @@ DutPatcher::patchDutIntoTopology(
   dutRouter.nodeId = kDutNodeId;
   dutRouter.nodeLabel = 0;
   topo.routers.emplace(dutNodeName, std::move(dutRouter));
-  // Keep routerNames in sync with routers (see Topology struct contract;
-  // TopologyGenerator and stripReplacedLeaf maintain the same invariant).
+  /*
+   * Keep routerNames in sync with routers (see Topology struct contract;
+   * TopologyGenerator and stripReplacedLeaf maintain the same invariant).
+   */
   topo.routerNames.push_back(dutNodeName);
 
   if (interfaces.empty() || dutNeighborNames.empty()) {

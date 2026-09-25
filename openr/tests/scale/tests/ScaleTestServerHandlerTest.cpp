@@ -20,9 +20,11 @@
 
 namespace openr {
 
-// Spin the handler behind a ScopedServerInterfaceThread so tests exercise
-// the real Thrift dispatch path (avoids facebook-thrift-handler-direct-call
-// lint by calling generated client methods instead of sync_* directly).
+/*
+ * Spin the handler behind a ScopedServerInterfaceThread so tests exercise
+ * the real Thrift dispatch path (avoids facebook-thrift-handler-direct-call
+ * lint by calling generated client methods instead of sync_* directly).
+ */
 class ScaleTestServerHandlerTest : public ::testing::Test {
  protected:
   void
@@ -113,12 +115,14 @@ TEST_F(ScaleTestServerHandlerTest, GetDutCountersBeforeStartReturnsEmpty) {
 }
 
 TEST_F(ScaleTestServerHandlerTest, StartWithInvalidConfigStaysNotRunning) {
-  // A config that fails Session's validateConfig (here: default-constructed, so
-  // dut.host is unset) makes the Session ctor throw SetupError inside
-  // startTest, BEFORE any session is published. No DUT is needed to exercise
-  // this path. The handler must surface the error AND leave session_ null so
-  // the operator can retry with a corrected config: getTestStatus reports
-  // not-running and per-session ops still throw NotRunningError.
+  /*
+   * A config that fails Session's validateConfig (here: default-constructed, so
+   * dut.host is unset) makes the Session ctor throw SetupError inside
+   * startTest, BEFORE any session is published. No DUT is needed to exercise
+   * this path. The handler must surface the error AND leave session_ null so
+   * the operator can retry with a corrected config: getTestStatus reports
+   * not-running and per-session ops still throw NotRunningError.
+   */
   thrift::ScaleTestConfig invalid; // dut.host unset -> TOPOLOGY_INVALID
   EXPECT_THROW(client_->sync_startTest(invalid), thrift::SetupError);
 
@@ -129,9 +133,11 @@ TEST_F(ScaleTestServerHandlerTest, StartWithInvalidConfigStaysNotRunning) {
   std::vector<std::string> nodes;
   EXPECT_THROW(client_->sync_listNodes(nodes), thrift::NotRunningError);
 
-  // A second start attempt must NOT be rejected with AlreadyRunningError: the
-  // failed attempt left no residue. It still throws SetupError (config is bad),
-  // proving the fast-reject pre-check saw a null session.
+  /*
+   * A second start attempt must NOT be rejected with AlreadyRunningError: the
+   * failed attempt left no residue. It still throws SetupError (config is bad),
+   * proving the fast-reject pre-check saw a null session.
+   */
   EXPECT_THROW(client_->sync_startTest(invalid), thrift::SetupError);
 }
 

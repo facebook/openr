@@ -19,8 +19,10 @@ namespace openr {
 TEST(SessionTest, ConstructorPopulatesTopology) {
   auto cfg = test::MakeTestConfig();
   Session session(cfg, /*basePortOverride=*/0);
-  // start() not called; verify the ctor populated the topology and
-  // listNodesUnlocked() returns a non-empty set of node names.
+  /*
+   * start() not called; verify the ctor populated the topology and
+   * listNodesUnlocked() returns a non-empty set of node names.
+   */
   auto names = session.listNodesUnlocked();
   EXPECT_FALSE(names.empty());
 }
@@ -42,8 +44,10 @@ TEST(SessionTest, StartPatchesDutIntoTopology) {
   Session s(cfg, 0);
   const size_t preRouterCount = s.topology().routers.size();
   s.start();
-  // For dutRole=SPINE the patch is a pure +1 router (the DUT itself).
-  // listNodesUnlocked excludes the DUT from the public listing.
+  /*
+   * For dutRole=SPINE the patch is a pure +1 router (the DUT itself).
+   * listNodesUnlocked excludes the DUT from the public listing.
+   */
   EXPECT_FALSE(s.dutNodeName().empty());
   EXPECT_GT(s.topology().routers.count(s.dutNodeName()), 0u)
       << "DUT node not found in topology after start()";
@@ -56,10 +60,12 @@ TEST(SessionTest, StartPatchesDutIntoTopology) {
 }
 
 TEST(SessionTest, ConstructorDoesNotCrashWhenFakeKvStoreEnabled) {
-  // Verify the FakeKvStoreManager member is constructed cleanly when
-  // enableFakeKvStore=true. The kvManager_ ctor is gated on BOTH
-  // enableFakeKvStore AND simulateNeighbors (matches legacy behavior),
-  // so both must be true to exercise the construction path.
+  /*
+   * Verify the FakeKvStoreManager member is constructed cleanly when
+   * enableFakeKvStore=true. The kvManager_ ctor is gated on BOTH
+   * enableFakeKvStore AND simulateNeighbors (matches legacy behavior),
+   * so both must be true to exercise the construction path.
+   */
   auto cfg = test::MakeTestConfig();
   cfg.injection()->enableFakeKvStore() = true;
   cfg.injection()->simulateNeighbors() = true;
@@ -89,14 +95,18 @@ TEST(SessionTest, GetStatusReportsConfigAndNotConnected) {
   EXPECT_EQ(*st.activeConfig(), cfg);
   ASSERT_TRUE(st.elapsedSec().has_value());
   EXPECT_GE(*st.elapsedSec(), 0);
-  // MakeTestConfig sets simulateNeighbors=false, so per the TestStatus IDL the
-  // optional neighborCount must be unset (distinct from a present 0).
+  /*
+   * MakeTestConfig sets simulateNeighbors=false, so per the TestStatus IDL the
+   * optional neighborCount must be unset (distinct from a present 0).
+   */
   EXPECT_FALSE(st.neighborCount().has_value());
 }
 
 TEST(SessionTest, NeighborStatsZeroedWhenNoSimulation) {
-  // MakeTestConfig sets simulateNeighbors=false, so sparkFaker_ is null and
-  // getNeighborStats returns an all-zero / empty struct.
+  /*
+   * MakeTestConfig sets simulateNeighbors=false, so sparkFaker_ is null and
+   * getNeighborStats returns an all-zero / empty struct.
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto stats = s.getNeighborStats();
@@ -107,8 +117,10 @@ TEST(SessionTest, NeighborStatsZeroedWhenNoSimulation) {
 }
 
 TEST(SessionTest, BuildFakeKeyValsVersionsAllRouters) {
-  // The periodic fake-key bump regenerates numFakeKeysPerNode keys for every
-  // router at a new version. Assert the payload shape without needing sinks.
+  /*
+   * The periodic fake-key bump regenerates numFakeKeysPerNode keys for every
+   * router at a new version. Assert the payload shape without needing sinks.
+   */
   auto cfg = test::MakeTestConfig();
   cfg.injection()->numFakeKeysPerNode() = 3;
   Session s(cfg, /*basePortOverride=*/0);
@@ -118,8 +130,10 @@ TEST(SessionTest, BuildFakeKeyValsVersionsAllRouters) {
   auto kv = s.buildFakeKeyVals(/*version=*/7);
   EXPECT_EQ(kv.size(), 3 * routers.size());
 
-  // Spot-check naming + version for a known router (keys are
-  // fakekeys{i}:{node}).
+  /*
+   * Spot-check naming + version for a known router (keys are
+   * fakekeys{i}:{node}).
+   */
   const auto& nodeName = routers.begin()->first;
   for (int i = 0; i < 3; ++i) {
     const auto key = "fakekeys" + std::to_string(i) + ":" + nodeName;
@@ -137,8 +151,10 @@ TEST(SessionTest, BuildFakeKeyValsEmptyWhenDisabled) {
 }
 
 TEST(SessionTest, VerifyRoutesReturnsZeroWhenDutNotConnected) {
-  // start() not called, so injector_ is null and verifyRoutes reports zero
-  // counts rather than dereferencing a missing DUT channel.
+  /*
+   * start() not called, so injector_ is null and verifyRoutes reports zero
+   * counts rather than dereferencing a missing DUT channel.
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto rc = s.verifyRoutes();
@@ -218,8 +234,10 @@ TEST(SessionTest, DownLinkRecordsInDownedLinks) {
   auto [a, b] = test::FindAdjacentPair(s);
   s.downLink(a, b);
   auto st = s.getStatus();
-  // Link endpoints are normalized (sorted) before storage; expect the
-  // smaller name first.
+  /*
+   * Link endpoints are normalized (sorted) before storage; expect the
+   * smaller name first.
+   */
   thrift::LinkRef expected;
   expected.localNode() = std::min(a, b);
   expected.remoteNode() = std::max(a, b);
@@ -248,8 +266,10 @@ TEST(SessionTest, DownNodesMarksAllDown) {
 }
 
 TEST(SessionTest, DownNodesRejectsWholeBatchAtomically) {
-  // One valid + one invalid name: the entire batch is rejected up front and
-  // nothing is marked down (atomic validation).
+  /*
+   * One valid + one invalid name: the entire batch is rejected up front and
+   * nothing is marked down (atomic validation).
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto names = s.listNodesUnlocked();
@@ -330,8 +350,10 @@ TEST(SessionTest, DownUpLinksRoundtripsState) {
 }
 
 TEST(SessionTest, FlapLinkRejectsUnknownEndpointSynchronously) {
-  // flapLink validates up front (before spawning the worker), so a bad endpoint
-  // throws to the caller and no link is downed.
+  /*
+   * flapLink validates up front (before spawning the worker), so a bad endpoint
+   * throws to the caller and no link is downed.
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto names = s.listNodesUnlocked();
@@ -351,9 +373,11 @@ TEST(SessionTest, FlapLinkZeroCyclesIsNoOp) {
 }
 
 TEST(SessionTest, FlapLinkRunsToCompletionInBackground) {
-  // Verify the background flap worker actually runs (down -> up cycles) and
-  // restores the link. Wait deterministically on a baton signalled by the
-  // worker's completion hook — no sleep-based polling.
+  /*
+   * Verify the background flap worker actually runs (down -> up cycles) and
+   * restores the link. Wait deterministically on a baton signalled by the
+   * worker's completion hook — no sleep-based polling.
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto [a, b] = test::FindAdjacentPair(s);
@@ -378,8 +402,10 @@ TEST(SessionTest, DownLinkRejectsIfEndpointAlreadyDowned) {
 }
 
 TEST(SessionTest, NodeFlapPreservesOperatorDownedLink) {
-  // Operator downLink() intent persists across a node flap: downing then
-  // restoring an endpoint must NOT silently bring an operator-downed link back.
+  /*
+   * Operator downLink() intent persists across a node flap: downing then
+   * restoring an endpoint must NOT silently bring an operator-downed link back.
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto [a, b] = test::FindAdjacentPair(s);
@@ -389,9 +415,11 @@ TEST(SessionTest, NodeFlapPreservesOperatorDownedLink) {
 
   s.downLink(a, b);
   s.downNode(a);
-  // While endpoint a is down, the incident link is subsumed by the downed node
-  // and hidden from getStatus() (per the TestStatus contract), though the
-  // intent is retained internally.
+  /*
+   * While endpoint a is down, the incident link is subsumed by the downed node
+   * and hidden from getStatus() (per the TestStatus contract), though the
+   * intent is retained internally.
+   */
   EXPECT_THAT(
       *s.getStatus().downedLinks(),
       ::testing::Not(::testing::Contains(expected)));
@@ -405,9 +433,11 @@ TEST(SessionTest, NodeFlapPreservesOperatorDownedLink) {
 }
 
 TEST(SessionTest, MultiLinkNodeFlapPreservesNeighborsOtherDownedLink) {
-  // Multi-link case: with edges a-b and b-c, downLink(b, c) then a flap of node
-  // a must NOT clear (b, c) — node a's down/up rebuilds neighbor b, and b must
-  // keep its other operator-downed link (to c) omitted, not silently restored.
+  /*
+   * Multi-link case: with edges a-b and b-c, downLink(b, c) then a flap of node
+   * a must NOT clear (b, c) — node a's down/up rebuilds neighbor b, and b must
+   * keep its other operator-downed link (to c) omitted, not silently restored.
+   */
   auto cfg = test::MakeTestConfig();
   Session s(cfg, /*basePortOverride=*/0);
   auto [a, b] = test::FindAdjacentPair(s);

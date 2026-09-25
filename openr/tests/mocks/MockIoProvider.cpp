@@ -35,8 +35,10 @@ int
 MockIoProvider::socket(int /* domain */, int /* type */, int /* protocol */) {
   VLOG(4) << "MockIoProvider::socket called";
 
-  // Create pipe for this spark socket. All received messages are written to
-  // write end of the pipe and read by spark via read-end
+  /*
+   * Create pipe for this spark socket. All received messages are written to
+   * write end of the pipe and read by spark via read-end
+   */
   int fds[2];
   if (pipe2(fds, O_NONBLOCK /* flags */) < 0) {
     LOG(FATAL) << "Failed to create pipe for spark mcast emulation.";
@@ -110,9 +112,11 @@ MockIoProvider::recvmsg(int sockFd, struct msghdr* msg, int /* flags */) {
   ::memcpy(msg->msg_name, &addrStorage, sizeof(sockaddr_storage));
   msg->msg_namelen = sizeof(sockaddr_storage);
 
-  // user should supply right sized buffer
-  // for things like fuzz-testing, we want to be able to test
-  // oversized messages being sent and truncated.
+  /*
+   * user should supply right sized buffer
+   * for things like fuzz-testing, we want to be able to test
+   * oversized messages being sent and truncated.
+   */
   if (msg->msg_iov->iov_len < packet.size()) {
     LOG(ERROR) << __func__ << " Warning: iov len " << msg->msg_iov->iov_len
                << ", p size: " << packet.size();
@@ -124,9 +128,11 @@ MockIoProvider::recvmsg(int sockFd, struct msghdr* msg, int /* flags */) {
       packet.data(),
       std::min(packet.size(), msg->msg_iov->iov_len));
 
-  //
-  // deliver the control data
-  //
+  /*
+   *
+   * deliver the control data
+   *
+   */
 
   // set the if index and ipv6 address of the sender
   struct cmsghdr* cmsg = CMSG_FIRSTHDR(msg);
@@ -248,8 +254,10 @@ MockIoProvider::sendmsg(int sockFd, const struct msghdr* msg, int /* flags */) {
         continue;
       }
 
-      // ATTN: In UT env, we explicitly allow pkt to send to itself to
-      //       mimick case that pkt looped back to its own intf.
+      /*
+       * ATTN: In UT env, we explicitly allow pkt to send to itself to
+       *       mimick case that pkt looped back to its own intf.
+       */
       if (otherFd == sockFd) {
         LOG(WARNING) << "Src and dst fd is the same. Pkt looped";
       }
@@ -275,9 +283,11 @@ MockIoProvider::sendmsg(int sockFd, const struct msghdr* msg, int /* flags */) {
   return -1;
 }
 
-//
-// Simply accept all setsockopts, and build fd to ifName mapping
-//
+/*
+ *
+ * Simply accept all setsockopts, and build fd to ifName mapping
+ *
+ */
 int
 MockIoProvider::setsockopt(
     int sockFd,
@@ -308,9 +318,11 @@ MockIoProvider::setsockopt(
   return 0;
 }
 
-//
-// Store user provided ifName to ifIndex mapping
-//
+/*
+ *
+ * Store user provided ifName to ifIndex mapping
+ *
+ */
 void
 MockIoProvider::addIfNameIfIndex(const IfNameAndifIndex& entries) {
   for (const auto& entry : entries) {
@@ -321,8 +333,10 @@ MockIoProvider::addIfNameIfIndex(const IfNameAndifIndex& entries) {
 
     std::lock_guard<std::mutex> lock(mutex_);
 
-    // we dont care about existing entries..
-    // Simply stomp away ...
+    /*
+     * we dont care about existing entries..
+     * Simply stomp away ...
+     */
     ifIndexToIfName_[ifIndex] = ifName;
     ifNameToIfIndex_[ifName] = ifIndex;
   }
@@ -365,11 +379,13 @@ MockIoProvider::registerPacketCallback(
   VLOG(4) << "Registered packet callback for interface: " << dstIfName;
 }
 
-//
-// This is invoked often. It loops through all mailboxes and send a signal
-// to spark (via linux pipe) to read the message if there is any active
-// message for it.
-//
+/*
+ *
+ * This is invoked often. It loops through all mailboxes and send a signal
+ * to spark (via linux pipe) to read the message if there is any active
+ * message for it.
+ *
+ */
 void
 MockIoProvider::processMailboxes() {
   VLOG(5) << "MockIoProvider::processMailboxes called";

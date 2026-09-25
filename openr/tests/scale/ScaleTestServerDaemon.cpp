@@ -21,10 +21,12 @@ DEFINE_bool(loopback_only, true, "Bind to loopback only (lab tool default)");
 
 namespace {
 
-// SIGINT/SIGTERM handlers need a server handle. We can't pass state through
-// the C signal-handler ABI, so a file-scope shared_ptr is the least-bad
-// option (alternative: folly::Singleton, which is heavier).
-// NOLINTNEXTLINE(facebook-avoid-non-const-global-variables)
+/*
+ * SIGINT/SIGTERM handlers need a server handle. We can't pass state through
+ * the C signal-handler ABI, so a file-scope shared_ptr is the least-bad
+ * option (alternative: folly::Singleton, which is heavier).
+ * NOLINTNEXTLINE(facebook-avoid-non-const-global-variables)
+ */
 std::shared_ptr<apache::thrift::ThriftServer> g_server;
 
 void

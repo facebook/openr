@@ -130,8 +130,10 @@ MockNetlinkFibHandler::syncFib(
   ++fibSyncCount_;
   syncFibBaton_.post();
 
-  // Identify dirty prefixes that are not part of Unicast route db nor failed
-  // Unicast route add. These would be the prefixes that we failed to delete
+  /*
+   * Identify dirty prefixes that are not part of Unicast route db nor failed
+   * Unicast route add. These would be the prefixes that we failed to delete
+   */
   for (auto& prefix : *dirtyPrefixes) {
     auto ipPrefix = toIpPrefix(prefix);
     if (unicastRouteDb->count(prefix) ||
@@ -225,8 +227,10 @@ MockNetlinkFibHandler::syncMplsFib(
   ++fibMplsSyncCount_;
   syncMplsFibBaton_.post();
 
-  // Identify dirty labels that are not part of MPLS route db nor of failed MPLS
-  // route add. These would be the labels that we failed to delete
+  /*
+   * Identify dirty labels that are not part of MPLS route db nor of failed MPLS
+   * route add. These would be the labels that we failed to delete
+   */
   for (auto& label : *dirtyLabels) {
     if (mplsRouteDb->count(label) ||
         std::count(failedLabelsToAdd.begin(), failedLabelsToAdd.end(), label)) {

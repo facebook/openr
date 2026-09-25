@@ -45,8 +45,10 @@ waitForDataToRead(const int fd) {
     if (ret > 0) {
       return;
     } else if (ret == EINTR) {
-      // A signal occurred while the system call was in progress.
-      // No error actually occurred.
+      /*
+       * A signal occurred while the system call was in progress.
+       * No error actually occurred.
+       */
       continue;
     } else {
       throw folly::AsyncSocketException(
@@ -59,12 +61,14 @@ waitForDataToRead(const int fd) {
 
 using namespace openr;
 using namespace openr::MockIoProviderUtils;
-//
-// This test sends packets along the follow topology.
-//
-// 3-node topology: 1 <-> 2 (2-node bidirectional)
-//                  3 (1-node island)
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ * 3-node topology: 1 <-> 2 (2-node bidirectional)
+ *                  3 (1-node island)
+ *
+ */
 TEST(MockIoProviderTestSetup, TwoNodesAndOneNodeTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -198,13 +202,15 @@ TEST(MockIoProviderTestSetup, TwoNodesAndOneNodeTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology
-// with the two nodes running in separate thread for
-// checking concurrent packet transfer.
-//
-// 2-node topology: 1 <-> 2 (2-node bidirectional)
-//
+/*
+ *
+ * This test sends packets along the follow topology
+ * with the two nodes running in separate thread for
+ * checking concurrent packet transfer.
+ *
+ * 2-node topology: 1 <-> 2 (2-node bidirectional)
+ *
+ */
 TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -379,8 +385,10 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
   checkPacketContent(packet2, recvMsg);
   EXPECT_EQ(ifIndex1, getMsgIfIndex(&recvMsg));
 
-  // To receive packet3.
-  // Wait for data availability for read.
+  /*
+   * To receive packet3.
+   * Wait for data availability for read.
+   */
   waitForDataToRead(fd1);
 
   // Receiving packet3 and checking.
@@ -399,16 +407,18 @@ TEST(MockIoProviderTestSetup, TwoConcurrentNodesTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology.
-//
-// 4-node full ring topology: 1 <-> 2
-//                            ^     ^
-//                            |     |
-//                            v     v
-//                            4 <-> 3
-// Each node has a 2-degree outgoing connection with adjacent neighbours.
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ * 4-node full ring topology: 1 <-> 2
+ *                            ^     ^
+ *                            |     |
+ *                            v     v
+ *                            4 <-> 3
+ * Each node has a 2-degree outgoing connection with adjacent neighbours.
+ *
+ */
 TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -630,16 +640,18 @@ TEST(MockIoProviderTestSetup, DuplexFullRingOfNodesTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology.
-//
-// 4-node partial ring topology: 1 <-> 2
-//                               ^     |
-//                               |     |
-//                               |     v
-//                               4 --> 3
-// The nodes has non-uniform outgoing degree of connectivity.
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ * 4-node partial ring topology: 1 <-> 2
+ *                               ^     |
+ *                               |     |
+ *                               |     v
+ *                               4 --> 3
+ * The nodes has non-uniform outgoing degree of connectivity.
+ *
+ */
 TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -854,17 +866,19 @@ TEST(MockIoProviderTestSetup, PartialRingOfNodesTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology.
-//
-// 4-node full star topology: 2 <-> 1 <-> 3
-//                                  ^
-//                                  |
-//                                  v
-//                                  4
-// Each node has a 1-degree outgoing connection except node 1, which has
-// 3-degree outgoing connectivities.
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ * 4-node full star topology: 2 <-> 1 <-> 3
+ *                                  ^
+ *                                  |
+ *                                  v
+ *                                  4
+ * Each node has a 1-degree outgoing connection except node 1, which has
+ * 3-degree outgoing connectivities.
+ *
+ */
 TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -1078,16 +1092,18 @@ TEST(MockIoProviderTestSetup, DuplexStarOfNodesTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology.
-//
-// 4-node partial star topology: 2 <-> 1 --> 3
-//                                     ^
-//                                     |
-//                                     |
-//                                     4
-// Some connectivities are missing from the prior full star topo.
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ * 4-node partial star topology: 2 <-> 1 --> 3
+ *                                     ^
+ *                                     |
+ *                                     |
+ *                                     4
+ * Some connectivities are missing from the prior full star topo.
+ *
+ */
 TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -1298,19 +1314,21 @@ TEST(MockIoProviderTestSetup, PartialStarOfNodesTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology.
-//
-//                            +-----------+
-//                            |           |
-//                            v           v
-// 4-node full star topology: 2 <-> 1 <-> 3
-//                            ^     ^     ^
-//                            |     |     |
-//                            |     v     |
-//                            +---> 4 <---+
-// Each node has 3-degree outgoing connectivities.
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ *                            +-----------+
+ *                            |           |
+ *                            v           v
+ * 4-node full star topology: 2 <-> 1 <-> 3
+ *                            ^     ^     ^
+ *                            |     |     |
+ *                            |     v     |
+ *                            +---> 4 <---+
+ * Each node has 3-degree outgoing connectivities.
+ *
+ */
 TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");
@@ -1547,16 +1565,18 @@ TEST(MockIoProviderTestSetup, DuplexFullMeshOfNodesTest) {
   mockIoProviderThread.join();
 }
 
-//
-// This test sends packets along the follow topology.
-//
-// 4-node full star topology: 2 <-> 1 --> 3
-//                            ^     |     ^
-//                            |     |     |
-//                            |     v     |
-//                            +---> 4 ----+
-// Each node has 3-degree outgoing connectivities.
-//
+/*
+ *
+ * This test sends packets along the follow topology.
+ *
+ * 4-node full star topology: 2 <-> 1 --> 3
+ *                            ^     |     ^
+ *                            |     |     |
+ *                            |     v     |
+ *                            +---> 4 ----+
+ * Each node has 3-degree outgoing connectivities.
+ *
+ */
 TEST(MockIoProviderTestSetup, PartialMeshOfNodesTest) {
   folly::IPAddressV6 ipAddr1V6("fe80::1");
   folly::IPAddressV6 ipAddr2V6("fe80::2");

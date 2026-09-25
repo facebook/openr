@@ -103,9 +103,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
   kvStore_->waitUntilRunning();
   allThreads_.emplace_back(std::move(kvStoreThread));
 
-  //
-  // create spark
-  //
+  /*
+   *
+   * create spark
+   *
+   */
   spark_ = std::make_unique<Spark>(
       interfaceUpdatesQueue_.getReader(),
       initializationEventQueue_.getReader(),
@@ -114,9 +116,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       ioProvider_,
       config_);
 
-  //
-  // create link monitor
-  //
+  /*
+   *
+   * create link monitor
+   *
+   */
   linkMonitor_ = std::make_unique<LinkMonitor>(
       config_,
       nlSock_.get(),
@@ -130,17 +134,21 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       neighborUpdatesQueue_.getReader(),
       nlSock_->getReader());
 
-  //
-  // create monitor
-  //
+  /*
+   *
+   * create monitor
+   *
+   */
   monitor_ = std::make_unique<openr::Monitor>(
       config_,
       Constants::kEventLogCategory.toString(),
       logSampleQueue_.getReader());
 
-  //
-  // Create prefix manager
-  //
+  /*
+   *
+   * Create prefix manager
+   *
+   */
   prefixManager_ = std::make_unique<PrefixManager>(
       staticRoutesQueue_,
       kvRequestQueue_,
@@ -150,9 +158,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       fibRouteUpdatesQueue_.getReader(),
       config_);
 
-  //
-  // create decision
-  //
+  /*
+   *
+   * create decision
+   *
+   */
   decision_ = std::make_unique<Decision>(
       config_,
       peerUpdatesQueue_.getReader(),
@@ -161,9 +171,11 @@ OpenrWrapper<Serializer>::OpenrWrapper(
       routeUpdatesQueue_,
       kvRequestQueue_);
 
-  //
-  // create FIB
-  //
+  /*
+   *
+   * create FIB
+   *
+   */
   fib_ = std::make_unique<Fib>(
       config_, routeUpdatesQueue_.getReader(), fibRouteUpdatesQueue_);
 
@@ -175,9 +187,11 @@ template <class Serializer>
 void
 OpenrWrapper<Serializer>::run() {
   eventBase_.scheduleTimeout(std::chrono::milliseconds(100), [this]() {
-    // mimick nlSock to generate LINK event
-    // ATTN: LinkMonitor will be notified as it holds the reader queue
-    //       from the same MockNetlinkProtocolSocket
+    /*
+     * mimick nlSock to generate LINK event
+     * ATTN: LinkMonitor will be notified as it holds the reader queue
+     *       from the same MockNetlinkProtocolSocket
+     */
     nlEventsInjector_->sendLinkEvent(
         "vethLMTest_" + nodeId_, /* ifName */
         5, /* ifIndex */

@@ -167,8 +167,10 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   folly::Baton<> deleteMplsRoutesBaton_;
   folly::Baton<> syncMplsFibBaton_;
 
-  // We use queue for signalling & waiting for unhealthy exceptions as it can
-  // be repetitive
+  /*
+   * We use queue for signalling & waiting for unhealthy exceptions as it can
+   * be repetitive
+   */
   messaging::RWQueue<folly::Unit> unhealthyExceptionQueue_;
 };
 
