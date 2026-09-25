@@ -336,9 +336,11 @@ BM_PrefixManagerPrefixFlap(
         testFixture->getPrefixGenerator(), numOfFlappedPrefixes);
     auto prefixesToWithdraw = prefixesToAdvertise;
 
-    //
-    // itertion 1.1: advertise `numOfFlappedPrefixes`
-    //
+    /*
+     *
+     * itertion 1.1: advertise `numOfFlappedPrefixes`
+     *
+     */
 
     // Start measuring benchmark time
     suspender.dismiss();
@@ -358,9 +360,11 @@ BM_PrefixManagerPrefixFlap(
     LOG(INFO) << "First iteration: advertised " << numOfFlappedPrefixes
               << " prefixes in " << advertiseBaseline << "ms";
 
-    //
-    // itertion 1.2: withdraw `numOfFlappedPrefixes`
-    //
+    /*
+     *
+     * itertion 1.2: withdraw `numOfFlappedPrefixes`
+     *
+     */
 
     // Start measuring benchmark time
     suspender.dismiss();
@@ -379,9 +383,11 @@ BM_PrefixManagerPrefixFlap(
             .count();
     LOG(INFO) << "First iteration: withdrawn " << numOfFlappedPrefixes
               << " prefixes in " << withdrawBaseline << "ms";
-    //
-    // itertion 2.1: advertise `numOfFlappedPrefixes`
-    //
+    /*
+     *
+     * itertion 2.1: advertise `numOfFlappedPrefixes`
+     *
+     */
 
     // Start measuring benchmark time
     suspender.dismiss();
@@ -408,9 +414,11 @@ BM_PrefixManagerPrefixFlap(
           << diffPercentage << "%";
     }
 
-    //
-    // itertion 2.2: withdraw `numOfFlappedPrefixes`
-    //
+    /*
+     *
+     * itertion 2.2: withdraw `numOfFlappedPrefixes`
+     *
+     */
 
     // Start measuring benchmark time
     suspender.dismiss();
@@ -437,9 +445,11 @@ BM_PrefixManagerPrefixFlap(
           << diffPercentage << "%";
     }
 
-    //
-    // itertion 3.1: advertise `numOfFlappedPrefixes`
-    //
+    /*
+     *
+     * itertion 3.1: advertise `numOfFlappedPrefixes`
+     *
+     */
 
     // Start measuring benchmark time
     suspender.dismiss();
@@ -466,9 +476,11 @@ BM_PrefixManagerPrefixFlap(
           << diffPercentage << "%";
     }
 
-    //
-    // itertion 3.2: withdraw `numOfFlappedPrefixes`
-    //
+    /*
+     *
+     * itertion 3.2: withdraw `numOfFlappedPrefixes`
+     *
+     */
 
     // Start measuring benchmark time
     suspender.dismiss();

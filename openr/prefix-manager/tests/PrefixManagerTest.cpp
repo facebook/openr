@@ -290,9 +290,11 @@ class PrefixManagerCoalescedFibUpdatesFixture
 
     initKvStoreWithPrefixManager();
 
-    // ATTN: do NOT wait for PREFIX_DB_SYNCED here -- that is what the test
-    // asserts. The FULL_SYNC is seeded in createFibRouteUpdatesReader below,
-    // so no separate triggerInitializationEventForPrefixManager is needed.
+    /*
+     * ATTN: do NOT wait for PREFIX_DB_SYNCED here -- that is what the test
+     * asserts. The FULL_SYNC is seeded in createFibRouteUpdatesReader below,
+     * so no separate triggerInitializationEventForPrefixManager is needed.
+     */
   }
 
  protected:
@@ -442,9 +444,11 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStore) {
         prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
-  // Throttling can come from:
-  //  - `syncKvStore()` inside `PrefixManager`
-  //  - `persistKey()` inside `KvStoreClientInternal`
+  /*
+   * Throttling can come from:
+   *  - `syncKvStore()` inside `PrefixManager`
+   *  - `persistKey()` inside `KvStoreClientInternal`
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -557,9 +561,11 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
   };
 
   auto q = kvStoreWrapper->getKvStore()->getKvStoreUpdatesReader();
-  //
-  // 1. Inject prefix1 with client-loopback and client-default - Verify KvStore
-  //
+  /*
+   *
+   * 1. Inject prefix1 with client-loopback and client-default - Verify KvStore
+   *
+   */
   expectedPrefix = loopback_prefix; // lowest client-id will win
   prefixManager->advertisePrefixes({loopback_prefix, default_prefix}).get();
   auto maybePub = q.get();
@@ -574,9 +580,11 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
         // Do not interested in initialization event
       });
 
-  //
-  // 2. Withdraw prefix1 with client-loopback - Verify KvStore
-  //
+  /*
+   *
+   * 2. Withdraw prefix1 with client-loopback - Verify KvStore
+   *
+   */
   expectedPrefix = default_prefix;
   prefixManager->withdrawPrefixes({loopback_prefix}).get();
   maybePub = q.get();
@@ -591,9 +599,11 @@ TEST_F(PrefixManagerTestFixture, VerifyKvStoreMultipleClients) {
         // Do not interested in initialization event
       });
 
-  //
-  // 3. Withdraw prefix1 with client-default - Verify KvStore
-  //
+  /*
+   *
+   * 3. Withdraw prefix1 with client-default - Verify KvStore
+   *
+   */
   expectedPrefix = std::nullopt;
   prefixManager->withdrawPrefixes({default_prefix}).get();
   maybePub = q.get();
@@ -631,9 +641,11 @@ TEST_F(PrefixManagerTestFixture, PrefixKeyUpdates) {
         prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
-  // Throttling can come from:
-  //  - `syncKvStore()` inside `PrefixManager`
-  //  - `persistKey()` inside `KvStoreClientInternal`
+  /*
+   * Throttling can come from:
+   *  - `syncKvStore()` inside `PrefixManager`
+   *  - `persistKey()` inside `KvStoreClientInternal`
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -735,9 +747,11 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
         EXPECT_EQ(db.prefixEntries()[0], prefixEntry);
       });
 
-  // increment the key version in kvstore and set empty value. `PrefixManager`
-  // will detect value changed, and retain the value present in persistent DB,
-  // and advertise with higher key version.
+  /*
+   * increment the key version in kvstore and set empty value. `PrefixManager`
+   * will detect value changed, and retain the value present in persistent DB,
+   * and advertise with higher key version.
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 10), [&]() noexcept {
         auto emptyPrefixDb = createPrefixDb(nodeId_, {});
@@ -767,8 +781,10 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
         EXPECT_EQ(db.prefixEntries()[0], prefixEntry);
       });
 
-  // Clear key from prefix DB map, which will delete key from persistent
-  // store and update kvstore with empty prefix entry list
+  /*
+   * Clear key from prefix DB map, which will delete key from persistent
+   * store and update kvstore with empty prefix entry list
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -790,9 +806,11 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
         EXPECT_TRUE(*db.deletePrefix());
       });
 
-  // Insert same key in kvstore with any higher version, and non empty value
-  // Prefix manager should get the update and re-advertise with empty Prefix
-  // with higher key version.
+  /*
+   * Insert same key in kvstore with any higher version, and non empty value
+   * Prefix manager should get the update and re-advertise with empty Prefix
+   * with higher key version.
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -808,8 +826,10 @@ TEST_F(PrefixManagerTestFixture, PrefixKeySubscription) {
                 ));
       });
 
-  // prefix manager will override the key inserted above with higher key
-  // version and empty prefix DB
+  /*
+   * prefix manager will override the key inserted above with higher key
+   * version and empty prefix DB
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -880,8 +900,10 @@ TEST_F(PrefixManagerSmallTtlTestFixture, PrefixWithdrawExpiry) {
         prefixManager->withdrawPrefixes({prefixEntry1}).get();
       });
 
-  // check `prefixEntry1` should have been expired, prefix 2 should be there
-  // with same version
+  /*
+   * check `prefixEntry1` should have been expired, prefix 2 should be there
+   * with same version
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt +=
@@ -974,8 +996,10 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
         {prefixEntry1, prefixEntry7});
     prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore
-    // ATTN: both prefixes should be updated via throttle
+    /*
+     * Wait for update in KvStore
+     * ATTN: both prefixes should be updated via throttle
+     */
     auto pub = kvStoreWrapper->recvPublication();
     EXPECT_EQ(2, pub.keyVals()->size());
 
@@ -993,8 +1017,10 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
         PrefixEventType::WITHDRAW_PREFIXES_BY_TYPE, thrift::PrefixType::BGP);
     prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore
-    // ATTN: ONLY `prefixEntry7` will be removed as its type is BGP
+    /*
+     * Wait for update in KvStore
+     * ATTN: ONLY `prefixEntry7` will be removed as its type is BGP
+     */
     auto pub = kvStoreWrapper->recvPublication();
     EXPECT_EQ(1, pub.keyVals()->size());
 
@@ -1013,9 +1039,11 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
         {prefixEntry3});
     prefixUpdatesQueue.push(std::move(event));
 
-    // Wait for update in KvStore
-    // ATTN: 1st pub is withdrawn notification of existing `prefixEntry1`
-    //       `KvStoreClientInternal` won't throttle the change
+    /*
+     * Wait for update in KvStore
+     * ATTN: 1st pub is withdrawn notification of existing `prefixEntry1`
+     *       `KvStoreClientInternal` won't throttle the change
+     */
     auto pub1 = kvStoreWrapper->recvPublication();
     EXPECT_EQ(1, pub1.keyVals()->size());
 
@@ -1047,9 +1075,11 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
     EXPECT_EQ(0, prefixes->size());
   }
 
-  // Test VIP prefixes add and withdraw
-  // Add prefixEntry9 with 2 nexthops, withdraw 1 nexthop, then withdraw the
-  // other one
+  /*
+   * Test VIP prefixes add and withdraw
+   * Add prefixEntry9 with 2 nexthops, withdraw 1 nexthop, then withdraw the
+   * other one
+   */
   PrefixEntry cPrefixEntry(
       std::make_shared<thrift::PrefixEntry>(prefixEntry9), {});
   folly::F14FastSet<thrift::NextHopThrift> nexthops;
@@ -1076,8 +1106,10 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
           event.prefixEntries.push_back(cPrefixEntry);
           prefixUpdatesQueue.push(std::move(event));
 
-          // Unicast route of VIP prefixEntry9 is sent to Decision/Fib for
-          // programming.
+          /*
+           * Unicast route of VIP prefixEntry9 is sent to Decision/Fib for
+           * programming.
+           */
           auto update = waitForRouteUpdate(*staticRoutesReaderPtr);
           EXPECT_TRUE(update.has_value());
 
@@ -1155,9 +1187,11 @@ TEST_F(PrefixManagerTestFixture, PrefixUpdatesQueue) {
  * Verifies `getAdvertisedRoutesFiltered` with all filter combinations
  */
 TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
-  //
-  // Add prefixes, prefix1 -> DEFAULT, LOOPBACK
-  //
+  /*
+   *
+   * Add prefixes, prefix1 -> DEFAULT, LOOPBACK
+   *
+   */
   auto const prefix = toIpPrefix("10.0.0.0/8");
   {
     PrefixEvent event1(
@@ -1172,9 +1206,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     prefixUpdatesQueue.push(std::move(event2));
   }
 
-  //
-  // Empty filter
-  //
+  /*
+   *
+   * Empty filter
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     auto routes = prefixManager->getAdvertisedRoutesFiltered(filter).get();
@@ -1192,9 +1228,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     EXPECT_EQ(2, routeDetail.routes()->size());
   }
 
-  //
-  // Filter on prefix
-  //
+  /*
+   *
+   * Filter on prefix
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixes() = std::vector<thrift::IpPrefix>({prefix});
@@ -1208,9 +1246,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     EXPECT_EQ(2, routeDetail.routes()->size());
   }
 
-  //
-  // Filter on non-existing prefix
-  //
+  /*
+   *
+   * Filter on non-existing prefix
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixes() =
@@ -1219,9 +1259,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     ASSERT_EQ(0, routes->size());
   }
 
-  //
-  // Filter on empty prefix list. Should return empty list
-  //
+  /*
+   *
+   * Filter on empty prefix list. Should return empty list
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixes() = std::vector<thrift::IpPrefix>();
@@ -1229,9 +1271,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     ASSERT_EQ(0, routes->size());
   }
 
-  //
-  // Filter on type
-  //
+  /*
+   *
+   * Filter on type
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixType() = thrift::PrefixType::DEFAULT;
@@ -1248,9 +1292,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     EXPECT_EQ(thrift::PrefixType::DEFAULT, route.key());
   }
 
-  //
-  // Filter on non-existing type (BGP)
-  //
+  /*
+   *
+   * Filter on non-existing type (BGP)
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixType() = thrift::PrefixType::BGP;
@@ -1258,9 +1304,11 @@ TEST_F(PrefixManagerTestFixture, GetAdvertisedRoutes) {
     ASSERT_EQ(0, routes->size());
   }
 
-  //
-  // Filter on non-existing type (VIP)
-  //
+  /*
+   *
+   * Filter on non-existing type (VIP)
+   *
+   */
   {
     thrift::AdvertisedRouteFilter filter;
     filter.prefixType() = thrift::PrefixType::VIP;
@@ -1353,9 +1401,11 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
       2);
   path1_2_2.area() = areaStrB;
 
-  //
-  // 1. Inject prefix1 from area A, {B, C} should receive announcement
-  //
+  /*
+   *
+   * 1. Inject prefix1 from area A, {B, C} should receive announcement
+   *
+   */
 
   {
     auto prefixEntry1A = prefixEntry1;
@@ -1407,10 +1457,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     EXPECT_EQ(0, gotDeleted.size());
   }
 
-  //
-  // 2. Inject prefix1 of VIP type from area B, {A, C} should receive
-  // announcement. B withdraw old prefix from A
-  //
+  /*
+   *
+   * 2. Inject prefix1 of VIP type from area B, {A, C} should receive
+   * announcement. B withdraw old prefix from A
+   *
+   */
 
   {
     // build prefixEntry for addr1 from area "B"
@@ -1455,9 +1507,11 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteUpdates) {
     EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaB).prefix());
   }
 
-  //
-  // 3. Withdraw prefix1, {A, C} receive prefix withdrawal
-  //
+  /*
+   *
+   * 3. Withdraw prefix1, {A, C} receive prefix withdrawal
+   *
+   */
 
   {
     DecisionRouteUpdate routeUpdate;
@@ -1511,10 +1565,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
       2);
   path1_2_3.area() = areaStrC;
 
-  //
-  // 1. Inject prefix1 with ecmp areas = [A, B], best area = A
-  //    => only C receive announcement
-  //
+  /*
+   *
+   * 1. Inject prefix1 with ecmp areas = [A, B], best area = A
+   *    => only C receive announcement
+   *
+   */
 
   // create unicast route for addr1 from area "A"
   auto prefixEntry1A = prefixEntry1;
@@ -1552,10 +1608,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     EXPECT_EQ(0, gotDeleted.size());
   }
 
-  //
-  // 2. add C into ecmp group, ecmp areas = [A, B, C], best area = A
-  //    => C receive withdraw
-  //
+  /*
+   *
+   * 2. add C into ecmp group, ecmp areas = [A, B, C], best area = A
+   *    => C receive withdraw
+   *
+   */
   unicast1A.nexthops.emplace(path1_2_3);
   {
     DecisionRouteUpdate routeUpdate;
@@ -1573,10 +1631,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaC).prefix());
   }
 
-  //
-  // 3. withdraw B from ecmp group, ecmp areas = [A, C], best area = A
-  //    => B receive update
-  //
+  /*
+   *
+   * 3. withdraw B from ecmp group, ecmp areas = [A, C], best area = A
+   *    => B receive update
+   *
+   */
   unicast1A.nexthops.erase(path1_2_2);
   {
     DecisionRouteUpdate routeUpdate;
@@ -1594,10 +1654,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     EXPECT_EQ(0, gotDeleted.size());
   }
 
-  //
-  // 4. change ecmp group to [B], best area = B
-  //    => B receive withdraw, {A, C} receive update
-  //
+  /*
+   *
+   * 4. change ecmp group to [B], best area = B
+   *    => B receive withdraw, {A, C} receive update
+   *
+   */
 
   // create unicast route for addr1 from area "B"
   auto prefixEntry1B = prefixEntry1;
@@ -1624,8 +1686,10 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     expected.emplace(prefixKeyAreaA, expectedPrefixEntry1B);
     expected.emplace(prefixKeyAreaC, expectedPrefixEntry1B);
 
-    // this test is long, we might hit ttl updates
-    // here skip ttl updates
+    /*
+     * this test is long, we might hit ttl updates
+     * here skip ttl updates
+     */
     int expectedPubCnt{3}, gotPubCnt{0};
     while (gotPubCnt < expectedPubCnt) {
       auto pub = kvStoreWrapper->recvPublication();
@@ -1638,10 +1702,12 @@ TEST_F(PrefixManagerMultiAreaTestFixture, DecisionRouteNexthopUpdates) {
     EXPECT_EQ(addr1, *gotDeleted.at(prefixKeyAreaB).prefix());
   }
 
-  //
-  // 5. Withdraw prefix1
-  //    => {A, C} receive prefix withdrawal
-  //
+  /*
+   *
+   * 5. Withdraw prefix1
+   *    => {A, C} receive prefix withdrawal
+   *
+   */
   {
     DecisionRouteUpdate routeUpdate;
     routeUpdate.unicastRoutesToDelete.emplace(toIPNetwork(addr1));
@@ -1848,13 +1914,15 @@ TEST_F(RouteOriginationOverrideFixture, StaticRoutesAnnounce) {
   EXPECT_FALSE(update.has_value());
 }
 
-//
-// Test case to verify prefix/attributes aligns with config read from
-// `thrift::OpenrConfig`. This is the sanity check.
-//
-// Test also verifies that route with min_supporting_route=0 will be directly
-// advertised to `KvStore`.
-//
+/*
+ *
+ * Test case to verify prefix/attributes aligns with config read from
+ * `thrift::OpenrConfig`. This is the sanity check.
+ *
+ * Test also verifies that route with min_supporting_route=0 will be directly
+ * advertised to `KvStore`.
+ *
+ */
 TEST_F(RouteOriginationOverrideFixture, ReadFromConfig) {
   // RQueue interface to read KvStore update
   auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
@@ -1956,19 +2024,21 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
   auto unicastEntryV4 = RibUnicastEntry(
       toIPNetwork(addressV4), {}, entryV4, Constants::kDefaultArea.toString());
 
-  //
-  // Step1: this tests:
-  //  - originated prefix whose supporting routes passed across threshold
-  //    will be advertised(v4);
-  //  - otherwise it will NOT be advertised;
-  //
-  // Inject:
-  //  - 1 supporting route for v4Prefix;
-  //  - 1 supporting route for v6Prefix;
-  // Expect:
-  //  - v4Prefix_ will be advertised as `min_supporting_route=1`;
-  //  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
-  //
+  /*
+   *
+   * Step1: this tests:
+   *  - originated prefix whose supporting routes passed across threshold
+   *    will be advertised(v4);
+   *  - otherwise it will NOT be advertised;
+   *
+   * Inject:
+   *  - 1 supporting route for v4Prefix;
+   *  - 1 supporting route for v6Prefix;
+   * Expect:
+   *  - v4Prefix_ will be advertised as `min_supporting_route=1`;
+   *  - v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+   *
+   */
   XLOG(DBG1, "Starting test step 1...");
   {
     DecisionRouteUpdate routeUpdate;
@@ -2031,21 +2101,23 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     }
   }
 
-  //
-  // Step2: this tests:
-  //  - unrelated prefix will be ignored;
-  //  - route deletion followed with addition will make no change
-  //    although threshold has been bypassed in the middle;
-  //
-  // Inject:
-  //  - 1 route which is NOT subnet of v4Prefix;
-  //  - 1 supporting route for v6Prefix;
-  // Withdraw:
-  //  - 1 different supporting route for v6Prefix;
-  // Expect:
-  //  - # of supporting prefix for v4Prefix_ won't change;
-  //  - # of supporting prefix for v6Prefix_ won't change;
-  //
+  /*
+   *
+   * Step2: this tests:
+   *  - unrelated prefix will be ignored;
+   *  - route deletion followed with addition will make no change
+   *    although threshold has been bypassed in the middle;
+   *
+   * Inject:
+   *  - 1 route which is NOT subnet of v4Prefix;
+   *  - 1 supporting route for v6Prefix;
+   * Withdraw:
+   *  - 1 different supporting route for v6Prefix;
+   * Expect:
+   *  - # of supporting prefix for v4Prefix_ won't change;
+   *  - # of supporting prefix for v6Prefix_ won't change;
+   *
+   */
   XLOG(DBG1, "Starting test step 2...");
   {
     DecisionRouteUpdate routeUpdate;
@@ -2088,20 +2160,22 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     }
   }
 
-  //
-  // Step3: this tests:
-  //  - existing supporting prefix will be ignored;
-  //  - originated prefix whose supporting routes passed across threshold
-  //    will be advertised(v6);
-  //
-  // Inject:
-  //  - exactly the same supporting route as previously for v4Prefix;
-  //  - 1 supporting route for v6Prefix;
-  // Expect:
-  //  - v4Prefix_'s supporting routes doesn't change as same update is ignored
-  //  - v6Prefix_ will be advertised to `KvStore` as `min_supporting_route=2`
-  //  - v6Prefix_ will NOT be advertised to `Decision` as `install_to_fib=false`
-  //
+  /*
+   *
+   * Step3: this tests:
+   *  - existing supporting prefix will be ignored;
+   *  - originated prefix whose supporting routes passed across threshold
+   *    will be advertised(v6);
+   *
+   * Inject:
+   *  - exactly the same supporting route as previously for v4Prefix;
+   *  - 1 supporting route for v6Prefix;
+   * Expect:
+   *  - v4Prefix_'s supporting routes doesn't change as same update is ignored
+   *  - v6Prefix_ will be advertised to `KvStore` as `min_supporting_route=2`
+   *  - v6Prefix_ will NOT be advertised to `Decision` as `install_to_fib=false`
+   *
+   */
   XLOG(DBG1, "Starting test step 3...");
   {
     DecisionRouteUpdate routeUpdate;
@@ -2163,15 +2237,17 @@ TEST_F(RouteOriginationFixture, BasicAdvertiseWithdraw) {
     }
   }
 
-  // Step4: Withdraw:
-  //  - 1 supporting route of v4Prefix;
-  //  - 1 supporting route of v6Prefix;
-  // Expect:
-  //  - v4Prefix_ is withdrawn as `supporting_route_cnt=0`;
-  //  - v6Prefix_ is withdrawn as `supporting_route_cnt=1`;
-  //  - `Decision` won't receive routeUpdate for `v6Prefix_`
-  //    since it has `install_to_fib=false`;
-  //
+  /*
+   * Step4: Withdraw:
+   *  - 1 supporting route of v4Prefix;
+   *  - 1 supporting route of v6Prefix;
+   * Expect:
+   *  - v4Prefix_ is withdrawn as `supporting_route_cnt=0`;
+   *  - v6Prefix_ is withdrawn as `supporting_route_cnt=1`;
+   *  - `Decision` won't receive routeUpdate for `v6Prefix_`
+   *    since it has `install_to_fib=false`;
+   *
+   */
   XLOG(DBG1, "Starting test step 4...");
   {
     DecisionRouteUpdate routeUpdate;
@@ -2317,9 +2393,11 @@ class RouteOriginationV4OverV6NonZeroSupportFixture
     triggerInitializationEventForPrefixManager(
         fibRouteUpdatesQueue, kvStoreWrapper->getKvStoreUpdatesQueueWriter());
 
-    // ATTN: do NOT wait for PREFIX_DB_SYNC event publication since
-    // the test will validate queue events happening before initializaiton
-    // event being published.
+    /*
+     * ATTN: do NOT wait for PREFIX_DB_SYNC event publication since
+     * the test will validate queue events happening before initializaiton
+     * event being published.
+     */
   }
 
   openr::thrift::OpenrConfig
@@ -2354,9 +2432,11 @@ TEST_F(
       nodeId_, folly::IPAddress::createNetwork(v4Prefix_), kTestingAreaName);
   auto v4PrefixKeyStr = v4PrefixKey.getPrefixKeyV2();
   {
-    // Static route for prefix with `install_to_fib=true` should be published in
-    // OpenR initialization process.
-    // v4Prefix_ has install_to_fib set as true.
+    /*
+     * Static route for prefix with `install_to_fib=true` should be published in
+     * OpenR initialization process.
+     * v4Prefix_ has install_to_fib set as true.
+     */
     auto update = waitForRouteUpdate(staticRoutesReader);
     EXPECT_TRUE(update.has_value());
     auto updatedRoutes = *update.value().unicastRoutesToUpdate();
@@ -2371,8 +2451,10 @@ TEST_F(
   }
 
   {
-    // First Fib route updates include v4 and one supporting prefix.
-    // Note the v4Prefix is 192.108.0.1/24 :-)
+    /*
+     * First Fib route updates include v4 and one supporting prefix.
+     * Note the v4Prefix is 192.108.0.1/24 :-)
+     */
     auto addressV4 = toIpPrefix(v4Prefix_);
     const auto entryV4 =
         createPrefixEntry(addressV4, thrift::PrefixType::CONFIG);
@@ -2395,9 +2477,11 @@ TEST_F(
     routeUpdate1.addRouteToUpdate(unicastEntryV4_1);
     fibRouteUpdatesQueue.push(std::move(routeUpdate1));
 
-    // After first Fib route updates, minimum_supporting_routes=2 is not
-    // fulfilled for config originated v4Prefix_. As a result, previously
-    // published unicast route should be removed.
+    /*
+     * After first Fib route updates, minimum_supporting_routes=2 is not
+     * fulfilled for config originated v4Prefix_. As a result, previously
+     * published unicast route should be removed.
+     */
     auto update = waitForRouteUpdate(staticRoutesReader);
     EXPECT_TRUE(update.has_value());
     auto deletedRoutes = *update.value().unicastRoutesToDelete();
@@ -2410,8 +2494,10 @@ TEST_F(
   }
 
   {
-    // Supporting prefix number 2
-    // Note the v4Prefix is 192.108.0.1/24 :-)
+    /*
+     * Supporting prefix number 2
+     * Note the v4Prefix is 192.108.0.1/24 :-)
+     */
     const std::string v4Prefix_2 = "192.108.0.22/30";
     const auto v4Network_2 = folly::IPAddress::createNetwork(v4Prefix_2);
     const auto prefixEntryV4_2 =
@@ -2429,8 +2515,10 @@ TEST_F(
     auto pub = kvStoreWrapper->recvPublication();
     EXPECT_EQ(1, pub.keyVals()->count(v4PrefixKeyStr));
 
-    // minimum_supporting_routes=2 is fulfilled, same static route for v4Prefix_
-    // should not be published again.
+    /*
+     * minimum_supporting_routes=2 is fulfilled, same static route for v4Prefix_
+     * should not be published again.
+     */
     auto update = waitForRouteUpdate(staticRoutesReader);
     EXPECT_TRUE(update.has_value());
     auto updatedRoutes = *update.value().unicastRoutesToUpdate();
@@ -2542,8 +2630,10 @@ class RouteOriginationSingleAreaFixture : public RouteOriginationFixture {
 };
 
 TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
-  // RQueue interface to read route updates sent by PrefixManager to
-  // Decision. This queue is expressly used for originated routes
+  /*
+   * RQueue interface to read route updates sent by PrefixManager to
+   * Decision. This queue is expressly used for originated routes
+   */
   auto staticRoutesReader = staticRouteUpdatesQueue.getReader();
   auto kvStoreUpdatesReader = kvStoreWrapper->getReader();
 
@@ -2595,43 +2685,45 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
   const auto bestPrefixEntryV6_ =
       createPrefixEntry(toIpPrefix(v6Prefix_), thrift::PrefixType::CONFIG);
 
-  //
-  // This test case tests the following:
-  //  - originated prefix whose supporting routes passed across threshold
-  //    will be advertised (v4, and eventually v6);
-  //  - otherwise it will NOT be advertised (initially v6);
-  //  - Route Advertisement to KvStore happens with single area configured
-  //
-  // Steps, briefly:
-  //
-  // 1. Inject the following into the fibRouteUpdatesQueue (simulating Fib to
-  //    Prefixmgr interaction):
-  //    - 1st supporting route for v4Prefix_;
-  //    - 1st supporting route for v6Prefix_;
-  // Verification:
-  //    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
-  //    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
-  //    e. Config values and supporting routes count is as expected for both
-  //       v4Prefix_ and v6Prefix_
-  //
-  // 2. Inject the following into the fibRouteUpdatesQueue (simulating Fib
-  //    to Prefixmgr interaction):
-  //    - 2nd supporting route for v6Prefix_;
-  // Verification:
-  //    a. v6Prefix_ will STILL NOT be sent to Decision on
-  //       staticRouteUpdatesQueue since, while min_supporting_route is now met
-  //       for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
-  //    b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
-  //    c. Config values and supporting routes count is as expected for both
-  //       v4Prefix_ and v6Prefix_
-  //
-  // 3. Withdraw 1 supporting route from both v4Prefix_ and v6Prefix_
-  //    - this will break the min_supporting_routes condition for both
-  //      the prefixes.
-  // Verification:
-  //    a. delete only for the v4Prefix_ gets sent to Decision
-  //    b. Both prefixes will be withdrawn from KvStore
-  //    c. Supporting routes count for both prefixes will decrement by 1
+  /*
+   *
+   * This test case tests the following:
+   *  - originated prefix whose supporting routes passed across threshold
+   *    will be advertised (v4, and eventually v6);
+   *  - otherwise it will NOT be advertised (initially v6);
+   *  - Route Advertisement to KvStore happens with single area configured
+   *
+   * Steps, briefly:
+   *
+   * 1. Inject the following into the fibRouteUpdatesQueue (simulating Fib to
+   *    Prefixmgr interaction):
+   *    - 1st supporting route for v4Prefix_;
+   *    - 1st supporting route for v6Prefix_;
+   * Verification:
+   *    c. v4Prefix_ will be advertised to KvStore as `min_supporting_route=1`;
+   *    d. v6Prefix_ will NOT be advertised as `min_supporting_route=2`;
+   *    e. Config values and supporting routes count is as expected for both
+   *       v4Prefix_ and v6Prefix_
+   *
+   * 2. Inject the following into the fibRouteUpdatesQueue (simulating Fib
+   *    to Prefixmgr interaction):
+   *    - 2nd supporting route for v6Prefix_;
+   * Verification:
+   *    a. v6Prefix_ will STILL NOT be sent to Decision on
+   *       staticRouteUpdatesQueue since, while min_supporting_route is now met
+   *       for v6Prefix_, the install_to_fib bit is NOT set for v6Prefix_
+   *    b. v6Prefix_ will be advertised to KvStore as `min_supporting_route=2`;
+   *    c. Config values and supporting routes count is as expected for both
+   *       v4Prefix_ and v6Prefix_
+   *
+   * 3. Withdraw 1 supporting route from both v4Prefix_ and v6Prefix_
+   *    - this will break the min_supporting_routes condition for both
+   *      the prefixes.
+   * Verification:
+   *    a. delete only for the v4Prefix_ gets sent to Decision
+   *    b. Both prefixes will be withdrawn from KvStore
+   *    c. Supporting routes count for both prefixes will decrement by 1
+   */
 
   // Step 1 - inject 1 v4 and 1 v6 supporting prefix into fibRouteUpdatesQueue
   DecisionRouteUpdate routeUpdate;
@@ -2671,8 +2763,10 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
   }
 
-  // Verify 1g: Via PrefixManager's public API, verify the values for # of
-  //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(1)
+  /*
+   * Verify 1g: Via PrefixManager's public API, verify the values for # of
+   *  supporting routes for both the v4Prefix_ (1) and v6Orefix_(1)
+   */
   {
     auto mp = getOriginatedPrefixDb();
     auto& prefixEntryV4 = mp.at(v4Prefix_);
@@ -2722,8 +2816,10 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
   }
 
-  // Verify 2c: Via PrefixManager's public API, verify the values for # of
-  //  supporting routes for both the v4Prefix_ (1) and v6Orefix_(2 now)
+  /*
+   * Verify 2c: Via PrefixManager's public API, verify the values for # of
+   *  supporting routes for both the v4Prefix_ (1) and v6Orefix_(2 now)
+   */
   {
     auto mp = getOriginatedPrefixDb();
     auto& prefixEntryV4 = mp.at(v4Prefix_);
@@ -2782,8 +2878,10 @@ TEST_F(RouteOriginationSingleAreaFixture, BasicAdvertiseWithdraw) {
     waitForKvStorePublication(kvStoreUpdatesReader, exp, expDeleted);
   }
 
-  // Verify 3c: Via PrefixManager's public API, verify that that supporting
-  // routes count for v6Prefix_ is now 1 (and 0 for v4Prefix_)
+  /*
+   * Verify 3c: Via PrefixManager's public API, verify that that supporting
+   * routes count for v6Prefix_ is now 1 (and 0 for v4Prefix_)
+   */
   {
     auto mp = getOriginatedPrefixDb();
     auto& prefixEntryV4 = mp.at(v4Prefix_);
@@ -2839,8 +2937,10 @@ TEST_F(PrefixManagerTestFixture, BasicKeyValueRequestQueue) {
         kvRequestQueue.push(std::move(unsetPrefixRequest));
       });
 
-  // Check that key was unset properly. Key is still in KvStore because TTL has
-  // not expired yet. TTL refreshing has stopped so TTL version remains at 0.
+  /*
+   * Check that key was unset properly. Key is still in KvStore because TTL has
+   * not expired yet. TTL refreshing has stopped so TTL version remains at 0.
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -2866,18 +2966,22 @@ TEST_F(PrefixManagerTestFixture, AdvertisePrefixes) {
       folly::IPAddress::createNetwork(toString(*prefixEntry2.prefix())),
       kTestingAreaName);
 
-  // 1. Advertise prefix entry.
-  // 2. Check that prefix entry is in KvStore.
-  // 3. Advertise two prefix entries: previously advertised one and new one.
-  // 4. Check that both prefixes are in KvStore. Neither's version are bumped.
+  /*
+   * 1. Advertise prefix entry.
+   * 2. Check that prefix entry is in KvStore.
+   * 3. Advertise two prefix entries: previously advertised one and new one.
+   * 4. Check that both prefixes are in KvStore. Neither's version are bumped.
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
         prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
-  // Wait for throttling. Throttling can come from:
-  //  - `syncKvStore()` inside `PrefixManager`
-  //  - `persistSelfOriginatedKey()` inside `KvStore`
+  /*
+   * Wait for throttling. Throttling can come from:
+   *  - `syncKvStore()` inside `PrefixManager`
+   *  - `persistSelfOriginatedKey()` inside `KvStore`
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -2898,8 +3002,10 @@ TEST_F(PrefixManagerTestFixture, AdvertisePrefixes) {
       std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        // First prefix was re-advertised with same value. Version should not
-        // have been bumped.
+        /*
+         * First prefix was re-advertised with same value. Version should not
+         * have been bumped.
+         */
         auto prefixKeyStr = prefixKey1.getPrefixKeyV2();
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
@@ -2927,10 +3033,12 @@ TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
           kTestingAreaName)
           .getPrefixKeyV2();
 
-  // 1. Advertise prefix entry.
-  // 2. Check that prefix entry is in KvStore.
-  // 3. Withdraw prefix entry.
-  // 4. Check that prefix is withdrawn.
+  /*
+   * 1. Advertise prefix entry.
+   * 2. Check that prefix entry is in KvStore.
+   * 3. Withdraw prefix entry.
+   * 4. Check that prefix is withdrawn.
+   */
 
   // Advertise prefix entry.
   evb.scheduleTimeout(
@@ -2938,9 +3046,11 @@ TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
         prefixManager->advertisePrefixes({prefixEntry1}).get();
       });
 
-  // Wait for throttling. Throttling can come from:
-  //  - `syncKvStore()` inside `PrefixManager`
-  //  - `persistSelfOriginatedKey()` inside `KvStore`
+  /*
+   * Wait for throttling. Throttling can come from:
+   *  - `syncKvStore()` inside `PrefixManager`
+   *  - `persistSelfOriginatedKey()` inside `KvStore`
+   */
   evb.scheduleTimeout(
       std::chrono::milliseconds(
           scheduleAt += 3 * Constants::kKvStoreSyncThrottleTimeout.count()),
@@ -2959,8 +3069,10 @@ TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
       std::chrono::milliseconds(
           scheduleAt += 2 * Constants::kKvStoreSyncThrottleTimeout.count()),
       [&]() noexcept {
-        // Key is still in KvStore because TTL has not expired yet. TTL
-        // refreshing has stopped so TTL version remains at 0.
+        /*
+         * Key is still in KvStore because TTL has not expired yet. TTL
+         * refreshing has stopped so TTL version remains at 0.
+         */
         auto maybeValue =
             kvStoreWrapper->getKey(kTestingAreaName, prefixKeyStr);
         EXPECT_TRUE(maybeValue.has_value());

@@ -316,8 +316,10 @@ BM_RedistributeFibAddRoute(
     // Create a reader to read requests showing up in kvRequestQueue
     auto kvRequestReaderQ = testFixture->kvRequestQueue_.getReader();
 
-    // Generate numOfExistingPrefixes of unicast routes to be added
-    // All routes are contained in single DecisionRouteUpdate
+    /*
+     * Generate numOfExistingPrefixes of unicast routes to be added
+     * All routes are contained in single DecisionRouteUpdate
+     */
     auto routeUpdateForExisting = generateDecisionRouteUpdate(
         testFixture->getPrefixGenerator(), numOfExistingPrefixes);
     testFixture->fibRouteUpdatesQueue_.push(std::move(routeUpdateForExisting));
@@ -325,8 +327,10 @@ BM_RedistributeFibAddRoute(
     // Verify corresponding requests inside kvRequestQueue
     testFixture->checkKeyValRequest(numOfExistingPrefixes, kvRequestReaderQ);
 
-    // Generate numOfRedistributeRoutes of unicast routes to be redistributed
-    // All routes are contained in single DecisionRouteUpdate
+    /*
+     * Generate numOfRedistributeRoutes of unicast routes to be redistributed
+     * All routes are contained in single DecisionRouteUpdate
+     */
     auto routeUpdate = generateDecisionRouteUpdate(
         testFixture->getPrefixGenerator(), numOfRedistributeRoutes);
 
@@ -398,8 +402,10 @@ BM_RedistributeFibDeleteRoute(
     auto prefixEntries = generatePrefixEntries(
         testFixture->getPrefixGenerator(), numOfExistingPrefixes);
 
-    // Generate numOfExistingPrefixes of unicast routes to be added
-    // All routes are contained in single DecisionRouteUpdate
+    /*
+     * Generate numOfExistingPrefixes of unicast routes to be added
+     * All routes are contained in single DecisionRouteUpdate
+     */
     auto routeUpdateForExisting =
         generateDecisionRouteUpdateFromPrefixEntries(prefixEntries);
     testFixture->fibRouteUpdatesQueue_.push(std::move(routeUpdateForExisting));
@@ -411,8 +417,10 @@ BM_RedistributeFibDeleteRoute(
     auto prefixesToRedistribute = prefixEntries;
     prefixesToRedistribute.resize(numOfRedistributeRoutes);
 
-    // Generate numOfRedistributeRoutes of unicast routes to be redistributed
-    // All routes are contained in single DecisionRouteUpdate
+    /*
+     * Generate numOfRedistributeRoutes of unicast routes to be redistributed
+     * All routes are contained in single DecisionRouteUpdate
+     */
     DecisionRouteUpdate routeUpdate;
     for (auto& prefixEntry : prefixesToRedistribute) {
       routeUpdate.unicastRoutesToDelete.emplace(

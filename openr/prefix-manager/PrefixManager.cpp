@@ -44,8 +44,10 @@ PrefixManager::PrefixManager(
       initializationEventQueue_(initializationEventQueue) {
   CHECK(config);
 
-  // Always add RIB type prefixes, since Fib routes updates are always expected
-  // in OpenR initialization procedure.
+  /*
+   * Always add RIB type prefixes, since Fib routes updates are always expected
+   * in OpenR initialization procedure.
+   */
   XLOG(INFO, "[Initialization] PrefixManager should wait for RIB updates.");
   uninitializedPrefixTypes_.emplace(thrift::PrefixType::RIB);
 
@@ -145,8 +147,10 @@ PrefixManager::PrefixManager(
               update.prefixes.size() + update.prefixEntries.size(),
               apache::thrift::util::enumNameSafe<thrift::PrefixType>(
                   update.type));
-          // Publish initial unicast routes for the prefix type, so they will be
-          // programmed in warmboot.
+          /*
+           * Publish initial unicast routes for the prefix type, so they will be
+           * programmed in warmboot.
+           */
           sendStaticUnicastRoutes(update.type);
 
           triggerInitialPrefixDbSync();
@@ -234,8 +238,10 @@ void
 PrefixManager::processPublication(thrift::Publication&& thriftPub) {
   folly::small_vector<folly::CIDRNetwork> changed{};
   for (const auto& [keyStr, val] : *thriftPub.keyVals()) {
-    // Only interested in prefix updates.
-    // Ignore if val has no value field inside `thrift::Value`(e.g. ttl update)
+    /*
+     * Only interested in prefix updates.
+     * Ignore if val has no value field inside `thrift::Value`(e.g. ttl update)
+     */
     auto const& area = *thriftPub.area();
     try {
       const auto prefixDb =
@@ -261,8 +267,10 @@ PrefixManager::processPublication(thrift::Publication&& thriftPub) {
             "[Prefix Update]: Area: {}, {} updated inside KvStore",
             area,
             keyStr);
-        // populate advertiseStatus_ collection to make sure we can find
-        // <key, area> when clear key from `KvStore`
+        /*
+         * populate advertiseStatus_ collection to make sure we can find
+         * <key, area> when clear key from `KvStore`
+         */
         advertiseStatus_[network].areas.emplace(area);
 
         // Populate pendingState to check keys
@@ -285,8 +293,10 @@ PrefixManager::~PrefixManager() {
       "[Exit] Send termination signals to stop {} tasks.",
       getFiberTaskNum());
 
-  // - If EventBase is stopped or it is within the evb thread, run immediately;
-  // - Otherwise, will wait the EventBase to run;
+  /*
+   * - If EventBase is stopped or it is within the evb thread, run immediately;
+   * - Otherwise, will wait the EventBase to run;
+   */
   getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
       [this]() { syncKvStoreThrottled_.reset(); });
 
@@ -312,12 +322,16 @@ PrefixManager::toPrefixEntryThrift(
   entry.prefix() =
       toIpPrefix(folly::IPAddress::createNetwork(*prefix.prefix()));
   entry.metrics() = std::move(metrics);
-  // ATTN: local-originated prefix has unique type CONFIG
-  //      to be differentiated from others.
+  /*
+   * ATTN: local-originated prefix has unique type CONFIG
+   *      to be differentiated from others.
+   */
   entry.type() = tType;
-  // ATTN: `area_stack` will be explicitly set to empty
-  //      as there is no "cross-area" behavior for local
-  //      originated prefixes.
+  /*
+   * ATTN: `area_stack` will be explicitly set to empty
+   *      as there is no "cross-area" behavior for local
+   *      originated prefixes.
+   */
   CHECK(entry.area_stack()->empty());
   if (auto tags = prefix.tags()) {
     entry.tags() = *tags;
@@ -335,8 +349,10 @@ PrefixManager::buildOriginatedPrefixes(
     auto network = folly::IPAddress::createNetwork(*prefix.prefix());
     auto entry = toPrefixEntryThrift(prefix, thrift::PrefixType::CONFIG);
 
-    // Populate RibUnicastEntry struct
-    // ATTN: empty nexthop list indicates a drop route
+    /*
+     * Populate RibUnicastEntry struct
+     * ATTN: empty nexthop list indicates a drop route
+     */
     RibUnicastEntry unicastEntry(network, {});
     unicastEntry.bestPrefixEntry = std::move(entry);
 
@@ -358,9 +374,11 @@ PrefixManager::buildOriginatedPrefixes(
       originatedPrefixDb_.size(),
       fb303::SUM);
 
-  // Publish static routes for config originated prefixes. This makes sure
-  // initial RIB/FIB after warmboot still includes routes for config originated
-  // prefixes.
+  /*
+   * Publish static routes for config originated prefixes. This makes sure
+   * initial RIB/FIB after warmboot still includes routes for config originated
+   * prefixes.
+   */
   staticRouteUpdatesQueue_.push(std::move(routeUpdatesForDecision));
 }
 
@@ -368,8 +386,10 @@ std::pair<thrift::PrefixType, const PrefixEntry>
 PrefixManager::getBestPrefixEntry(
     const folly::F14FastMap<thrift::PrefixType, PrefixEntry>&
         prefixTypeToEntry) {
-  // If decision calculation has already considered local routes, then we should
-  // use the best entry provided by decision instead of calculating here again.
+  /*
+   * If decision calculation has already considered local routes, then we should
+   * use the best entry provided by decision instead of calculating here again.
+   */
   const auto it = prefixTypeToEntry.find(thrift::PrefixType::RIB);
   if (prefixTypeToEntry.end() != it && it->second.preferredForRedistribution) {
     return std::make_pair(thrift::PrefixType::RIB, it->second);
@@ -409,9 +429,11 @@ PrefixManager::populateRouteUpdates(
   // Propogate route update to Decision (if necessary)
   auto& advertiseStatus = advertiseStatus_[prefix];
   if (prefixEntry.shouldInstall()) {
-    // Populate RibUnicastEntry struct
-    // ATTN: AREA field is empty for NHs
-    // if shouldInstall() is true, nexthops is guaranteed to have value.
+    /*
+     * Populate RibUnicastEntry struct
+     * ATTN: AREA field is empty for NHs
+     * if shouldInstall() is true, nexthops is guaranteed to have value.
+     */
     RibUnicastEntry unicastEntry(prefix, prefixEntry.nexthops.value());
     unicastEntry.bestPrefixEntry = *prefixEntry.tPrefixEntry;
     if (advertiseStatus.publishedRoute.has_value() &&
@@ -439,18 +461,22 @@ PrefixManager::updatePrefixKeysInKvStore(
 
   auto keysIt = advertiseStatus_.find(prefix);
   if (keysIt != advertiseStatus_.end()) {
-    // ATTN: advertiseStatus_ collection holds "advertised" prefixes in
-    // previous round of syncing. By removing prefixes in current run,
-    // whatever left in `advertiseStatus_` will be the delta to be removed.
+    /*
+     * ATTN: advertiseStatus_ collection holds "advertised" prefixes in
+     * previous round of syncing. By removing prefixes in current run,
+     * whatever left in `advertiseStatus_` will be the delta to be removed.
+     */
     for (const auto& area : updatedArea) {
       keysIt->second.areas.erase(area);
     }
 
-    // remove keys which are no longer advertised
-    // e.g.
-    // t0: prefix_1 => {area_1, area_2}
-    // t1: prefix_1 => {area_1, area_3}
-    //     (prefix_1, area_2) will be removed
+    /*
+     * remove keys which are no longer advertised
+     * e.g.
+     * t0: prefix_1 => {area_1, area_2}
+     * t1: prefix_1 => {area_1, area_3}
+     *     (prefix_1, area_2) will be removed
+     */
     deleteKvStoreKeyHelper(prefix, keysIt->second.areas);
   }
 
@@ -468,9 +494,11 @@ PrefixManager::addKvStoreKeyHelper(const PrefixEntry& entry) {
       tPrefixEntry->area_stack()->begin(), tPrefixEntry->area_stack()->end()};
 
   for (const auto& toArea : entry.dstAreas) {
-    // prevent area_stack loop
-    // ATTN: for local-originated prefixes, `area_stack` is explicitly
-    //       set to empty.
+    /*
+     * prevent area_stack loop
+     * ATTN: for local-originated prefixes, `area_stack` is explicitly
+     *       set to empty.
+     */
     if (areaStack.count(toArea)) {
       continue;
     }
@@ -602,8 +630,10 @@ PrefixManager::deleteKvStoreKeyHelper(
 void
 PrefixManager::triggerInitialPrefixDbSync() {
   if (uninitializedPrefixTypes_.empty()) {
-    // Trigger initial syncKvStore(), after receiving prefixes of all expected
-    // types and all inital prefix keys from KvStore.
+    /*
+     * Trigger initial syncKvStore(), after receiving prefixes of all expected
+     * types and all inital prefix keys from KvStore.
+     */
     syncKvStore();
 
     // Logging for initialization stage duration computation
@@ -618,9 +648,11 @@ PrefixManager::triggerInitialPrefixDbSync() {
 
 bool
 PrefixManager::prefixEntryReadyToBeAdvertised(const PrefixEntry& prefixEntry) {
-  // If nexthops is set in prefixEntry, it implicitly indicates that the
-  // associated unicast routes should be programmed before the prefix is
-  // advertised.
+  /*
+   * If nexthops is set in prefixEntry, it implicitly indicates that the
+   * associated unicast routes should be programmed before the prefix is
+   * advertised.
+   */
   if (prefixEntry.nexthops.has_value()) {
     if (programmedPrefixes_.count(prefixEntry.network) == 0) {
       return false;
@@ -656,8 +688,10 @@ PrefixManager::syncKvStore() {
     }
   }
 
-  // TODO: iterate the whole prefixMap_ is time consuming.
-  // Explore scale enhancement
+  /*
+   * TODO: iterate the whole prefixMap_ is time consuming.
+   * Explore scale enhancement
+   */
   for (const auto& [prefix, prefixEntries] : prefixMap_) {
     receivedPrefixCnt += prefixEntries.size();
 
@@ -731,8 +765,10 @@ PrefixManager::syncKvStore() {
   // Update flat counters
   fb303::fbData->setCounter(
       "prefix_manager.received_prefixes", receivedPrefixCnt);
-  // TODO: report per-area advertised prefixes if openr is running in
-  // multi-areas.
+  /*
+   * TODO: report per-area advertised prefixes if openr is running in
+   * multi-areas.
+   */
   fb303::fbData->setCounter(
       "prefix_manager.advertised_prefixes", advertiseStatus_.size());
   fb303::fbData->setCounter(
@@ -1191,8 +1227,10 @@ std::vector<PrefixEntry>
 PrefixManager::applyOriginationPolicy(
     const std::vector<PrefixEntry>& prefixEntries,
     const std::string& policyName) {
-  // Store them before applying origination policy for future debugging
-  // purpose
+  /*
+   * Store them before applying origination policy for future debugging
+   * purpose
+   */
   storeOriginatedPrefixes(prefixEntries, policyName);
   std::vector<PrefixEntry> postOriginationPrefixes = {};
   for (auto prefix : prefixEntries) {
@@ -1275,9 +1313,11 @@ PrefixManager::advertisePrefixesImpl(
     const auto& type = *entry.tPrefixEntry->type();
     const auto& prefixCidr = entry.network;
 
-    // ATTN: create new folly::CIDRNetwork -> typeToPrefixes
-    //       mapping if it is new prefix. `[]` operator is
-    //       used intentionally.
+    /*
+     * ATTN: create new folly::CIDRNetwork -> typeToPrefixes
+     *       mapping if it is new prefix. `[]` operator is
+     *       used intentionally.
+     */
     auto [it, inserted] = prefixMap_[prefixCidr].emplace(type, entry);
 
     if (!inserted) {
@@ -1383,8 +1423,10 @@ PrefixManager::syncPrefixesByTypeImpl(
     const folly::F14FastSet<std::string>& dstAreas,
     const std::optional<std::string>& policyName) {
   XLOGF(DBG1, "Syncing prefixes of type {}", toString(type));
-  // building these lists so we can call add and remove and get detailed
-  // logging
+  /*
+   * building these lists so we can call add and remove and get detailed
+   * logging
+   */
   std::vector<thrift::PrefixEntry> toAddOrUpdate, toRemove;
   folly::F14FastSet<folly::CIDRNetwork> toRemoveSet;
   for (auto const& [prefix, typeToPrefixes] : prefixMap_) {
@@ -1424,8 +1466,10 @@ PrefixManager::withdrawPrefixesByTypeImpl(thrift::PrefixType type) {
 
 void
 PrefixManager::aggregatesToAdvertise(const folly::CIDRNetwork& prefix) {
-  // ATTN: ignore attribute-ONLY update for existing RIB entries
-  //       as it won't affect `supporting_route_cnt`
+  /*
+   * ATTN: ignore attribute-ONLY update for existing RIB entries
+   *       as it won't affect `supporting_route_cnt`
+   */
   auto [ribPrefixIt, inserted] =
       ribPrefixDb_.emplace(prefix, std::vector<folly::CIDRNetwork>());
   if (!inserted) {
@@ -1433,8 +1477,10 @@ PrefixManager::aggregatesToAdvertise(const folly::CIDRNetwork& prefix) {
   }
 
   for (auto& [network, route] : originatedPrefixDb_) {
-    // folly::CIDRNetwork.first -> IPAddress
-    // folly::CIDRNetwork.second -> cidr length
+    /*
+     * folly::CIDRNetwork.first -> IPAddress
+     * folly::CIDRNetwork.second -> cidr length
+     */
     if (!prefix.first.inSubnet(network.first, network.second)) {
       continue;
     }
@@ -1513,13 +1559,15 @@ PrefixManager::processOriginatedPrefixes() {
           "[Route Origination] Withdrawing originated route {}",
           folly::IPAddress::networkToString(network));
     } else {
-      // In OpenR initialization process, PrefixManager publishes unicast
-      // routes for config originated prefixes with `install_to_fib=true`
-      // (This is required in warmboot). If it turns out there are no enough
-      // supporting routes, previously published unicast routes in OpenR
-      // initialization process should be deleted.
-      // TODO: Consider moving static route generation and best entry
-      // selection logic to Decision.
+      /*
+       * In OpenR initialization process, PrefixManager publishes unicast
+       * routes for config originated prefixes with `install_to_fib=true`
+       * (This is required in warmboot). If it turns out there are no enough
+       * supporting routes, previously published unicast routes in OpenR
+       * initialization process should be deleted.
+       * TODO: Consider moving static route generation and best entry
+       * selection logic to Decision.
+       */
       if (!route.supportingRoutesFulfilled()) {
         auto it = advertiseStatus_.find(network);
         if (it != advertiseStatus_.end() &&
@@ -1605,9 +1653,11 @@ PrefixManager::initCounters() noexcept {
 namespace {
 void
 resetNonTransitiveAttrs(thrift::PrefixEntry& prefixEntry) {
-  // Reset non-transitive attributes which cannot be redistributed across
-  // areas. Ref:
-  // https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html.
+  /*
+   * Reset non-transitive attributes which cannot be redistributed across
+   * areas. Ref:
+   * https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html.
+   */
   prefixEntry.forwardingAlgorithm() =
       thrift::PrefixForwardingAlgorithm::SP_ECMP;
   prefixEntry.forwardingType() = thrift::PrefixForwardingType::IP;
@@ -1628,40 +1678,50 @@ PrefixManager::redistributePrefixesAcrossAreas(
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
 
-  // ATTN: Routes imported from local BGP won't show up inside
-  // `fibRouteUpdate`. However, local-originated static route
-  // (e.g. from route-aggregation) can come along.
+  /*
+   * ATTN: Routes imported from local BGP won't show up inside
+   * `fibRouteUpdate`. However, local-originated static route
+   * (e.g. from route-aggregation) can come along.
+   */
 
   // Add/Update unicast routes
   for (auto& [prefix, route] : fibRouteUpdate.unicastRoutesToUpdate) {
     // NOTE: future expansion - run egress policy here
 
-    //
-    // Cross area, modify attributes
-    //
+    /*
+     *
+     * Cross area, modify attributes
+     *
+     */
     auto& prefixEntry = route.bestPrefixEntry;
 
     if (*prefixEntry.type() == thrift::PrefixType::CONFIG) {
-      // Skip local-originated prefix as it won't be considered as
-      // part of its own supporting routes.
+      /*
+       * Skip local-originated prefix as it won't be considered as
+       * part of its own supporting routes.
+       */
       if (originatedPrefixDb_.count(prefix)) {
         continue;
       }
     }
 
-    // Update interested mutable transitive attributes.
-    //
-    // For OpenR route representation, referring to
-    // https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html
-    // 1. append area stack
+    /*
+     * Update interested mutable transitive attributes.
+     *
+     * For OpenR route representation, referring to
+     * https://openr.readthedocs.io/Operator_Guide/RouteRepresentation.html
+     * 1. append area stack
+     */
     prefixEntry.area_stack()->emplace_back(route.bestArea);
     // 2. increase distance by 1
     ++(*prefixEntry.metrics()->distance());
     // 3. normalize to RIB routes
     prefixEntry.type() = thrift::PrefixType::RIB;
 
-    // Keep weight in OpenrPolicyActionData. Area policy will later decide
-    // whether it should be advertised into one area.
+    /*
+     * Keep weight in OpenrPolicyActionData. Area policy will later decide
+     * whether it should be advertised into one area.
+     */
     std::optional<OpenrPolicyActionData> policyActionData{std::nullopt};
     if (prefixEntry.weight().has_value()) {
       policyActionData = OpenrPolicyActionData(prefixEntry.weight().value());
@@ -1694,8 +1754,10 @@ PrefixManager::redistributePrefixesAcrossAreas(
   for (const auto& prefix : fibRouteUpdate.unicastRoutesToDelete) {
     // TODO: remove this when advertise RibUnicastEntry for routes to delete
     if (originatedPrefixDb_.count(prefix)) {
-      // skip local-originated prefix as it won't be considered as
-      // part of its own supporting routes.
+      /*
+       * skip local-originated prefix as it won't be considered as
+       * part of its own supporting routes.
+       */
       continue;
     }
 
@@ -1710,9 +1772,11 @@ PrefixManager::redistributePrefixesAcrossAreas(
   // Maybe advertise/withdrawn for local originated routes
   processOriginatedPrefixes();
 
-  // Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
-  // We want to keep processFibRouteUpdates() running as dynamic
-  // configuration could add/remove areas.
+  /*
+   * Redisrtibute RIB route ONLY when there are multiple `areaId` configured .
+   * We want to keep processFibRouteUpdates() running as dynamic
+   * configuration could add/remove areas.
+   */
   if (areaToPolicy_.size() > 1) {
     advertisePrefixesImpl(advertisedPrefixes);
     withdrawPrefixesImpl(withdrawnPrefixes);

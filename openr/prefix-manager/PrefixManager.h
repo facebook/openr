@@ -57,11 +57,13 @@ class PrefixManagerPendingUpdates {
   }
 
  private:
-  // Track prefixes that have changed within this batch
-  // ATTN: this collection contains:
-  //  - newly added prefixes
-  //  - updated prefixes
-  //  - prefixes being withdrawn
+  /*
+   * Track prefixes that have changed within this batch
+   * ATTN: this collection contains:
+   *  - newly added prefixes
+   *  - updated prefixes
+   *  - prefixes being withdrawn
+   */
   folly::F14FastSet<folly::CIDRNetwork> changedPrefixes_{};
 };
 
@@ -357,20 +359,26 @@ class PrefixManager final : public OpenrEventBase {
   // Process Fib route update.
   void processFibRouteUpdates(DecisionRouteUpdate&& fibRouteUpdate);
 
-  // Store programmed routes update from FIB, which are later used to check
-  // whether prefixes are ready to be injected into KvStore.
+  /*
+   * Store programmed routes update from FIB, which are later used to check
+   * whether prefixes are ready to be injected into KvStore.
+   */
   void storeProgrammedRoutes(const DecisionRouteUpdate& fibRouteUpdates);
 
-  // For one node locating in multiple areas, it should redistribute prefixes
-  // received from one area into other areas, performing similar role as border
-  // routers in BGP.
+  /*
+   * For one node locating in multiple areas, it should redistribute prefixes
+   * received from one area into other areas, performing similar role as border
+   * routers in BGP.
+   */
   void redistributePrefixesAcrossAreas(DecisionRouteUpdate&& fibRouteUpdate);
 
   // get all areaIds
   folly::F14FastSet<std::string> allAreaIds();
 
-  // Record originated prefixes with origination policy name for to be exposed
-  // by Cli for debugging purpose
+  /*
+   * Record originated prefixes with origination policy name for to be exposed
+   * by Cli for debugging purpose
+   */
   void storeOriginatedPrefixes(
       std::vector<PrefixEntry> prefixEntries, const std::string& policyName);
 
@@ -402,23 +410,29 @@ class PrefixManager final : public OpenrEventBase {
   messaging::ReplicateQueue<thrift::InitializationEvent>&
       initializationEventQueue_;
 
-  // Throttled version of syncKvStore. It batches up multiple calls and
-  // send them in one go!
+  /*
+   * Throttled version of syncKvStore. It batches up multiple calls and
+   * send them in one go!
+   */
   std::unique_ptr<AsyncThrottle> syncKvStoreThrottled_;
 
-  // TODO: Merge this with advertiseStatus_.
-  // The current prefix db this node is advertising. In-case if multiple entries
-  // exists for a given prefix, best-route-selection process would select the
-  // ones with the best metric. Lowest prefix-type is used as a tie-breaker for
-  // advertising the best selected routes to KvStore.
+  /*
+   * TODO: Merge this with advertiseStatus_.
+   * The current prefix db this node is advertising. In-case if multiple entries
+   * exists for a given prefix, best-route-selection process would select the
+   * ones with the best metric. Lowest prefix-type is used as a tie-breaker for
+   * advertising the best selected routes to KvStore.
+   */
   folly::F14FastMap<
       folly::CIDRNetwork,
       folly::F14FastMap<thrift::PrefixType, PrefixEntry>>
       prefixMap_;
 
-  // For prefixes came from PrefixEvent with an origination policy,
-  // store the pre-policy version in originatedPrefixMap_.
-  // Used in thrift request getAdvertisedRoutesWithOriginationPolicy().
+  /*
+   * For prefixes came from PrefixEvent with an origination policy,
+   * store the pre-policy version in originatedPrefixMap_.
+   * Used in thrift request getAdvertisedRoutesWithOriginationPolicy().
+   */
   folly::F14FastMap<
       folly::CIDRNetwork,
       folly::
