@@ -11,9 +11,11 @@
 
 namespace openr {
 
-// OpenrPolicyActionData - capture any data that's needed to apply a action
-// but can NOT be pre-configured in Policy Configuration
-// (e.g some data needs to be dynamically derived on the fly).
+/*
+ * OpenrPolicyActionData - capture any data that's needed to apply a action
+ * but can NOT be pre-configured in Policy Configuration
+ * (e.g some data needs to be dynamically derived on the fly).
+ */
 struct OpenrPolicyActionData {
   explicit OpenrPolicyActionData(int64_t weight) : weight(weight) {}
 

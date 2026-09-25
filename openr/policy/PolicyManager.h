@@ -33,9 +33,11 @@ class PolicyManager {
       const std::optional<OpenrPolicyMatchData>& policyMatchData =
           std::nullopt) noexcept;
 
-  // PolicyManagerImpl uses forward declaration
-  // Use shared_ptr because it works with incomplete type, where unique_ptr
-  // requires full declaration
+  /*
+   * PolicyManagerImpl uses forward declaration
+   * Use shared_ptr because it works with incomplete type, where unique_ptr
+   * requires full declaration
+   */
   std::shared_ptr<PolicyManagerImpl> impl_{nullptr};
 };
 } // namespace openr
