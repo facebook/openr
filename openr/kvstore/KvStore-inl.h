@@ -23,8 +23,10 @@
 namespace fb303 = facebook::fb303;
 
 namespace openr::detail {
-// Callback for pre-serialized flood RPCs. Resolves a Promise<Unit> on
-// response/error and self-deletes (standard thrift callback pattern).
+/*
+ * Callback for pre-serialized flood RPCs. Resolves a Promise<Unit> on
+ * response/error and self-deletes (standard thrift callback pattern).
+ */
 class FloodResponseCallback final
     : public apache::thrift::RequestClientCallback {
  public:
@@ -199,8 +201,10 @@ KvStore<ClientType>::KvStore(
     });
     kvStoreWorkers_.emplace_back(std::move(fiber));
 
-    // Schedule initial timer for cap on self originated keys updates
-    // this is one shot timer
+    /*
+     * Schedule initial timer for cap on self originated keys updates
+     * this is one shot timer
+     */
     initialSelfOriginatedKeysTimer_ =
         folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
           XLOG(DBG1, "[Exit] initial self originated keys timer expired");
@@ -299,11 +303,13 @@ KvStore<ClientType>::getAreaDbOrThrow(
     XLOGF(
         WARNING, "Area {} requested but not configured for this node.", areaId);
 
-    // ATTN: AreaId "0" a special area that is treated as the wildcard area.
-    // We will still do FULL_SYNC if:
-    //  1) We are ONLY configured with single areaId "0";
-    //  2) We are ONLY configured with single areaId(may NOT be "0") and
-    //     with areaId "0" from peer's sync request;
+    /*
+     * ATTN: AreaId "0" a special area that is treated as the wildcard area.
+     * We will still do FULL_SYNC if:
+     *  1) We are ONLY configured with single areaId "0";
+     *  2) We are ONLY configured with single areaId(may NOT be "0") and
+     *     with areaId "0" from peer's sync request;
+     */
     const auto defaultArea = Constants::kDefaultArea.toString();
     if (kvStoreDb_.size() == 1 &&
         (kvStoreDb_.count(defaultArea) || areaId == defaultArea)) {
@@ -514,8 +520,10 @@ KvStore<ClientType>::dumpKvStoreKeysImpl(
       auto& kvStoreDb = getAreaDbOrThrow(area, "dumpKvStoreKeys");
       fb303::fbData->addStatValue("kvstore.cmd_key_dump", 1, fb303::COUNT);
 
-      // KvStoreFilters contains `thrift::FilterOperator`
-      // Default to thrift::FilterOperator::OR
+      /*
+       * KvStoreFilters contains `thrift::FilterOperator`
+       * Default to thrift::FilterOperator::OR
+       */
       thrift::FilterOperator oper = thrift::FilterOperator::OR;
       if (keyDumpParams.oper().has_value()) {
         oper = *keyDumpParams.oper();
@@ -1384,8 +1392,10 @@ KvStoreDb<ClientType>::getPeersByState(thrift::KvStorePeerState state) {
   return res;
 }
 
-// A util wrapper function which calls both logStateTransition and
-// publishPeerStateCounters functions
+/*
+ * A util wrapper function which calls both logStateTransition and
+ * publishPeerStateCounters functions
+ */
 template <class ClientType>
 void
 KvStoreDb<ClientType>::logStateTransitionWithCounterPublication(
@@ -1521,12 +1531,14 @@ thrift::KvStorePeerState
 KvStoreDb<ClientType>::getNextState(
     std::optional<thrift::KvStorePeerState> const& currState,
     KvStorePeerEvent const& event) {
-  //
-  // This is the state transition matrix for KvStorePeerState. It is a
-  // sparse-matrix with row representing `KvStorePeerState` and column
-  // representing `KvStorePeerEvent`. State transition is driven by
-  // certain event. Invalid state jump will cause fatal error.
-  //
+  /*
+   *
+   * This is the state transition matrix for KvStorePeerState. It is a
+   * sparse-matrix with row representing `KvStorePeerState` and column
+   * representing `KvStorePeerEvent`. State transition is driven by
+   * certain event. Invalid state jump will cause fatal error.
+   *
+   */
   static const std::vector<std::vector<std::optional<thrift::KvStorePeerState>>>
       stateMap = {
           /*
@@ -1574,13 +1586,15 @@ KvStoreDb<ClientType>::getNextState(
   return nextState.value();
 }
 
-//
-// KvStorePeer is the struct representing peer information including:
-//  - thrift client;
-//  - peerSpec;
-//  - backoff;
-//  - etc.
-//
+/*
+ *
+ * KvStorePeer is the struct representing peer information including:
+ *  - thrift client;
+ *  - peerSpec;
+ *  - backoff;
+ *  - etc.
+ *
+ */
 template <class ClientType>
 KvStoreDb<ClientType>::KvStorePeer::KvStorePeer(
     const std::string& nodeName,
@@ -1731,8 +1745,10 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
       context->loadCertificate(kvParams_.x509_cert_path->c_str());
       context->loadPrivateKey(kvParams_.x509_key_path->c_str());
       folly::ssl::SSLCommonOptions::setClientOptions(*context);
-      // Since we are suggesting support for rocket in ALPN,
-      // we should use RocketClientChannel to match what is negotiated
+      /*
+       * Since we are suggesting support for rocket in ALPN,
+       * we should use RocketClientChannel to match what is negotiated
+       */
       secureClient = getOpenrCtrlSecureClient<ClientType>(
           *(evb->getEvb()),
           context,
@@ -1903,8 +1919,10 @@ KvStoreDb<ClientType>::KvStoreDb(
   thriftSyncTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { requestThriftPeerSync(); });
 
-  // Hook up timer with cleanupTtlCountdownQueue(). The actual scheduling
-  // happens within updateTtlCountdownQueue()
+  /*
+   * Hook up timer with cleanupTtlCountdownQueue(). The actual scheduling
+   * happens within updateTtlCountdownQueue()
+   */
   ttlCountdownTimer_ = folly::AsyncTimeout::make(
       *evb_->getEvb(), [this]() noexcept { cleanupTtlCountdownQueue(); });
 
@@ -2026,8 +2044,10 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::floodTopoDumpTask() noexcept {
   while (true) { // Break when stop signal is ready
-    // Sleep before next check
-    // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
+    /*
+     * Sleep before next check
+     * ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
+     */
     if (floodTopoStopSignal_.try_wait_for(Constants::kFloodTopoDumpInterval)) {
       break; // Baton was posted
     } else {
@@ -2058,8 +2078,10 @@ template <class ClientType>
 void
 KvStoreDb<ClientType>::checkKeyTtlTask() noexcept {
   while (true) { // Break when stop signal is ready
-    // Sleep before next check
-    // ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
+    /*
+     * Sleep before next check
+     * ATTN: sleep first to avoid empty peers when KvStoreDb initially starts.
+     */
     if (ttlCheckStopSignal_.try_wait_for(Constants::kFloodTopoDumpInterval)) {
       break; // Baton was posted
     } else {
@@ -2084,15 +2106,17 @@ KvStoreDb<ClientType>::checkKeyTtl() noexcept {
     if (!filter.keyMatch(k, v)) {
       continue;
     }
-    // ATTN: ttl is refreshed every keyTtl.count() / 4 by default.
-    // Increment the counter if the following condition fulfilled:
-    //
-    // 1. If keyTtl.count() is below the threshold of 1/2 keyTtl, this
-    // indicates that the ttl-refreshing sent from peer on timstamp of
-    // {3/4, 1/2} keyTtl are NOT received;
-    //
-    // 2. If the originator of this adj key is still connected to KvStore,
-    // this is a strong signal that flooding topo is in bad state;
+    /*
+     * ATTN: ttl is refreshed every keyTtl.count() / 4 by default.
+     * Increment the counter if the following condition fulfilled:
+     *
+     * 1. If keyTtl.count() is below the threshold of 1/2 keyTtl, this
+     * indicates that the ttl-refreshing sent from peer on timstamp of
+     * {3/4, 1/2} keyTtl are NOT received;
+     *
+     * 2. If the originator of this adj key is still connected to KvStore,
+     * this is a strong signal that flooding topo is in bad state;
+     */
     if (*v.ttl() < kvParams_.keyTtl.count() / 2 and
         thriftPeers_.count(*v.originatorId())) {
       XLOGF(ERR, "Ttl of {} drops below 50% threshold and going to expire", k);
@@ -2131,8 +2155,10 @@ KvStoreDb<ClientType>::setSelfOriginatedKey(
     }
   }
 
-  // Store self-originated key-vals in cache
-  // ATTN: ttl backoff will be set separately in scheduleTtlUpdates()
+  /*
+   * Store self-originated key-vals in cache
+   * ATTN: ttl backoff will be set separately in scheduleTtlUpdates()
+   */
   auto selfOriginatedVal = SelfOriginatedValue(thriftValue);
   selfOriginatedKeyVals_[key] = std::move(selfOriginatedVal);
 
@@ -2155,30 +2181,36 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
   // Look key up in local cached storage
   auto selfOriginatedKeyIt = selfOriginatedKeyVals_.find(key);
 
-  // Advertise key-val if old key-val needs to be overridden or key does not
-  // exist in KvStore already.
+  /*
+   * Advertise key-val if old key-val needs to be overridden or key does not
+   * exist in KvStore already.
+   */
   bool shouldAdvertise = false;
 
-  // Create the default thrift value with:
-  //  1. version - [NOT FILLED] - 0 is INVALID
-  //  2. originatorId - [DONE] - nodeId
-  //  3. value - [DONE] - value
-  //  4. ttl - [DONE] - kvParams_.keyTtl.count()
-  //  5. ttlVersion - [NOT FILLED] - empty
-  //  6. hash - [OPTIONAL] - empty
+  /*
+   * Create the default thrift value with:
+   *  1. version - [NOT FILLED] - 0 is INVALID
+   *  2. originatorId - [DONE] - nodeId
+   *  3. value - [DONE] - value
+   *  4. ttl - [DONE] - kvParams_.keyTtl.count()
+   *  5. ttlVersion - [NOT FILLED] - empty
+   *  6. hash - [OPTIONAL] - empty
+   */
   thrift::Value thriftValue =
       createThriftValue(0, kvParams_.nodeId, value, kvParams_.keyTtl.count());
   CHECK(thriftValue.value());
 
-  // Two cases for this particular (k, v) pair:
-  //  1) Key is first-time persisted:
-  //     Retrieve it from `kvStore_`.
-  //      <1> Key is NOT found in `KvStore` (ATTN:
-  //          new key advertisement)
-  //      <2> Key is found in `KvStore`. Override the
-  //          value with authoritative operation.
-  //  2) Key has been persisted before:
-  //     Retrieve it from cached self-originated key-vals;
+  /*
+   * Two cases for this particular (k, v) pair:
+   *  1) Key is first-time persisted:
+   *     Retrieve it from `kvStore_`.
+   *      <1> Key is NOT found in `KvStore` (ATTN:
+   *          new key advertisement)
+   *      <2> Key is found in `KvStore`. Override the
+   *          value with authoritative operation.
+   *  2) Key has been persisted before:
+   *     Retrieve it from cached self-originated key-vals;
+   */
   if (selfOriginatedKeyIt == selfOriginatedKeyVals_.end()) {
     // Key is first-time persisted. Check if key is in KvStore.
     auto keyIt = kvStore_.find(key);
@@ -2187,8 +2219,10 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
       thriftValue.version() = 1;
       shouldAdvertise = true;
     } else {
-      // Key is NOT persisted but can be found inside KvStore.
-      // This can be keys advertised by our previous incarnation.
+      /*
+       * Key is NOT persisted but can be found inside KvStore.
+       * This can be keys advertised by our previous incarnation.
+       */
       thriftValue = keyIt->second;
       // TTL update pub is never saved in kvstore. Value is not std::nullopt.
       DCHECK(thriftValue.value());
@@ -2202,9 +2236,11 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
     }
   }
 
-  // Override thrift::Value if
-  //  1) the SAME key is originated by different node;
-  //  2) the peristed value has changed;
+  /*
+   * Override thrift::Value if
+   *  1) the SAME key is originated by different node;
+   *  2) the peristed value has changed;
+   */
   if (*thriftValue.originatorId() != kvParams_.nodeId or
       *thriftValue.value() != value) {
     (*thriftValue.version())++;
@@ -2214,9 +2250,11 @@ KvStoreDb<ClientType>::persistSelfOriginatedKey(
     shouldAdvertise = true;
   }
 
-  // Override ttl value to new one.
-  // ATTN: When ttl changes but value doesn't, we should advertise ttl
-  // immediately so that new ttl is in effect.
+  /*
+   * Override ttl value to new one.
+   * ATTN: When ttl changes but value doesn't, we should advertise ttl
+   * immediately so that new ttl is in effect.
+   */
   const bool hasTtlChanged =
       (kvParams_.keyTtl.count() != *thriftValue.ttl()) ? true : false;
   thriftValue.ttl() = kvParams_.keyTtl.count();
@@ -2266,8 +2304,10 @@ KvStoreDb<ClientType>::advertiseSelfOriginatedKeys() {
 
   std::chrono::milliseconds timeout = kvParams_.syncMaxBackoff;
   for (auto const& key : keysToAdvertise_) {
-    // Each key was introduced through a persistSelfOriginatedKey() call.
-    // Therefore, each key is in selfOriginatedKeyVals_ and has a keyBackoff.
+    /*
+     * Each key was introduced through a persistSelfOriginatedKey() call.
+     * Therefore, each key is in selfOriginatedKeyVals_ and has a keyBackoff.
+     */
     auto& selfOriginatedValue = selfOriginatedKeyVals_.at(key);
     const auto& thriftValue = selfOriginatedValue.value;
     CHECK(selfOriginatedValue.keyBackoff.has_value());
@@ -2322,8 +2362,10 @@ KvStoreDb<ClientType>::unsetSelfOriginatedKey(
   // erase key
   eraseSelfOriginatedKey(key);
 
-  // Check if key is in KvStore. If key doesn't exist in KvStore no need to
-  // add it as "empty". This condition should not exist.
+  /*
+   * Check if key is in KvStore. If key doesn't exist in KvStore no need to
+   * add it as "empty". This condition should not exist.
+   */
   auto keyIt = kvStore_.find(key);
   if (keyIt == kvStore_.end()) {
     return;
@@ -2358,21 +2400,25 @@ KvStoreDb<ClientType>::unsetPendingSelfOriginatedKeys() {
 
   // Build set of keys to update KvStore
   thrift::KeyVals keyVals;
-  // Build keys to be cleaned from local storage. Do not remove from
-  // keysToUnset_ directly while iterating.
+  /*
+   * Build keys to be cleaned from local storage. Do not remove from
+   * keysToUnset_ directly while iterating.
+   */
   std::vector<std::string> localKeysToUnset;
 
   for (auto const& [key, thriftVal] : keysToUnset_) {
-    // ATTN: consider corner case of key X being:
-    //  Case 1) first persisted then unset before throttling triggers
-    //    X will NOT be persisted at all.
-    //
-    //  Case 2) first unset then persisted before throttling kicks in
-    //    X will NOT be unset since it is inside `persistedKeyVals_`
-    //
-    //  Source of truth will be `persistedKeyVals_` as
-    //  `unsetSelfOriginatedKey()` will do `eraseSelfOriginatedKey()`, which
-    //  wipes out its existence.
+    /*
+     * ATTN: consider corner case of key X being:
+     *  Case 1) first persisted then unset before throttling triggers
+     *    X will NOT be persisted at all.
+     *
+     *  Case 2) first unset then persisted before throttling kicks in
+     *    X will NOT be unset since it is inside `persistedKeyVals_`
+     *
+     *  Source of truth will be `persistedKeyVals_` as
+     *  `unsetSelfOriginatedKey()` will do `eraseSelfOriginatedKey()`, which
+     *  wipes out its existence.
+     */
     auto it = selfOriginatedKeyVals_.find(key);
     if (it == selfOriginatedKeyVals_.end()) {
       // Case 1:  X is not persisted. Set new value.
@@ -2404,14 +2450,18 @@ KvStoreDb<ClientType>::scheduleTtlUpdates(
 
   auto& value = selfOriginatedKeyVals_.at(key);
 
-  // renew before ttl expires. renew every ttl/4, i.e., try 3 times using
-  // ExponetialBackoff to track remaining time before ttl expiration.
+  /*
+   * renew before ttl expires. renew every ttl/4, i.e., try 3 times using
+   * ExponetialBackoff to track remaining time before ttl expiration.
+   */
   value.ttlBackoff = ExponentialBackoff<std::chrono::milliseconds>(
       std::chrono::milliseconds(ttl / 4),
       std::chrono::milliseconds(ttl / 4 + 1));
 
-  // Delay first ttl advertisement by (ttl / 4). We have just advertised key
-  // or update and would like to avoid sending unncessary immediate ttl update
+  /*
+   * Delay first ttl advertisement by (ttl / 4). We have just advertised key
+   * or update and would like to avoid sending unncessary immediate ttl update
+   */
   if (!advertiseImmediately) {
     selfOriginatedKeyVals_[key].ttlBackoff.reportError();
   }
@@ -2446,8 +2496,10 @@ KvStoreDb<ClientType>::advertiseTtlUpdates() {
     // Bump ttl version
     (*thriftValue.ttlVersion())++;
 
-    // Create copy of thrift::Value without value field for bandwidth
-    // efficiency when advertising
+    /*
+     * Create copy of thrift::Value without value field for bandwidth
+     * efficiency when advertising
+     */
     auto advertiseValue = createThriftValue(
         *thriftValue.version(),
         kvParams_.nodeId,
@@ -2505,8 +2557,10 @@ void
 KvStoreDb<ClientType>::updateTtlCountdownQueue(
     const thrift::Publication& publication, bool isSelfOriginatedUpdate) {
   for (const auto& [key, value] : *publication.keyVals()) {
-    // self originated key should never expire
-    // Explicit deletion use separate logic
+    /*
+     * self originated key should never expire
+     * Explicit deletion use separate logic
+     */
     if (!isSelfOriginatedUpdate && selfOriginatedKeyVals_.count(key) > 0) {
       continue;
     }
@@ -2528,10 +2582,12 @@ KvStoreDb<ClientType>::updateTtlCountdownQueue(
             std::chrono::milliseconds(*value.ttl()));
       }
 
-      // ATTN: ttlCountdownHandleMap_ uses a tuple of key and originatorId as
-      // its key. We want to replace the existing entry in ttlCountdownQueue_
-      // with the latest version and ttlVersion. So we skip the equality check
-      // for version and ttlVersion.
+      /*
+       * ATTN: ttlCountdownHandleMap_ uses a tuple of key and originatorId as
+       * its key. We want to replace the existing entry in ttlCountdownQueue_
+       * with the latest version and ttlVersion. So we skip the equality check
+       * for version and ttlVersion.
+       */
       TtlCountdownHandleKey handleKey{key, *value.originatorId()};
       auto it = ttlCountdownHandleMap_.find(handleKey);
       if (it != ttlCountdownHandleMap_.end()) {
@@ -2571,8 +2627,10 @@ KvStoreDb<ClientType>::getKeyValsSize() const {
   return size;
 }
 
-// build publication out of the requested keys (per request)
-// if not keys provided, will return publication with empty keyVals
+/*
+ * build publication out of the requested keys (per request)
+ * if not keys provided, will return publication with empty keyVals
+ */
 template <class ClientType>
 thrift::Publication
 KvStoreDb<ClientType>::getKeyVals(std::vector<std::string> const& keys) {
@@ -2590,9 +2648,11 @@ KvStoreDb<ClientType>::getKeyVals(std::vector<std::string> const& keys) {
   return thriftPub;
 }
 
-// This function serves the purpose of periodically scanning peers in
-// IDLE state and promote them to SYNCING state. The initial dump will
-// happen in async nature to unblock KvStore to process other requests.
+/*
+ * This function serves the purpose of periodically scanning peers in
+ * IDLE state and promote them to SYNCING state. The initial dump will
+ * happen in async nature to unblock KvStore to process other requests.
+ */
 template <class ClientType>
 void
 KvStoreDb<ClientType>::requestThriftPeerSync() {
@@ -2604,8 +2664,10 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
   uint32_t numThriftPeersInSync =
       getPeersByState(thrift::KvStorePeerState::SYNCING).size();
 
-  // Lazily build KeyDumpParams only when needed (i.e., when there's a peer to
-  // sync). Once built, reuse for all peers.
+  /*
+   * Lazily build KeyDumpParams only when needed (i.e., when there's a peer to
+   * sync). Once built, reuse for all peers.
+   */
   std::optional<thrift::KeyDumpParams> params;
   std::optional<thrift::KeyDumpParams> fabricExternalParams;
 
@@ -2696,8 +2758,10 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
               startTime);
         });
 
-    // in case pending peer size is over parallelSyncLimit,
-    // wait until syncInitialBackoff before sending next round of sync
+    /*
+     * in case pending peer size is over parallelSyncLimit,
+     * wait until syncInitialBackoff before sending next round of sync
+     */
     if (numThriftPeersInSync > parallelSyncLimitOverThrift_) {
       timeout = kvParams_.syncInitialBackoff;
       XLOGF(
@@ -2726,11 +2790,13 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
   }
 }
 
-// This function will process the full-dump response from peers:
-//  1) Merge peer's publication with local KvStoreDb;
-//  2) Send a finalized full-sync to peer for missing keys;
-//  3) Exponetially update number of peers to SYNC in parallel;
-//  4) Promote KvStorePeerState from SYNCING -> INITIALIZED;
+/*
+ * This function will process the full-dump response from peers:
+ *  1) Merge peer's publication with local KvStoreDb;
+ *  2) Send a finalized full-sync to peer for missing keys;
+ *  3) Exponetially update number of peers to SYNC in parallel;
+ *  4) Promote KvStorePeerState from SYNCING -> INITIALIZED;
+ */
 template <class ClientType>
 void
 KvStoreDb<ClientType>::processThriftSuccess(
@@ -2752,11 +2818,13 @@ KvStoreDb<ClientType>::processThriftSuccess(
     return;
   }
 
-  // ATTN: In parallel link case, peer state can be set to IDLE when
-  //       parallel adj comes up before the previous full-sync response
-  //       being received. KvStoreDb will ignore the old full-sync
-  //       response and will rely on the new full-sync response to
-  //       promote the state.
+  /*
+   * ATTN: In parallel link case, peer state can be set to IDLE when
+   *       parallel adj comes up before the previous full-sync response
+   *       being received. KvStoreDb will ignore the old full-sync
+   *       response and will rely on the new full-sync response to
+   *       promote the state.
+   */
   auto& peer = thriftPeers_.at(peerName);
   if (*peer.peerSpec.state() == thrift::KvStorePeerState::IDLE) {
     XLOGF(
@@ -2771,8 +2839,10 @@ KvStoreDb<ClientType>::processThriftSuccess(
       pub.tobeUpdatedKeys().has_value() ? pub.tobeUpdatedKeys()->size() : 0;
   auto numReceivedKeys = pub.keyVals()->size();
 
-  // ATTN: `peerName` is MANDATORY to fulfill the finialized
-  //       full-sync with peers.
+  /*
+   * ATTN: `peerName` is MANDATORY to fulfill the finialized
+   *       full-sync with peers.
+   */
   const auto mergeResult = mergePublication(
       pub, false /* remote update */, peerName /* request finalized sync */);
 
@@ -2815,16 +2885,20 @@ KvStoreDb<ClientType>::processThriftSuccess(
   // Log full-sync event via replicate queue
   logSyncEvent(peerName, timeDelta);
 
-  // Successfully received full-sync response. Double the parallel
-  // sync limit. This is to:
-  //  1) accelerate the rest of pending full-syncs if any;
-  //  2) assume subsequeny sync diff will be small in traffic amount;
+  /*
+   * Successfully received full-sync response. Double the parallel
+   * sync limit. This is to:
+   *  1) accelerate the rest of pending full-syncs if any;
+   *  2) assume subsequeny sync diff will be small in traffic amount;
+   */
   parallelSyncLimitOverThrift_ = std::min(
       2 * parallelSyncLimitOverThrift_,
       Constants::kMaxFullSyncPendingCountThreshold);
 
-  // Schedule another round of `thriftSyncTimer_` full-sync request if
-  // there is still peer in IDLE state. If no IDLE peer, cancel timeout.
+  /*
+   * Schedule another round of `thriftSyncTimer_` full-sync request if
+   * there is still peer in IDLE state. If no IDLE peer, cancel timeout.
+   */
   uint32_t numThriftPeersInIdle =
       getPeersByState(thrift::KvStorePeerState::IDLE).size();
   if (numThriftPeersInIdle > 0) {
@@ -2852,8 +2926,10 @@ KvStoreDb<ClientType>::processInitializationEvent() {
       // Running into THRIFT_API_ERROR is treated as sync completion signal.
       ++initialSyncFailureCnt;
     } else {
-      // Return if there are peers still in IDLE/SYNCING state and no thrift
-      // errors have occured yet.
+      /*
+       * Return if there are peers still in IDLE/SYNCING state and no thrift
+       * errors have occured yet.
+       */
       return;
     }
   }
@@ -2872,9 +2948,11 @@ KvStoreDb<ClientType>::processInitializationEvent() {
   initialKvStoreSyncedCallback_();
 }
 
-// This function will process the exception hit during full-dump:
-//  1) Change peer state from current state to IDLE due to exception;
-//  2) Schedule syncTimer to pick IDLE peer up if NOT scheduled;
+/*
+ * This function will process the exception hit during full-dump:
+ *  1) Change peer state from current state to IDLE due to exception;
+ *  2) Schedule syncTimer to pick IDLE peer up if NOT scheduled;
+ */
 template <class ClientType>
 void
 KvStoreDb<ClientType>::processThriftFailure(
@@ -2926,8 +3004,10 @@ KvStoreDb<ClientType>::disconnectPeer(
     peer.expBackoff.reportError(); // apply exponential backoff
   }
 
-  // reset client to reconnect later in next batch of thriftSyncTimer_
-  // scanning
+  /*
+   * reset client to reconnect later in next batch of thriftSyncTimer_
+   * scanning
+   */
   peer.plainTextClient.reset();
   if (kvParams_.enable_secure_thrift_client) {
     peer.secureClient.reset();
@@ -2946,14 +3026,18 @@ KvStoreDb<ClientType>::disconnectPeer(
   logStateTransitionWithCounterPublication(
       peer.nodeName, oldState, *peer.peerSpec.state());
 
-  // Thrift error is treated as a completion signal of syncing with peer.
-  // Check whether initial sync is completed.
+  /*
+   * Thrift error is treated as a completion signal of syncing with peer.
+   * Check whether initial sync is completed.
+   */
   if (!initialSyncCompleted_) {
     processInitializationEvent();
   }
 
-  // Schedule another round of `thriftSyncTimer_` in case it is
-  // NOT scheduled.
+  /*
+   * Schedule another round of `thriftSyncTimer_` in case it is
+   * NOT scheduled.
+   */
   if (!thriftSyncTimer_->isScheduled()) {
     thriftSyncTimer_->scheduleTimeout(std::chrono::milliseconds(0));
   }
@@ -2979,8 +3063,10 @@ KvStoreDb<ClientType>::addThriftPeers(
 
       const auto& oldPeerSpec = peerIter->second.peerSpec;
       if (*oldPeerSpec.peerAddr() != *newPeerSpec.peerAddr()) {
-        // case1: peerSpec updated(i.e. parallel adjacencies can
-        //        potentially have peerSpec updated by LM)
+        /*
+         * case1: peerSpec updated(i.e. parallel adjacencies can
+         *        potentially have peerSpec updated by LM)
+         */
         XLOGF(
             INFO,
             "{}[Peer Update] peerAddr is updated from: {} to: {}",
@@ -3175,9 +3261,11 @@ KvStoreDb<ClientType>::cleanupTtlCountdownQueue() {
   fb303::fbData->addStatValue(
       "kvstore.expired_key_vals", expiredKeys.size(), fb303::SUM);
 
-  // ATTN: expired key will be ONLY notified to local subscribers
-  //       via replicate-queue. KvStore will NOT flood publication
-  //       with expired keys ONLY to external peers.
+  /*
+   * ATTN: expired key will be ONLY notified to local subscribers
+   *       via replicate-queue. KvStore will NOT flood publication
+   *       with expired keys ONLY to external peers.
+   */
   thrift::Publication expiredKeysPub{};
   expiredKeysPub.expiredKeys() = std::move(expiredKeys);
   expiredKeysPub.area() = area_;
@@ -3227,8 +3315,10 @@ KvStoreDb<ClientType>::floodBufferedUpdates() {
   publicationBuffer_.clear();
 
   for (auto& pub : publications) {
-    // when sending out merged publication, we maintain orginal-root-id
-    // we act as a forwarder, NOT an initiator.
+    /*
+     * when sending out merged publication, we maintain orginal-root-id
+     * we act as a forwarder, NOT an initiator.
+     */
     floodPublication(std::move(pub), false /* rate-limit */);
   }
 }
@@ -3246,8 +3336,10 @@ KvStoreDb<ClientType>::finalizeFullSync(
     }
   }
 
-  // Update ttl values to remove expiring keys. Ignore the response if no
-  // keys to be sent
+  /*
+   * Update ttl values to remove expiring keys. Ignore the response if no
+   * keys to be sent
+   */
   updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, updates);
   if (!updates.keyVals()->size()) {
     return;
@@ -3273,9 +3365,11 @@ KvStoreDb<ClientType>::finalizeFullSync(
   if (*thriftPeer.peerSpec.state() == thrift::KvStorePeerState::IDLE or
       ((!thriftPeer.plainTextClient)) or
       (kvParams_.enable_secure_thrift_client && !thriftPeer.secureClient)) {
-    // TODO: evaluate the condition later to add to pending collection
-    // peer in thriftPeers collection can still be in IDLE state.
-    // Skip final full-sync with those peers.
+    /*
+     * TODO: evaluate the condition later to add to pending collection
+     * peer in thriftPeers collection can still be in IDLE state.
+     * Skip final full-sync with those peers.
+     */
     return;
   }
   params.senderId() = kvParams_.nodeId;
@@ -3353,9 +3447,11 @@ KvStoreDb<ClientType>::finalizeFullSync(
 template <class ClientType>
 folly::F14FastSet<std::string>
 KvStoreDb<ClientType>::getFloodPeers() {
-  // flood-peers:
-  //  1) SPT-peers;
-  //  2) peers-who-does-not-support-DUAL;
+  /*
+   * flood-peers:
+   *  1) SPT-peers;
+   *  2) peers-who-does-not-support-DUAL;
+   */
   folly::F14FastSet<std::string> floodPeers;
   for (const auto& [peerName, peer] : thriftPeers_) {
     floodPeers.emplace(peerName);
@@ -3428,8 +3524,10 @@ KvStoreDb<ClientType>::floodPublication(
     bufferPublication(std::move(publication));
     return floodBufferedUpdates();
   }
-  // Update ttl on keys we are trying to advertise. Also remove keys which
-  // are about to expire.
+  /*
+   * Update ttl on keys we are trying to advertise. Also remove keys which
+   * are about to expire.
+   */
   updatePublicationTtl(ttlCountdownQueue_, kvParams_.ttlDecr, publication);
 
   // If there are no changes then return
@@ -3437,9 +3535,11 @@ KvStoreDb<ClientType>::floodPublication(
     return;
   }
 
-  // Find from whom we might have got this publication. Last entry is our ID
-  // and hence second last entry is the node from whom we get this
-  // publication
+  /*
+   * Find from whom we might have got this publication. Last entry is our ID
+   * and hence second last entry is the node from whom we get this
+   * publication
+   */
   std::optional<std::string> senderId;
   if (publication.nodeIds().has_value() && publication.nodeIds()->size()) {
     senderId = publication.nodeIds()->back();
@@ -3467,8 +3567,10 @@ KvStoreDb<ClientType>::floodPublication(
     return;
   }
 
-  // Log keys being flooded only if DBG2 is enabled to avoid expensive
-  // computation when logging is disabled
+  /*
+   * Log keys being flooded only if DBG2 is enabled to avoid expensive
+   * computation when logging is disabled
+   */
   if (XLOG_IS_ON(DBG2)) {
     auto keysToUpdate = folly::gen::from(*publication.keyVals()) |
         folly::gen::get<0>() | folly::gen::as<std::vector<std::string>>();
@@ -3554,15 +3656,19 @@ KvStoreDb<ClientType>::floodPublication(
   }
   for (auto& [peerName, thriftPeer] : thriftPeers_) {
     if (senderId.has_value() && senderId.value() == peerName) {
-      // Do not flood towards senderId from whom we received this
-      // publication
+      /*
+       * Do not flood towards senderId from whom we received this
+       * publication
+       */
       continue;
     }
 
     if (*thriftPeer.peerSpec.state() != thrift::KvStorePeerState::INITIALIZED) {
-      // Skip flooding to those peers if peer has NOT finished
-      // initial sync(i.e. promoted to `INITIALIZED`)
-      // store key for flooding after intialized
+      /*
+       * Skip flooding to those peers if peer has NOT finished
+       * initial sync(i.e. promoted to `INITIALIZED`)
+       * store key for flooding after intialized
+       */
       for (auto const& [key, _] : *params.keyVals()) {
         thriftPeer.pendingKeysDuringInitialization.insert(key);
       }
@@ -4127,8 +4233,10 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
     return;
   }
 
-  // go through received publications to refresh self-originated key-vals if
-  // necessary
+  /*
+   * go through received publications to refresh self-originated key-vals if
+   * necessary
+   */
   for (auto const& [key, rcvdValue] : *publication.keyVals()) {
     if (!rcvdValue.value().has_value()) {
       // ignore TTL update
@@ -4142,11 +4250,13 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
       continue;
     }
 
-    // 3 cases to process for version comparison
-    //
-    // case-1: currValue > rcvdValue
-    // case-2: currValue < rcvdValue
-    // case-3: currValue == rcvdValue
+    /*
+     * 3 cases to process for version comparison
+     *
+     * case-1: currValue > rcvdValue
+     * case-2: currValue < rcvdValue
+     * case-3: currValue == rcvdValue
+     */
     auto& currValue = it->second.value;
     const auto& currVersion = *currValue.version();
     const auto& rcvdVersion = *rcvdValue.version();
@@ -4159,22 +4269,26 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
       // case-2: rcvdValue has higher version, MUST override.
       shouldOverride = true;
     } else {
-      // case-3: currValue has the SAME version as rcvdValue,
-      // conditionally override.
-      // NOTE: similar operation in persistSelfOriginatedKey()
-      // for key overriding.
+      /*
+       * case-3: currValue has the SAME version as rcvdValue,
+       * conditionally override.
+       * NOTE: similar operation in persistSelfOriginatedKey()
+       * for key overriding.
+       */
       if (*rcvdValue.originatorId() != kvParams_.nodeId or
           *currValue.value() != *rcvdValue.value()) {
         shouldOverride = true;
       }
     }
 
-    // NOTE: local KvStoreDb needs to override and re-advertise, including:
-    //  - bump up version;
-    //  - reset ttlVersion;
-    //  - override originatorId(do nothing since it is up-to-date);
-    //  - override value(do nothing since it is up-to-date);
-    //  - honor the ttl from local value;
+    /*
+     * NOTE: local KvStoreDb needs to override and re-advertise, including:
+     *  - bump up version;
+     *  - reset ttlVersion;
+     *  - override originatorId(do nothing since it is up-to-date);
+     *  - override value(do nothing since it is up-to-date);
+     *  - honor the ttl from local value;
+     */
     if (shouldOverride) {
       currValue.ttlVersion() = 0;
       currValue.version() = *rcvdValue.version() + 1;
@@ -4188,9 +4302,11 @@ KvStoreDb<ClientType>::processPublicationForSelfOriginatedKey(
           *rcvdValue.version(),
           *currValue.originatorId());
     } else {
-      // update local ttlVersion if received higher ttlVersion.
-      // NOTE: ttlVersion will be bumped up before ttl update.
-      // It works fine to just update to latest ttlVersion, instead of +1.
+      /*
+       * update local ttlVersion if received higher ttlVersion.
+       * NOTE: ttlVersion will be bumped up before ttl update.
+       * It works fine to just update to latest ttlVersion, instead of +1.
+       */
       if (*currValue.ttlVersion() < *rcvdValue.ttlVersion()) {
         currValue.ttlVersion() = *rcvdValue.ttlVersion();
         scheduleTtlUpdates(key, true /* advertiseImmediately*/);
@@ -4328,9 +4444,11 @@ KvStoreDb<ClientType>::mergePublication(
   }
 
   if (*result.inconsistencyDetetectedWithOriginator()) {
-    // inconsistency detected: Received a TTL update from originator
-    // but key version are mismatched
-    // Transition to IDLE to resync
+    /*
+     * inconsistency detected: Received a TTL update from originator
+     * but key version are mismatched
+     * Transition to IDLE to resync
+     */
     auto it = thriftPeers_.find(sender.value());
     if (it != thriftPeers_.end()) {
       disconnectPeer(it->second, KvStorePeerEvent::INCONSISTENCY_DETECTED);
@@ -4360,8 +4478,10 @@ KvStoreDb<ClientType>::mergePublication(
         "kvstore.last_update", getUnixTimeStampMs(), fb303::AVG);
   }
 
-  // Populate nodeIds. ATTN: nodeId of itself will be appended later
-  // inside `floodPublication`
+  /*
+   * Populate nodeIds. ATTN: nodeId of itself will be appended later
+   * inside `floodPublication`
+   */
   if (nodeIds.has_value()) {
     deltaPublication.nodeIds().copy_from(rcvdPublication.nodeIds());
   }
@@ -4378,8 +4498,10 @@ KvStoreDb<ClientType>::mergePublication(
         "kvstore.received_redundant_publications", 1, fb303::COUNT);
   }
 
-  // response to senderId with tobeUpdatedKeys + Vals
-  // (last step in 3-way full-sync)
+  /*
+   * response to senderId with tobeUpdatedKeys + Vals
+   * (last step in 3-way full-sync)
+   */
   if (!keysToSendBack.empty()) {
     finalizeFullSync(keysToSendBack, senderId.value());
   }

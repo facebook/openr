@@ -88,8 +88,10 @@ class KvStoreWrapper {
 
   void
   stopThriftServer() {
-    // ATTN: it is user's responsibility to close the queue passed
-    //       to thrift server before calling stop()
+    /*
+     * ATTN: it is user's responsibility to close the queue passed
+     *       to thrift server before calling stop()
+     */
     thriftServerThread_.stop();
     thriftServerThread_.join();
 
@@ -275,8 +277,10 @@ class KvStoreWrapper {
   // Queue for streaming peer updates from LM
   messaging::ReplicateQueue<PeerEvent> dummyPeerUpdatesQueue_;
 
-  // Emtpy queue for streaming key events from sources which persist keys into
-  // KvStore Will be removed once KvStoreClientInternal is deprecated
+  /*
+   * Emtpy queue for streaming key events from sources which persist keys into
+   * KvStore Will be removed once KvStoreClientInternal is deprecated
+   */
   messaging::ReplicateQueue<KeyValueRequest> dummyKvRequestQueue_;
 
   // KvStore instance owned by this wrapper
@@ -291,8 +295,10 @@ class KvStoreWrapper {
   // Thread in which thrift server will be running
   apache::thrift::util::ScopedServerThread thriftServerThread_;
 
-  // SslContext to enable TLS on Thrift Server. If unset, only plaintext
-  // communication will be supported.
+  /*
+   * SslContext to enable TLS on Thrift Server. If unset, only plaintext
+   * communication will be supported.
+   */
   std::shared_ptr<wangle::SSLContextConfig> sslContext_;
 };
 

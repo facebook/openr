@@ -271,8 +271,10 @@ BM_KvStoreValueUpdate(
   kvStoreHarness->clear();
 }
 
-// The first integer parameter is number of keyVals already in store
-// The second integer parameter is the number of keyVals for update
+/*
+ * The first integer parameter is number of keyVals already in store
+ * The second integer parameter is the number of keyVals for update
+ */
 BENCHMARK_COUNTERS_NAME_PARAM(
     BM_KvStoreMergeKeyValues, counters, 10_10, 10, 10);
 BENCHMARK_COUNTERS_NAME_PARAM(

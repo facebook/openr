@@ -131,12 +131,14 @@ class KvStoreThriftTestFixture : public ::testing::Test {
       stores_{};
 };
 
-//
-// class for simple topology creation, which has:
-//  1) Create a 2 kvstore intances with `enableKvStoreThrift` knob open;
-//  2) Inject different keys to different store and make sure it is
-//     mutual exclusive;
-//
+/*
+ *
+ * class for simple topology creation, which has:
+ *  1) Create a 2 kvstore intances with `enableKvStoreThrift` knob open;
+ *  2) Inject different keys to different store and make sure it is
+ *     mutual exclusive;
+ *
+ */
 class SimpleKvStoreThriftTestFixture : public KvStoreThriftTestFixture {
  protected:
   void
@@ -184,14 +186,16 @@ class SimpleKvStoreThriftTestFixture : public KvStoreThriftTestFixture {
   thrift::Value thriftVal2{};
 };
 
-//
-// Positive case for initial full-sync over thrift
-//
-// 1) Start 2 kvStores and 2 corresponding thrift servers.
-// 2) Add peer to each other;
-// 3) Make sure full-sync is performed and reach global consistency;
-// 4) Remove peers to check `KvStoreThriftPeers` data-strcuture;
-//
+/*
+ *
+ * Positive case for initial full-sync over thrift
+ *
+ * 1) Start 2 kvStores and 2 corresponding thrift servers.
+ * 2) Add peer to each other;
+ * 3) Make sure full-sync is performed and reach global consistency;
+ * 4) Remove peers to check `KvStoreThriftPeers` data-strcuture;
+ *
+ */
 TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
   // create 2 nodes topology for thrift peers
   createSimpleThriftTestTopo();
@@ -205,10 +209,12 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
   // eventbase to schedule callbacks at certain time spot
   OpenrEventBase evb;
   evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() noexcept {
-    //
-    // Step1: Add peer to each other's KvStore instances
-    //        Expect full-sync request exchanged;
-    //
+    /*
+     *
+     * Step1: Add peer to each other's KvStore instances
+     *        Expect full-sync request exchanged;
+     *
+     */
     EXPECT_TRUE(
         store1->addPeer(kTestingAreaName, store2->getNodeId(), peerSpec2));
     EXPECT_TRUE(
@@ -265,10 +271,12 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
     EXPECT_EQ(2, store1->dumpAll(kTestingAreaName).size());
     EXPECT_EQ(2, store2->dumpAll(kTestingAreaName).size());
 
-    //
-    // Step2: Update peer with different thrift peerAddr
-    //        Expect full-sync request being sent;
-    //
+    /*
+     *
+     * Step2: Update peer with different thrift peerAddr
+     *        Expect full-sync request being sent;
+     *
+     */
     store2.reset(); // shared_ptr needs to be cleaned up everywhere!
     stores_.back()->closeQueue();
     stores_.back()->stop();
@@ -312,24 +320,28 @@ TEST_F(SimpleKvStoreThriftTestFixture, InitialThriftSync) {
 
   evb.run();
 
-  //
-  // Step3: Remove peers
-  //
+  /*
+   *
+   * Step3: Remove peers
+   *
+   */
   EXPECT_TRUE(store1->delPeer(kTestingAreaName, store2->getNodeId()));
   EXPECT_TRUE(store2->delPeer(kTestingAreaName, store1->getNodeId()));
   EXPECT_EQ(0, store1->getPeers(kTestingAreaName).size());
   EXPECT_EQ(0, store2->getPeers(kTestingAreaName).size());
 }
 
-//
-// Negative test case for initial full-sync over thrift
-//
-// 1) Start 2 kvStores and 2 corresponding thrift servers;
-// 2) Jeopardize port number to mimick thrift exception;
-// 3) Add peer to each other;
-// 4) Make sure full-sync encountered expcetion and no
-//    kvStore full-sync going through;
-//
+/*
+ *
+ * Negative test case for initial full-sync over thrift
+ *
+ * 1) Start 2 kvStores and 2 corresponding thrift servers;
+ * 2) Jeopardize port number to mimick thrift exception;
+ * 3) Add peer to each other;
+ * 4) Make sure full-sync encountered expcetion and no
+ *    kvStore full-sync going through;
+ *
+ */
 TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   // create 2 nodes topology for thrift peers
   createSimpleThriftTestTopo();
@@ -340,9 +352,11 @@ TEST_F(SimpleKvStoreThriftTestFixture, FullSyncWithException) {
   auto peerSpec1 = store1->getPeerSpec();
   auto peerSpec2 = store2->getPeerSpec();
 
-  // create dummy port in purpose to mimick exception connecting thrift server
-  // ATTN: explicitly make sure dummy port used will be different to thrift
-  // server ports
+  /*
+   * create dummy port in purpose to mimick exception connecting thrift server
+   * ATTN: explicitly make sure dummy port used will be different to thrift
+   * server ports
+   */
   folly::F14FastSet<uint16_t> usedPorts{
       store1->getThriftPort(), store2->getThriftPort()};
   const uint16_t dummyPort1 = generateRandomDiffPort(usedPorts);
@@ -397,13 +411,15 @@ INSTANTIATE_TEST_SUITE_P(
         std::make_pair(openr::AreaId{"snc1.f02.s001"}, "SPINE"),
         std::make_pair(openr::AreaId{"snc1.f02.p004"}, "POD")));
 
-// +-------------+-------+-------------+---------------------------+
-// | total_peers | IDLE  | INITIALIZED | all_peers_not_initialized |
-// +-------------+-------+-------------+---------------------------+
-// |             |   0   |      2      |             0             |
-// |      2      |   1   |      1      |             0             |
-// |             |   2   |      0      |             1             |
-// +-------------+-------+-------------+---------------------------+
+/*
+ * +-------------+-------+-------------+---------------------------+
+ * | total_peers | IDLE  | INITIALIZED | all_peers_not_initialized |
+ * +-------------+-------+-------------+---------------------------+
+ * |             |   0   |      2      |             0             |
+ * |      2      |   1   |      1      |             0             |
+ * |             |   2   |      0      |             1             |
+ * +-------------+-------+-------------+---------------------------+
+ */
 TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
   fb303::fbData->resetAllData();
 
@@ -431,10 +447,12 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
       std::get<1>(KvStoreThriftTestFixtureWithAreaParams::GetParam()),
       areaTypeStr);
 
-  //
-  // Construct the counters' keys string
-  //
-  // kvstore.num_peers.<UNKNOWN/HGRID/SLICE/SPINE/POD>.IDLE
+  /*
+   *
+   * Construct the counters' keys string
+   *
+   * kvstore.num_peers.<UNKNOWN/HGRID/SLICE/SPINE/POD>.IDLE
+   */
   const std::string idleKeyStr = fmt::format(
       Constants::kKvStoreNumPeerByStateCounter, areaTypeStr, "IDLE");
   // kvstore.num_peers.<UNKNOWN/HGRID/SLICE/SPINE/POD>.INITIALIZED
@@ -466,16 +484,20 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
 
     EXPECT_EQ(0, numIdlePeer);
     EXPECT_EQ(2, numInitializedPeer);
-    // If there is at least 1 peer is initialized state, this
-    // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
-    // 0
+    /*
+     * If there is at least 1 peer is initialized state, this
+     * kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
+     * 0
+     */
     EXPECT_EQ(0, allPeerNotInitialized);
     EXPECT_LE(0, fullSyncDurationBefore);
 
-    // inject thrift failure for this peer `node-2`, processing time is 500ms
-    // the peer from INITIALIZED state will be changed to IDLE state
-    // the next evb scheduled task will verify the number of IDLE and
-    // INITIALIZED peers
+    /*
+     * inject thrift failure for this peer `node-2`, processing time is 500ms
+     * the peer from INITIALIZED state will be changed to IDLE state
+     * the next evb scheduled task will verify the number of IDLE and
+     * INITIALIZED peers
+     */
     store1->injectThriftFailure(testAreaId, store2->getNodeId());
   });
 
@@ -494,23 +516,29 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
             "kvstore.thrift.{}_duration_ms.avg",
             Constants::kTypeFullSync.toString()));
 
-    // verify the number of IDLE and INITIALIZED peers
-    //
-    // IDLE peer should go from 0 to 1 after the injected thriftfailure
-    // INITIALIZED peer should go from 2 to 1 after the injected
-    // thriftfailure
+    /*
+     * verify the number of IDLE and INITIALIZED peers
+     *
+     * IDLE peer should go from 0 to 1 after the injected thriftfailure
+     * INITIALIZED peer should go from 2 to 1 after the injected
+     * thriftfailure
+     */
     EXPECT_EQ(1, numIdlePeer);
     EXPECT_EQ(1, numInitializedPeer);
-    // If there is at least 1 peer is initialized state, this
-    // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
-    // 0
+    /*
+     * If there is at least 1 peer is initialized state, this
+     * kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
+     * 0
+     */
     EXPECT_EQ(0, allPeerNotInitialized);
     EXPECT_LE(0, fullSyncDurationAfter);
 
-    // inject thrift failure for this peer `node-3`, processing time is 500ms
-    // the peer from INITIALIZED state will be changed to IDLE state
-    // the next evb scheduled task will verify the number of IDLE and
-    // INITIALIZED peers
+    /*
+     * inject thrift failure for this peer `node-3`, processing time is 500ms
+     * the peer from INITIALIZED state will be changed to IDLE state
+     * the next evb scheduled task will verify the number of IDLE and
+     * INITIALIZED peers
+     */
     store1->injectThriftFailure(testAreaId, store3->getNodeId());
   });
 
@@ -524,16 +552,20 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
     // Verify if no peers is in INITIALIZED state
     auto allPeerNotInitialized = allCounters[allPeerNotInitializedKeyStr];
 
-    // verify the number of IDLE and INITIALIZED peers
-    //
-    // IDLE peer should go from 1 to 2 after another injected thriftfailure
-    // INITIALIZED peer should go from 1 to 0 after another injected
-    // thriftfailure
+    /*
+     * verify the number of IDLE and INITIALIZED peers
+     *
+     * IDLE peer should go from 1 to 2 after another injected thriftfailure
+     * INITIALIZED peer should go from 1 to 0 after another injected
+     * thriftfailure
+     */
     EXPECT_EQ(2, numIdlePeer);
     EXPECT_EQ(0, numInitializedPeer);
-    // If all peers are NOT in initialized state, this
-    // kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
-    // 1
+    /*
+     * If all peers are NOT in initialized state, this
+     * kvstore.all_peers_not_initialized.<UNKNOWN/HGRID/SLICE/SPINE/POD> will be
+     * 1
+     */
     EXPECT_EQ(1, allPeerNotInitialized);
 
     // stop the eventbase
@@ -544,17 +576,19 @@ TEST_P(KvStoreThriftTestFixtureWithAreaParams, PublishPeerStateCountersTest) {
   evb.run();
 }
 
-//
-// Test case to verify correctness of 3-way full-sync
-// Tuple => (key, version, value)
-//
-// store1 has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
-// store2 has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
-//
-// After store1 did a full-sync with store2, we expect both have:
-//
-// (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
-//
+/*
+ *
+ * Test case to verify correctness of 3-way full-sync
+ * Tuple => (key, version, value)
+ *
+ * store1 has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+ * store2 has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+ *
+ * After store1 did a full-sync with store2, we expect both have:
+ *
+ * (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+ *
+ */
 TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
   // Reset fb303 data for every test to make sure clean startup
   facebook::fb303::fbData->resetAllData();
@@ -609,8 +643,10 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
         kTestingAreaName, store2->getNodeId(), store2->getPeerSpec()));
   });
 
-  // after 3-way full-sync, we expect both A and B have:
-  // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+  /*
+   * after 3-way full-sync, we expect both A and B have:
+   * (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+   */
   evb.scheduleTimeout(std::chrono::milliseconds(1000), [&]() noexcept {
     for (const auto& key : allKeys) {
       auto val1 = store1->getKey(kTestingAreaName, key);
@@ -677,15 +713,17 @@ TEST_F(KvStoreThriftTestFixture, UnidirectionThriftFullSync) {
   EXPECT_EQ(v4->value().value(), value2);
 }
 
-//
-// Test case for flooding publication over thrift.
-//
-// Simple Topology:
-//
-// node1 <---> node2
-//
-// A ---> B indicates: A has B as its thrift peer
-//
+/*
+ *
+ * Test case for flooding publication over thrift.
+ *
+ * Simple Topology:
+ *
+ * node1 <---> node2
+ *
+ * A ---> B indicates: A has B as its thrift peer
+ *
+ */
 TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
   // create 2 nodes topology for thrift peers
   createSimpleThriftTestTopo();
@@ -693,10 +731,12 @@ TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
   auto store1 = stores_.front();
   auto store2 = stores_.back();
 
-  //
-  // Step1: Add peer to each other's KvStore instances
-  //        Expect full-sync request exchanged;
-  //
+  /*
+   *
+   * Step1: Add peer to each other's KvStore instances
+   *        Expect full-sync request exchanged;
+   *
+   */
   EXPECT_TRUE(store1->addPeer(
       kTestingAreaName, store2->getNodeId(), store2->getPeerSpec()));
   EXPECT_TRUE(store2->addPeer(
@@ -708,10 +748,12 @@ TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
   EXPECT_TRUE(
       verifyKvStoreKeyVal(store2.get(), key1, thriftVal1, kTestingAreaName));
 
-  //
-  // Step2: Inject a new key in one of the store. Make sure flooding happens
-  //        and the other store have the key;
-  //
+  /*
+   *
+   * Step2: Inject a new key in one of the store. Make sure flooding happens
+   *        and the other store have the key;
+   *
+   */
   const std::string key3{"key3"};
   auto thriftVal3 =
       createThriftValue(3, store2->getNodeId(), std::string("value3"));
@@ -726,24 +768,26 @@ TEST_F(SimpleKvStoreThriftTestFixture, BasicFloodingOverThrift) {
   EXPECT_EQ(3, store2->dumpAll(kTestingAreaName).size());
 }
 
-//
-// Test case for flooding publication over thrift.
-//
-// Ring Topology:
-//
-// node1 ---> node2 ---> node3
-//   ^                    |
-//   |                    |
-//   ----------------------
-//
-// 1) Inject key1 in node1;
-// 2) Inject key2 in node2;
-// 3) Inject key3 in node3;
-// 4) Ring topology will make sure flooding is happening one-way
-//    but reach global consistensy;
-//
-// NOTE: A ---> B indicates A has B as its thrift peer
-//
+/*
+ *
+ * Test case for flooding publication over thrift.
+ *
+ * Ring Topology:
+ *
+ * node1 ---> node2 ---> node3
+ *   ^                    |
+ *   |                    |
+ *   ----------------------
+ *
+ * 1) Inject key1 in node1;
+ * 2) Inject key2 in node2;
+ * 3) Inject key3 in node3;
+ * 4) Ring topology will make sure flooding is happening one-way
+ *    but reach global consistensy;
+ *
+ * NOTE: A ---> B indicates A has B as its thrift peer
+ *
+ */
 TEST_F(KvStoreThriftTestFixture, RingTopoFloodingOverThrift) {
   // spin up 3 kvStore instances and thriftServers
   const std::string node1{"node-1"};

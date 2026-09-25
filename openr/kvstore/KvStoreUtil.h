@@ -83,8 +83,10 @@ using SelfOriginatedKeyVals =
 
 class KvStoreFilters {
  public:
-  // takes the list of comma separated key prefixes to match,
-  // and the list of originator IDs to match in the value
+  /*
+   * takes the list of comma separated key prefixes to match,
+   * and the list of originator IDs to match in the value
+   */
   static inline const std::optional<FabricConfig> kNoFabricConfig =
       std::nullopt;
   static inline const std::optional<std::string> kNoPeerName = std::nullopt;
@@ -116,8 +118,10 @@ class KvStoreFilters {
   std::string str() const;
 
  private:
-  // Returns true if key is allowed to be published based on the fabric scope
-  // rule. Runs before the matches.
+  /*
+   * Returns true if key is allowed to be published based on the fabric scope
+   * rule. Runs before the matches.
+   */
   bool isAllowedByFabricScope(const std::string& key) const;
 
   // list of string prefixes, empty list matches all keys
@@ -312,16 +316,20 @@ thrift::Publication dumpAllWithFilters(
     const KvStoreFilters& kvFilters,
     bool doNotPublishValue = false);
 
-// Dump the hashes of my KV store whose keys match the given prefix
-// If prefix is the empty sting, the full hash store is dumped
+/*
+ * Dump the hashes of my KV store whose keys match the given prefix
+ * If prefix is the empty sting, the full hash store is dumped
+ */
 thrift::Publication dumpHashWithFilters(
     const std::string& area,
     const thrift::KeyVals& kvStore,
     const KvStoreFilters& kvFilters);
 
-// Update Time to expire filed in Publication
-// If timeleft is below Constants::kTtlThreshold and removeAboutToExpire is
-// true, erase keyVals
+/*
+ * Update Time to expire filed in Publication
+ * If timeleft is below Constants::kTtlThreshold and removeAboutToExpire is
+ * true, erase keyVals
+ */
 void updatePublicationTtl(
     const TtlCountdownQueue& ttlCountdownQueue,
     const std::chrono::milliseconds ttlDecr,

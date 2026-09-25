@@ -40,8 +40,10 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
       kvStoreConfig_,
       std::move(fabricConfig));
 
-  // we need to spin up a thrift server for KvStore clients to connect to. See
-  // https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update
+  /*
+   * we need to spin up a thrift server for KvStore clients to connect to. See
+   * https://openr.readthedocs.io/en/latest/Protocol_Guide/KvStore.html#incremental-updates-flooding-update
+   */
   kvStoreServiceHandler_ = std::make_shared<KvStoreServiceHandler<ClientType>>(
       nodeId_, kvStore_.get());
 }

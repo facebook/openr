@@ -20,9 +20,11 @@ KvStoreServiceHandler<ClientType>::KvStoreServiceHandler(
   CHECK_NOTNULL(kvStore_);
 }
 
-//
-// KvStore APIs
-//
+/*
+ *
+ * KvStore APIs
+ *
+ */
 
 template <class ClientType>
 folly::coro::Task<std::unique_ptr<thrift::Publication>>

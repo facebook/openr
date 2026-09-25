@@ -45,8 +45,10 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
 
   void
   TearDown() override {
-    // ATTN: kvStoreUpdatesQueue must be closed before destructing
-    //       KvStoreClientInternal as fiber future is depending on RQueue
+    /*
+     * ATTN: kvStoreUpdatesQueue must be closed before destructing
+     *       KvStoreClientInternal as fiber future is depending on RQueue
+     */
     kvStoreWrapper1_->stop();
     kvStoreWrapper2_->stop();
   }
@@ -59,9 +61,11 @@ class MultipleKvStoreTestFixture : public ::testing::Test {
       kvStoreWrapper1_, kvStoreWrapper2_;
 };
 
-//
-// validate mergeKeyValues
-//
+/*
+ *
+ * validate mergeKeyValues
+ *
+ */
 TEST(KvStoreUtil, mergeKeyValuesTest) {
   thrift::KeyVals oldStore;
   thrift::KeyVals myStore;
@@ -172,8 +176,10 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
     EXPECT_EQ(deltaKvIt->second.value().has_value(), false);
   }
 
-  // update ttl only (same version, originatorId and value,
-  // but higher ttlVersion)
+  /*
+   * update ttl only (same version, originatorId and value,
+   * but higher ttlVersion)
+   */
   {
     myKvIt->second = thriftValue;
     newKvIt->second = thriftValue;
@@ -216,9 +222,11 @@ TEST(KvStoreUtil, mergeKeyValuesTest) {
   }
 }
 
-//
-// Test compareValues method
-//
+/*
+ *
+ * Test compareValues method
+ *
+ */
 TEST(KvStoreUtil, compareValuesTest) {
   auto refValue = createThriftValue(
       5, /* version */
@@ -296,9 +304,11 @@ TEST(KvStoreUtil, compareValuesTest) {
   }
 }
 
-//
-// Test dumpAllWithThriftClient API
-//
+/*
+ *
+ * Test dumpAllWithThriftClient API
+ *
+ */
 TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
@@ -336,11 +346,15 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
     EXPECT_TRUE(pub.contains(key2));
   }
 
-  // Step3: shutdown thriftSevers and verify
-  // dumpAllWithThriftClientFromMultiple() will get nothing.
+  /*
+   * Step3: shutdown thriftSevers and verify
+   * dumpAllWithThriftClientFromMultiple() will get nothing.
+   */
   {
-    // ATTN: kvStoreUpdatesQueue must be closed before destructing
-    //       KvStoreClientInternal as fiber future is depending on RQueue
+    /*
+     * ATTN: kvStoreUpdatesQueue must be closed before destructing
+     *       KvStoreClientInternal as fiber future is depending on RQueue
+     */
     kvStoreWrapper1_->closeQueue();
     kvStoreWrapper2_->closeQueue();
     kvStoreWrapper1_->stopThriftServer();
@@ -354,9 +368,11 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllTest) {
   }
 }
 
-//
-// Test dumpAllWithThriftClient API with multiple key prefixes
-//
+/*
+ *
+ * Test dumpAllWithThriftClient API with multiple key prefixes
+ *
+ */
 TEST_F(MultipleKvStoreTestFixture, dumpAllWithMultipleKeysTest) {
   const std::string key1{"testprefix1_key1"};
   const std::string key2{"testprefix1_key2"};
@@ -391,9 +407,11 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithMultipleKeysTest) {
   EXPECT_TRUE(pub.contains(key3));
 }
 
-//
-// Test dumpAllWithThriftClient API overloaded for clients instead of addresses
-//
+/*
+ *
+ * Test dumpAllWithThriftClient API overloaded for clients instead of addresses
+ *
+ */
 TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
   const std::string key1{"test_key1"};
   const std::string key2{"test_key2"};
@@ -439,11 +457,15 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
     EXPECT_TRUE(pub.count(key2));
   }
 
-  // Step3: shutdown thriftSevers and verify
-  // dumpAllWithThriftClientFromMultiple() will get nothing.
+  /*
+   * Step3: shutdown thriftSevers and verify
+   * dumpAllWithThriftClientFromMultiple() will get nothing.
+   */
   {
-    // ATTN: kvStoreUpdatesQueue must be closed before destructing
-    //       KvStoreClientInternal as fiber future is depending on RQueue
+    /*
+     * ATTN: kvStoreUpdatesQueue must be closed before destructing
+     *       KvStoreClientInternal as fiber future is depending on RQueue
+     */
     kvStoreWrapper1_->closeQueue();
     kvStoreWrapper2_->closeQueue();
     kvStoreWrapper1_->stopThriftServer();
@@ -457,9 +479,11 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
   }
 }
 
-//
-// Test KvStoreFilters APIs
-//
+/*
+ *
+ * Test KvStoreFilters APIs
+ *
+ */
 TEST(KvStoreUtil, KvStoreFiltersTest) {
   // Nodes and keys that are in the matching list
   const std::string node1{"node1"};
@@ -538,10 +562,12 @@ makeTestFabricConfig() {
 }
 } // namespace
 
-// Tests for isAllowedByFabricScope via keyMatch.
-// isAllowedByFabricScope blocks fabric keys (adj/prefix keys for fabric nodes)
-// from being sent to non-fabric peers. It is called before key/originator
-// matching.
+/*
+ * Tests for isAllowedByFabricScope via keyMatch.
+ * isAllowedByFabricScope blocks fabric keys (adj/prefix keys for fabric nodes)
+ * from being sent to non-fabric peers. It is called before key/originator
+ * matching.
+ */
 TEST(KvStoreUtil, FabricScope_NoFabricConfig) {
   // Without fabricConfig, all keys are allowed regardless of content.
   auto filter = KvStoreFilters({}, {});
@@ -807,13 +833,17 @@ TEST(KvStoreUtil, GetMergeTypeTest) {
   }
 }
 
-//
-//
-//
+/*
+ *
+ *
+ *
+ */
 TEST(KvStoreUtil, GetAreaTypeTest) {
-  //
-  // valid areas
-  //
+  /*
+   *
+   * valid areas
+   *
+   */
   {
     {
       // POD area
@@ -841,9 +871,11 @@ TEST(KvStoreUtil, GetAreaTypeTest) {
       EXPECT_EQ(result, "HGRID");
     }
   }
-  //
-  // invalid areas
-  //
+  /*
+   *
+   * invalid areas
+   *
+   */
   {
     {
       std::string area = "snc1.f02s001";

@@ -438,9 +438,11 @@ getMergeType(
        * old value and they never sync.
        */
 
-      // Note: We assume local store should always have a value. If not, it is
-      // an invalid case and is ok to crash kvstore. For non-ttl update, the
-      // incoming keys should always have a value associated
+      /*
+       * Note: We assume local store should always have a value. If not, it is
+       * an invalid case and is ok to crash kvstore. For non-ttl update, the
+       * incoming keys should always have a value associated
+       */
       auto rc = (apache::thrift::can_throw(*value.value()))
                     .compare(apache::thrift::can_throw(*curValue->value()));
 
@@ -601,10 +603,12 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
   // compare value
   if (v1.hash().has_value() && v2.hash().has_value() &&
       *v1.hash() == *v2.hash()) {
-    // TODO: `ttlVersion` and `ttl` value can be different on neighbor nodes.
-    // The ttl-update should never be sent over the full-sync
-    // hashes are same => (version, orginatorId, value are same)
-    // compare ttl-version
+    /*
+     * TODO: `ttlVersion` and `ttl` value can be different on neighbor nodes.
+     * The ttl-update should never be sent over the full-sync
+     * hashes are same => (version, orginatorId, value are same)
+     * compare ttl-version
+     */
     if (*v1.ttlVersion() != *v2.ttlVersion()) {
       return *v1.ttlVersion() > *v2.ttlVersion() ? ComparisonResult::FIRST
                                                  : ComparisonResult::SECOND;
@@ -613,8 +617,10 @@ compareValues(const thrift::Value& v1, const thrift::Value& v2) {
     }
   }
 
-  // can't use hash, either it's missing or they are different
-  // compare values
+  /*
+   * can't use hash, either it's missing or they are different
+   * compare values
+   */
   if (v1.value().has_value() && v2.value().has_value()) {
     auto compareRes = (*v1.value()).compare(*v2.value());
     if (compareRes > 0) {
@@ -643,9 +649,11 @@ KvStoreFilters::KvStoreFilters(
       fabricConfig_(fabricConfig),
       peerName_(peerName) {}
 
-// The function return true if there is a match on one of
-// the attributes, such as key prefix or originator ids, and
-// the key is not blocked by the fabric scope rule.
+/*
+ * The function return true if there is a match on one of
+ * the attributes, such as key prefix or originator ids, and
+ * the key is not blocked by the fabric scope rule.
+ */
 bool
 KvStoreFilters::keyMatchAny(
     std::string const& key, thrift::Value const& value) const {
@@ -666,9 +674,11 @@ KvStoreFilters::keyMatchAny(
   return false;
 }
 
-// The function return true if there is a match on all the attributes
-// such as key prefix and originator ids, and
-// the key is not blocked by the fabric scope rule.
+/*
+ * The function return true if there is a match on all the attributes
+ * such as key prefix and originator ids, and
+ * the key is not blocked by the fabric scope rule.
+ */
 bool
 KvStoreFilters::keyMatchAll(
     std::string const& key, thrift::Value const& value) const {
@@ -764,16 +774,20 @@ KvStoreFilters::isAllowedByFabricScope(const std::string& key) const {
     // The peer is a fabric node. No keys are blocked by this rule.
     return true;
   }
-  // This is a fabric node; the peer is a non-fabric node and this is a fabric
-  // key. Block it.
+  /*
+   * This is a fabric node; the peer is a non-fabric node and this is a fabric
+   * key. Block it.
+   */
   return false;
 }
 
-// dump the keys on which hashes differ from given keyVals
-// thriftPub.keyVals: better keys or keys exist only in MY-KEY-VAL
-// thriftPub.tobeUpdatedKeys: better keys or keys exist only in REQ-KEY-VAL
-// this way, full-sync initiator knows what keys need to send back to finish
-// 3-way full-sync
+/*
+ * dump the keys on which hashes differ from given keyVals
+ * thriftPub.keyVals: better keys or keys exist only in MY-KEY-VAL
+ * thriftPub.tobeUpdatedKeys: better keys or keys exist only in REQ-KEY-VAL
+ * this way, full-sync initiator knows what keys need to send back to finish
+ * 3-way full-sync
+ */
 thrift::Publication
 dumpDifference(
     const std::string& area,
@@ -822,9 +836,11 @@ dumpDifference(
   return thriftPub;
 }
 
-// dump the entries of my KV store whose keys match filter
-// KvStoreFilters contains `thrift::FilterOperator`
-// Default to thrift::FilterOperator::OR
+/*
+ * dump the entries of my KV store whose keys match filter
+ * KvStoreFilters contains `thrift::FilterOperator`
+ * Default to thrift::FilterOperator::OR
+ */
 thrift::Publication
 dumpAllWithFilters(
     const std::string& area,
@@ -848,8 +864,10 @@ dumpAllWithFilters(
   return thriftPub;
 }
 
-// dump the hashes of my KV store whose keys match the given prefix
-// if prefix is the empty string, the full hash store is dumped
+/*
+ * dump the hashes of my KV store whose keys match the given prefix
+ * if prefix is the empty string, the full hash store is dumped
+ */
 thrift::Publication
 dumpHashWithFilters(
     const std::string& area,
@@ -871,8 +889,10 @@ dumpHashWithFilters(
   }
   return thriftPub;
 }
-// update TTL with remainng time to expire, TTL version remains
-// same so existing keys will not be updated with this TTL
+/*
+ * update TTL with remainng time to expire, TTL version remains
+ * same so existing keys will not be updated with this TTL
+ */
 void
 updatePublicationTtl(
     const TtlCountdownQueue& ttlCountdownQueue,
@@ -904,9 +924,11 @@ updatePublicationTtl(
       continue;
     }
 
-    // Set the time-left and decrement it by one so that ttl decrement
-    // deterministically whenever it is exchanged between KvStores. This
-    // will avoid looping of updates between stores.
+    /*
+     * Set the time-left and decrement it by one so that ttl decrement
+     * deterministically whenever it is exchanged between KvStores. This
+     * will avoid looping of updates between stores.
+     */
     kv->second.ttl() = timeLeft.count() - ttlDecr.count();
   }
 }

@@ -171,9 +171,11 @@ CO_TEST_F(KvStoreTestFixture, BasicGetKey) {
   const std::string key = "prefix:node-for-retrieval:[10.0.0.0/8]";
   const std::string value = "get-key-value";
 
-  // 1. Get key. Make sure it doesn't exist in KvStore yet.
-  // 2. Set key manually using KvStoreWrapper.
-  // 3. Get key. Make sure it exists and value matches.
+  /*
+   * 1. Get key. Make sure it doesn't exist in KvStore yet.
+   * 2. Set key manually using KvStoreWrapper.
+   * 3. Get key. Make sure it exists and value matches.
+   */
 
   thrift::KeyGetParams paramsBefore;
   paramsBefore.keys()->emplace_back(key);
@@ -281,9 +283,11 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   const std::string prefix3 = "192.10.0.0";
   const std::string prefix4 = "192.168.0.0";
 
-  // 1. Dump keys with no matches.
-  // 2. Set keys manully. 2 include prefix, 2 do not.
-  // 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
+  /*
+   * 1. Dump keys with no matches.
+   * 2. Set keys manully. 2 include prefix, 2 do not.
+   * 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
+   */
   std::optional<thrift::KeyVals> maybeKeyMap;
   try {
     thrift::KeyDumpParams params;
@@ -335,8 +339,10 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix3), 0);
   EXPECT_EQ(keysFromStore.count(prefix4), 0);
 
-  // Check that all keys are retrieved when bad prefix "[10.0.0" (missing
-  // right bracket) is given.
+  /*
+   * Check that all keys are retrieved when bad prefix "[10.0.0" (missing
+   * right bracket) is given.
+   */
   try {
     thrift::KeyDumpParams params;
     params.keys() = {badPrefixRegex};
@@ -372,9 +378,11 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   const std::string prefix3 = "192.10.0.0";
   const std::string prefix4 = "192.168.0.0";
 
-  // 1. Dump keys with no matches.
-  // 2. Set keys manully. 2 include prefix, 2 do not.
-  // 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
+  /*
+   * 1. Dump keys with no matches.
+   * 2. Set keys manully. 2 include prefix, 2 do not.
+   * 3. Dump keys. Verify 2 that include prefix are in dump, others are not.
+   */
   std::optional<thrift::KeyVals> maybeKeyMap;
   try {
     thrift::KeyDumpParams params;
@@ -424,8 +432,10 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix3), 0);
   EXPECT_EQ(keysFromStore.count(prefix4), 0);
 
-  // Check that all keys are retrieved when bad prefix "[10.0.0" (missing
-  // right bracket) is given.
+  /*
+   * Check that all keys are retrieved when bad prefix "[10.0.0" (missing
+   * right bracket) is given.
+   */
   try {
     thrift::KeyDumpParams params;
     params.keys() = {badPrefixRegex};
@@ -480,16 +490,20 @@ TEST_F(KvStoreTestFixture, PublishKvStoreSyncedIfNoPeersInSomeAreas) {
   storeA->run();
   storeB->run();
 
-  // storeA receives peers in the only "area1", and published kvStoreSynced
-  // signal.
+  /*
+   * storeA receives peers in the only "area1", and published kvStoreSynced
+   * signal.
+   */
   thrift::PeersMap peersA;
   peersA.emplace(storeB->getNodeId(), storeB->getPeerSpec());
   PeerEvent peerEventA{{"area1", AreaPeerEvent(peersA, {} /*peersToDel*/)}};
   storeAPeerUpdatesQueue.push(peerEventA);
   storeA->recvKvStoreSyncedSignal();
 
-  // storeB receives one peer in "area1" but empty peers in "area2". OpenR
-  // initialization is converged and kvStoreSynced signal is published.
+  /*
+   * storeB receives one peer in "area1" but empty peers in "area2". OpenR
+   * initialization is converged and kvStoreSynced signal is published.
+   */
   thrift::PeersMap peersB;
   peersB.emplace(storeA->getNodeId(), storeA->getPeerSpec());
   PeerEvent peerEventB{{"area1", AreaPeerEvent(peersB, {} /*peersToDel*/)}};
@@ -546,8 +560,10 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithMissingKey) {
 
   waitForAllPeersInitialized();
 
-  // Inconsistent store originates key, with default version=1
-  // B and C will automatically get the update of (key, 1) in their stores
+  /*
+   * Inconsistent store originates key, with default version=1
+   * B and C will automatically get the update of (key, 1) in their stores
+   */
   const std::string key{"key"};
   const std::string value{"val"};
   const auto version{1};
@@ -559,8 +575,10 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithMissingKey) {
 
   LOG(INFO) << "All stores have received expected key update.";
 
-  // Force B to have higher version but expire immediately.
-  // Set the `nodeIds` to mark A and C have already received the updates.
+  /*
+   * Force B to have higher version but expire immediately.
+   * Set the `nodeIds` to mark A and C have already received the updates.
+   */
   const thrift::Value thriftVal = createThriftValue(
       version + 1 /* version */,
       inconsistentStore->getNodeId() /* originatorId */,
@@ -668,16 +686,20 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentVersion) {
   const std::string value{"val"};
   const auto version{20};
 
-  // Inconsistent store originates key, with default version=1
-  // B and C will automatically get the update of (key, 1) in their stores
+  /*
+   * Inconsistent store originates key, with default version=1
+   * B and C will automatically get the update of (key, 1) in their stores
+   */
   kvRequestQueue_.push(PersistKeyValueRequest(kTestingAreaName, key, value));
 
   // make sure storeB and storeC received the update
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, key);
   waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, key);
 
-  // Force B to have higher version. Store A and C is not updated (By setting
-  // the `nodeIds` to mark A and C already received the updates)
+  /*
+   * Force B to have higher version. Store A and C is not updated (By setting
+   * the `nodeIds` to mark A and C already received the updates)
+   */
   const thrift::Value thriftVal = createThriftValue(
       version /* version */,
       inconsistentStore->getNodeId() /* originatorId */,
@@ -694,8 +716,10 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentVersion) {
 
   OpenrEventBase evb;
   int scheduleAt{0};
-  // Check both store to be in sync after a TTL update from A. With higher
-  // version
+  /*
+   * Check both store to be in sync after a TTL update from A. With higher
+   * version
+   */
 
   // wait until a TTL update is send and full resync is done between A and B
   evb.scheduleTimeout(
@@ -782,8 +806,10 @@ TEST_F(KvStoreTestFixture, PeerResyncWithConfiguredBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  // discount 1ms. We have seen some-times elapsed time is
-  //     999 ms instead of 1000 ms of Initial Backoff
+  /*
+   * discount 1ms. We have seen some-times elapsed time is
+   *     999 ms instead of 1000 ms of Initial Backoff
+   */
   EXPECT_GE(elapsedTime, ksyncInitialBackoff.count() - 1);
   EXPECT_LT(elapsedTime, ksyncMaxBackoff.count());
 
@@ -862,8 +888,10 @@ TEST_F(KvStoreTestFixture, PeerResyncWithEqualConfiguredBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  // discount 1ms. We have seen some-times elapsed time is
-  //     999 ms instead of 1000 ms of Initial Backoff
+  /*
+   * discount 1ms. We have seen some-times elapsed time is
+   *     999 ms instead of 1000 ms of Initial Backoff
+   */
   EXPECT_GE(elapsedTime, ksyncInitialBackoff.count() - 1);
   EXPECT_LT(elapsedTime, ksyncValidationTime.count());
 
@@ -934,8 +962,10 @@ TEST_F(KvStoreTestFixture, PeerResyncWithDefaultBackoff) {
   waitForAllPeersInitialized();
   auto elapsedTime =
       duration_cast<milliseconds>(steady_clock::now() - start).count();
-  // discount 2ms. We have seen some-times elapsed time is
-  //     3999 ms instead of 4000 ms of Initial Backoff
+  /*
+   * discount 2ms. We have seen some-times elapsed time is
+   *     3999 ms instead of 4000 ms of Initial Backoff
+   */
   EXPECT_GT(elapsedTime, (Constants::kKvstoreSyncInitialBackoff.count() - 2));
   EXPECT_LT(elapsedTime, Constants::kKvstoreSyncMaxBackoff.count());
 
@@ -1048,10 +1078,12 @@ TEST_F(KvStoreTestFixture, KvStoreSyncTimeoutWithoutPeerUpdate) {
   EXPECT_LT(elapsedTime, kKvStoreSyncTimeoutUpperCheck.count());
 }
 
-// When you receive a update from 'other' about a key you originates,
-//  with some inconsistency (higher ttl_version)
-// 1. you should never delete it
-// 2. you should update ttl (so other's keyVal do not expire)
+/*
+ * When you receive a update from 'other' about a key you originates,
+ *  with some inconsistency (higher ttl_version)
+ * 1. you should never delete it
+ * 2. you should update ttl (so other's keyVal do not expire)
+ */
 TEST_F(KvStoreTestFixture, noDeleteForSelfOriginatedKey) {
   const auto ttlMe{200000}; // Just discovered other bug preventing me to use
                             // infinity here. Will fix the bug
@@ -1169,16 +1201,20 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentOriginator) {
   const std::string value{"val"};
   const auto version{1};
 
-  // Inconsistent store originates key, with default version=1
-  // B and C will automatically get the update of (key, 1) in their stores
+  /*
+   * Inconsistent store originates key, with default version=1
+   * B and C will automatically get the update of (key, 1) in their stores
+   */
   kvRequestQueue_.push(PersistKeyValueRequest(kTestingAreaName, key, value));
 
   // make sure storeA and storeB received the update
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, key);
   waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, key);
 
-  // Force B to have a different originatorId. Store C is not updated(By setting
-  // the `nodeIds` to mark C already received the updates)
+  /*
+   * Force B to have a different originatorId. Store C is not updated(By setting
+   * the `nodeIds` to mark C already received the updates)
+   */
   const thrift::Value thriftVal = createThriftValue(
       version /* version */,
       storeB->getNodeId() /* diff originatorId */,
@@ -1195,8 +1231,10 @@ TEST_F(KvStoreTestFixture, ResyncUponTtlUpdateWithInconsistentOriginator) {
 
   OpenrEventBase evb;
   int scheduleAt{0};
-  // Check both store to be in sync after a TTL update from A. With higher
-  // version
+  /*
+   * Check both store to be in sync after a TTL update from A. With higher
+   * version
+   */
 
   // wait until a TTL update is send and full resync is done between A and B
   evb.scheduleTimeout(
@@ -1342,8 +1380,10 @@ TEST_F(KvStoreTestFixture, ConvergenceProfilerPerfEventsStamping) {
 
   const auto counters = fb303::fbData->getCounters();
   EXPECT_TRUE(counters.contains("kvstore.recv_to_advertise_ms.avg"));
-  // Max is published as a plain counter (not a stat), so the bare key is
-  // present and non-negative after at least one observation.
+  /*
+   * Max is published as a plain counter (not a stat), so the bare key is
+   * present and non-negative after at least one observation.
+   */
   ASSERT_TRUE(counters.contains("kvstore.recv_to_advertise_max_ms"));
   EXPECT_GE(counters.at("kvstore.recv_to_advertise_max_ms"), 0);
 
@@ -1353,9 +1393,11 @@ TEST_F(KvStoreTestFixture, ConvergenceProfilerPerfEventsStamping) {
       0, fb303::fbData->getCounters().at("kvstore.recv_to_advertise_max_ms"));
 }
 
-//
-// Test counter reporting
-//
+/*
+ *
+ * Test counter reporting
+ *
+ */
 TEST_F(KvStoreTestFixture, CounterReport) {
   // clean up counters before testing
   const std::string& area = kTestingAreaName;
@@ -1452,9 +1494,11 @@ TEST_F(KvStoreTestFixture, CounterReport) {
   ASSERT_TRUE(counters.contains("kvstore.received_key_vals." + area + ".sum"));
   EXPECT_EQ(3, counters.at("kvstore.received_key_vals." + area + ".sum"));
 
-  // Verify the ttl countdown queue size counter is populated
-  // NOTE: counter is 1. We call setKey() 4 times, but the first 2 don't have a
-  // ttl and the last 2 have the same (key, originator) combination.
+  /*
+   * Verify the ttl countdown queue size counter is populated
+   * NOTE: counter is 1. We call setKey() 4 times, but the first 2 don't have a
+   * ttl and the last 2 have the same (key, originator) combination.
+   */
   ASSERT_TRUE(counters.contains("kvstore.ttl_countdown_queue_size." + area));
   EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_queue_size." + area));
 
@@ -1518,10 +1562,12 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
   kvStore->run();
   const std::string& area = kTestingAreaName;
 
-  //
-  // 1. Advertise key-value with 1ms rtt
-  // - This will get added to local KvStore but will never be published
-  //   to other nodes or doesn't show up in GET request
+  /*
+   *
+   * 1. Advertise key-value with 1ms rtt
+   * - This will get added to local KvStore but will never be published
+   *   to other nodes or doesn't show up in GET request
+   */
   {
     auto thriftValue = value;
     thriftValue.ttl() = 1;
@@ -1541,11 +1587,13 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(0, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
-  //
-  // 2. Advertise key with long enough ttl, so that it doesn't expire
-  // - Ensure we receive publication over pub socket
-  // - Ensure we receive key-value via GET request
-  //
+  /*
+   *
+   * 2. Advertise key with long enough ttl, so that it doesn't expire
+   * - Ensure we receive publication over pub socket
+   * - Ensure we receive key-value via GET request
+   *
+   */
   {
     auto thriftValue = value;
     thriftValue.ttl() = 50000;
@@ -1596,9 +1644,11 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
-  //
-  // 3. Advertise ttl-update to set it to new value
-  //
+  /*
+   *
+   * 3. Advertise ttl-update to set it to new value
+   *
+   */
   {
     auto thriftValue = value;
     thriftValue.value().reset();
@@ -1632,9 +1682,11 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
-  //
-  // 4. Set ttl of key to INFINITE
-  //
+  /*
+   *
+   * 4. Set ttl of key to INFINITE
+   *
+   */
   {
     auto thriftValue = value;
     thriftValue.value().reset();
@@ -1669,9 +1721,11 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
-  //
-  // 5. Set ttl of key back to a fixed value
-  //
+  /*
+   *
+   * 5. Set ttl of key back to a fixed value
+   *
+   */
   {
     auto thriftValue = value;
     thriftValue.value().reset();
@@ -1705,9 +1759,11 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
-  //
-  // 6. Apply old ttl update and see no effect
-  //
+  /*
+   *
+   * 6. Apply old ttl update and see no effect
+   *
+   */
   {
     auto thriftValue = value;
     thriftValue.value().reset();
@@ -1728,11 +1784,13 @@ CO_TEST_F(KvStoreTestFixture, TtlVerification) {
     EXPECT_EQ(1, counters.at("kvstore.ttl_countdown_handle_map_size." + area));
   }
 
-  //
-  // 7. Add new (key, originatorId) combinations and verify queue size
-  //  - ensure that when we re-set a (key, originatorId) combination with a new
-  //  ttlVersion, size of queue does not increase
-  //
+  /*
+   *
+   * 7. Add new (key, originatorId) combinations and verify queue size
+   *  - ensure that when we re-set a (key, originatorId) combination with a new
+   *  ttlVersion, size of queue does not increase
+   *
+   */
   {
     // Set new key test-key2
     thrift::Value thriftVal2 = createThriftValue(
@@ -2057,9 +2115,11 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
   EXPECT_LT(*cmpPeers[store0NodeId].stateElapsedTimeMs(), 5000);
   EXPECT_EQ(*cmpPeers[store0NodeId].flaps(), 0);
 
-  //
-  // Step 1) and 2): advertise key from store1/store2 and verify
-  //
+  /*
+   *
+   * Step 1) and 2): advertise key from store1/store2 and verify
+   *
+   */
   {
     auto thriftVal = createThriftValue(
         1 /* version */, "1.2.3.4" /* originatorId */, "value1" /* value */
@@ -2091,9 +2151,11 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
     EXPECT_EQ(thriftVal, pub.keyVals()[key]);
   }
 
-  //
-  // Step 3) and 4): advertise from store0 and verify
-  //
+  /*
+   *
+   * Step 3) and 4): advertise from store0 and verify
+   *
+   */
   {
     auto thriftVal = createThriftValue(
         3 /* version */, "1.2.3.4" /* originatorId */, "value3" /* value */
@@ -2112,13 +2174,15 @@ TEST_F(KvStoreTestFixture, PeerAddUpdateRemove) {
     EXPECT_NE(3, *maybeVal2.value().version());
   }
 
-  //
-  // Step 5) and 6): update store1 with same peer spec of store0
-  //
-  // TODO: test failed under OSS build env when thrift client is
-  // desctructed and recreated with the SAME (address, port)
-  //
-  // T101564784 to track and investigate
+  /*
+   *
+   * Step 5) and 6): update store1 with same peer spec of store0
+   *
+   * TODO: test failed under OSS build env when thrift client is
+   * desctructed and recreated with the SAME (address, port)
+   *
+   * T101564784 to track and investigate
+   */
   {
     /*
   EXPECT_TRUE(store1->addPeer(
@@ -2204,8 +2268,10 @@ TEST_F(KvStoreTestFixture, BasicSync) {
       myPeerUpdatesQueue.getReader());
   myStore->run();
 
-  // NOTE: It is important to add peers after starting our store to avoid
-  // race condition where certain updates are lost over PUB/SUB channel
+  /*
+   * NOTE: It is important to add peers after starting our store to avoid
+   * race condition where certain updates are lost over PUB/SUB channel
+   */
   thrift::PeersMap myPeers;
   for (auto& store : peerStores) {
     myPeers.emplace(store->getNodeId(), store->getPeerSpec());
@@ -2218,9 +2284,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
       {kTestingAreaName, AreaPeerEvent(myPeers, {} /*peersToDel*/)}};
   myPeerUpdatesQueue.push(myPeerEvent);
 
-  // Wait for full-sync to complete. Full-sync is complete when all of our
-  // neighbors receive all the keys and we must receive `kNumStores`
-  // key-value updates from each store over PUB socket.
+  /*
+   * Wait for full-sync to complete. Full-sync is complete when all of our
+   * neighbors receive all the keys and we must receive `kNumStores`
+   * key-value updates from each store over PUB socket.
+   */
   LOG(INFO) << "Waiting for full sync to complete.";
   for (auto& store : stores_) {
     folly::F14FastSet<std::string> keys;
@@ -2234,16 +2302,20 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     }
   }
 
-  // Expect myStore publishing KVSTORE_SYNCED after initial KvStoreDb sync with
-  // peers.
+  /*
+   * Expect myStore publishing KVSTORE_SYNCED after initial KvStoreDb sync with
+   * peers.
+   */
   myStore->recvKvStoreSyncedSignal();
 
   // Verify myStore database
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll(kTestingAreaName));
 
-  //
-  // Submit another range of values
-  //
+  /*
+   *
+   * Submit another range of values
+   *
+   */
   LOG(INFO) << "Submitting the second round of key-values...";
   for (auto& store : peerStores) {
     auto key = fmt::format("test-key-{}", store->getNodeId());
@@ -2265,9 +2337,11 @@ TEST_F(KvStoreTestFixture, BasicSync) {
     expectedKeyVals[key] = thriftVal;
   }
 
-  // Wait again for the full sync to complete. Full-sync is complete when all
-  // of our neighbors receive all the keys and we must receive `kNumStores`
-  // key-value updates from each store over PUB socket.
+  /*
+   * Wait again for the full sync to complete. Full-sync is complete when all
+   * of our neighbors receive all the keys and we must receive `kNumStores`
+   * key-value updates from each store over PUB socket.
+   */
   LOG(INFO) << "waiting for another full sync to complete...";
   // Receive 16 updates from each store
   for (auto& store : stores_) {
@@ -2285,16 +2359,18 @@ TEST_F(KvStoreTestFixture, BasicSync) {
   // Verify our database and all neighbor database
   EXPECT_EQ(expectedKeyVals, myStore->dumpAll(kTestingAreaName));
 
-  //
-  // Update key in peerStore[0] and verify flooding behavior
-  // Invariant => Sent publication to a neighbor never reflects back
-  // - Only one publication and key_vals is received in all stores
-  // - Only one publication and key_vals is updated in all stores
-  // - Only one publication, key_vals is sent out of peerStore[0]
-  // - Exactly 15 publications, key_vals is sent out of myStore
-  //   (15 peers except originator)
-  // - No publication or key_vals is sent out of peerStores except peerStore[0]
-  //
+  /*
+   *
+   * Update key in peerStore[0] and verify flooding behavior
+   * Invariant => Sent publication to a neighbor never reflects back
+   * - Only one publication and key_vals is received in all stores
+   * - Only one publication and key_vals is updated in all stores
+   * - Only one publication, key_vals is sent out of peerStore[0]
+   * - Exactly 15 publications, key_vals is sent out of myStore
+   *   (15 peers except originator)
+   * - No publication or key_vals is sent out of peerStores except peerStore[0]
+   *
+   */
   LOG(INFO) << "Testing flooding behavior";
 
   // Get current counters
@@ -2365,9 +2441,11 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   const unsigned int kNumStores = 16;
   const std::string kKeyName = "test-key";
 
-  //
-  // Start the intermediate stores in string topology
-  //
+  /*
+   *
+   * Start the intermediate stores in string topology
+   *
+   */
   LOG(INFO) << "Preparing and starting stores.";
   std::vector<KvStoreWrapper<::apache::thrift::Client<thrift::KvStoreService>>*>
       stores;
@@ -2401,10 +2479,12 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
   // need to wait on this for the list of nodeIds to be as expected.
   waitForAllPeersInitialized();
 
-  //
-  // Submit same key in store 0 and store N-1, use same version
-  // but different values
-  //
+  /*
+   *
+   * Submit same key in store 0 and store N-1, use same version
+   * but different values
+   *
+   */
   LOG(INFO) << "Submitting key-values from first and last store";
 
   // set a key from first store
@@ -2439,9 +2519,11 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
       *thriftValLast.originatorId(),
       thriftValLast.value());
 
-  //
-  // We expect test-value-2 because "2" > "1" in tie-breaking
-  //
+  /*
+   *
+   * We expect test-value-2 because "2" > "1" in tie-breaking
+   *
+   */
   LOG(INFO) << "Pulling values from every store";
 
   // We have to wait until we see two updates on the first node and verify them.
@@ -2471,14 +2553,18 @@ TEST_F(KvStoreTestFixture, TieBreaking) {
     EXPECT_EQ(thriftValLast, *maybeThriftVal);
   }
 
-  //
-  // Now submit the same key with LOWER version number
-  //
+  /*
+   *
+   * Now submit the same key with LOWER version number
+   *
+   */
   LOG(INFO) << "Submitting key-value from first server with lower version";
 
-  // set a key from first store - notice we bumped originator to "9", but
-  // it should not have any effect, since version is lower. It is sufficient
-  // to verify changes on only first node.
+  /*
+   * set a key from first store - notice we bumped originator to "9", but
+   * it should not have any effect, since version is lower. It is sufficient
+   * to verify changes on only first node.
+   */
   {
     auto thriftVal = createThriftValue(
         9 /* version */,
@@ -2544,16 +2630,20 @@ TEST_F(KvStoreTestFixture, DumpPrefix) {
       createKvStore(getTestKvConf(getNodeId(kOriginBase, kNumStores)));
   myStore->run();
 
-  // NOTE: It is important to add peers after starting our store to avoid
-  // race condition.
+  /*
+   * NOTE: It is important to add peers after starting our store to avoid
+   * race condition.
+   */
   for (auto& store : peerStores) {
     myStore->addPeer(
         kTestingAreaName, store->getNodeId(), store->getPeerSpec());
   }
 
-  // Wait for full-sync to complete. Full-sync is complete when all of our
-  // neighbors receive all the keys and we must receive `kNumStores`
-  // key-value updates from each store over PUB socket.
+  /*
+   * Wait for full-sync to complete. Full-sync is complete when all of our
+   * neighbors receive all the keys and we must receive `kNumStores`
+   * key-value updates from each store over PUB socket.
+   */
   LOG(INFO) << "Waiting for full sync to complete.";
   {
     XLOGF(DBG3, "Store {} received keys.", myStore->getNodeId());
@@ -2785,8 +2875,10 @@ TEST_F(KvStoreTestFixture, RateLimiterFlood) {
     thriftVal.hash() = generateHash(
         *thriftVal.version(), *thriftVal.originatorId(), thriftVal.value());
     if (expectNumKeys == 10) {
-      // we should be able to set thousands of keys wihtin 5 seconds,
-      // pick one of them and let it be set by store0, all others set by store2
+      /*
+       * we should be able to set thousands of keys wihtin 5 seconds,
+       * pick one of them and let it be set by store0, all others set by store2
+       */
       *thriftVal.originatorId() = "store0";
       EXPECT_TRUE(store0->setKey(kTestingAreaName, key, thriftVal));
     } else {
@@ -2864,10 +2956,12 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   auto s0PubSent1 =
       fb303::fbData->getCounters()["kvstore.thrift.num_flood_pub.count"];
 
-  // store0 is not rate limited, so it floods updates to store1. Under flood
-  // memory pressure the per-area byte budget may coalesce/defer flooding, so
-  // the number of flood publications is not necessarily one-per-update. Assert
-  // that flooding happened and that the latest value converged to store1.
+  /*
+   * store0 is not rate limited, so it floods updates to store1. Under flood
+   * memory pressure the per-area byte budget may coalesce/defer flooding, so
+   * the number of flood publications is not necessarily one-per-update. Assert
+   * that flooding happened and that the latest value converged to store1.
+   */
   EXPECT_GE(s0PubSent1, 1);
   auto s1Key1 = store1->getKey(kTestingAreaName, "key1");
   ASSERT_TRUE(s1Key1.has_value());
@@ -2915,8 +3009,10 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   auto s1PubSent2 = allCounters["kvstore.thrift.num_flood_pub.count"];
   auto s0KeyNum2 = store0->dumpAll(kTestingAreaName).size();
 
-  // number of messages sent must be around duration * messageRate
-  // +3 as some messages could have been sent after the counter
+  /*
+   * number of messages sent must be around duration * messageRate
+   * +3 as some messages could have been sent after the counter
+   */
   EXPECT_LT(s1PubSent2, (duration2 + wait + 3) * messageRate);
 
   /**
@@ -2955,12 +3051,16 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
   auto s1PubSent3 = allCounters["kvstore.thrift.num_flood_pub.count"];
   auto s1Supressed3 = allCounters["kvstore.rate_limit_suppress.count"];
 
-  // number of messages sent must be around duration * messageRate
-  // +3 as some messages could have been sent after the counter
+  /*
+   * number of messages sent must be around duration * messageRate
+   * +3 as some messages could have been sent after the counter
+   */
   EXPECT_LE(s1PubSent3 - s1PubSent2, (duration3 + wait + 3) * messageRate);
 
-  // check for number of keys in store0 should be equal to number of keys
-  // added in store1.
+  /*
+   * check for number of keys in store0 should be equal to number of keys
+   * added in store1.
+   */
   auto s0KeyNum3 = store0->dumpAll(kTestingAreaName).size();
   EXPECT_EQ(s0KeyNum3 - s0KeyNum2, i3);
 
@@ -2997,8 +3097,10 @@ TEST_F(KvStoreTestFixture, RateLimiter) {
 
   allCounters = fb303::fbData->getCounters();
   auto s1Supressed4 = allCounters["kvstore.rate_limit_suppress.count"];
-  // expired keys are not sent (or received). Just check expired keys
-  // were also supressed
+  /*
+   * expired keys are not sent (or received). Just check expired keys
+   * were also supressed
+   */
   EXPECT_GE(s1Supressed4 - s1Supressed3, 1);
 }
 
@@ -3064,16 +3166,20 @@ TEST_F(KvStoreTestFixture, FullSync) {
   int scheduleAt{0};
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
-        // storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
-        // storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
-        // let A sends a full sync request to B and wait for completion
+        /*
+         * storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+         * storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+         * let A sends a full sync request to B and wait for completion
+         */
         storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec());
       });
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 1000), [&]() noexcept {
-        // after full-sync, we expect both A and B have:
-        // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+        /*
+         * after full-sync, we expect both A and B have:
+         * (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+         */
         for (const auto& key : allKeys) {
           auto valA = storeA->getKey(kTestingAreaName, key);
           auto valB = storeB->getKey(kTestingAreaName, key);
@@ -3150,8 +3256,10 @@ CO_TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   const std::string k2{"plane-area-0"};
   const std::string k3{"plane-area-1"};
 
-  // to aid in keyVal sizes below, calculate total of struct members with
-  // fixed size once at the beginning
+  /*
+   * to aid in keyVal sizes below, calculate total of struct members with
+   * fixed size once at the beginning
+   */
   size_t fixed_size = (sizeof(std::string) + sizeof(thrift::Value));
 
   thrift::Value thriftVal0 = createThriftValue(
@@ -3242,8 +3350,10 @@ CO_TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   }
 
   {
-    // set key in default area, but storeA does not have default area, this
-    // should fail
+    /*
+     * set key in default area, but storeA does not have default area, this
+     * should fail
+     */
     EXPECT_FALSE(storeA->setKey(kTestingAreaName, k0, thriftVal0));
     // set key in the correct area
     EXPECT_TRUE(storeA->setKey(podAreaId, k0, thriftVal0));
@@ -3258,9 +3368,11 @@ CO_TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
   }
 
   {
-    // set key in store C and verify it's present in plane area in store B
-    // and not present in POD area in storeB and storeA set key in the
-    // correct area
+    /*
+     * set key in store C and verify it's present in plane area in store B
+     * and not present in POD area in storeB and storeA set key in the
+     * correct area
+     */
     EXPECT_TRUE(storeC->setKey(planeAreaId, k2, thriftVal2));
     // store C should have the key in plane.area_id
     EXPECT_TRUE(storeC->getKey(planeAreaId, k2).has_value());
@@ -3296,20 +3408,24 @@ CO_TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     EXPECT_EQ(expectedKeyValsPlane, storeB->dumpAll(planeAreaId));
     EXPECT_EQ(expectedKeyValsPlane, storeC->dumpAll(planeAreaId));
 
-    // check for counters on StoreB that has 2 instances. Number of keys
-    // must be the total of both areas number of keys must be 4, 2 from
-    // pod.area_id and 2 from planArea number of peers at storeB must be 2 -
-    // one from each area
+    /*
+     * check for counters on StoreB that has 2 instances. Number of keys
+     * must be the total of both areas number of keys must be 4, 2 from
+     * pod.area_id and 2 from planArea number of peers at storeB must be 2 -
+     * one from each area
+     */
     EXPECT_EQ(2, storeB->dumpAll(podAreaId).size());
     EXPECT_EQ(2, storeB->dumpAll(planeAreaId).size());
   }
 
   {
-    // based on above config, with 3 kvstore nodes spanning two areas,
-    // storeA and storeC will send back areaSummary vector with 1 entry
-    // and storeB, which has two areas, will send back vector with 2
-    // entries. each entry in the areaSummary vector will have 2 keys (per
-    // above)
+    /*
+     * based on above config, with 3 kvstore nodes spanning two areas,
+     * storeA and storeC will send back areaSummary vector with 1 entry
+     * and storeB, which has two areas, will send back vector with 2
+     * entries. each entry in the areaSummary vector will have 2 keys (per
+     * above)
+     */
     std::set<std::string> areaSetAll{
         *pod.area_id(), *plane.area_id(), kTestingAreaName};
     std::set<std::string> areaSetEmpty{};
@@ -3331,8 +3447,10 @@ CO_TEST_F(KvStoreTestFixture, KeySyncMultipleArea) {
     EXPECT_EQ(2, summary.size());
     EXPECT_EQ(2, *summary.at(0).keyValsCount());
     EXPECT_EQ(2, *summary.at(1).keyValsCount());
-    // for storeB, spanning 2 areas, check that kv count for all areas add
-    // up individually
+    /*
+     * for storeB, spanning 2 areas, check that kv count for all areas add
+     * up individually
+     */
     storeBTest[*summary.at(0).area()] = *summary.at(0).keyValsBytes();
     storeBTest[*summary.at(1).area()] = *summary.at(1).keyValsBytes();
     EXPECT_EQ(1, storeBTest.count(*plane.area_id()));
@@ -3425,17 +3543,21 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
   int scheduleAt{0};
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 0), [&]() noexcept {
-        // storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
-        // storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
-        // let A sends a full sync request to B and wait for completion
+        /*
+         * storeA has (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 1, a)
+         * storeB has             (k1, 1, a), (k2, 1, b), (k3, 9, b), (k4, 6, b)
+         * let A sends a full sync request to B and wait for completion
+         */
         storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec());
         storeB->addPeer(defaultAreaId, "storeA", storeA->getPeerSpec());
       });
 
   evb.scheduleTimeout(
       std::chrono::milliseconds(scheduleAt += 1000), [&]() noexcept {
-        // after full-sync, we expect both A and B have:
-        // (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+        /*
+         * after full-sync, we expect both A and B have:
+         * (k0, 5, a), (k1, 1, a), (k2, 9, a), (k3, 9, b), (k4, 6, b)
+         */
         for (const auto& key : allKeys) {
           auto valA = storeA->getKey(kTestingAreaName, key);
           auto valB = storeB->getKey(kTestingAreaName, key);
@@ -3478,19 +3600,23 @@ TEST_F(KvStoreTestFixture, KeySyncWithBackwardCompatibility) {
 /**
  * Validate client
  */
-// TEST_F(KvStoreTestFixture, SecureClientTest) {
-//   AreaId defaultAreaId{Constants::kDefaultArea.toString()};
+/*
+ * TEST_F(KvStoreTestFixture, SecureClientTest) {
+ *   AreaId defaultAreaId{Constants::kDefaultArea.toString()};
+ */
 
-//   auto storeA = createKvStore(
-//       getTestKvConf("storeA"), {Constants::kDefaultArea.toString()});
-//   auto storeB = createKvStore(getTestKvConf("storeB"), {kTestingAreaName});
-//   storeA->run();
-//   storeB->run();
-//   EXPECT_TRUE(
-//       storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec()));
-//   EXPECT_TRUE(storeB->addPeer(defaultAreaId, "storeA",
-//   storeA->getPeerSpec()));
-// }
+/*
+ *   auto storeA = createKvStore(
+ *       getTestKvConf("storeA"), {Constants::kDefaultArea.toString()});
+ *   auto storeB = createKvStore(getTestKvConf("storeB"), {kTestingAreaName});
+ *   storeA->run();
+ *   storeB->run();
+ *   EXPECT_TRUE(
+ *       storeA->addPeer(kTestingAreaName, "storeB", storeB->getPeerSpec()));
+ *   EXPECT_TRUE(storeB->addPeer(defaultAreaId, "storeA",
+ *   storeA->getPeerSpec()));
+ * }
+ */
 
 /**
  * Verify that fabric-internal keys (adj/prefix/drainStatus keys for fabric
@@ -3560,13 +3686,15 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
 
   waitForAllPeersInitialized();
 
-  // Keys to set on Node A:
-  //  - fabricAdjKey: adj key for a fabric leaf node → fabric-internal
-  //  - fabricPrefixKey: prefix key for a fabric spine node → fabric-internal
-  //  - fabricDrainStatusKey: drainStatus key for this fabric → fabric-internal
-  //  - lagEbFaIfStatusKey: LAG EB/FA if-status key for a BBF node → NOT
-  //    fabric-internal (must still flood to non-fabric peers)
-  //  - nonFabricKey: adj key for external node → NOT fabric-internal
+  /*
+   * Keys to set on Node A:
+   *  - fabricAdjKey: adj key for a fabric leaf node → fabric-internal
+   *  - fabricPrefixKey: prefix key for a fabric spine node → fabric-internal
+   *  - fabricDrainStatusKey: drainStatus key for this fabric → fabric-internal
+   *  - lagEbFaIfStatusKey: LAG EB/FA if-status key for a BBF node → NOT
+   *    fabric-internal (must still flood to non-fabric peers)
+   *  - nonFabricKey: adj key for external node → NOT fabric-internal
+   */
   const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
   const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
   const std::string fabricDrainStatusKey = "drainStatus:bbf01.dfw1";
@@ -3602,9 +3730,11 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
       storeA->setKey(kTestingAreaName, nonFabricKey, thriftVal("non-fab")),
       IsTrue());
 
-  // Wait for the non-fabric keys to propagate to both peers (they should always
-  // reach both B and C). lagEbFaIfStatus is a BBF key but NOT fabric-internal,
-  // so it must also reach the non-fabric peer C.
+  /*
+   * Wait for the non-fabric keys to propagate to both peers (they should always
+   * reach both B and C). lagEbFaIfStatus is a BBF key but NOT fabric-internal,
+   * so it must also reach the non-fabric peer C.
+   */
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, nonFabricKey);
   waitForKeyInStoreWithTimeout(storeC, kTestingAreaName, nonFabricKey);
   waitForKeyInStoreWithTimeout(storeB, kTestingAreaName, lagEbFaIfStatusKey);
@@ -3624,9 +3754,11 @@ TEST_F(KvStoreTestFixture, FloodPublicationFabricScope) {
   EXPECT_THAT(dumpB.count(lagEbFaIfStatusKey), Eq(1));
   EXPECT_THAT(dumpB.count(nonFabricKey), Eq(1));
 
-  // Node C (non-fabric peer): should have the non-fabric keys
-  // (adj:external-node and lagEbFaIfStatus:*) but none of the fabric-internal
-  // keys.
+  /*
+   * Node C (non-fabric peer): should have the non-fabric keys
+   * (adj:external-node and lagEbFaIfStatus:*) but none of the fabric-internal
+   * keys.
+   */
   folly::F14FastMap<std::string, thrift::Value> dumpC =
       storeC->dumpAll(kTestingAreaName);
   EXPECT_THAT(dumpC.count(nonFabricKey), Eq(1));
@@ -3837,8 +3969,10 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionMultiPeerDelivery) {
     }
   }
 
-  // Positive control: flooding really happened, so the assertions above are not
-  // vacuously true on a store that never flooded.
+  /*
+   * Positive control: flooding really happened, so the assertions above are not
+   * vacuously true on a store that never flooded.
+   */
   EXPECT_GT(getCounterOrZero("kvstore.thrift.num_flood_pub.count"), 0);
   expectPreCompressionPathExercised();
 }
@@ -3913,8 +4047,10 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionFabricScope) {
   setKey(fabricPrefixKey, fabricPrefixVal);
   setKey(nonFabricKey, nonFabricVal);
 
-  // Fabric peer receives everything, with payloads intact through the
-  // compress-once path.
+  /*
+   * Fabric peer receives everything, with payloads intact through the
+   * compress-once path.
+   */
   EXPECT_TRUE(
       waitForKeyValue(storeB, kTestingAreaName, nonFabricKey, nonFabricVal));
   EXPECT_TRUE(
@@ -3925,8 +4061,10 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionFabricScope) {
   // Fabric-external peer receives only the non-fabric key.
   EXPECT_TRUE(
       waitForKeyValue(storeC, kTestingAreaName, nonFabricKey, nonFabricVal));
-  // Guard: without pre-compression this degrades into the plain fabric-scope
-  // test and would no longer cover the two-buffer-per-publication shape.
+  /*
+   * Guard: without pre-compression this degrades into the plain fabric-scope
+   * test and would no longer cover the two-buffer-per-publication shape.
+   */
   expectPreCompressionPathExercised();
 
   const auto dumpC = storeC->dumpAll(kTestingAreaName);
@@ -3961,8 +4099,10 @@ TEST_F(KvStoreTestFixture, FloodWatermarkCapturesSinglePublication) {
   const std::string key{"single-pub-key"};
   const std::string value(kValueBytes, 'x');
 
-  // Default budget: this must not engage backpressure -- the point is the
-  // ordinary, non-deferred flood path.
+  /*
+   * Default budget: this must not engage backpressure -- the point is the
+   * ordinary, non-deferred flood path.
+   */
   auto* publisher = createKvStore(getPreCompressKvConf(publisherId));
   auto* receiver = createKvStore(getPreCompressKvConf("single-pub-receiver"));
   publisher->run();
@@ -3989,8 +4129,10 @@ TEST_F(KvStoreTestFixture, FloodWatermarkCapturesSinglePublication) {
   EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
   EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value));
 
-  // No backpressure, so the AVG-sampled path contributed nothing; the mark can
-  // only be non-zero if the charge itself recorded it.
+  /*
+   * No backpressure, so the AVG-sampled path contributed nothing; the mark can
+   * only be non-zero if the charge itself recorded it.
+   */
   EXPECT_THAT(
       getCounterOrZero("kvstore.flood.backpressure_engaged.count"), Eq(0));
   EXPECT_GE(
@@ -4062,8 +4204,10 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionBudgetNotEngagedUnderNormalLoad) {
   EXPECT_GT(getCounterOrZero("kvstore.thrift.num_flood_pub.count"), 0);
   expectPreCompressionPathExercised();
 
-  // A burst this size is orders of magnitude below the per-area budget, so
-  // backpressure must never engage and the wedge-recovery path must never run.
+  /*
+   * A burst this size is orders of magnitude below the per-area budget, so
+   * backpressure must never engage and the wedge-recovery path must never run.
+   */
   EXPECT_THAT(
       getCounterOrZero("kvstore.flood.backpressure_engaged.count"), Eq(0));
   EXPECT_THAT(
@@ -4100,9 +4244,11 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionPeerFailureSettlesCleanly) {
       IsTrue());
   waitForAllPeersInitialized();
 
-  // Flood once while the peer is healthy. This both confirms the pre-compress
-  // budget path is live (deterministic here, before the peer goes IDLE stops
-  // new buffers being charged) and gives the failure below a working baseline.
+  /*
+   * Flood once while the peer is healthy. This both confirms the pre-compress
+   * budget path is live (deterministic here, before the peer goes IDLE stops
+   * new buffers being charged) and gives the failure below a working baseline.
+   */
   {
     const auto warmupValue = makeFloodValue("failure-warmup");
     auto warmupVal = createThriftValue(
@@ -4123,8 +4269,10 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionPeerFailureSettlesCleanly) {
     expectPreCompressionPathExercised();
   }
 
-  // Kill the peer's thrift server; subsequent floods to it must fail. stop() is
-  // idempotent, so the fixture teardown stopping it again is harmless.
+  /*
+   * Kill the peer's thrift server; subsequent floods to it must fail. stop() is
+   * idempotent, so the fixture teardown stopping it again is harmless.
+   */
   const auto deadPeerId = deadPeer->getNodeId();
   deadPeer->closeQueue();
   deadPeer->stop();
@@ -4144,8 +4292,10 @@ TEST_F(KvStoreTestFixture, FloodPreCompressionPeerFailureSettlesCleanly) {
     EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
   }
 
-  // The failed flood RPC drives the peer to IDLE via processThriftFailure,
-  // which only runs from the continuation that also released the charge.
+  /*
+   * The failed flood RPC drives the peer to IDLE via processThriftFailure,
+   * which only runs from the continuation that also released the charge.
+   */
   EXPECT_TRUE(waitForPeerState(
       publisher, kTestingAreaName, deadPeerId, thrift::KvStorePeerState::IDLE))
       << "peer should transition to IDLE after flood RPC failure";
@@ -4201,21 +4351,27 @@ TEST_F(KvStoreTestFixture, FloodBackpressureDefersAndDrains) {
     EXPECT_THAT(publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
   }
 
-  // Deferral must actually have happened -- otherwise this is just the
-  // no-backpressure test with a different config.
+  /*
+   * Deferral must actually have happened -- otherwise this is just the
+   * no-backpressure test with a different config.
+   */
   EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0)
       << "expected the 1-byte budget to defer at least one publication";
 
-  // Despite deferral, every key must still reach the peer via
-  // drainPendingFloods.
+  /*
+   * Despite deferral, every key must still reach the peer via
+   * drainPendingFloods.
+   */
   for (const auto& [key, value] : expectedKeyVals) {
     EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value))
         << "deferred key " << key << " was never drained to the peer";
   }
   EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(kNumKeys));
 
-  // Every backpressure episode that started must have ended: pendingFloodKeys_
-  // is drained and cleared, not stranded.
+  /*
+   * Every backpressure episode that started must have ended: pendingFloodKeys_
+   * is drained and cleared, not stranded.
+   */
   EXPECT_THAT(
       getCounterOrZero("kvstore.flood.backpressure_resolved.count"),
       Eq(getCounterOrZero("kvstore.flood.backpressure_engaged.count")));
@@ -4251,8 +4407,10 @@ TEST_F(KvStoreTestFixture, FloodBackpressureCoalescesToLatestValue) {
       IsTrue());
   waitForAllPeersInitialized();
 
-  // Repeatedly overwrite one key with monotonically increasing versions while
-  // the area is backpressured.
+  /*
+   * Repeatedly overwrite one key with monotonically increasing versions while
+   * the area is backpressured.
+   */
   std::string finalValue;
   for (int64_t version = 1; version <= kNumUpdates; ++version) {
     finalValue = makeFloodValue(fmt::format("coalesce-v{}", version));
@@ -4378,8 +4536,10 @@ TEST_F(KvStoreTestFixture, FloodBackpressureDrainRespectsFabricScope) {
   EXPECT_TRUE(waitForKeyValue(
       storeB, kTestingAreaName, fabricPrefixKey, makeFloodValue("fab-prefix")));
 
-  // Fabric-external peer gets the non-fabric keys but never the fabric ones,
-  // including for keys delivered via the drain path.
+  /*
+   * Fabric-external peer gets the non-fabric keys but never the fabric ones,
+   * including for keys delivered via the drain path.
+   */
   for (const auto& [key, value] : nonFabricKeyVals) {
     EXPECT_TRUE(waitForKeyValue(storeC, kTestingAreaName, key, value));
   }
@@ -4449,8 +4609,10 @@ TEST_F(
 
   EXPECT_GT(getCounterOrZero("kvstore.flood.backpressure_engaged.count"), 0);
 
-  // No key may be lost, and the minimum valid threshold must not spuriously
-  // trip wedge recovery while RPCs are legitimately in flight.
+  /*
+   * No key may be lost, and the minimum valid threshold must not spuriously
+   * trip wedge recovery while RPCs are legitimately in flight.
+   */
   for (const auto& [key, value] : expectedKeyVals) {
     EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value))
         << "key " << key << " lost at the minimum reconcile threshold";
@@ -4595,10 +4757,12 @@ TEST_F(KvStoreTestFixture, FloodBackpressureCountersAreOperable) {
           fmt::format("kvstore.flood.num_coalesced_keys.{}.sum", area)),
       Eq(coalescedKeys));
 
-  // The budget is exported so outstanding_bytes can be read as utilization,
-  // once at node level with the configured value. It must NOT be area-tagged
-  // (one node-level config applied to every area) and must NOT be summed
-  // across areas, which is what routing it through getCounters() would do.
+  /*
+   * The budget is exported so outstanding_bytes can be read as utilization,
+   * once at node level with the configured value. It must NOT be area-tagged
+   * (one node-level config applied to every area) and must NOT be summed
+   * across areas, which is what routing it through getCounters() would do.
+   */
   EXPECT_THAT(getCounterOrZero("kvstore.flood.budget_bytes"), Eq(1));
   EXPECT_THAT(
       getCounterOrZero(fmt::format("kvstore.flood.budget_bytes.{}", area)),
@@ -4660,8 +4824,10 @@ TEST_F(KvStoreTestFixture, FloodMemBudgetParamsResolution) {
       zeroBudget.floodMemBudgetBytes, Eq(Constants::kFloodMemBudgetBytes))
       << "zero budget would latch flooding off permanently";
 
-  // Below the floor -> default, so live accounting cannot be reset under a
-  // still-in-flight RPC.
+  /*
+   * Below the floor -> default, so live accounting cannot be reset under a
+   * still-in-flight RPC.
+   */
   auto shortThresholdConf = getTestKvConf("params-short-threshold");
   shortThresholdConf.flood_drain_reconcile_threshold_ms() =
       Constants::kMinFloodDrainReconcileThreshold.count() - 1;
@@ -4823,9 +4989,11 @@ TEST_F(KvStoreTestFixture, FloodBackpressureRepeatedBurstsDoNotWedge) {
   constexpr size_t kKeysPerBurst{20};
   const std::string publisherId{"burst-publisher"};
 
-  // 1-byte budget: every burst is guaranteed to go through defer -> drain, so
-  // the wedge check below is exercised rather than depending on whether floods
-  // happen to overlap.
+  /*
+   * 1-byte budget: every burst is guaranteed to go through defer -> drain, so
+   * the wedge check below is exercised rather than depending on whether floods
+   * happen to overlap.
+   */
   auto* publisher = createKvStore(getTinyBudgetKvConf(publisherId));
   auto* receiver = createKvStore(getPreCompressKvConf("burst-receiver"));
   publisher->run();
@@ -4860,8 +5028,10 @@ TEST_F(KvStoreTestFixture, FloodBackpressureRepeatedBurstsDoNotWedge) {
           publisher->setKey(kTestingAreaName, key, thriftVal), IsTrue());
     }
 
-    // Each burst must fully drain before the next one starts; a ratcheting
-    // leak shows up as a burst that never arrives.
+    /*
+     * Each burst must fully drain before the next one starts; a ratcheting
+     * leak shows up as a burst that never arrives.
+     */
     for (const auto& [key, value] : burstKeyVals) {
       EXPECT_TRUE(waitForKeyValue(receiver, kTestingAreaName, key, value))
           << "burst " << burst << " key " << key
@@ -4871,9 +5041,11 @@ TEST_F(KvStoreTestFixture, FloodBackpressureRepeatedBurstsDoNotWedge) {
     EXPECT_THAT(receiver->dumpAll(kTestingAreaName).size(), Eq(totalKeys));
   }
 
-  // Every backpressure episode across every burst must have been resolved. A
-  // skipped release would latch both gates closed and strand the pending set,
-  // leaving engaged > resolved.
+  /*
+   * Every backpressure episode across every burst must have been resolved. A
+   * skipped release would latch both gates closed and strand the pending set,
+   * leaving engaged > resolved.
+   */
   const auto engaged =
       getCounterOrZero("kvstore.flood.backpressure_engaged.count");
   EXPECT_GT(engaged, 0);
@@ -4950,8 +5122,10 @@ TEST_F(
         store->dumpAll(kTestingAreaName).size(), Eq(expectedKeyVals.size()));
   }
 
-  // Traffic must terminate rather than ping-pong: once converged, letting the
-  // stores idle produces no further flood publications.
+  /*
+   * Traffic must terminate rather than ping-pong: once converged, letting the
+   * stores idle produces no further flood publications.
+   */
   const auto floodsAfterConvergence =
       getCounterOrZero("kvstore.thrift.num_flood_pub.count");
   const auto idleUntil =
@@ -5195,8 +5369,10 @@ TEST_F(KvStoreTestFixture, FinalizeFullSyncFabricScope) {
   storeB->run();
   storeC->run();
 
-  // Set keys on Node A BEFORE establishing peering so that they are
-  // exchanged during the 3-way full-sync (finalizeFullSync), not via flood.
+  /*
+   * Set keys on Node A BEFORE establishing peering so that they are
+   * exchanged during the 3-way full-sync (finalizeFullSync), not via flood.
+   */
   const std::string fabricAdjKey = "adj:eb01-ld002.dfw1";
   const std::string fabricPrefixKey = "prefix:eb01-sp002.dfw1:[10.0.0.0/8]";
   const std::string nonFabricKey = "adj:external-node";

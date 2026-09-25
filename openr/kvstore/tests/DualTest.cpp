@@ -23,8 +23,10 @@ using namespace folly;
 // sync time-ms to wait for all DUAL nodes to converge
 const std::chrono::milliseconds syncms{500};
 
-// I/O response delay to mimic real senario
-// e.g one link-up-event might result in different ack time on each end.
+/*
+ * I/O response delay to mimic real senario
+ * e.g one link-up-event might result in different ack time on each end.
+ */
 const uint32_t kIoDelayBaseMs{5};
 const uint32_t kIoDelayVarMs{5};
 
@@ -94,10 +96,12 @@ isSpt(const Graph& g) {
   return true;
 }
 
-// validate route-info on a given dual node
-// this ensures
-// - node is in passive state
-// - if distance is inf, then nexthop has to be none, and vice versa
+/*
+ * validate route-info on a given dual node
+ * this ensures
+ * - node is in passive state
+ * - if distance is inf, then nexthop has to be none, and vice versa
+ */
 bool
 validateRouteInfo(const Dual::RouteInfo& info) {
   if (info.sm.state != DualState::PASSIVE) {
@@ -380,8 +384,10 @@ class DualBaseFixture : public ::testing::Test {
       evb->runAfterDelay(
           [&, node1, node2]() { nodes.at(node2)->peerDown(node1); }, 0);
 
-      // bring them back up
-      // Make sure link-up event is scheduled AFTER link-down event
+      /*
+       * bring them back up
+       * Make sure link-up event is scheduled AFTER link-down event
+       */
       evb->runAfterDelay(
           [&, node1, node2, cost]() { nodes.at(node1)->peerUp(node2, cost); },
           randomDelayMs());
@@ -475,8 +481,10 @@ class DualBaseFixture : public ::testing::Test {
     }
   }
 
-  // validate no-root case (no node declares itself as root)
-  // if this case, we expect everynode reports a empty route-info map
+  /*
+   * validate no-root case (no node declares itself as root)
+   * if this case, we expect everynode reports a empty route-info map
+   */
   bool
   validateNoRoot(
       const folly::F14FastMap<
@@ -494,10 +502,12 @@ class DualBaseFixture : public ::testing::Test {
     return true;
   }
 
-  // validate the correctness of Dual Algorithm for a given rootId
-  // - ensure all nodes are in PASSIVE state
-  // - ensure formed flooding topology is a SPT
-  // - ensure flooding topology matches actual physical topology (spf)
+  /*
+   * validate the correctness of Dual Algorithm for a given rootId
+   * - ensure all nodes are in PASSIVE state
+   * - ensure formed flooding topology is a SPT
+   * - ensure flooding topology matches actual physical topology (spf)
+   */
   bool
   validateOnRoot(
       const std::string& rootId,
@@ -582,8 +592,10 @@ class DualBaseFixture : public ::testing::Test {
           physicalTopo);
     }
 
-    // 2. validate flooding topology matches expected shortest-path graph
-    // predecessors vector
+    /*
+     * 2. validate flooding topology matches expected shortest-path graph
+     * predecessors vector
+     */
     std::vector<VertexDescriptor> preds(boost::num_vertices(physicalTopo));
     // distances vector
     std::vector<Weight> dists(boost::num_vertices(physicalTopo));
@@ -657,13 +669,15 @@ class DualBaseFixture : public ::testing::Test {
     return true;
   }
 
-  // Single Link Failure Test
-  // if not flap:
-  // for EACH link: bring it down, wait-and-validate, bring it up,
-  // wait-and-validate
-  // if flap:
-  // for EACH link: bring it down, bring it up right
-  // away without delay, validate all
+  /*
+   * Single Link Failure Test
+   * if not flap:
+   * for EACH link: bring it down, wait-and-validate, bring it up,
+   * wait-and-validate
+   * if flap:
+   * for EACH link: bring it down, bring it up right
+   * away without delay, validate all
+   */
   bool
   singleLinkFailureTest(bool flap = false) {
     // flap each edge one by one and validate
@@ -710,13 +724,15 @@ class DualBaseFixture : public ::testing::Test {
     return true;
   }
 
-  // Single Node Failure Test
-  // if not flap:
-  // for EACH node: bring it down, wait-and-validate, bring it up,
-  // wait-and-validate
-  // if flap:
-  // for EACH node: bring it down, bring it up right
-  // away without delay, validate all
+  /*
+   * Single Node Failure Test
+   * if not flap:
+   * for EACH node: bring it down, wait-and-validate, bring it up,
+   * wait-and-validate
+   * if flap:
+   * for EACH node: bring it down, bring it up right
+   * away without delay, validate all
+   */
   bool
   singleNodeFailureTest(bool flap = false) {
     // flap each node and validate
@@ -762,9 +778,11 @@ class DualBaseFixture : public ::testing::Test {
     return true;
   }
 
-  // Multiple Failure Test
-  // randomly pick 20% links, capped between [2, 6]
-  // bring them down/up and validate, same flap logic as above
+  /*
+   * Multiple Failure Test
+   * randomly pick 20% links, capped between [2, 6]
+   * bring them down/up and validate, same flap logic as above
+   */
   bool
   multiFailureTest(bool flap = false) {
     // pick 20% of edges to shut down
@@ -775,8 +793,10 @@ class DualBaseFixture : public ::testing::Test {
         gen::as<std::vector<Edge>>();
 
     if (flap) {
-      // flap test
-      // flap all chosen edges
+      /*
+       * flap test
+       * flap all chosen edges
+       */
       for (const auto& edge : links) {
         XLOGF(DBG1, "===> link ({}, {}) flap", edge.name1, edge.name2);
         linkFlap(edge.name1, edge.name2, edge.weight);
@@ -820,9 +840,11 @@ class DualBaseFixture : public ::testing::Test {
     return true;
   }
 
-  // collect results and status for all nodes (blocking call)
-  // output: map<node-id: <root-id: RouteInfo>>
-  // output: map<node-id: <root-id: status-string>>
+  /*
+   * collect results and status for all nodes (blocking call)
+   * output: map<node-id: <root-id: RouteInfo>>
+   * output: map<node-id: <root-id: status-string>>
+   */
   void
   getResults(
       folly::F14FastMap<

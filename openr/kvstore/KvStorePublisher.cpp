@@ -50,9 +50,11 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
       (!filter_.originatorIds().is_set() ||
        (*filter_.originatorIds()).empty()) &&
       !*filter_.ignoreTtl() && !*filter_.doNotPublishValue()) {
-    // No filtering criteria. Accept all updates as TTL updates are not be
-    // to be updated. If we don't optimize here, we will have go through
-    // key values of a publication and copy them.
+    /*
+     * No filtering criteria. Accept all updates as TTL updates are not be
+     * to be updated. If we don't optimize here, we will have go through
+     * key values of a publication and copy them.
+     */
     auto filteredPub = std::make_unique<thrift::Publication>(pub);
     filteredPub->timestamp_ms() = getUnixTimeStampMs();
     publisher_.next(std::move(*filteredPub));
@@ -75,8 +77,10 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
 
   if (publication_filtered.keyVals()->size() ||
       publication_filtered.expiredKeys()->size()) {
-    // There is at least one key value in the publication for the client
-    // or there are some expiredKeys
+    /*
+     * There is at least one key value in the publication for the client
+     * or there are some expiredKeys
+     */
     publication_filtered.timestamp_ms() = getUnixTimeStampMs();
     publisher_.next(std::move(publication_filtered));
   }
@@ -84,8 +88,10 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
 
 thrift::KeyVals
 KvStorePublisher::getFilteredKeyVals(const thrift::KeyVals& origKeyVals) {
-  // The value field may be explicitly excluded/ignored by the doNotPublishValue
-  // flag
+  /*
+   * The value field may be explicitly excluded/ignored by the doNotPublishValue
+   * flag
+   */
   thrift::KeyVals keyvals;
   for (auto& [key, val] : origKeyVals) {
     if (*filter_.ignoreTtl() && !val.value().has_value()) {

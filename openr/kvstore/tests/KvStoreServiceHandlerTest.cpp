@@ -169,9 +169,11 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
   }
 
   {
-    // get API with regex matching
-    //
-    // positive test case
+    /*
+     * get API with regex matching
+     *
+     * positive test case
+     */
     thrift::KeyDumpParams params;
     params.keys() = {"key"};
     params.originatorIds() = {"fake_node"};
@@ -187,9 +189,11 @@ CO_TEST_F(KvStoreServiceHandlerTestFixture, KvStoreApis) {
     EXPECT_EQ(keyVals.at("key3"), kvs.at("key3"));
   }
   {
-    // get API with regex matching
-    //
-    // negative test case
+    /*
+     * get API with regex matching
+     *
+     * negative test case
+     */
     thrift::KeyDumpParams params;
     params.keys() = {"key"};
     params.originatorIds() = {"fake_node"};

@@ -110,17 +110,21 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
     // Expected global Key-Value database
     folly::F14FastMap<std::string, thrift::Value> expectedGlobalKeyVals;
 
-    // For each `key`, generate a `value` and submit it to the first
-    // store. After submission of all keys, make sure all KvStore are in
-    // consistent state. We perform the same thing `kNumIter` times.
+    /*
+     * For each `key`, generate a `value` and submit it to the first
+     * store. After submission of all keys, make sure all KvStore are in
+     * consistent state. We perform the same thing `kNumIter` times.
+     */
     int64_t version = 1;
     CHECK_GT(kNumIter, kNumStores);
     for (unsigned int i = 0; i < kNumIter; ++i, ++version) {
       LOG(INFO) << "KeyValue Synchronization Test. Iteration# " << i;
       auto startTime = std::chrono::steady_clock::now();
 
-      // we'll save expected keys and values which will be updated in all
-      // KvStores in this iteration.
+      /*
+       * we'll save expected keys and values which will be updated in all
+       * KvStores in this iteration.
+       */
       std::map<std::string, thrift::Value> expectedKeyVals;
 
       // Submit a bunch of keys/values to the first store.
@@ -140,13 +144,17 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
         EXPECT_GE(stores_.size(), 0);
         EXPECT_TRUE(store->setKey(kTestingAreaName, key, thriftVal));
         const auto dump = store->dumpAll(kTestingAreaName);
-        // TODO: This is a hack! Pause thread for a bit to allow key to be
-        // retrieved. T102358658 is task that has been created to address this
-        // issue.
+        /*
+         * TODO: This is a hack! Pause thread for a bit to allow key to be
+         * retrieved. T102358658 is task that has been created to address this
+         * issue.
+         */
         std::this_thread::sleep_for(500ms);
         EXPECT_FALSE(dump.empty());
-        // Verify 1. hash is updated in KvStore
-        // 2. dumpHashes request returns key values as expected
+        /*
+         * Verify 1. hash is updated in KvStore
+         * 2. dumpHashes request returns key values as expected
+         */
         const auto hashDump = co_await store->dumpHashes(kTestingAreaName);
         for (const auto& [dumpKey, dumpValue] : dump) {
           EXPECT_TRUE(dumpValue.hash().value() != 0);
@@ -166,12 +174,14 @@ class KvStoreTestTtlFixture : public ::testing::TestWithParam<bool> {
       } // for `j < kNumKeys`
       LOG(INFO) << "Done submitting key-value pairs. Iteration# " << i;
 
-      // We just generated kNumKeys `new` keys-vals with random values and
-      // submitted each one in a different Publication. So we must receive
-      // exactly kNumKeys key-value updates from all KvStores.
-      // NOTE: It is not necessary to receive kNumKeys publications. Just one
-      // publication can be published for all changes and depends on internal
-      // implementation of KvStore (we do not rely on it).
+      /*
+       * We just generated kNumKeys `new` keys-vals with random values and
+       * submitted each one in a different Publication. So we must receive
+       * exactly kNumKeys key-value updates from all KvStores.
+       * NOTE: It is not necessary to receive kNumKeys publications. Just one
+       * publication can be published for all changes and depends on internal
+       * implementation of KvStore (we do not rely on it).
+       */
       if (!checkTtl) {
         LOG(INFO) << "Expecting publications from stores. Iteration# " << i;
         for (unsigned int j = 0; j < kNumStores; ++j) {

@@ -131,9 +131,11 @@ runExperiment(
 
 #pragma region TearDown
   BENCHMARK_SUSPEND {
-    // Need to explicity call destructor in suspend mode,
-    // otherwise destruct time would be counted.
-    // which could result in wrong benchmark result.
+    /*
+     * Need to explicity call destructor in suspend mode,
+     * otherwise destruct time would be counted.
+     * which could result in wrong benchmark result.
+     */
     kvStoreWrappers_.clear();
     events_.clear();
     keyVals.clear();

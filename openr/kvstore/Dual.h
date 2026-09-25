@@ -49,9 +49,11 @@ enum class DualEvent {
  */
 struct DualStateMachine {
   DualState state{DualState::PASSIVE};
-  // take input event, switch state if need
-  // event: input event
-  // fc: meet feasible condition or not
+  /*
+   * take input event, switch state if need
+   * event: input event
+   * fc: meet feasible condition or not
+   */
   void processEvent(DualEvent event, bool fc = true);
 };
 
@@ -64,8 +66,10 @@ struct DualStateMachine {
  */
 class Dual {
  public:
-  // constructor
-  // takes nodeId, rootId, current local-distances
+  /*
+   * constructor
+   * takes nodeId, rootId, current local-distances
+   */
   Dual(
       const std::string& nodeId,
       const std::string& rootId,
@@ -74,40 +78,50 @@ class Dual {
           const std::optional<std::string>& oldNh,
           const std::optional<std::string>& newNh)> nexthopChangeCb);
 
-  // peer up event
-  // input: (neighbor-id, link-metric)
-  // output: map<neighbor-id: dual-messages-to-send>
+  /*
+   * peer up event
+   * input: (neighbor-id, link-metric)
+   * output: map<neighbor-id: dual-messages-to-send>
+   */
   void peerUp(
       const std::string& neighbor,
       int64_t cost,
       folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
-  // peer down event
-  // input: (neighbor-id)
-  // output: map<neighbor-id: dual-messages-to-send>
+  /*
+   * peer down event
+   * input: (neighbor-id)
+   * output: map<neighbor-id: dual-messages-to-send>
+   */
   void peerDown(
       const std::string& neighbor,
       folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
-  // process a DUAL update message
-  // input: (neighbor-id, a update dual-message)
-  // output: map<neighbor-id: dual-messages-to-send>
+  /*
+   * process a DUAL update message
+   * input: (neighbor-id, a update dual-message)
+   * output: map<neighbor-id: dual-messages-to-send>
+   */
   void processUpdate(
       const std::string& neighbor,
       const thrift::DualMessage& update,
       folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
-  // process a DUAL query message
-  // input: (neighbor-id, a query dual-message)
-  // output: map<neighbor-id: dual-messages-to-send>
+  /*
+   * process a DUAL query message
+   * input: (neighbor-id, a query dual-message)
+   * output: map<neighbor-id: dual-messages-to-send>
+   */
   void processQuery(
       const std::string& neighbor,
       const thrift::DualMessage& query,
       folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
-  // process a DUAL reply message
-  // input: (neighbor-id, a reply dual-message)
-  // output: map<neighbor-id: dual-messages-to-send>
+  /*
+   * process a DUAL reply message
+   * input: (neighbor-id, a reply dual-message)
+   * output: map<neighbor-id: dual-messages-to-send>
+   */
   void processReply(
       const std::string& neighbor,
       const thrift::DualMessage& reply,
@@ -127,10 +141,12 @@ class Dual {
   struct RouteInfo {
     // my current distance towards destination
     int64_t distance{std::numeric_limits<int64_t>::max()};
-    // distance that will be used to report to my neighbors
-    // this can be different from distance in case where node gets into
-    // active state, distance will be updated in realtime while report-distance
-    // and feasible-distance will stay same until it gets back to PASSIVE state
+    /*
+     * distance that will be used to report to my neighbors
+     * this can be different from distance in case where node gets into
+     * active state, distance will be updated in realtime while report-distance
+     * and feasible-distance will stay same until it gets back to PASSIVE state
+     */
     int64_t reportDistance{std::numeric_limits<int64_t>::max()};
     // distance used to evaluate whether a feasible condition is met or not
     int64_t feasibleDistance{std::numeric_limits<int64_t>::max()};
@@ -143,8 +159,10 @@ class Dual {
     // diffusing: track received query
     std::stack<std::string> cornet{};
 
-    // dump route info into human-friendly string mainly for logging or
-    // debugging
+    /*
+     * dump route info into human-friendly string mainly for logging or
+     * debugging
+     */
     std::string
     toString() const {
       std::string state;
@@ -206,8 +224,10 @@ class Dual {
   // get current spt children
   folly::F14FastSet<std::string> children() const noexcept;
 
-  // get current spt peers (nexthop + children)
-  // return empty-set if dual has no valid route
+  /*
+   * get current spt peers (nexthop + children)
+   * return empty-set if dual has no valid route
+   */
   folly::F14FastSet<std::string> sptPeers() const noexcept;
 
   // my node id
@@ -223,11 +243,13 @@ class Dual {
   // check if my route-to-root is affected
   bool routeAffected();
 
-  // check if meet the feasible condition or not according to SNC (source node
-  // condition)
-  // if we can find a neighbor whose report-distance < my-feasible-distance
-  // AND local-distance + report-distance == current minimum-distance
-  // return true, otherwise return false
+  /*
+   * check if meet the feasible condition or not according to SNC (source node
+   * condition)
+   * if we can find a neighbor whose report-distance < my-feasible-distance
+   * AND local-distance + report-distance == current minimum-distance
+   * return true, otherwise return false
+   */
   bool meetFeasibleCondition(std::string& nexthop, int64_t& distance);
 
   // flood updates to all my neighbor
@@ -244,8 +266,10 @@ class Dual {
   bool diffusingComputation(
       folly::F14FastMap<std::string, thrift::DualMessages>& msgsToSend);
 
-  // perform local or diffusing computation depends on if FC is met
-  // if needReply: send reply back
+  /*
+   * perform local or diffusing computation depends on if FC is met
+   * if needReply: send reply back
+   */
   void tryLocalOrDiffusing(
       const DualEvent& event,
       bool needReply,
@@ -308,14 +332,18 @@ class DualNode {
 
   virtual ~DualNode() = default;
 
-  // subclass needs to implement this method to perform actual I/O operation
-  // return true on success, otherwise false
+  /*
+   * subclass needs to implement this method to perform actual I/O operation
+   * return true on success, otherwise false
+   */
   virtual bool sendDualMessages(
       const std::string& neighbor,
       const thrift::DualMessages& msgs) noexcept = 0;
 
-  // subclass needs to override this api to perform actions when nexthop changes
-  // for a given root-id
+  /*
+   * subclass needs to override this api to perform actions when nexthop changes
+   * for a given root-id
+   */
   virtual void processNexthopChange(
       const std::string& rootId,
       const std::optional<std::string>& oldNh,
@@ -339,17 +367,23 @@ class DualNode {
   // get all discovered duals reference as map<root-id: Dual>
   std::map<std::string, Dual>& getDuals();
 
-  // pick smallest root-id who has a valid-route
-  // return none if no ready SPT found
+  /*
+   * pick smallest root-id who has a valid-route
+   * return none if no ready SPT found
+   */
   std::optional<std::string> getSptRootId() const noexcept;
 
-  // get SPT-peers for a given root-id
-  // return empty-set if dual for root-id is not ready
+  /*
+   * get SPT-peers for a given root-id
+   * return empty-set if dual for root-id is not ready
+   */
   folly::F14FastSet<std::string> getSptPeers(
       const std::optional<std::string>& rootId) const noexcept;
 
-  // get route-info for a given root-id
-  // return none if root-id is not discoveried yet
+  /*
+   * get route-info for a given root-id
+   * return none if root-id is not discoveried yet
+   */
   std::optional<Dual::RouteInfo> getInfo(
       const std::string& rootId) const noexcept;
 
@@ -359,8 +393,10 @@ class DualNode {
   // get status as string for a given root-id
   std::string getStatusString(const std::string& rootId) const noexcept;
 
-  // get status for all discovered roots
-  // return pair<this-node-level-status, map<root-id: root-level-status>>
+  /*
+   * get status for all discovered roots
+   * return pair<this-node-level-status, map<root-id: root-level-status>>
+   */
   std::pair<std::string, folly::F14FastMap<std::string, std::string>>
   getStatusStrings() const noexcept;
 

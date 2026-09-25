@@ -250,8 +250,10 @@ class KvStoreDb {
    * Private methods
    */
 
-  // util wrapper function which calls both logStateTransition and
-  // publishPeerStateCounters functions
+  /*
+   * util wrapper function which calls both logStateTransition and
+   * publishPeerStateCounters functions
+   */
   void logStateTransitionWithCounterPublication(
       std::string const& peerName,
       thrift::KvStorePeerState oldState,
@@ -298,8 +300,10 @@ class KvStoreDb {
   // Returns the protocol type to use for serialization for the given peer.
   uint16_t getProtocolType(const KvStorePeer& peer) const;
 
-  // Returns serialized request for a thrift::KeySetParams object and the given
-  // protocol type.
+  /*
+   * Returns serialized request for a thrift::KeySetParams object and the given
+   * protocol type.
+   */
   apache::thrift::SerializedRequest serializeRequest(
       const uint16_t protocolType,
       thrift::KeySetParams& paramsToSend,
@@ -683,11 +687,13 @@ class KvStoreDb {
     folly::SemiFuture<folly::Unit> setKvStoreKeyValsWrapper(
         const std::string& area, const thrift::KeySetParams& keySetParams);
 
-    // Send a pre-serialized setKvStoreKeyVals request via the channel.
-    // Used by floodPublication to avoid redundant serialization.
-    // protocolId must match the protocol used to serialize the buffer.
-    // If preCompressed is true, the buffer is already zstd-compressed and
-    // the channel skips re-compression.
+    /*
+     * Send a pre-serialized setKvStoreKeyVals request via the channel.
+     * Used by floodPublication to avoid redundant serialization.
+     * protocolId must match the protocol used to serialize the buffer.
+     * If preCompressed is true, the buffer is already zstd-compressed and
+     * the channel skips re-compression.
+     */
     folly::SemiFuture<folly::Unit> sendPreSerializedSetKvStoreKeyVals(
         const folly::IOBuf& serializedBuf,
         uint16_t protocolId,
@@ -697,10 +703,12 @@ class KvStoreDb {
         const thrift::KeyDumpParams& filter, const std::string& area);
 #pragma endregion ApiWrapper
 
-    // Centralized secure-client-with-plaintext-fallback logic.
-    // If TLS is disabled, calls fn(plainTextClient). Otherwise tries
-    // fn(secureClient), catching AsyncSocketException and falling back
-    // to fn(plainTextClient).
+    /*
+     * Centralized secure-client-with-plaintext-fallback logic.
+     * If TLS is disabled, calls fn(plainTextClient). Otherwise tries
+     * fn(secureClient), catching AsyncSocketException and falling back
+     * to fn(plainTextClient).
+     */
     template <typename Fn>
     auto withSecureFallback(
         const char* callerName, const std::string& counterName, Fn&& fn)
@@ -718,21 +726,27 @@ class KvStoreDb {
     // exponetial backoff in case of retry after sync failure
     ExponentialBackoff<std::chrono::milliseconds> expBackoff;
 
-    // KvStorePeer now supports 2 types of clients:
-    // 1. thrift::OpenrCtrlCppAsyncClient -> KvStore runs with Open/R;
-    // 2. thrift::KvStoreServiceAsyncClient -> KvStore runs independently;
+    /*
+     * KvStorePeer now supports 2 types of clients:
+     * 1. thrift::OpenrCtrlCppAsyncClient -> KvStore runs with Open/R;
+     * 2. thrift::KvStoreServiceAsyncClient -> KvStore runs independently;
+     */
     std::unique_ptr<ClientType> plainTextClient{nullptr};
 
     // only if TLS is enabled
     std::unique_ptr<ClientType> secureClient{nullptr};
 
-    // Stores set of keys that may have changed during initialization of this
-    // peer. Will flood to them in finalizeFullSync(), the last step of
-    // initial sync.
+    /*
+     * Stores set of keys that may have changed during initialization of this
+     * peer. Will flood to them in finalizeFullSync(), the last step of
+     * initial sync.
+     */
     folly::F14FastSet<std::string> pendingKeysDuringInitialization{};
 
-    // Number of occurred Thrift API errors in the process of syncing with
-    // peer.
+    /*
+     * Number of occurred Thrift API errors in the process of syncing with
+     * peer.
+     */
     int64_t numThriftApiErrors{0};
 
     // Kv store parameters
@@ -742,8 +756,10 @@ class KvStoreDb {
   // Set of peers with all info over thrift channel
   folly::F14FastMap<std::string, KvStorePeer> thriftPeers_{};
 
-  // Boolean flag indicating whether initial KvStoreDb sync with all peers
-  // completed in OpenR initialization procedure.
+  /*
+   * Boolean flag indicating whether initial KvStoreDb sync with all peers
+   * completed in OpenR initialization procedure.
+   */
   bool initialSyncCompleted_{false};
   bool initialSelfOriginatedKeysSyncCompleted_{false};
 
@@ -753,14 +769,16 @@ class KvStoreDb {
   // TTL count down queue
   TtlCountdownQueue ttlCountdownQueue_;
 
-  // Map holding the handles to the elements in ttlCountdownQueue_
-  // Key is struct TtlCountdownHandleKey(key, originatorId) and value is the
-  // handle to the element.
-  // Note: F14FastMap is used here instead of F14NodeMap
-  // because of the automatic sizing when we call erase(). This should not cause
-  // referance stability with current code as there are no long standing
-  // references. Current UTs do resize the map multiple times and are able to
-  // pass.
+  /*
+   * Map holding the handles to the elements in ttlCountdownQueue_
+   * Key is struct TtlCountdownHandleKey(key, originatorId) and value is the
+   * handle to the element.
+   * Note: F14FastMap is used here instead of F14NodeMap
+   * because of the automatic sizing when we call erase(). This should not cause
+   * referance stability with current code as there are no long standing
+   * references. Current UTs do resize the map multiple times and are able to
+   * pass.
+   */
   folly::F14FastMap<TtlCountdownHandleKey, TtlCountdownQueue::handle_type>
       ttlCountdownHandleMap_;
 
@@ -790,32 +808,44 @@ class KvStoreDb {
   // timer to advertise key-vals for self-originated keys
   std::unique_ptr<folly::AsyncTimeout> advertiseKeyValsTimer_{nullptr};
 
-  // all self originated key-vals and their backoffs
-  // persistKey and setKey will add, clearKey will remove
+  /*
+   * all self originated key-vals and their backoffs
+   * persistKey and setKey will add, clearKey will remove
+   */
   folly::F14FastMap<std::string /* key */, SelfOriginatedValue>
       selfOriginatedKeyVals_{};
 
-  // Map of keys to unset to new values to set. Used for batch processing of
-  // unset ClearKeyValueRequests.
+  /*
+   * Map of keys to unset to new values to set. Used for batch processing of
+   * unset ClearKeyValueRequests.
+   */
   folly::F14FastMap<std::string /* key */, thrift::Value> keysToUnset_{};
 
   // Set of local keys to be re-advertised.
   folly::F14FastSet<std::string /* key */> keysToAdvertise_{};
 
-  // Throttle advertisement of self-originated persisted keys.
-  // Calls `advertiseSelfOriginatedKeys()`.
+  /*
+   * Throttle advertisement of self-originated persisted keys.
+   * Calls `advertiseSelfOriginatedKeys()`.
+   */
   std::unique_ptr<AsyncThrottle> advertiseSelfOriginatedKeysThrottled_{nullptr};
 
-  // Throttle advertisement of TTL updates for self-originated keys.
-  // Calls `advertiseTtlUpdates()`.
+  /*
+   * Throttle advertisement of TTL updates for self-originated keys.
+   * Calls `advertiseTtlUpdates()`.
+   */
   std::unique_ptr<AsyncThrottle> selfOriginatedTtlUpdatesThrottled_{nullptr};
 
-  // Throttle unsetting of self-originated keys.
-  // Calls `unsetPendingSelfOriginatedKeys()`.
+  /*
+   * Throttle unsetting of self-originated keys.
+   * Calls `unsetPendingSelfOriginatedKeys()`.
+   */
   std::unique_ptr<AsyncThrottle> unsetSelfOriginatedKeysThrottled_{nullptr};
 
-  // pending keys to flood publication
-  // map<flood-root-id: set<keys>>
+  /*
+   * pending keys to flood publication
+   * map<flood-root-id: set<keys>>
+   */
   folly::F14FastMap<std::optional<std::string>, folly::F14FastSet<std::string>>
       publicationBuffer_{};
 
@@ -897,14 +927,18 @@ class KvStoreDb {
    */
   std::optional<std::chrono::steady_clock::time_point> pendingFloodSince_{};
 
-  // Callback function to signal KvStore that KvStoreDb sync with all peers
-  // are completed.
+  /*
+   * Callback function to signal KvStore that KvStoreDb sync with all peers
+   * are completed.
+   */
   std::function<void()> initialKvStoreSyncedCallback_;
   std::function<void()> initialSelfOriginatedKeysSyncedCallback_;
 
-  // max parallel syncs allowed. It's initialized with '2' and doubles
-  // up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
-  // response received
+  /*
+   * max parallel syncs allowed. It's initialized with '2' and doubles
+   * up to a max value of kMaxFullSyncPendingCountThresholdfor each full sync
+   * response received
+   */
   size_t parallelSyncLimitOverThrift_{2};
 
   // Stop signal for fiber to periodically dump flood topology
@@ -1102,8 +1136,10 @@ class KvStore final : public OpenrEventBase {
   folly::SemiFuture<int32_t> semifuture_getKvStorePeerFlaps(
       std::string const& area, std::string const& peerName);
 
-// [Public APIs]
-// Coroutine versions
+/*
+ * [Public APIs]
+ * Coroutine versions
+ */
 #if FOLLY_HAS_COROUTINES
   folly::coro::Task<std::unique_ptr<std::vector<thrift::Publication>>>
   co_dumpKvStoreKeys(
@@ -1223,8 +1259,10 @@ class KvStore final : public OpenrEventBase {
   std::unordered_map<std::string /* area ID */, KvStoreDb<ClientType>>
       kvStoreDb_{};
 
-  // Boolean flag to indicate if kvStoreSynced signal is published in OpenR
-  // initialization process.
+  /*
+   * Boolean flag to indicate if kvStoreSynced signal is published in OpenR
+   * initialization process.
+   */
   bool initialSyncSignalSent_{false};
   bool initialSelfAdjSyncSignalSent_{false};
 

@@ -433,8 +433,10 @@ BM_KvStoreUpdatePubTtl(
   for (int i = 0; i < iters; ++i) {
     auto testFixture = std::make_unique<KvStoreBenchmarkTestFixture>();
 
-    // Create and push `numOfMyEntries` of keyVals to ttlCountdownQueue
-    // and return `numOfPubEntries` of keyVals as publication keyVals
+    /*
+     * Create and push `numOfMyEntries` of keyVals to ttlCountdownQueue
+     * and return `numOfPubEntries` of keyVals as publication keyVals
+     */
     TtlCountdownQueue ttlCountdownQueue;
     auto keyVals = testFixture->setCountdownQueueEntry(
         numOfMyEntries, numOfPubEntries, ttlCountdownQueue);

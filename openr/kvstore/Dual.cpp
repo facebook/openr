@@ -137,8 +137,10 @@ Dual::routeAffected() {
     }
   }
 
-  // nexthop MUST has value, if it's none, it will be handled in
-  // above "distance changed" or "no valid route found" cases
+  /*
+   * nexthop MUST has value, if it's none, it will be handled in
+   * above "distance changed" or "no valid route found" cases
+   */
   CHECK(info_.nexthop.has_value());
   if (!nexthops.count(*info_.nexthop)) {
     // nextHop changed
@@ -285,8 +287,10 @@ Dual::tryLocalOrDiffusing(
   } else {
     // not meet FC, perform diffusing computation
     if (needReply && event != DualEvent::QUERY_FROM_SUCCESSOR) {
-      // if received query from neighbor other than current next-hop,
-      // send reply back before starting diffusing
+      /*
+       * if received query from neighbor other than current next-hop,
+       * send reply back before starting diffusing
+       */
       sendReply(msgsToSend);
     }
     XLOGF(DBG2, "{}::{}: start diffusing", rootId, nodeId);
@@ -422,9 +426,11 @@ Dual::peerUp(
       neighbor,
       cost);
 
-  // reset parent, if I chose this neighbor as parent before, but I didn't
-  // receive peer-down event(non-graceful shutdown), reset nexthop and distance
-  // as-if we received peer-down event before.
+  /*
+   * reset parent, if I chose this neighbor as parent before, but I didn't
+   * receive peer-down event(non-graceful shutdown), reset nexthop and distance
+   * as-if we received peer-down event before.
+   */
   if (info_.nexthop.has_value() && *info_.nexthop == neighbor) {
     if (nexthopCb_) {
       nexthopCb_(info_.nexthop, std::nullopt);
@@ -443,8 +449,10 @@ Dual::peerUp(
   } else {
     // active
     if (info_.neighborInfos[neighbor].expectReply) {
-      // I expected a reply from this neighbor before and it just came up
-      // this is equivlent to receiving a reply
+      /*
+       * I expected a reply from this neighbor before and it just came up
+       * this is equivlent to receiving a reply
+       */
 
       thrift::DualMessage msg;
       msg.dstId() = rootId;
@@ -454,9 +462,11 @@ Dual::peerUp(
     }
   }
 
-  // send neighbor all route-table entries whose report-distance is valid
-  // NOTE: here we might already send neighbor a update from tryLocalOrDiffusing
-  // (2nd update will just be ignored by our neighbor)
+  /*
+   * send neighbor all route-table entries whose report-distance is valid
+   * NOTE: here we might already send neighbor a update from tryLocalOrDiffusing
+   * (2nd update will just be ignored by our neighbor)
+   */
 
   thrift::DualMessage msg;
   msg.dstId() = rootId;
@@ -503,8 +513,10 @@ Dual::peerDown(
     // active
     info_.sm.processEvent(event);
     if (info_.neighborInfos[neighbor].expectReply) {
-      // expecting a reply from this neighbor, but it goes down
-      // equivlent to receing a reply from this guy with max-distance.
+      /*
+       * expecting a reply from this neighbor, but it goes down
+       * equivlent to receing a reply from this guy with max-distance.
+       */
 
       thrift::DualMessage msg;
       msg.dstId() = rootId;
@@ -548,8 +560,10 @@ Dual::processUpdate(
     // passive
     tryLocalOrDiffusing(DualEvent::OTHERS, false, msgsToSend);
   } else {
-    // active
-    // only update d while leaving rd, fd as-is
+    /*
+     * active
+     * only update d while leaving rd, fd as-is
+     */
     if (info_.nexthop.has_value() && *info_.nexthop == neighbor) {
       info_.distance = addDistances(localDistances_[*info_.nexthop], rd);
     }
@@ -566,13 +580,15 @@ Dual::sendReply(
   info_.cornet.pop();
 
   if (!neighborUp(dstNode)) {
-    // neighbor was expecting a reply from me, but link is down on my end
-    // two cases:
-    // 1. link was up on both end, and now it's down: we can wait for neighbor
-    //    to receive a neighbor-down event (as-if neighbor received a reply)
-    // 2. link is up on the other end, I received a query, but I haven't
-    //    received a neighbor-up event yet. set pending-reply = true so when
-    //    link is up on my end, I can send out reply.
+    /*
+     * neighbor was expecting a reply from me, but link is down on my end
+     * two cases:
+     * 1. link was up on both end, and now it's down: we can wait for neighbor
+     *    to receive a neighbor-down event (as-if neighbor received a reply)
+     * 2. link is up on the other end, I received a query, but I haven't
+     *    received a neighbor-up event yet. set pending-reply = true so when
+     *    link is up on my end, I can send out reply.
+     */
     info_.neighborInfos[dstNode].needToReply = true;
     return;
   }
@@ -653,9 +669,11 @@ Dual::processReply(
   (*counters_[neighbor].totalRecv())++;
 
   if (!info_.neighborInfos[neighbor].expectReply) {
-    // received a reply when I don't expect to receive a reply from it
-    // this is OK, this can happen when I detect link-down event before I
-    // receive the reply, just ignore it.
+    /*
+     * received a reply when I don't expect to receive a reply from it
+     * this is OK, this can happen when I detect link-down event before I
+     * receive the reply, just ignore it.
+     */
     XLOGF(
         DBG2,
         "{}::{} recv REPLY from {} while I dont expect a reply, ignore it",
@@ -665,8 +683,10 @@ Dual::processReply(
     return;
   }
 
-  // active
-  // update report-distance and expect-reply flag
+  /*
+   * active
+   * update report-distance and expect-reply flag
+   */
   info_.neighborInfos[neighbor].reportDistance = reportDistance;
   info_.neighborInfos[neighbor].expectReply = false;
 
@@ -681,9 +701,11 @@ Dual::processReply(
     return;
   }
 
-  // step1. all my dependent nodes have either modified their routes as a
-  // result of the distance reported by me OR stopped being my dependent
-  // Therefore, I'm free to pick the optimal solution
+  /*
+   * step1. all my dependent nodes have either modified their routes as a
+   * result of the distance reported by me OR stopped being my dependent
+   * Therefore, I'm free to pick the optimal solution
+   */
   info_.sm.processEvent(DualEvent::LAST_REPLY, true);
 
   int64_t d;
