@@ -21,9 +21,11 @@ namespace {
 std::optional<size_t>
 getMemBytes(const std::string& memoryType) {
   std::optional<size_t> rss;
-  // match the line like: "VmRSS:      9028 kB"
-  // match the line like: "VmSize:      10036 kB"
-  // std::string regexString("VmRSS:\\s+(\\d+)\\s+(\\w+)");
+  /*
+   * match the line like: "VmRSS:      9028 kB"
+   * match the line like: "VmSize:      10036 kB"
+   * std::string regexString("VmRSS:\\s+(\\d+)\\s+(\\w+)");
+   */
   auto regexString = fmt::format("{}:\\s+(\\d+)\\s+(\\w+)", memoryType);
   re2::RE2 regex{regexString};
   std::string rssMatched;
