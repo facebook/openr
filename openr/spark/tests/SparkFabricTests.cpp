@@ -89,11 +89,13 @@ class SparkFabricFixture : public testing::Test {
   std::shared_ptr<SparkWrapper> node2_;
 };
 
-//
-// When two fabric nodes peer over a fabric internal interface
-// (matching port-channel10\d{3}), each should see the other's
-// real node name as remoteNodeName.
-//
+/*
+ *
+ * When two fabric nodes peer over a fabric internal interface
+ * (matching port-channel10\d{3}), each should see the other's
+ * real node name as remoteNodeName.
+ *
+ */
 TEST_F(SparkFabricFixture, FabricInternalInterface) {
   mockIoProvider_->addIfNameIfIndex(
       {{fabricIface1_, ifIndex1_}, {fabricIface2_, ifIndex2_}});
@@ -142,11 +144,13 @@ TEST_F(SparkFabricFixture, FabricInternalInterface) {
   }
 }
 
-//
-// When a fabric node peers with a non-fabric node over a non-fabric
-// interface, the fabric node advertises its fabric name while the
-// non-fabric node advertises its real node name.
-//
+/*
+ *
+ * When a fabric node peers with a non-fabric node over a non-fabric
+ * interface, the fabric node advertises its fabric name while the
+ * non-fabric node advertises its real node name.
+ *
+ */
 TEST_F(SparkFabricFixture, FabricToNonFabricOverExternalInterface) {
   mockIoProvider_->addIfNameIfIndex(
       {{iface1_, ifIndex1_}, {iface2_, ifIndex2_}});

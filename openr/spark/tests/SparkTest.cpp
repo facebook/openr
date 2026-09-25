@@ -355,8 +355,10 @@ TEST_F(SparkHandshakeConfigFixture, MinHoldTimerTest) {
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
 
-    // The time it takes for the neighbor to go down will be
-    // hold time +/- 1 keepalive interval.
+    /*
+     * The time it takes for the neighbor to go down will be
+     * hold time +/- 1 keepalive interval.
+     */
     ASSERT_GE(
         keepAliveTime + endTime - startTime, std::min(holdTime1, holdTime2));
     ASSERT_LE(
@@ -429,9 +431,11 @@ class SparkV4OverV6MixedModeFixture : public SimpleSparkFixture {
         ifIndex1 /* ifIndex */,
         {ip1V4, ip1V6} /* networks */)});
 
-    // iface2 is v6-only -- no v4 address configured. Under
-    // v4_over_v6_nexthop this interface must still be tracked and form an
-    // adjacency.
+    /*
+     * iface2 is v6-only -- no v4 address configured. Under
+     * v4_over_v6_nexthop this interface must still be tracked and form an
+     * adjacency.
+     */
     node2_->updateInterfaceDb({InterfaceInfo(
         iface2 /* ifName */,
         true /* isUp */,
@@ -445,8 +449,10 @@ class SparkV4OverV6MixedModeFixture : public SimpleSparkFixture {
   validate() override {
     const folly::IPAddress kZeroV4{"0.0.0.0"};
 
-    // node1 (dual-stack) should see node2 (v6-only) come up. node2 advertises
-    // a dummy 0.0.0.0 v4 transport address since it has no v4 address.
+    /*
+     * node1 (dual-stack) should see node2 (v6-only) come up. node2 advertises
+     * a dummy 0.0.0.0 v4 transport address since it has no v4 address.
+     */
     {
       auto events = node1_->waitForEvents(NB_UP);
       ASSERT_TRUE(events.has_value() && events.value().size() == 1);
@@ -478,18 +484,22 @@ class SparkV4OverV6MixedModeFixture : public SimpleSparkFixture {
   }
 };
 
-//
-// Mixed-mode adjacency: dual-stack <-> v6-only under v4_over_v6_nexthop.
-// Verifies the v6-only interface is tracked and an adjacency forms.
-//
+/*
+ *
+ * Mixed-mode adjacency: dual-stack <-> v6-only under v4_over_v6_nexthop.
+ * Verifies the v6-only interface is tracked and an adjacency forms.
+ *
+ */
 TEST_F(SparkV4OverV6MixedModeFixture, MixedV4V6Adjacency) {
   createAndConnect();
 }
 
-//
-// Start 2 Spark instances and wait them forming adj.
-// Verify public API works as expected and check neighbor state.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj.
+ * Verify public API works as expected and check neighbor state.
+ *
+ */
 TEST_F(SimpleSparkFixture, GetNeighborsTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -515,11 +525,13 @@ TEST_F(SimpleSparkFixture, GetNeighborsTest) {
   EXPECT_EQ(*neighbor2.remoteIfName(), iface2);
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// force to send helloMsg with restarting flag indicating GR.
-// Verify public API works as expected and check neighbor state.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * force to send helloMsg with restarting flag indicating GR.
+ * Verify public API works as expected and check neighbor state.
+ *
+ */
 TEST_F(SimpleSparkFixture, ForceGRMsgTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -556,10 +568,12 @@ TEST_F(SimpleSparkFixture, ForceGRMsgTest) {
   }
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// increase/decrease RTT, expect NEIGHBOR_RTT_CHANGE event
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * increase/decrease RTT, expect NEIGHBOR_RTT_CHANGE event
+ *
+ */
 TEST_F(SimpleSparkFixture, RttTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -615,20 +629,24 @@ TEST_F(SimpleSparkFixture, RttTest) {
   checkCounters();
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// make it uni-directional, expect both side to lose adj
-// due to missing node info in `ReflectedNeighborInfo`
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * make it uni-directional, expect both side to lose adj
+ * due to missing node info in `ReflectedNeighborInfo`
+ *
+ */
 TEST_F(SimpleSparkFixture, UnidirectionTest) {
   // create Spark instances and establish connections
   createAndConnect();
 
   LOG(INFO) << "Stopping communications from iface2 to iface1";
 
-  // stop packet flowing iface2 -> iface1. Expect both ends drops
-  //  1. node1 drops due to: heartbeat hold timer expired
-  //  2. node2 drops due to: helloMsg doesn't contains neighborInfo
+  /*
+   * stop packet flowing iface2 -> iface1. Expect both ends drops
+   *  1. node1 drops due to: heartbeat hold timer expired
+   *  2. node2 drops due to: helloMsg doesn't contains neighborInfo
+   */
   ConnectedIfPairs connectedPairs = {
       {iface1, {{iface2, 10}}},
   };
@@ -648,10 +666,12 @@ TEST_F(SimpleSparkFixture, UnidirectionTest) {
   }
 }
 
-//
-// Spark will tear down neighbor immediately upon receiving a neighbor down
-// from external source (fsdb)
-//
+/*
+ *
+ * Spark will tear down neighbor immediately upon receiving a neighbor down
+ * from external source (fsdb)
+ *
+ */
 TEST_F(SimpleSparkFixture, ExternalNeighborDown) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -666,11 +686,13 @@ TEST_F(SimpleSparkFixture, ExternalNeighborDown) {
   }
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// restart one of them within GR window, make sure we get neighbor
-// "RESTARTED" event due to graceful restart window.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * restart one of them within GR window, make sure we get neighbor
+ * "RESTARTED" event due to graceful restart window.
+ *
+ */
 TEST_F(SimpleSparkFixture, GRTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -705,8 +727,10 @@ TEST_F(SimpleSparkFixture, GRTest) {
       ifIndex2 /* ifIndex */,
       {ip2V4, ip2V6} /* networks */)});
 
-  // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
-  // with wrapped seqNum
+  /*
+   * node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
+   * with wrapped seqNum
+   */
   {
     auto events = node1_->waitForEvents(NB_RESTARTED);
     auto neighbor = events.value().back();
@@ -714,8 +738,10 @@ TEST_F(SimpleSparkFixture, GRTest) {
     LOG(INFO)
         << fmt::format("{} reported {} as 'RESTARTED'", nodeName1_, nodeName2_);
     ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
-    // Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
-    // and then eventually back to ESTABLISHED.
+    /*
+     * Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
+     * and then eventually back to ESTABLISHED.
+     */
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
   }
 
@@ -754,11 +780,13 @@ TEST_F(SimpleSparkFixture, GRTest) {
   checkCounters();
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// restart one of them outside of GR window, make sure we
-// sync adjacency again
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * restart one of them outside of GR window, make sure we
+ * sync adjacency again
+ *
+ */
 TEST_F(SimpleSparkFixture, GRTimeoutTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -792,8 +820,10 @@ TEST_F(SimpleSparkFixture, GRTimeoutTest) {
     LOG(INFO)
         << fmt::format("{} reported {} as 'DOWN'", nodeName1_, nodeName2_);
     ASSERT_TRUE(node1_->getTotalNeighborCount() == 0);
-    // Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
-    // and then eventually back to ESTABLISHED.
+    /*
+     * Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
+     * and then eventually back to ESTABLISHED.
+     */
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 0);
   }
 
@@ -813,8 +843,10 @@ TEST_F(SimpleSparkFixture, GRTimeoutTest) {
     EXPECT_EQ(true, neighbor.adjOnlyUsedByOtherNode);
     LOG(INFO) << fmt::format("{} reported {} as 'UP'", nodeName1_, nodeName2_);
     ASSERT_TRUE(node1_->getTotalNeighborCount() == 1);
-    // Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
-    // and then eventually back to ESTABLISHED.
+    /*
+     * Neighbor would have transitioned to NEGOTIATE after receiving HelloMsg,
+     * and then eventually back to ESTABLISHED.
+     */
     ASSERT_TRUE(node1_->getActiveNeighborCount() == 1);
   }
 
@@ -864,11 +896,13 @@ TEST_F(SimpleSparkFixture, GRTimeoutTest) {
   checkCounters();
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// gracefully shut down one of them but NOT bring it back,
-// make sure we get neighbor "DOWN" event due to GR timer expiring.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * gracefully shut down one of them but NOT bring it back,
+ * make sure we get neighbor "DOWN" event due to GR timer expiring.
+ *
+ */
 TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -887,8 +921,10 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
     LOG(INFO) << fmt::format(
         "{} reported adjacency DOWN towards {}", nodeName1_, nodeName2_);
 
-    // Make sure 'down' event is triggered by GRTimer expire
-    // and NOT related with heartbeat holdTimer( no hearbeatTimer started )
+    /*
+     * Make sure 'down' event is triggered by GRTimer expire
+     * and NOT related with heartbeat holdTimer( no hearbeatTimer started )
+     */
     auto endTime = std::chrono::steady_clock::now();
     ASSERT_TRUE(endTime - startTime >= std::chrono::seconds(grTime));
 
@@ -902,11 +938,13 @@ TEST_F(SimpleSparkFixture, GRTimerExpireTest) {
   }
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// restart one of them within GR window, make sure we get neighbor
-// "RESTARTED" event and validate attribute change.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * restart one of them within GR window, make sure we get neighbor
+ * "RESTARTED" event and validate attribute change.
+ *
+ */
 TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -928,8 +966,10 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
       ifIndex2 /* ifIndex */,
       {ip2V4, ip2V6} /* networks */)});
 
-  // node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
-  // with wrapped seqNum
+  /*
+   * node-1 should report node-2 as 'RESTARTED' when receiving helloMsg
+   * with wrapped seqNum
+   */
   {
     auto events = node1_->waitForEvents(NB_RESTARTED);
     ASSERT_TRUE(events.has_value() && events.value().size() == 1);
@@ -961,11 +1001,13 @@ TEST_F(SimpleSparkFixture, AttributeChangeAfterGRTest) {
   }
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// stop the bi-direction communication from each other.
-// Observe neighbor going DOWN due to hold timer expiration.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * stop the bi-direction communication from each other.
+ * Observe neighbor going DOWN due to hold timer expiration.
+ *
+ */
 TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -991,8 +1033,10 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
     // record time for expiration time test
     auto endTime = std::chrono::steady_clock::now();
 
-    // The time it takes for the neighbor to go down will be
-    // hold time +/- 1 keepalive interval.
+    /*
+     * The time it takes for the neighbor to go down will be
+     * hold time +/- 1 keepalive interval.
+     */
     ASSERT_GE(keepAliveTime + endTime - startTime, holdTime);
     ASSERT_LE(
         endTime - startTime - keepAliveTime,
@@ -1011,13 +1055,15 @@ TEST_F(SimpleSparkFixture, HeartbeatTimerExpireTest) {
   }
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// update interface from one instance's perspective. Due to same
-// interface, there should be no interface removal/adding.
-// Then update the network address from one instance's perspective.
-// This will trigger interface removal/adding.
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * update interface from one instance's perspective. Due to same
+ * interface, there should be no interface removal/adding.
+ * Then update the network address from one instance's perspective.
+ * This will trigger interface removal/adding.
+ *
+ */
 TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -1028,8 +1074,10 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
       ifIndex1 /* ifIndex */,
       {ip1V4, ip1V6} /* networks */)});
 
-  // since the removal of intf happens instantly. down event should
-  // be reported ASAP.
+  /*
+   * since the removal of intf happens instantly. down event should
+   * be reported ASAP.
+   */
   auto waitTime = std::chrono::seconds(
       *config1_->getSparkConfig().graceful_restart_time_s());
 
@@ -1084,10 +1132,12 @@ TEST_F(SimpleSparkFixture, InterfaceUpdateTest) {
   }
 }
 
-//
-// Start 2 Spark instances and wait them forming adj. Then
-// remove/add interface from one instance's perspective
-//
+/*
+ *
+ * Start 2 Spark instances and wait them forming adj. Then
+ * remove/add interface from one instance's perspective
+ *
+ */
 TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -1108,8 +1158,10 @@ TEST_F(SimpleSparkFixture, InterfaceRemovalTest) {
       nodeName1_,
       nodeName2_);
 
-  // since the removal of intf happens instantly. down event should
-  // be reported ASAP.
+  /*
+   * since the removal of intf happens instantly. down event should
+   * be reported ASAP.
+   */
   {
     EXPECT_TRUE(node1_->waitForEvents(NB_DOWN).has_value());
 
@@ -1235,9 +1287,11 @@ TEST_F(SparkFixture, InitializationTest) {
     ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
 
-    // The initialization event is published when
-    // minNeighborDiscoveryInterval elapses and far sooner than
-    // maxNeighborDiscoveryInterval.
+    /*
+     * The initialization event is published when
+     * minNeighborDiscoveryInterval elapses and far sooner than
+     * maxNeighborDiscoveryInterval.
+     */
     auto minNeighborDiscoveryInterval =
         *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
     auto maxNeighborDiscoveryInterval = 2 * minNeighborDiscoveryInterval;
@@ -1297,15 +1351,19 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     const auto startTime = std::chrono::steady_clock::now();
 
     ASSERT_TRUE(node1->waitForInitializationEvent() == true);
-    // Calculate the elapsed time right after we received the initialization
-    // event to minimize the potential delay
+    /*
+     * Calculate the elapsed time right after we received the initialization
+     * event to minimize the potential delay
+     */
     const auto node1ElapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
 
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
-    // Similarly, we need to measure the elapsed time here to minimize the
-    // measurement error
+    /*
+     * Similarly, we need to measure the elapsed time here to minimize the
+     * measurement error
+     */
     const auto node2ElapsedTime =
         std::chrono::duration_cast<std::chrono::milliseconds>(
             std::chrono::steady_clock::now() - startTime);
@@ -1313,9 +1371,11 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     ASSERT_TRUE(node2->getTotalNeighborCount() == 0);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
 
-    // The initialization event is published when
-    // minNeighborDiscoveryInterval elapses and far sooner than
-    // maxNeighborDiscoveryInterval.
+    /*
+     * The initialization event is published when
+     * minNeighborDiscoveryInterval elapses and far sooner than
+     * maxNeighborDiscoveryInterval.
+     */
     auto minNeighborDiscoveryInterval2 =
         *config2->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
     auto maxNeighborDiscoveryInterval2 =
@@ -1324,16 +1384,20 @@ TEST_F(SparkFixture, ForcedInitializationTest) {
     LOG(INFO) << "Elapsed time: " << node2ElapsedTime.count()
               << " milliseconds";
     EXPECT_GE(node2ElapsedTime.count(), minNeighborDiscoveryInterval2);
-    // introduce 50 ms buffer as the measurement might be slightly over the
-    // limit during context switching
+    /*
+     * introduce 50 ms buffer as the measurement might be slightly over the
+     * limit during context switching
+     */
     EXPECT_LE(node2ElapsedTime.count(), maxNeighborDiscoveryInterval2 + 50);
 
     ASSERT_TRUE(node1->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node1->getActiveNeighborCount() == 0);
 
-    // The initialization event is published when
-    // maxNeighborDiscoveryInterval elapses, as active neighbors are
-    // fewer than total neighbors.
+    /*
+     * The initialization event is published when
+     * maxNeighborDiscoveryInterval elapses, as active neighbors are
+     * fewer than total neighbors.
+     */
     auto maxNeighborDiscoveryInterval1 =
         *config1->getSparkConfig().max_neighbor_discovery_interval_s() * 1000;
 
@@ -1406,12 +1470,14 @@ TEST_F(SparkFixture, ReadConfigTest) {
   }
 }
 
-//
-// Start 2 Spark instances for different versions but within supported
-// range. Make sure they will form adjacency. Then add node3 with out-of-range
-// version. Confirm node3 can't form adjacency with neither of node1/node2
-// bi-directionally.
-//
+/*
+ *
+ * Start 2 Spark instances for different versions but within supported
+ * range. Make sure they will form adjacency. Then add node3 with out-of-range
+ * version. Confirm node3 can't form adjacency with neither of node1/node2
+ * bi-directionally.
+ *
+ */
 TEST_F(SparkFixture, VersionTest) {
   // Define interface names for the test
   mockIoProvider_->addIfNameIfIndex(
@@ -1496,8 +1562,10 @@ TEST_F(SparkFixture, VersionTest) {
     EXPECT_FALSE(
         node2->waitForEvents(NB_UP, restart_time_s2, restart_time_s2 * 2)
             .has_value());
-    // At the expiry of adj_hold_time, an initialization event will be
-    // published.
+    /*
+     * At the expiry of adj_hold_time, an initialization event will be
+     * published.
+     */
     ASSERT_TRUE(node3->waitForInitializationEvent() == true);
     EXPECT_FALSE(
         node3->waitForEvents(NB_UP, restart_time_s3, restart_time_s3 * 2)
@@ -1507,17 +1575,19 @@ TEST_F(SparkFixture, VersionTest) {
   }
 }
 
-//
-// Start 3 Spark instances in "hub-and-spoke" topology. We prohibit
-// node-2 and node-3 to talk to each other. We make node-1
-// use two different interfaces for communications.
-//
-// [node2]  [node3]
-//    \       /
-//     \     /
-//      \   /
-//     [node1]
-//
+/*
+ *
+ * Start 3 Spark instances in "hub-and-spoke" topology. We prohibit
+ * node-2 and node-3 to talk to each other. We make node-1
+ * use two different interfaces for communications.
+ *
+ * [node2]  [node3]
+ *    \       /
+ *     \     /
+ *      \   /
+ *     [node1]
+ *
+ */
 TEST_F(SparkFixture, HubAndSpokeTopology) {
   const std::string iface1_2{"iface1_2"};
   const std::string iface1_3{"iface1_3"};
@@ -1655,8 +1725,10 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
   LOG(INFO) << "Stopping " << nodeName1;
   node1.reset();
 
-  // both node-2 and node-3 should report node1 as restarting &
-  // subsequently down after hold-time expiry
+  /*
+   * both node-2 and node-3 should report node1 as restarting &
+   * subsequently down after hold-time expiry
+   */
   {
     auto events1 = node2->waitForEvents(NB_RESTARTING);
     ASSERT_TRUE(events1.has_value() && events1.value().size() == 1);
@@ -1678,8 +1750,10 @@ TEST_F(SparkFixture, HubAndSpokeTopology) {
     ASSERT_TRUE(node2->getActiveNeighborCount() == 0);
     ASSERT_TRUE(node3->getActiveNeighborCount() == 0);
 
-    // total neighbor count would eventually be updated too, but not right at
-    // the time when we receive the NB_DOWN event
+    /*
+     * total neighbor count would eventually be updated too, but not right at
+     * the time when we receive the NB_DOWN event
+     */
     checkTotalNeighborCountWithTimeout(node2);
     checkTotalNeighborCountWithTimeout(node3);
   }
@@ -1743,9 +1817,11 @@ TEST_F(SparkFixture, FastInitTest) {
     ASSERT_TRUE(node2->getTotalNeighborCount() == 1);
     ASSERT_TRUE(node2->getActiveNeighborCount() == 1);
 
-    // The initialization event is published when
-    // minNeighborDiscoveryInterval elapses and far sooner than
-    // maxNeighborDiscoveryInterval.
+    /*
+     * The initialization event is published when
+     * minNeighborDiscoveryInterval elapses and far sooner than
+     * maxNeighborDiscoveryInterval.
+     */
     auto minNeighborDiscoveryInterval =
         *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
     auto maxNeighborDiscoveryInterval = 2 * minNeighborDiscoveryInterval;
@@ -1785,9 +1861,11 @@ TEST_F(SparkFixture, FastInitTest) {
 
     ASSERT_TRUE(node2->waitForInitializationEvent() == true);
 
-    // The initialization event is published when
-    // minNeighborDiscoveryInterval elapses and far sooner than
-    // maxNeighborDiscoveryInterval.
+    /*
+     * The initialization event is published when
+     * minNeighborDiscoveryInterval elapses and far sooner than
+     * maxNeighborDiscoveryInterval.
+     */
     auto minNeighborDiscoveryInterval =
         *config1->getSparkConfig().min_neighbor_discovery_interval_s() * 1000;
     auto maxNeighborDiscoveryInterval = 2 * minNeighborDiscoveryInterval;
@@ -1799,13 +1877,15 @@ TEST_F(SparkFixture, FastInitTest) {
   }
 }
 
-//
-// Start 2 Spark instances and make sure they form adjacency. Then
-// start another Spark instance connecting over the same interface,
-// make sure node-1/2 can form adj with node-3 and vice versa.
-// Shut down node-3 and make sure adjacency between node-1 and node-2
-// is NOT affected.
-//
+/*
+ *
+ * Start 2 Spark instances and make sure they form adjacency. Then
+ * start another Spark instance connecting over the same interface,
+ * make sure node-1/2 can form adj with node-3 and vice versa.
+ * Shut down node-3 and make sure adjacency between node-1 and node-2
+ * is NOT affected.
+ *
+ */
 TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   // Define interface names for the test
   mockIoProvider_->addIfNameIfIndex(
@@ -1974,11 +2054,13 @@ TEST_F(SparkFixture, MultiplePeersOverSameInterface) {
   }
 }
 
-//
-// Start 2 Spark instances, but block one from hearing another. Then
-// shutdown the peer that cannot hear, and make sure there is no DOWN
-// event generated for this one.
-//
+/*
+ *
+ * Start 2 Spark instances, but block one from hearing another. Then
+ * shutdown the peer that cannot hear, and make sure there is no DOWN
+ * event generated for this one.
+ *
+ */
 TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   // Define interface names for the test
   mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -2029,28 +2111,36 @@ TEST_F(SparkFixture, IgnoreUnidirectionalPeer) {
   }
 
   {
-    // check for neighbor state on node1, should be WARM
-    // since will NOT receive helloMsg containing my own info
+    /*
+     * check for neighbor state on node1, should be WARM
+     * since will NOT receive helloMsg containing my own info
+     */
     EXPECT_TRUE(node1->getSparkNeighState(iface1, "node-2") == WARM);
     LOG(INFO) << "node-1 have neighbor: node-2 in WARM state";
 
-    // check for neighbor state on node2, should return std::nullopt
-    // since node2 can't receive pkt from node1
+    /*
+     * check for neighbor state on node2, should return std::nullopt
+     * since node2 can't receive pkt from node1
+     */
     EXPECT_FALSE(node2->getSparkNeighState(iface2, "node-1").has_value());
     LOG(INFO) << "node-2 doesn't have any neighbor";
   }
 }
 
-//
-// Start 1 Spark instace and make its interfaces connected to its own
-// Make sure pkt loop can be handled gracefully and no ADJ will be formed.
-//
+/*
+ *
+ * Start 1 Spark instace and make its interfaces connected to its own
+ * Make sure pkt loop can be handled gracefully and no ADJ will be formed.
+ *
+ */
 TEST_F(SparkFixture, LoopedHelloPktTest) {
   // Define interface names for the test
   mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}});
 
-  // connect iface1 directly with itself to mimick
-  // self-looped helloPkt
+  /*
+   * connect iface1 directly with itself to mimick
+   * self-looped helloPkt
+   */
   ConnectedIfPairs connectedPairs = {
       {iface1, {{iface1, 10}}},
   };
@@ -2085,13 +2175,15 @@ TEST_F(SparkFixture, LoopedHelloPktTest) {
   }
 }
 
-//
-// Start 2 Spark instances within different v4 subnet. Then
-// make sure they can't form adj as NEGOTIATION failed. Bring
-// down the interface and make sure no crash happened for tracked
-// neighbors. Then put them in same subnet, make sure instances
-// will form adj with each other.
-//
+/*
+ *
+ * Start 2 Spark instances within different v4 subnet. Then
+ * make sure they can't form adj as NEGOTIATION failed. Bring
+ * down the interface and make sure no crash happened for tracked
+ * neighbors. Then put them in same subnet, make sure instances
+ * will form adj with each other.
+ *
+ */
 TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   // Define interface names for the test
   mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -2113,8 +2205,10 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   auto node1 = createSpark("node-1", config1);
   auto node2 = createSpark("node-2", config2);
 
-  // enable v4 subnet validation to put adddres in different /31 subnet
-  // on purpose.
+  /*
+   * enable v4 subnet validation to put adddres in different /31 subnet
+   * on purpose.
+   */
   const folly::CIDRNetwork ip1V4WithSubnet =
       folly::IPAddress::createNetwork("192.168.0.2", 31);
   const folly::CIDRNetwork ip2V4WithSameSubnet =
@@ -2190,12 +2284,14 @@ TEST_F(SparkFixture, LinkDownWithoutAdjFormed) {
   }
 }
 
-//
-// Start 2 Spark instances within different v4 subnet. Then
-// make sure they can't form adj as NEGOTIATION failed. Check
-// neighbor state within NEGOTIATE/WARM depending on whether
-// new helloMsg is received.
-//
+/*
+ *
+ * Start 2 Spark instances within different v4 subnet. Then
+ * make sure they can't form adj as NEGOTIATION failed. Check
+ * neighbor state within NEGOTIATE/WARM depending on whether
+ * new helloMsg is received.
+ *
+ */
 TEST_F(SparkFixture, InvalidV4Subnet) {
   // Define interface names for the test
   mockIoProvider_->addIfNameIfIndex({{iface1, ifIndex1}, {iface2, ifIndex2}});
@@ -2220,8 +2316,10 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   auto node1 = createSpark(nodeName1, config1);
   auto node2 = createSpark(nodeName2, config2);
 
-  // enable v4 subnet validation to put adddres in different /31 subnet
-  // on purpose.
+  /*
+   * enable v4 subnet validation to put adddres in different /31 subnet
+   * on purpose.
+   */
   const folly::CIDRNetwork ip1V4WithSubnet =
       folly::IPAddress::createNetwork("192.168.0.2", 31);
   const folly::CIDRNetwork ip2V4WithDiffSubnet =
@@ -2276,28 +2374,36 @@ TEST_F(SparkFixture, InvalidV4Subnet) {
   }
 }
 
-//
-// Positive case for AREA:
-//
-// Start 2 Spark instances with areaConfig and make sure they
-// can form adj with each other in specified AREA.
-//
+/*
+ *
+ * Positive case for AREA:
+ *
+ * Start 2 Spark instances with areaConfig and make sure they
+ * can form adj with each other in specified AREA.
+ *
+ */
 TEST_F(SparkFixture, AreaMatch) {
-  // Explicitly set regex to be capital letters to make sure
-  // regex is NOT case-sensative
+  /*
+   * Explicitly set regex to be capital letters to make sure
+   * regex is NOT case-sensative
+   */
   auto areaConfig11 = createAreaConfig(area1, {"RSW.*"}, {".*"});
   auto areaConfig12 = createAreaConfig(area2, {"FSW.*"}, {".*"});
   auto areaConfig21 = createAreaConfig(area1, {"FSW.*"}, {".*"});
   auto areaConfig22 = createAreaConfig(area2, {"RSW.*"}, {".*"});
-  // overlaps with area2 config. node2 should choose aree2 config as it is lower
-  // alphabetically
+  /*
+   * overlaps with area2 config. node2 should choose aree2 config as it is lower
+   * alphabetically
+   */
   auto areaConfig23 = createAreaConfig(area3, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
   std::string nodeName2 = "fsw002";
 
-  // RSW: { 1 -> "RSW.*", 2 -> "FSW.*"}
-  // FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
+  /*
+   * RSW: { 1 -> "RSW.*", 2 -> "FSW.*"}
+   * FSW: { 1 -> "FSW.*", 2 -> "RSW.*"}
+   */
 
   std::vector<openr::thrift::AreaConfig> vec1 = {areaConfig11, areaConfig12};
   std::vector<openr::thrift::AreaConfig> vec2 = {
@@ -2359,20 +2465,24 @@ TEST_F(SparkFixture, AreaMatch) {
   }
 }
 
-//
-// Negative case for AREA:
-//
-// Start 2 Spark instances with areaConfig and make sure they
-// can NOT form adj due to wrong AREA regex matching.
-//
+/*
+ *
+ * Negative case for AREA:
+ *
+ * Start 2 Spark instances with areaConfig and make sure they
+ * can NOT form adj due to wrong AREA regex matching.
+ *
+ */
 TEST_F(SparkFixture, NoAreaMatch) {
-  // AreaConfig:
-  //  rsw001: { 1 -> "RSW.*"}
-  //  fsw002: { 1 -> "FSW.*"}
-  //
-  //  rsw001 and fsw002 will receive each other's helloMsg, but won't proceed.
-  //  rsw001 can ONLY pair with "RSW.*", whereas fsw002 can ONLY pair with
-  //  "FSW.*".
+  /*
+   * AreaConfig:
+   *  rsw001: { 1 -> "RSW.*"}
+   *  fsw002: { 1 -> "FSW.*"}
+   *
+   *  rsw001 and fsw002 will receive each other's helloMsg, but won't proceed.
+   *  rsw001 can ONLY pair with "RSW.*", whereas fsw002 can ONLY pair with
+   *  "FSW.*".
+   */
   auto areaConfig1 = createAreaConfig(area1, {"RSW.*"}, {".*"});
   auto areaConfig2 = createAreaConfig(area1, {"FSW.*"}, {".*"});
 
@@ -2441,22 +2551,26 @@ TEST_F(SparkFixture, NoAreaMatch) {
   }
 }
 
-//
-// Negative case for AREA:
-//
-// Start 2 Spark instances with areaConfig and make sure they
-// can NOT form adj due to inconsistent AREA negotiation result.
-//
+/*
+ *
+ * Negative case for AREA:
+ *
+ * Start 2 Spark instances with areaConfig and make sure they
+ * can NOT form adj due to inconsistent AREA negotiation result.
+ *
+ */
 TEST_F(SparkFixture, InconsistentAreaNegotiation) {
-  // AreaConfig:
-  //  rsw001: { 1 -> "FSW.*"}
-  //  fsw002: { 2 -> "RSW.*"}
-  //
-  //  rsw001 and fsw002 will receive each other's helloMsg and proceed to
-  //  NEGOTIATE stage. However, rsw001 thinks fsw002 should reside in
-  //  area "1", whereas fsw002 thinks rsw001 should be in area "2".
-  //
-  //  AREA negotiation won't go through. Will fall back to WARM
+  /*
+   * AreaConfig:
+   *  rsw001: { 1 -> "FSW.*"}
+   *  fsw002: { 2 -> "RSW.*"}
+   *
+   *  rsw001 and fsw002 will receive each other's helloMsg and proceed to
+   *  NEGOTIATE stage. However, rsw001 thinks fsw002 should reside in
+   *  area "1", whereas fsw002 thinks rsw001 should be in area "2".
+   *
+   *  AREA negotiation won't go through. Will fall back to WARM
+   */
   auto areaConfig1 = createAreaConfig(area1, {"FSW.*"}, {".*"});
   auto areaConfig2 = createAreaConfig(area2, {"RSW.*"}, {".*"});
 
@@ -2530,22 +2644,26 @@ TEST_F(SparkFixture, InconsistentAreaNegotiation) {
   }
 }
 
-//
-// Positive case for AREA:
-//
-// Start 1 Spark without AREA config supported, whereas starting
-// another Spark with areaConfig passed in. Make sure they can
-// form adj in `defaultArea` for backward compatibility.
-//
+/*
+ *
+ * Positive case for AREA:
+ *
+ * Start 1 Spark without AREA config supported, whereas starting
+ * another Spark with areaConfig passed in. Make sure they can
+ * form adj in `defaultArea` for backward compatibility.
+ *
+ */
 TEST_F(SparkFixture, NoAreaSupportNegotiation) {
-  // AreaConfig:
-  //  rsw001: {}
-  //  fsw002: { 2 -> "RSW.*"}
-  //
-  //  rsw001 doesn't know anything about AREA, whereas fsw002 is configured
-  //  with areaConfig. Make sure AREA negotiation will go through
-  //  rsw001 form adj inside `defaultArea`.
-  //  fsw002 form adj inside `2`
+  /*
+   * AreaConfig:
+   *  rsw001: {}
+   *  fsw002: { 2 -> "RSW.*"}
+   *
+   *  rsw001 doesn't know anything about AREA, whereas fsw002 is configured
+   *  with areaConfig. Make sure AREA negotiation will go through
+   *  rsw001 form adj inside `defaultArea`.
+   *  fsw002 form adj inside `2`
+   */
   auto areaConfig2 = createAreaConfig(area2, {"RSW.*"}, {".*"});
 
   std::string nodeName1 = "rsw001";
@@ -2606,22 +2724,26 @@ TEST_F(SparkFixture, NoAreaSupportNegotiation) {
   }
 }
 
-//
-// Start 2 Spark with AREA config supported and make sure they can
-// form adj. Then add another Spark. Make sure 3rd Spark instance
-// can form adj with different peers within different area over the
-// same interface.
-//
+/*
+ *
+ * Start 2 Spark with AREA config supported and make sure they can
+ * form adj. Then add another Spark. Make sure 3rd Spark instance
+ * can form adj with different peers within different area over the
+ * same interface.
+ *
+ */
 TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
-  // AreaConfig:
-  //  rsw001: { 1 -> {"FSW.*"}, 2 -> {"SSW.*"}}
-  //  fsw002: { 1 -> {"RSW.*", "SSW.*"}}
-  //  ssw003: { 1 -> {"FSW.*"}, 2 -> {"RSW.*"}}
-  //
-  //  Based on topology setup, expected adj pairs:
-  //    rsw001 <==> fsw002
-  //    fsw002 <==> ssw003
-  //    ssw003 <==> rsw001
+  /*
+   * AreaConfig:
+   *  rsw001: { 1 -> {"FSW.*"}, 2 -> {"SSW.*"}}
+   *  fsw002: { 1 -> {"RSW.*", "SSW.*"}}
+   *  ssw003: { 1 -> {"FSW.*"}, 2 -> {"RSW.*"}}
+   *
+   *  Based on topology setup, expected adj pairs:
+   *    rsw001 <==> fsw002
+   *    fsw002 <==> ssw003
+   *    ssw003 <==> rsw001
+   */
   auto areaConfig11 = createAreaConfig(area1, {"FSW.*"}, {".*"});
   auto areaConfig12 = createAreaConfig(area2, {"SSW.*"}, {".*"});
   auto areaConfig2 = createAreaConfig(area1, {"RSW.*", "SSW.*"}, {".*"});
@@ -2763,9 +2885,11 @@ TEST_F(SparkFixture, MultiplePeersWithDiffAreaOverSameLink) {
   }
 }
 
-//
-// Test v6 link-local address change
-//
+/*
+ *
+ * Test v6 link-local address change
+ *
+ */
 TEST_F(SimpleSparkFixture, V6LinkLocalAddressChange) {
   // Establish initial adjacency
   createAndConnect();
@@ -2822,9 +2946,11 @@ TEST_F(SimpleSparkFixture, V6LinkLocalAddressChange) {
   }
 }
 
-//
-// Test v4 address change triggers
-//
+/*
+ *
+ * Test v4 address change triggers
+ *
+ */
 TEST_F(SimpleSparkFixture, V4AddressChange) {
   // Establish initial adjacency
   createAndConnect();
@@ -2887,11 +3013,13 @@ main(int argc, char* argv[]) {
   return RUN_ALL_TESTS();
 }
 
-//
-// Verify that consecutive handshake messages serialize correctly when using
-// the same buffer (packetBuffer_) by performing multiple interface flaps and
-// verifying successful neighbor re-establishment each time.
-//
+/*
+ *
+ * Verify that consecutive handshake messages serialize correctly when using
+ * the same buffer (packetBuffer_) by performing multiple interface flaps and
+ * verifying successful neighbor re-establishment each time.
+ *
+ */
 TEST_F(SimpleSparkFixture, ConsecutiveHandshakeMsgBufferReuseTest) {
   // create Spark instances and establish connections
   createAndConnect();
@@ -2900,9 +3028,11 @@ TEST_F(SimpleSparkFixture, ConsecutiveHandshakeMsgBufferReuseTest) {
   ASSERT_EQ(node1_->getSparkNeighState(iface1, nodeName2_), ESTABLISHED);
   ASSERT_EQ(node2_->getSparkNeighState(iface2, nodeName1_), ESTABLISHED);
 
-  // Perform multiple interface flaps to trigger consecutive handshake messages
-  // Each flap causes: hello msgs -> handshake msgs -> heartbeat msgs
-  // All using the same packetBuffer_, testing buffer reuse correctness
+  /*
+   * Perform multiple interface flaps to trigger consecutive handshake messages
+   * Each flap causes: hello msgs -> handshake msgs -> heartbeat msgs
+   * All using the same packetBuffer_, testing buffer reuse correctness
+   */
   constexpr int kNumFlaps = 3;
 
   for (int i = 0; i < kNumFlaps; ++i) {
@@ -2947,9 +3077,11 @@ TEST_F(SimpleSparkFixture, ConsecutiveHandshakeMsgBufferReuseTest) {
       EXPECT_EQ(nodeName1_, event.remoteNodeName);
     }
 
-    // Verify neighbors are back in ESTABLISHED state after each flap
-    // If buffer reuse caused corruption, handshake would fail and
-    // neighbors wouldn't reach ESTABLISHED state
+    /*
+     * Verify neighbors are back in ESTABLISHED state after each flap
+     * If buffer reuse caused corruption, handshake would fail and
+     * neighbors wouldn't reach ESTABLISHED state
+     */
     ASSERT_EQ(node1_->getSparkNeighState(iface1, nodeName2_), ESTABLISHED);
     ASSERT_EQ(node2_->getSparkNeighState(iface2, nodeName1_), ESTABLISHED);
     ASSERT_EQ(node1_->getTotalNeighborCount(), 1);
@@ -2957,35 +3089,37 @@ TEST_F(SimpleSparkFixture, ConsecutiveHandshakeMsgBufferReuseTest) {
   }
 }
 
-//
-// Verify that Spark recovers adjacency after a crash-loop on one side.
-//
-// This test reproduces an asymmetric adjacency deadlock that occurs when one
-// node crash-loops (rapid kill-restart cycles). The crash-loop causes the two
-// nodes to fall out of sync in the Spark state machine:
-//
-//   1. The stable node (node1) ends up in WARM state for the restarting peer,
-//      because each rapid restart resets seq numbers and triggers RESTART
-//      detection, and eventually the GR timer expires, bringing node1 to IDLE.
-//
-//   2. The restarting node (node2), once it finally stabilizes, discovers node1
-//      quickly and enters NEGOTIATE → ESTABLISHED. But node1 is still in WARM
-//      and never sends heartbeats, so node2's heartbeat hold timer (holdTime)
-//      expires and it drops back to IDLE — erasing node1 from its neighbor
-//      tracking entirely.
-//
-//   3. Node1 eventually receives node2's hello with its info and enters
-//      NEGOTIATE. But by now node2 has erased node1 (step 2) and doesn't
-//      respond to node1's handshake. Node1's negotiate timer expires (3s)
-//      and falls back to WARM. This cycle repeats indefinitely.
-//
-// The fix in processHandshakeMsg promotes a WARM-state node to NEGOTIATE when
-// it receives a handshake, then processes that handshake to reach ESTABLISHED
-// in one shot — breaking the deadlock.
-//
-// Without the fix, node1 remains stuck in WARM and the test would timeout
-// waiting for NB_UP. With the fix, both sides reach ESTABLISHED.
-//
+/*
+ *
+ * Verify that Spark recovers adjacency after a crash-loop on one side.
+ *
+ * This test reproduces an asymmetric adjacency deadlock that occurs when one
+ * node crash-loops (rapid kill-restart cycles). The crash-loop causes the two
+ * nodes to fall out of sync in the Spark state machine:
+ *
+ *   1. The stable node (node1) ends up in WARM state for the restarting peer,
+ *      because each rapid restart resets seq numbers and triggers RESTART
+ *      detection, and eventually the GR timer expires, bringing node1 to IDLE.
+ *
+ *   2. The restarting node (node2), once it finally stabilizes, discovers node1
+ *      quickly and enters NEGOTIATE → ESTABLISHED. But node1 is still in WARM
+ *      and never sends heartbeats, so node2's heartbeat hold timer (holdTime)
+ *      expires and it drops back to IDLE — erasing node1 from its neighbor
+ *      tracking entirely.
+ *
+ *   3. Node1 eventually receives node2's hello with its info and enters
+ *      NEGOTIATE. But by now node2 has erased node1 (step 2) and doesn't
+ *      respond to node1's handshake. Node1's negotiate timer expires (3s)
+ *      and falls back to WARM. This cycle repeats indefinitely.
+ *
+ * The fix in processHandshakeMsg promotes a WARM-state node to NEGOTIATE when
+ * it receives a handshake, then processes that handshake to reach ESTABLISHED
+ * in one shot — breaking the deadlock.
+ *
+ * Without the fix, node1 remains stuck in WARM and the test would timeout
+ * waiting for NB_UP. With the fix, both sides reach ESTABLISHED.
+ *
+ */
 TEST_F(SimpleSparkFixture, CrashLoopRecoveryTest) {
   // Establish initial adjacency between node1 and node2
   createAndConnect();
@@ -3000,19 +3134,21 @@ TEST_F(SimpleSparkFixture, CrashLoopRecoveryTest) {
   auto holdTime =
       std::chrono::seconds(*config1_->getSparkConfig().hold_time_s());
 
-  // -----------------------------------------------------------------------
-  // Phase 1: Disconnect and simulate a crash-loop on node2.
-  //
-  // Disconnect the two nodes so that node1 cannot receive any hellos or
-  // handshakes from the restarting node2. This ensures that node1's GR
-  // timer expires and node2 is fully erased from node1's neighbor tracking
-  // — reproducing the production scenario where the stable node ends up
-  // with a clean slate (IDLE, no neighbor entry) after the crash-loop.
-  //
-  // Without the disconnect, node1 would discover the new node2 instance
-  // within the GR window and recover via the normal RESTART→NEGOTIATE path,
-  // which doesn't exercise the fix.
-  // -----------------------------------------------------------------------
+  /*
+   * -----------------------------------------------------------------------
+   * Phase 1: Disconnect and simulate a crash-loop on node2.
+   *
+   * Disconnect the two nodes so that node1 cannot receive any hellos or
+   * handshakes from the restarting node2. This ensures that node1's GR
+   * timer expires and node2 is fully erased from node1's neighbor tracking
+   * — reproducing the production scenario where the stable node ends up
+   * with a clean slate (IDLE, no neighbor entry) after the crash-loop.
+   *
+   * Without the disconnect, node1 would discover the new node2 instance
+   * within the GR window and recover via the normal RESTART→NEGOTIATE path,
+   * which doesn't exercise the fix.
+   * -----------------------------------------------------------------------
+   */
   ConnectedIfPairs emptyPairs = {};
   mockIoProvider_->setConnectedPairs(emptyPairs);
 
@@ -3039,18 +3175,20 @@ TEST_F(SimpleSparkFixture, CrashLoopRecoveryTest) {
 
   LOG(INFO) << "Crash-loop ended. Final node2 instance is now stable.";
 
-  // -----------------------------------------------------------------------
-  // Phase 2: Wait for node1's GR timer to expire.
-  //
-  // While disconnected, node1 transitions:
-  //   ESTABLISHED → RESTART (detected seq# jump from crash-loop hellos
-  //   that arrived before disconnect, or missed hellos)
-  //   → GR timer expires → IDLE → neighbor erased
-  //
-  // After this, node1 has no knowledge of node2. This is the exact state
-  // observed in production after the qxt1 crash-loop: the stable side
-  // (qxs1) had its GR timer expire and erased the neighbor.
-  // -----------------------------------------------------------------------
+  /*
+   * -----------------------------------------------------------------------
+   * Phase 2: Wait for node1's GR timer to expire.
+   *
+   * While disconnected, node1 transitions:
+   *   ESTABLISHED → RESTART (detected seq# jump from crash-loop hellos
+   *   that arrived before disconnect, or missed hellos)
+   *   → GR timer expires → IDLE → neighbor erased
+   *
+   * After this, node1 has no knowledge of node2. This is the exact state
+   * observed in production after the qxt1 crash-loop: the stable side
+   * (qxs1) had its GR timer expire and erased the neighbor.
+   * -----------------------------------------------------------------------
+   */
   {
     LOG(INFO) << "Waiting for node1 to declare node2 DOWN (GR timer expiry).";
     auto events = node1_->waitForEvents(NB_DOWN);
@@ -3064,25 +3202,27 @@ TEST_F(SimpleSparkFixture, CrashLoopRecoveryTest) {
   ASSERT_EQ(node1_->getActiveNeighborCount(), 0);
   checkTotalNeighborCountWithTimeout(node1_);
 
-  // -----------------------------------------------------------------------
-  // Phase 3: Reconnect and verify fresh adjacency formation.
-  //
-  // Restore connectivity between the interfaces. Both nodes now go through
-  // fresh neighbor discovery:
-  //   IDLE → WARM (receive hello) → NEGOTIATE (receive hello with our info)
-  //                                → ESTABLISHED (complete handshake)
-  //
-  // In the production deadlock scenario, the timing was such that one side
-  // reached ESTABLISHED while the other was still in WARM. The ESTABLISHED
-  // side's heartbeat timer would expire (no heartbeats from the WARM peer),
-  // it would drop to IDLE and erase the neighbor, and the cycle would
-  // repeat forever.
-  //
-  // The fix in processHandshakeMsg breaks this deadlock: when a node in
-  // WARM receives a handshake, it proactively promotes to NEGOTIATE and
-  // processes the handshake to reach ESTABLISHED in one shot, rather than
-  // passively waiting for the hello exchange to catch up.
-  // -----------------------------------------------------------------------
+  /*
+   * -----------------------------------------------------------------------
+   * Phase 3: Reconnect and verify fresh adjacency formation.
+   *
+   * Restore connectivity between the interfaces. Both nodes now go through
+   * fresh neighbor discovery:
+   *   IDLE → WARM (receive hello) → NEGOTIATE (receive hello with our info)
+   *                                → ESTABLISHED (complete handshake)
+   *
+   * In the production deadlock scenario, the timing was such that one side
+   * reached ESTABLISHED while the other was still in WARM. The ESTABLISHED
+   * side's heartbeat timer would expire (no heartbeats from the WARM peer),
+   * it would drop to IDLE and erase the neighbor, and the cycle would
+   * repeat forever.
+   *
+   * The fix in processHandshakeMsg breaks this deadlock: when a node in
+   * WARM receives a handshake, it proactively promotes to NEGOTIATE and
+   * processes the handshake to reach ESTABLISHED in one shot, rather than
+   * passively waiting for the hello exchange to catch up.
+   * -----------------------------------------------------------------------
+   */
   LOG(INFO) << "Reconnecting interfaces. Waiting for adjacency to re-form.";
 
   ConnectedIfPairs connectedPairs = {
@@ -3130,15 +3270,17 @@ TEST_F(SimpleSparkFixture, CrashLoopRecoveryTest) {
   ASSERT_EQ(node1_->getActiveNeighborCount(), 1);
   ASSERT_EQ(node2_->getActiveNeighborCount(), 1);
 
-  // -----------------------------------------------------------------------
-  // Phase 4: Verify stability — adjacency must not flap after recovery.
-  //
-  // Without the fix, even if the adjacency momentarily forms, it would
-  // immediately flap because one side never reaches ESTABLISHED (stuck in
-  // WARM), so it never sends heartbeats, causing the other side's heartbeat
-  // hold timer to expire. Verify that no DOWN event occurs for at least
-  // 3x the hold time — well beyond the heartbeat expiry window.
-  // -----------------------------------------------------------------------
+  /*
+   * -----------------------------------------------------------------------
+   * Phase 4: Verify stability — adjacency must not flap after recovery.
+   *
+   * Without the fix, even if the adjacency momentarily forms, it would
+   * immediately flap because one side never reaches ESTABLISHED (stuck in
+   * WARM), so it never sends heartbeats, causing the other side's heartbeat
+   * hold timer to expire. Verify that no DOWN event occurs for at least
+   * 3x the hold time — well beyond the heartbeat expiry window.
+   * -----------------------------------------------------------------------
+   */
   auto stabilityWindow = holdTime * 3;
 
   LOG(INFO) << "Verifying adjacency stability for " << stabilityWindow.count()

@@ -76,8 +76,10 @@ std::tuple<
     std::chrono::microseconds /* kernel timestamp */>
 IoProvider::recvMessage(
     int fd, unsigned char* buf, int len, openr::IoProvider* ioProvider) {
-  // the control message buffer
-  // XXX: hardcoded, but this hardly should be a problem
+  /*
+   * the control message buffer
+   * XXX: hardcoded, but this hardly should be a problem
+   */
   union {
     char ctrlBuf[CMSG_SPACE(1024)];
     struct cmsghdr align;
@@ -94,14 +96,18 @@ IoProvider::recvMessage(
 
   ::memset(&msg, 0, sizeof(msg));
 
-  // we only expect to receive one block of data, single entry
-  // in the vector
+  /*
+   * we only expect to receive one block of data, single entry
+   * in the vector
+   */
   msg.msg_iov = &entry;
   msg.msg_iovlen = 1;
 
-  // this part is important - if we don't zero the buffer,
-  // the CMSG_NXTHDR may burp, because it tries extracting
-  // fields from "next header" in the buffer
+  /*
+   * this part is important - if we don't zero the buffer,
+   * the CMSG_NXTHDR may burp, because it tries extracting
+   * fields from "next header" in the buffer
+   */
   ::memset(&u.ctrlBuf[0], 0, sizeof(u.ctrlBuf));
 
   // control message buffer used to receive dest IP from the kernel
@@ -129,8 +135,10 @@ IoProvider::recvMessage(
     throw std::runtime_error("Message truncated");
   }
 
-  // grab the inIndex we received this packet on and the hopLimit
-  // those are available since we requested them via socket options
+  /*
+   * grab the inIndex we received this packet on and the hopLimit
+   * those are available since we requested them via socket options
+   */
   struct cmsghdr* cmsg{nullptr};
   int ifIndex{-1};
   int hopLimit{0};
@@ -211,8 +219,10 @@ IoProvider::sendMessage(
   msg.msg_name = reinterpret_cast<void*>(&addrStorage);
   msg.msg_namelen = dstAddr.getActualSize();
 
-  // set the source address and source if index for this message
-  // this goes into ancilliary data fields
+  /*
+   * set the source address and source if index for this message
+   * this goes into ancilliary data fields
+   */
   msg.msg_control = u.cbuf;
   msg.msg_controllen = sizeof(u.cbuf);
   cmsg = CMSG_FIRSTHDR(&msg);

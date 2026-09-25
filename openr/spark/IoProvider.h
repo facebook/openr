@@ -20,19 +20,23 @@
 
 namespace openr {
 
-//
-// This class provides API to mock some syscalls that
-// could be useful for testing. The default version
-// simply forwards to the system implementation
-//
+/*
+ *
+ * This class provides API to mock some syscalls that
+ * could be useful for testing. The default version
+ * simply forwards to the system implementation
+ *
+ */
 class IoProvider {
  public:
   IoProvider() = default;
   virtual ~IoProvider() = default;
 
-  //
-  // mocked syscalls
-  //
+  /*
+   *
+   * mocked syscalls
+   *
+   */
   virtual int socket(int domain, int type, int protocol);
 
   virtual int fcntl(int fd, int cmd, int arg);

@@ -18,10 +18,12 @@ SparkWrapper::SparkWrapper(
     std::shared_ptr<const Config> config,
     bool isRateLimitEnabled)
     : myNodeName_(myNodeName), config_(config) {
-  // apply isRateLimitEnabled.
-  // Using a plain bool enable/disable for rate-limit here, to leave
-  // the knowledge of the default contained in Spark (and not re-specify it
-  // here).
+  /*
+   * apply isRateLimitEnabled.
+   * Using a plain bool enable/disable for rate-limit here, to leave
+   * the knowledge of the default contained in Spark (and not re-specify it
+   * here).
+   */
   spark_ = isRateLimitEnabled
       ? std::make_shared<Spark>(
             interfaceUpdatesQueue_.getReader(),
@@ -42,8 +44,10 @@ SparkWrapper::SparkWrapper(
             version
             // Go with the default Spark rate-limit
         );
-  // For testing - fuzz testing particularly - we want parsing errors to
-  // be thrown upward, not suppressed.
+  /*
+   * For testing - fuzz testing particularly - we want parsing errors to
+   * be thrown upward, not suppressed.
+   */
   spark_->setThrowParserErrors(true);
 
   // start spark

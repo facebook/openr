@@ -24,23 +24,29 @@
 namespace fb303 = facebook::fb303;
 
 namespace {
-//
-// The min size of IPv6 packet is 1280 bytes. We use this
-// so we don't have to care about MTU size/discovery
-//
+/*
+ *
+ * The min size of IPv6 packet is 1280 bytes. We use this
+ * so we don't have to care about MTU size/discovery
+ *
+ */
 const int kMinIpv6Mtu = 1280;
 
-//
-// The acceptable hop limit, assuming we send packets with this TTL
-//
+/*
+ *
+ * The acceptable hop limit, assuming we send packets with this TTL
+ *
+ */
 const int kSparkHopLimit = 255;
 
 // number of restarting packets to send out per interface before I'm going down
 const int kNumRestartingPktSent = 3;
 
-//
-// Subscribe/unsubscribe to a multicast group on given interface
-//
+/*
+ *
+ * Subscribe/unsubscribe to a multicast group on given interface
+ *
+ */
 bool
 toggleMcastGroup(
     int fd,
@@ -324,8 +330,10 @@ Spark::Spark(
           numBuckets, sec);
     }
   }
-  // Timer scheduled with lower bound timeout, after which  NEIGHBOR_DISCOVERED
-  // initialization signal may be published to LM over neighborUpdatesQueue_.
+  /*
+   * Timer scheduled with lower bound timeout, after which  NEIGHBOR_DISCOVERED
+   * initialization signal may be published to LM over neighborUpdatesQueue_.
+   */
   minNeighborDiscoveryIntervalTimer_ =
       folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
         XLOGF(
@@ -340,8 +348,10 @@ Spark::Spark(
           maxNeighborDiscoveryIntervalTimer_->cancelTimeout();
           initialNeighborsDiscovered();
         } else {
-          // Defer until the pending neighbors become active or the
-          // maxNeighborDiscoveryInterval expires.
+          /*
+           * Defer until the pending neighbors become active or the
+           * maxNeighborDiscoveryInterval expires.
+           */
           XLOGF(
               INFO,
               "[Initialization] Deferring publishing  NEIGHBOR_DISCOVERED"
@@ -350,8 +360,10 @@ Spark::Spark(
         }
       });
 
-  // Timer scheduled with upper bound timeout, after which  NEIGHBOR_DISCOVERED
-  // initialization signal must be published to LM over neighborUpdatesQueue_.
+  /*
+   * Timer scheduled with upper bound timeout, after which  NEIGHBOR_DISCOVERED
+   * initialization signal must be published to LM over neighborUpdatesQueue_.
+   */
   maxNeighborDiscoveryIntervalTimer_ =
       folly::AsyncTimeout::make(*getEvb(), [this]() noexcept {
         XLOGF(
@@ -375,12 +387,14 @@ Spark::Spark(
       }
 
       if (!initialInterfacesReceived_) {
-        // Set up min-max interval related timers that control when Spark can
-        // publish the NEIGHBOR_DISCOVERED signal to LinkMonitor. The min
-        // interval is a lower bound that must elapse before considering
-        // publishing this signal while the max interval is an upper bound at
-        // which point the signal must be published, if signal has still not
-        // been sent.
+        /*
+         * Set up min-max interval related timers that control when Spark can
+         * publish the NEIGHBOR_DISCOVERED signal to LinkMonitor. The min
+         * interval is a lower bound that must elapse before considering
+         * publishing this signal while the max interval is an upper bound at
+         * which point the signal must be published, if signal has still not
+         * been sent.
+         */
         minNeighborDiscoveryIntervalTimer_->scheduleTimeout(
             minNeighborDiscoveryInterval_);
         maxNeighborDiscoveryIntervalTimer_->scheduleTimeout(
@@ -774,8 +788,10 @@ Spark::parsePacket(
 PacketValidationResult
 Spark::validateV4AddressSubnet(
     std::string const& ifName, thrift::BinaryAddress neighV4Addr) {
-  // validate v4 address subnet
-  // make sure v4 address is already specified on neighbor
+  /*
+   * validate v4 address subnet
+   * make sure v4 address is already specified on neighbor
+   */
   auto const& myV4Network = interfaceDb_.at(ifName).v4Network;
   auto const& myV4Addr = myV4Network.first;
   auto const& myV4PrefixLen = myV4Network.second;
@@ -854,15 +870,17 @@ Spark::processRttChange(
 
 std::chrono::microseconds
 Spark::rttRounding(int64_t const rtt) {
-  // Mask off to millisecond accuracy!
-  //
-  // Reason => For practical Wide Area Networks(WAN) scenario.
-  // Having accuracy up to milliseconds is sufficient.
-  //
-  // Further, load on system can heavily influence rtt measurement in
-  // microseconds as we do calculation in user-space. Also when Open/R
-  // process restarts on neighbor node, measurement will more likely
-  // to be the same as previous one.
+  /*
+   * Mask off to millisecond accuracy!
+   *
+   * Reason => For practical Wide Area Networks(WAN) scenario.
+   * Having accuracy up to milliseconds is sufficient.
+   *
+   * Further, load on system can heavily influence rtt measurement in
+   * microseconds as we do calculation in user-space. Also when Open/R
+   * process restarts on neighbor node, measurement will more likely
+   * to be the same as previous one.
+   */
   return std::chrono::microseconds(
       std::max(rtt / 1000 * 1000, std::chrono::microseconds(1000).count()));
 }
@@ -920,9 +938,11 @@ Spark::updateNeighborRtt(
   // rounding rtt value to milisecond
   rtt = rttRounding(rtt.count());
 
-  // It is possible for things to go wrong in RTT calculation because of
-  // clock adjustment.
-  // Next measurements will correct this wrong measurement.
+  /*
+   * It is possible for things to go wrong in RTT calculation because of
+   * clock adjustment.
+   * Next measurements will correct this wrong measurement.
+   */
   if (rtt.count() < 0) {
     XLOGF(
         ERR,
@@ -967,9 +987,11 @@ Spark::sendHandshakeMsg(
     XLOGF(ERR, "[SparkHandshakeMsg] Failed sending pkt over: {}", ifName);
   };
 
-  // in some cases, getting link-local address may fail and throw
-  // e.g. when iface has not yet auto-configured it, or iface is removed but
-  // down event has not arrived yet
+  /*
+   * in some cases, getting link-local address may fail and throw
+   * e.g. when iface has not yet auto-configured it, or iface is removed but
+   * down event has not arrived yet
+   */
   const auto& interfaceEntry = interfaceDb_.at(ifName);
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v4Addr = interfaceEntry.v4Network.first;
@@ -1062,9 +1084,11 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
     return;
   }
 
-  // in some cases, getting link-local address may fail and throw
-  // e.g. when iface has not yet auto-configured it, or iface is removed but
-  // down event has not arrived yet
+  /*
+   * in some cases, getting link-local address may fail and throw
+   * e.g. when iface has not yet auto-configured it, or iface is removed but
+   * down event has not arrived yet
+   */
   const auto& interfaceEntry = interfaceDb_.at(ifName);
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
@@ -1074,8 +1098,10 @@ Spark::sendHeartbeatMsg(std::string const& ifName) {
   heartbeatMsg.nodeName() = getMyNodeName(ifName);
   heartbeatMsg.seqNum() = mySeqNum_;
   heartbeatMsg.holdAdjacency() = false;
-  // ATTN: notify peer to set special adjacency flag when node is still within
-  // initialization procedure
+  /*
+   * ATTN: notify peer to set special adjacency flag when node is still within
+   * initialization procedure
+   */
   heartbeatMsg.holdAdjacency() = (!initialized_);
 
   thrift::SparkHelloPacket pkt;
@@ -1192,9 +1218,11 @@ Spark::floodRestartingMsg() {
   folly::Promise<folly::Unit> promise;
   auto sf = promise.getSemiFuture();
   runInEventBaseThread([this, p = std::move(promise)]() mutable {
-    // send out restarting packets for all interfaces before I'm going down
-    // here we are sending duplicate restarting packets (kNumRestartingPktSent
-    // times per interface) in case some packets get lost
+    /*
+     * send out restarting packets for all interfaces before I'm going down
+     * here we are sending duplicate restarting packets (kNumRestartingPktSent
+     * times per interface) in case some packets get lost
+     */
     for (int i = 0; i < kNumRestartingPktSent; ++i) {
       for (const auto& [ifName, _] : interfaceDb_) {
         sendHelloMsg(
@@ -1292,10 +1320,12 @@ Spark::neighborUpWrapper(
   // add neighborName to collection
   addToActiveNeighbors(ifName, neighborName);
 
-  // Notify LinkMonitor about neighbor UP event.
-  // ATTN: both WARM_BOOT(GR) and COLD_BOOT shared the SAME:
-  // negotiation -> established state transiion.
-  // Differentiate them by reporting different types of events.
+  /*
+   * Notify LinkMonitor about neighbor UP event.
+   * ATTN: both WARM_BOOT(GR) and COLD_BOOT shared the SAME:
+   * negotiation -> established state transiion.
+   * Differentiate them by reporting different types of events.
+   */
   if (neighbor.gracefulRestartHoldTimer) {
     // stop the graceful-restart hold-timer
     neighbor.gracefulRestartHoldTimer.reset();
@@ -1489,8 +1519,10 @@ Spark::processNegotiateTimeout(
 void
 Spark::processGRTimeout(
     std::string const& ifName, std::string const& neighborName) {
-  // spark neighbor must exist if the negotiate hold-timer call back gets
-  // called.
+  /*
+   * spark neighbor must exist if the negotiate hold-timer call back gets
+   * called.
+   */
   auto& ifNeighbors = sparkNeighbors_.at(ifName);
   auto& neighbor = ifNeighbors.at(neighborName);
 
@@ -1658,17 +1690,21 @@ Spark::processHelloMsg(
   auto neighborIt = ifNeighbors.find(neighborName);
 
   if (neighborIt == ifNeighbors.end()) {
-    // deduce area for neighbor
-    // TODO: Spark is yet to support area change due to dynamic configuration.
-    //       To avoid running area deducing logic for every single helloMsg,
-    //       ONLY deduce for unknown neighbors.
+    /*
+     * deduce area for neighbor
+     * TODO: Spark is yet to support area change due to dynamic configuration.
+     *       To avoid running area deducing logic for every single helloMsg,
+     *       ONLY deduce for unknown neighbors.
+     */
     auto areaId = getNeighborArea(neighborName, ifName, config_->getAreas());
     if (!areaId.has_value()) {
       return;
     }
 
-    // Report RTT change
-    // capture ifName & originator by copy
+    /*
+     * Report RTT change
+     * capture ifName & originator by copy
+     */
     auto rttChangeCb = [this, ifName, neighborName](const int64_t& newRtt) {
       processRttChange(ifName, neighborName, newRtt);
     };
@@ -1723,8 +1759,10 @@ Spark::processHelloMsg(
       neighborName,
       apache::thrift::util::enumNameSafe(neighbor.state));
 
-  // for neighbor in fast initial state and does not see us yet,
-  // reply for quick convergence
+  /*
+   * for neighbor in fast initial state and does not see us yet,
+   * reply for quick convergence
+   */
   if (*helloMsg.solicitResponse()) {
     XLOGF(
         DBG2,
@@ -1749,12 +1787,14 @@ Spark::processHelloMsg(
       return;
     }
 
-    // My node's Seq# seen from neighbor should NOT be higher than ours
-    // since it always received helloMsg sent previously. If it is the
-    // case, it normally means we have recently restarted ourself.
-    //
-    // Ignore this helloMsg from my previous incarnation.
-    // Wait for neighbor to catch up with the latest Seq#.
+    /*
+     * My node's Seq# seen from neighbor should NOT be higher than ours
+     * since it always received helloMsg sent previously. If it is the
+     * case, it normally means we have recently restarted ourself.
+     *
+     * Ignore this helloMsg from my previous incarnation.
+     * Wait for neighbor to catch up with the latest Seq#.
+     */
     const uint64_t myRemoteSeqNum =
         static_cast<uint64_t>(*neighborInfos.at(myNodeName).seqNum());
     if (myRemoteSeqNum >= mySeqNum_) {
@@ -1842,16 +1882,20 @@ Spark::processHelloMsg(
       }
     }
   } else if (neighbor.state == thrift::SparkNeighState::RESTART) {
-    // Neighbor is undergoing restart. Will reply immediately for hello msg for
-    // quick adjacency establishment.
+    /*
+     * Neighbor is undergoing restart. Will reply immediately for hello msg for
+     * quick adjacency establishment.
+     */
     if (tsIt == neighborInfos.end()) {
       // Neighbor is NOT aware of us, ignore helloMsg
       return;
     }
 
     if (neighbor.seqNum < remoteSeqNum) {
-      // By going here, it means this node missed ALL of the helloMsg sent-out
-      // after neighbor 'restarting' itself. Will let GR timer to handle it.
+      /*
+       * By going here, it means this node missed ALL of the helloMsg sent-out
+       * after neighbor 'restarting' itself. Will let GR timer to handle it.
+       */
       XLOGF(
           WARNING,
           "[SparkHelloMsg] Unexpected Seq#:{} received from neighbor: {}, local Seq#: {}",
@@ -1893,8 +1937,10 @@ Spark::processHandshakeMsg(
     return;
   }
 
-  // Ignore handshakeMsg if I am NOT the receiver as AREA negotiation
-  // is point-to-point
+  /*
+   * Ignore handshakeMsg if I am NOT the receiver as AREA negotiation
+   * is point-to-point
+   */
   if (auto neighborNodeName = handshakeMsg.neighborNodeName()) {
     std::string myNodeName = getMyNodeName(ifName);
     if (*neighborNodeName != myNodeName) {
@@ -1907,10 +1953,12 @@ Spark::processHandshakeMsg(
     }
   }
 
-  // under quick flapping of Openr, msg can come out-of-order.
-  // handshakeMsg will ONLY be processed when:
-  //  1). neighbor is tracked on ifName;
-  //  2). neighbor is under NEGOTIATE stage;
+  /*
+   * under quick flapping of Openr, msg can come out-of-order.
+   * handshakeMsg will ONLY be processed when:
+   *  1). neighbor is tracked on ifName;
+   *  2). neighbor is under NEGOTIATE stage;
+   */
   auto& ifNeighbors = sparkNeighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
   if (neighborIt == ifNeighbors.end()) {
@@ -1920,13 +1968,15 @@ Spark::processHandshakeMsg(
 
   auto& neighbor = neighborIt->second;
 
-  // for quick convergence, reply immediately if neighbor
-  // hasn't form adjacency with us yet.
-  //
-  // ATTN: in case of v4 subnet validation fails, neighbor
-  //       state will fall back from NEGOTIATE => WARM.
-  //       Node should NOT ask for handshakeMsg reply to
-  //       avoid infinite loop of pkt between nodes.
+  /*
+   * for quick convergence, reply immediately if neighbor
+   * hasn't form adjacency with us yet.
+   *
+   * ATTN: in case of v4 subnet validation fails, neighbor
+   *       state will fall back from NEGOTIATE => WARM.
+   *       Node should NOT ask for handshakeMsg reply to
+   *       avoid infinite loop of pkt between nodes.
+   */
   if (!(*handshakeMsg.isAdjEstablished())) {
     sendHandshakeMsg(
         ifName,
@@ -1935,47 +1985,49 @@ Spark::processHandshakeMsg(
         neighbor.state != thrift::SparkNeighState::NEGOTIATE);
   }
 
-  // Skip handshake processing if neighbor is NOT in NEGOTIATE state, with one
-  // important exception: WARM state gets promoted to NEGOTIATE (see below).
-  //
-  // Normal reasons for being outside NEGOTIATE:
-  //  1). negotiate hold timer already expired;
-  //  2). v4 validation failed and fell back to WARM;
-  //
-  // However, there is a deadlock scenario after a crash-loop recovery that
-  // requires special handling when the neighbor is in WARM state:
-  //
-  //   Consider two nodes A and B. After B's OpenR crash-loops and restarts:
-  //
-  //   1. B discovers A via hello exchange, enters NEGOTIATE, sends handshake.
-  //   2. A is still in WARM (hasn't seen B's hello with A's info yet).
-  //      A replies with a handshake (lines above) but stays in WARM.
-  //   3. B receives A's reply, advances to ESTABLISHED.
-  //   4. B starts its heartbeat hold timer (holdTime, typically 30s).
-  //      But A is still in WARM — A never reached ESTABLISHED, so A never
-  //      sends heartbeats to B.
-  //   5. B's heartbeat timer expires. B transitions ESTABLISHED -> IDLE and
-  //      ERASES A from its neighbor tracking (eraseSparkNeighbor in
-  //      processHeartbeatTimeout).
-  //   6. A eventually receives B's hello containing A's info. A transitions
-  //      WARM -> NEGOTIATE and sends a handshake to B.
-  //   7. B has no neighbor entry for A (erased in step 5). B drops A's
-  //      handshake silently ("Neighbor is NOT found" at line 1820-1823).
-  //   8. A's negotiate hold timer expires (handshakeHoldTime, typically 3s).
-  //      A falls back to WARM. Go to step 1 and repeat forever.
-  //
-  //   The 3-second negotiate window on A must align with the brief period
-  //   where B has A tracked and is in NEGOTIATE — but B keeps erasing A
-  //   every 30 seconds, making the timing extremely unlikely to converge.
-  //
-  // Fix: When we are in WARM and receive a handshake from a neighbor that
-  // is actively trying to negotiate (isAdjEstablished=false), proactively
-  // enter NEGOTIATE and process this handshake to reach ESTABLISHED in one
-  // shot. This is safe because:
-  //   - processNegotiation() sets up negotiate timers as a safety net
-  //   - neighborUpWrapper() (called on ESTABLISHED) cleans up those timers
-  //   - All validation (v4 subnet, area) still runs before ESTABLISHED
-  //   - If validation fails, timers are cleaned up in the failure paths
+  /*
+   * Skip handshake processing if neighbor is NOT in NEGOTIATE state, with one
+   * important exception: WARM state gets promoted to NEGOTIATE (see below).
+   *
+   * Normal reasons for being outside NEGOTIATE:
+   *  1). negotiate hold timer already expired;
+   *  2). v4 validation failed and fell back to WARM;
+   *
+   * However, there is a deadlock scenario after a crash-loop recovery that
+   * requires special handling when the neighbor is in WARM state:
+   *
+   *   Consider two nodes A and B. After B's OpenR crash-loops and restarts:
+   *
+   *   1. B discovers A via hello exchange, enters NEGOTIATE, sends handshake.
+   *   2. A is still in WARM (hasn't seen B's hello with A's info yet).
+   *      A replies with a handshake (lines above) but stays in WARM.
+   *   3. B receives A's reply, advances to ESTABLISHED.
+   *   4. B starts its heartbeat hold timer (holdTime, typically 30s).
+   *      But A is still in WARM — A never reached ESTABLISHED, so A never
+   *      sends heartbeats to B.
+   *   5. B's heartbeat timer expires. B transitions ESTABLISHED -> IDLE and
+   *      ERASES A from its neighbor tracking (eraseSparkNeighbor in
+   *      processHeartbeatTimeout).
+   *   6. A eventually receives B's hello containing A's info. A transitions
+   *      WARM -> NEGOTIATE and sends a handshake to B.
+   *   7. B has no neighbor entry for A (erased in step 5). B drops A's
+   *      handshake silently ("Neighbor is NOT found" at line 1820-1823).
+   *   8. A's negotiate hold timer expires (handshakeHoldTime, typically 3s).
+   *      A falls back to WARM. Go to step 1 and repeat forever.
+   *
+   *   The 3-second negotiate window on A must align with the brief period
+   *   where B has A tracked and is in NEGOTIATE — but B keeps erasing A
+   *   every 30 seconds, making the timing extremely unlikely to converge.
+   *
+   * Fix: When we are in WARM and receive a handshake from a neighbor that
+   * is actively trying to negotiate (isAdjEstablished=false), proactively
+   * enter NEGOTIATE and process this handshake to reach ESTABLISHED in one
+   * shot. This is safe because:
+   *   - processNegotiation() sets up negotiate timers as a safety net
+   *   - neighborUpWrapper() (called on ESTABLISHED) cleans up those timers
+   *   - All validation (v4 subnet, area) still runs before ESTABLISHED
+   *   - If validation fails, timers are cleaned up in the failure paths
+   */
   if (neighbor.state != thrift::SparkNeighState::NEGOTIATE) {
     if (neighbor.state == thrift::SparkNeighState::WARM) {
       XLOGF(
@@ -2017,15 +2069,19 @@ Spark::processHandshakeMsg(
       std::chrono::milliseconds(*handshakeMsg.gracefulRestartTime()),
       gracefulRestartTime_);
 
-  // peer has a lower hold time value. We will reconfigure the heartbeat timer
-  // to honor a higher frequency of sending heartbeat.
-  // TODO: we can consider using fiber task/corotine to manage the keepalive.
+  /*
+   * peer has a lower hold time value. We will reconfigure the heartbeat timer
+   * to honor a higher frequency of sending heartbeat.
+   * TODO: we can consider using fiber task/corotine to manage the keepalive.
+   */
   if (neighbor.heartbeatHoldTime < holdTime_) {
     updateKeepAliveTimer(neighbor.heartbeatHoldTime, ifName);
   }
 
-  // v4 subnet validation if v4 is enabled. If we're using v4-over-v6 we no
-  // longer need to validate the address reported by neighbor node
+  /*
+   * v4 subnet validation if v4 is enabled. If we're using v4-over-v6 we no
+   * longer need to validate the address reported by neighbor node
+   */
   if (enableV4_ && !v4OverV6Nexthop_) {
     if (PacketValidationResult::FAILURE ==
         validateV4AddressSubnet(ifName, *handshakeMsg.transportAddressV4())) {
@@ -2045,17 +2101,21 @@ Spark::processHandshakeMsg(
     }
   }
 
-  // area validation. Compare the following:
-  //
-  //  1) handshakeMsg.area: areaId that neighbor node thinks I should be in;
-  //  2) neighbor.area: areaId that I think neighbor node should be in;
-  //
-  //  ONLY promote to NEGOTIATE state if areaId matches
+  /*
+   * area validation. Compare the following:
+   *
+   *  1) handshakeMsg.area: areaId that neighbor node thinks I should be in;
+   *  2) neighbor.area: areaId that I think neighbor node should be in;
+   *
+   *  ONLY promote to NEGOTIATE state if areaId matches
+   */
   if (neighbor.area != *handshakeMsg.area()) {
     if (*handshakeMsg.area() == Constants::kDefaultArea.toString() ||
         neighbor.area == Constants::kDefaultArea.toString()) {
-      // for backward compatibility: if the peer is still advertising
-      // default area (0), it would be considered a match
+      /*
+       * for backward compatibility: if the peer is still advertising
+       * default area (0), it would be considered a match
+       */
       fb303::fbData->addStatValue(
           "spark.hello.default_area_rcvd", 1, fb303::SUM);
     } else {
@@ -2119,9 +2179,11 @@ Spark::processHeartbeatMsg(
     return;
   }
 
-  // under GR case, when node restarts, it will needs several helloMsg to
-  // establish neighborship. During this time, heartbeatMsg from peer
-  // will NOT be processed.
+  /*
+   * under GR case, when node restarts, it will needs several helloMsg to
+   * establish neighborship. During this time, heartbeatMsg from peer
+   * will NOT be processed.
+   */
   auto& ifNeighbors = sparkNeighbors_.at(ifName);
   auto neighborIt = ifNeighbors.find(neighborName);
   if (neighborIt == ifNeighbors.end()) {
@@ -2134,16 +2196,20 @@ Spark::processHeartbeatMsg(
 
   auto& neighbor = neighborIt->second;
 
-  // In case receiving heartbeat msg when it is NOT in established state,
-  // Just ignore it.
+  /*
+   * In case receiving heartbeat msg when it is NOT in established state,
+   * Just ignore it.
+   */
   if (neighbor.state != thrift::SparkNeighState::ESTABLISHED) {
     XLOGF(
         DBG3,
         "[SparkHeartbeatMsg] Received heartbeat. Expected state: [ESTABLISHED], current state of neighbor: {} is: [{}]",
         neighborName,
         apache::thrift::util::enumNameSafe(neighbor.state));
-    // Only if the neighbor is in Warm state, we need a helloMsg to unblock
-    // ourselve to transition this neighbor to established quickly
+    /*
+     * Only if the neighbor is in Warm state, we need a helloMsg to unblock
+     * ourselve to transition this neighbor to established quickly
+     */
     if (neighbor.state == thrift::SparkNeighState::WARM) {
       XLOG(
           DBG3,
@@ -2214,9 +2280,11 @@ Spark::sendHelloMsg(
     XLOGF(ERR, "[SparkHelloMsg] Failed sending pkt over: {}", ifName);
   };
 
-  // in some cases, getting link-local address may fail and throw
-  // e.g. when iface has not yet auto-configured it, or iface is removed but
-  // down event has not arrived yet
+  /*
+   * in some cases, getting link-local address may fail and throw
+   * e.g. when iface has not yet auto-configured it, or iface is removed but
+   * down event has not arrived yet
+   */
   const auto& interfaceEntry = interfaceDb_.at(ifName);
   const auto ifIndex = interfaceEntry.ifIndex;
   const auto v6Addr = interfaceEntry.v6LinkLocalNetwork.first;
@@ -2300,26 +2368,32 @@ void
 Spark::setupFastDiscoveryHelloTimer(std::string const& ifName) {
   auto timePoint = std::chrono::steady_clock::now();
 
-  // NOTE: We do not send hello packet immediately after adding new interface
-  // this is due to the fact that it may not have yet configured a link-local
-  // address. The hello packet will be sent later and will have good chances
-  // of making it out if small delay is introduced.
+  /*
+   * NOTE: We do not send hello packet immediately after adding new interface
+   * this is due to the fact that it may not have yet configured a link-local
+   * address. The hello packet will be sent later and will have good chances
+   * of making it out if small delay is introduced.
+   */
   auto helloTimer = folly::AsyncTimeout::make(
       *getEvb(), [this, ifName, timePoint]() mutable noexcept {
         bool inFastInitState = false;
-        // Under Spark context, hello pkt will be sent in relatively low
-        // frequency. However, when node comes up initially or restarting,
-        // send multiple helloMsg to promote to 'NEGOTIATE' state ASAP.
-        // To form adj, at least 2 helloMsg is needed( i.e. with second
-        // hello contain myNodeName_ info ). To give enough margin, send
-        // 3 times of necessary packets.
+        /*
+         * Under Spark context, hello pkt will be sent in relatively low
+         * frequency. However, when node comes up initially or restarting,
+         * send multiple helloMsg to promote to 'NEGOTIATE' state ASAP.
+         * To form adj, at least 2 helloMsg is needed( i.e. with second
+         * hello contain myNodeName_ info ). To give enough margin, send
+         * 3 times of necessary packets.
+         */
         inFastInitState = (std::chrono::steady_clock::now() - timePoint) <=
             6 * fastInitHelloTime_;
 
         sendHelloMsg(ifName, inFastInitState);
 
-        // Schedule next run (add 20% variance)
-        // overriding timeoutPeriod if I am in fast initial state
+        /*
+         * Schedule next run (add 20% variance)
+         * overriding timeoutPeriod if I am in fast initial state
+         */
         std::chrono::milliseconds timeoutPeriod =
             inFastInitState ? fastInitHelloTime_ : helloTime_;
 
@@ -2342,9 +2416,11 @@ Spark::processInitializationEvent(thrift::InitializationEvent&& event) {
   // ATTN: must toggle this flag before sending SparkHeartbeatMsg
   initialized_ = true;
 
-  // force to send SparkHeartbeatMsg immediately to notify peers.
-  // NOTE: it is ok for this pkt to be lost as we will continuously send it as
-  // the name suggests.
+  /*
+   * force to send SparkHeartbeatMsg immediately to notify peers.
+   * NOTE: it is ok for this pkt to be lost as we will continuously send it as
+   * the name suggests.
+   */
   for (const auto& [ifName, _] : interfaceDb_) {
     sendHeartbeatMsg(ifName);
   }
@@ -2409,9 +2485,11 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
    * - if v4 is enabled and v4-over-v6-nexthop is enabled, v4 IP is not needed
    */
   for (const auto& info : ifDb) {
-    // ATTN: multiple networks can be associated with one ifName.
-    //  - Retrieve networks in sorted order;
-    //  - Use the lowest one (other node will do similar)
+    /*
+     * ATTN: multiple networks can be associated with one ifName.
+     *  - Retrieve networks in sorted order;
+     *  - Use the lowest one (other node will do similar)
+     */
     const auto v4Networks = info.getSortedV4Addrs();
     const auto v6LinkLocalNetworks = info.getSortedV6LinkLocalAddrs();
 
@@ -2478,8 +2556,10 @@ Spark::processInterfaceUpdates(InterfaceDatabase&& ifDb) {
   // Adding interfaces
   addInterface(toAdd, newInterfaceDb);
 
-  // Updating interface. If ifindex changes, we need to unsubscribe old ifindex
-  // from mcast and subscribe new one
+  /*
+   * Updating interface. If ifindex changes, we need to unsubscribe old ifindex
+   * from mcast and subscribe new one
+   */
   updateInterface(toUpdate, newInterfaceDb);
 }
 
@@ -2501,9 +2581,11 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
       CHECK(!neighbor.nodeName.empty());
       CHECK(!neighbor.remoteIfName.empty());
 
-      // Spark will NOT notify neighbor DOWN event in following cases:
-      //    1). v6Addr is empty for this neighbor;
-      //    2). v4 enabled and v4Addr is empty for this neighbor;
+      /*
+       * Spark will NOT notify neighbor DOWN event in following cases:
+       *    1). v6Addr is empty for this neighbor;
+       *    2). v4 enabled and v4Addr is empty for this neighbor;
+       */
       if (neighbor.transportAddressV6.addr()->empty() ||
           ((enableV4_ && !v4OverV6Nexthop_) &&
            neighbor.transportAddressV4.addr()->empty())) {
@@ -2516,8 +2598,10 @@ Spark::deleteInterface(const std::vector<std::string>& toDel) {
     ifNameToHeartbeatTimers_.erase(ifName);
 
     auto ifIndex = interfaceDb_.at(ifName).ifIndex;
-    // unsubscribe the socket from mcast group on this interface
-    // On error, log and continue
+    /*
+     * unsubscribe the socket from mcast group on this interface
+     * On error, log and continue
+     */
     if (!toggleMcastGroup(
             mcastFd_,
             folly::IPAddress(Constants::kSparkMcastAddr.toString()),
@@ -2544,8 +2628,10 @@ Spark::addInterface(
     XLOGF(
         INFO, "Adding iface {} for tracking with ifindex {}", ifName, ifIndex);
 
-    // subscribe the socket to mcast address on this interface
-    // We throw an error on the first one to encounter a problem
+    /*
+     * subscribe the socket to mcast address on this interface
+     * We throw an error on the first one to encounter a problem
+     */
     if (!toggleMcastGroup(
             mcastFd_,
             folly::IPAddress(Constants::kSparkMcastAddr.toString()),
@@ -2596,11 +2682,15 @@ Spark::updateInterface(
     auto& interface = interfaceDb_.at(ifName);
     auto& newInterface = newInterfaceDb.at(ifName);
 
-    // in case ifindex changes w/o interface down event followed by up event
-    // this can occur if platform/netlink agent is down
+    /*
+     * in case ifindex changes w/o interface down event followed by up event
+     * this can occur if platform/netlink agent is down
+     */
     if (newInterface.ifIndex != interface.ifIndex) {
-      // unsubscribe the socket from mcast group on the old ifindex
-      // On error, log and continue
+      /*
+       * unsubscribe the socket from mcast group on the old ifindex
+       * On error, log and continue
+       */
       if (!toggleMcastGroup(
               mcastFd_,
               folly::IPAddress(Constants::kSparkMcastAddr.toString()),
@@ -2613,8 +2703,10 @@ Spark::updateInterface(
             folly::errnoStr(errno));
       }
 
-      // subscribe the socket to mcast address on the new ifindex
-      // We throw an error on the first one to encounter a problem
+      /*
+       * subscribe the socket to mcast address on the new ifindex
+       * We throw an error on the first one to encounter a problem
+       */
       if (!toggleMcastGroup(
               mcastFd_,
               folly::IPAddress(Constants::kSparkMcastAddr.toString()),
@@ -2693,8 +2785,10 @@ Spark::updateGlobalCounters() {
   CHECK_EQ(trackedNeighborCount, numTotalNeighbors_);
   fb303::fbData->setCounter(
       "spark.num_adjacent_neighbors", adjacentNeighborCount);
-  // Established neighbor could should be less than active neighbor
-  // count (the latter include restarting neighbors too.)
+  /*
+   * Established neighbor could should be less than active neighbor
+   * count (the latter include restarting neighbors too.)
+   */
   CHECK_LE(adjacentNeighborCount, numActiveNeighbors_);
   fb303::fbData->setCounter(
       "spark.tracked_adjacent_neighbors_diff",
@@ -2710,8 +2804,10 @@ Spark::getNeighborArea(
     const std::string& localIfName,
     const folly::F14FastMap<std::string /* areaId */, AreaConfiguration>&
         areaConfigs) {
-  // IMPT: ordered set. Function yeilds lowest areaId in case of multiple
-  // candidate areas
+  /*
+   * IMPT: ordered set. Function yeilds lowest areaId in case of multiple
+   * candidate areas
+   */
   std::set<std::string> candidateAreas{};
 
   // looping through areaIdRegexList
@@ -2749,11 +2845,13 @@ Spark::setThrowParserErrors(bool val) {
   isThrowParserErrorsOn_ = val;
 }
 
-// Returns the node name that we should use for the given
-// peer connected by the interface with ifName. If this
-// node is a fabric node and the other side is a non-fabric
-// node, then returns the fabricName. In all other cases,
-// returns the true name (myNodeName_).
+/*
+ * Returns the node name that we should use for the given
+ * peer connected by the interface with ifName. If this
+ * node is a fabric node and the other side is a non-fabric
+ * node, then returns the fabricName. In all other cases,
+ * returns the true name (myNodeName_).
+ */
 std::string
 Spark::getMyNodeName(const std::string& ifName) const {
   // This node is not a part of a fabric.
