@@ -460,8 +460,10 @@ TEST(RWQueueTest, PushTimeCoalescing) {
 }
 
 TEST(RWQueueTest, CoalescingReturnFalseAppends) {
-  // Coalesce only positive increments; a non-positive value starts a new
-  // element (coalescer returns false -> append).
+  /*
+   * Coalesce only positive increments; a non-positive value starts a new
+   * element (coalescer returns false -> append).
+   */
   RWQueue<int> q("coalescing", [](int& existing, int& incoming) {
     if (incoming > 0) {
       existing += incoming;

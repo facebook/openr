@@ -44,21 +44,27 @@ BM_RWQueue(
     const size_t kCount) {
   auto suspender = folly::BenchmarkSuspender();
 
-  //
-  // Total number of reads performed
-  //
+  /*
+   *
+   * Total number of reads performed
+   *
+   */
   std::atomic<size_t> totalReads{0};
 
-  //
-  // Queue under testing. We use primitive type. This is good enough for us to
-  // measure the performance overhead of messaging queue.
-  //
+  /*
+   *
+   * Queue under testing. We use primitive type. This is good enough for us to
+   * measure the performance overhead of messaging queue.
+   *
+   */
   messaging::RWQueue<size_t> q;
 
-  //
-  // Add reader tasks. Reader would continue to read as long as queue is open
-  // NOTE: We have all readers in their own event base & thread
-  //
+  /*
+   *
+   * Add reader tasks. Reader would continue to read as long as queue is open
+   * NOTE: We have all readers in their own event base & thread
+   *
+   */
   folly::EventBase readerEvb;
   auto& readerManager = folly::fibers::getFiberManager(readerEvb);
   for (size_t i = 0; i < kNumReaders; ++i) {
@@ -76,21 +82,27 @@ BM_RWQueue(
     });
   }
 
-  //
-  // Start reader thread. This will not return until all reader tasks are
-  // completed.
-  //
+  /*
+   *
+   * Start reader thread. This will not return until all reader tasks are
+   * completed.
+   *
+   */
   std::thread readerThread([&readerEvb] { readerEvb.loop(); });
 
-  //
-  // Iterate multiple times. In each iterate we
-  //
+  /*
+   *
+   * Iterate multiple times. In each iterate we
+   *
+   */
   while (iters--) {
-    //
-    // Add writer tasks. Each writer will write `kCount` elements. So overall
-    // each reader would read `kCount * kNumWriters` elements. Aka each reader
-    // would read every element written by every reader.
-    //
+    /*
+     *
+     * Add writer tasks. Each writer will write `kCount` elements. So overall
+     * each reader would read `kCount * kNumWriters` elements. Aka each reader
+     * would read every element written by every reader.
+     *
+     */
     folly::EventBase writerEvb;
     auto& writerManager = folly::fibers::getFiberManager(writerEvb);
     for (size_t i = 0; i < kNumWriters; ++i) {
@@ -103,9 +115,11 @@ BM_RWQueue(
       });
     }
 
-    //
-    // Run writer-loop & wait until reader reads everything
-    //
+    /*
+     *
+     * Run writer-loop & wait until reader reads everything
+     *
+     */
     const size_t expectedReads = kCount * kNumWriters;
     totalReads = 0;
     suspender.dismiss();
@@ -116,9 +130,11 @@ BM_RWQueue(
     suspender.rehire();
   } // while
 
-  //
-  // Close queue & wait for all readers to terminate
-  //
+  /*
+   *
+   * Close queue & wait for all readers to terminate
+   *
+   */
   q.close();
   readerThread.join();
 }
@@ -131,21 +147,27 @@ BM_ReplicateQueue(
     const size_t kCount) {
   auto suspender = folly::BenchmarkSuspender();
 
-  //
-  // Total number of reads performed
-  //
+  /*
+   *
+   * Total number of reads performed
+   *
+   */
   std::atomic<size_t> totalReads{0};
 
-  //
-  // Queue under testing. We use primitive type. This is good enough for us to
-  // measure the performance overhead of messaging queue.
-  //
+  /*
+   *
+   * Queue under testing. We use primitive type. This is good enough for us to
+   * measure the performance overhead of messaging queue.
+   *
+   */
   messaging::ReplicateQueue<size_t> q;
 
-  //
-  // Add reader tasks. Reader would continue to read as long as queue is open
-  // NOTE: We have all readers in their own event base & thread
-  //
+  /*
+   *
+   * Add reader tasks. Reader would continue to read as long as queue is open
+   * NOTE: We have all readers in their own event base & thread
+   *
+   */
   folly::EventBase readerEvb;
   auto& readerManager = folly::fibers::getFiberManager(readerEvb);
   for (size_t i = 0; i < kNumReaders; ++i) {
@@ -163,21 +185,27 @@ BM_ReplicateQueue(
     });
   }
 
-  //
-  // Start reader thread. This will not return until all reader tasks are
-  // completed.
-  //
+  /*
+   *
+   * Start reader thread. This will not return until all reader tasks are
+   * completed.
+   *
+   */
   std::thread readerThread([&readerEvb] { readerEvb.loop(); });
 
-  //
-  // Iterate multiple times. In each iterate we
-  //
+  /*
+   *
+   * Iterate multiple times. In each iterate we
+   *
+   */
   while (iters--) {
-    //
-    // Add writer tasks. Each writer will write `kCount` elements. So overall
-    // each reader would read `kCount * kNumWriters` elements. Aka each reader
-    // would read every element written by every reader.
-    //
+    /*
+     *
+     * Add writer tasks. Each writer will write `kCount` elements. So overall
+     * each reader would read `kCount * kNumWriters` elements. Aka each reader
+     * would read every element written by every reader.
+     *
+     */
     folly::EventBase writerEvb;
     auto& writerManager = folly::fibers::getFiberManager(writerEvb);
     for (size_t i = 0; i < kNumWriters; ++i) {
@@ -190,9 +218,11 @@ BM_ReplicateQueue(
       });
     }
 
-    //
-    // Run writer-loop & wait until reader reads everything
-    //
+    /*
+     *
+     * Run writer-loop & wait until reader reads everything
+     *
+     */
     const size_t expectedReads = kCount * kNumWriters * kNumReaders;
     totalReads = 0;
     suspender.dismiss();
@@ -203,9 +233,11 @@ BM_ReplicateQueue(
     suspender.rehire();
   } // while
 
-  //
-  // Close queue & wait for all readers to terminate
-  //
+  /*
+   *
+   * Close queue & wait for all readers to terminate
+   *
+   */
   q.close();
   readerThread.join();
 }

@@ -458,8 +458,10 @@ class RWQueue {
   // Existing FIFO storage for ordinary and tail-coalescing readers.
   std::deque<ValueType> queue_;
 
-  // Optional push-time coalescer (see constructor). Set once at construction;
-  // nullptr means normal append behavior.
+  /*
+   * Optional push-time coalescer (see constructor). Set once at construction;
+   * nullptr means normal append behavior.
+   */
   std::function<bool(ValueType& existing, ValueType& incoming)> coalesceFn_{
       nullptr};
 

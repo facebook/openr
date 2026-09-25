@@ -137,8 +137,10 @@ ReplicateQueue<ValueType>::getReplicationStats() {
       it = lockedReaders->erase(it);
     } else {
       RWQueueStats stat = (*it)->getStats();
-      // TODO T98477650 : We need to maintain proper queueIds instead of
-      // using a counter/index to maintain consistency and robustness
+      /*
+       * TODO T98477650 : We need to maintain proper queueIds instead of
+       * using a counter/index to maintain consistency and robustness
+       */
       if (stat.queueId.empty()) {
         stat.queueId = std::to_string(queueCount++);
       }

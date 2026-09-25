@@ -95,9 +95,11 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
   } else if (stateSuppressionQueue_) {
     stateSuppressionQueue_->push(std::forward<ValueTypeT>(val));
   } else if (coalesceFn_ && !queue_.empty()) {
-    // Offer the incoming value to be merged into the pending tail element. If
-    // the coalescer consumes it (returns true) nothing is appended, bounding
-    // the backlog even when the reader is slow/stalled; otherwise append it.
+    /*
+     * Offer the incoming value to be merged into the pending tail element. If
+     * the coalescer consumes it (returns true) nothing is appended, bounding
+     * the backlog even when the reader is slow/stalled; otherwise append it.
+     */
     ValueType incoming(std::forward<ValueTypeT>(val));
     if (!coalesceFn_(queue_.back(), incoming)) {
       queue_.emplace_back(std::move(incoming));
@@ -122,9 +124,11 @@ RWQueue<ValueType>::get() {
     return folly::makeUnexpected(maybeImmediateRead.error());
   }
 
-  // Post our own baton if read is immediate (for)
-  // XXX: This will evenly distribute elements between readers when queue
-  // and also ensures fiber-fairness
+  /*
+   * Post our own baton if read is immediate (for)
+   * XXX: This will evenly distribute elements between readers when queue
+   * and also ensures fiber-fairness
+   */
   if (maybeImmediateRead.value()) {
     CHECK(pendingRead.data);
     pendingRead.baton.post();

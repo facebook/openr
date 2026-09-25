@@ -44,9 +44,11 @@ TEST(ReplicateQueueTest, Test) {
         ++numReads;
         ++totalReads;
         if (totalReads == kTotalWrites * kNumReaders) {
-          // Before closing the replicated queue (and hence internal RWQueues),
-          // get replication stats and verify that replication reads match the
-          // overall reads we expect
+          /*
+           * Before closing the replicated queue (and hence internal RWQueues),
+           * get replication stats and verify that replication reads match the
+           * overall reads we expect
+           */
           std::vector<RWQueueStats> stats = q.getReplicationStats();
           for (auto& stat : stats) {
             replicatedReads += stat.reads;
@@ -120,8 +122,10 @@ TEST(ReplicateQueueTest, ReaderCoalescing) {
   q.push(2);
   q.push(3);
 
-  // Coalescing is per-reader: only the reader created with a coalescer merges;
-  // the plain reader still receives every element.
+  /*
+   * Coalescing is per-reader: only the reader created with a coalescer merges;
+   * the plain reader still receives every element.
+   */
   EXPECT_EQ(3, plain.size());
   EXPECT_EQ(1, merged.size());
   EXPECT_EQ(6, merged.get().value());
