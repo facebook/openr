@@ -59,8 +59,10 @@ OpenrCtrlHandler::OpenrCtrlHandler(
       spark_(spark),
       config_(config),
       dispatcher_(dispatcher) {
-  // We expect ctrl-evb not be running otherwise adding fiber task is not
-  // thread safe.
+  /*
+   * We expect ctrl-evb not be running otherwise adding fiber task is not
+   * thread safe.
+   */
   CHECK_NOTNULL(ctrlEvb);
   CHECK(!ctrlEvb->isRunning());
 
@@ -167,12 +169,14 @@ OpenrCtrlHandler::~OpenrCtrlHandler() {
   XLOG(INFO, "[Exit] Successfully stopped OpenrCtrlHandler.");
 }
 
-// NOTE: We're intentionally creating list of publishers to and then invoke
-// `complete()` on them.
-// Reason => `complete()` returns only when callback `onComplete` associated
-// with publisher returns. Since we acquire lock within `onComplete` callback,
-// we will run into the deadlock if `complete()` is invoked within
-// SYNCHRONIZED block
+/*
+ * NOTE: We're intentionally creating list of publishers to and then invoke
+ * `complete()` on them.
+ * Reason => `complete()` returns only when callback `onComplete` associated
+ * with publisher returns. Since we acquire lock within `onComplete` callback,
+ * we will run into the deadlock if `complete()` is invoked within
+ * SYNCHRONIZED block
+ */
 void
 OpenrCtrlHandler::closeKvStorePublishers() {
   std::vector<std::unique_ptr<KvStorePublisher>> publishers;
@@ -186,8 +190,10 @@ OpenrCtrlHandler::closeKvStorePublishers() {
       "[Exit] Terminating {} active KvStore snoop stream(s).",
       publishers.size());
   for (auto& publisher : publishers) {
-    // We have to send an exception as part of the completion, otherwise
-    // thrift doesn't seem to notify the peer of the shutdown
+    /*
+     * We have to send an exception as part of the completion, otherwise
+     * thrift doesn't seem to notify the peer of the shutdown
+     */
     publisher->complete(
         folly::make_exception_wrapper<std::runtime_error>(
             "publisher terminated"));
@@ -227,8 +233,10 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
   // check if any of KeyVal has 'adj' update
   bool isAdjChanged = false;
   for (auto& [key, val] : *pub.keyVals()) {
-    // check if we have any value update.
-    // Ttl refreshing won't update any value.
+    /*
+     * check if we have any value update.
+     * Ttl refreshing won't update any value.
+     */
     if (!val.value().has_value()) {
       continue;
     }
@@ -242,8 +250,10 @@ OpenrCtrlHandler::processPublication(thrift::Publication&& pub) {
   }
 
   if (isAdjChanged) {
-    // thrift::Publication contains "adj:*" key change.
-    // Clean ALL pending promises
+    /*
+     * thrift::Publication contains "adj:*" key change.
+     * Clean ALL pending promises
+     */
     longPollReqs_.withWLock([&](auto& longPollReqs) {
       for (auto& [_, req] : longPollReqs[*pub.area()]) {
         auto& p = req.first; // get the promise
@@ -290,8 +300,10 @@ OpenrCtrlHandler::authorizeConnection() {
   }
 
   if (peerCommonName.empty() || acceptablePeerCommonNames_.empty()) {
-    // for now, we will allow non-secure connections, but lets log the event so
-    // we know how often this is happening.
+    /*
+     * for now, we will allow non-secure connections, but lets log the event so
+     * we know how often this is happening.
+     */
     LogSample sample{};
 
     sample.addString(
@@ -432,8 +444,10 @@ OpenrCtrlHandler::getRunningConfigThrift(thrift::OpenrConfig& _config) {
 folly::SemiFuture<std::unique_ptr<thrift::OpenrDrainState>>
 OpenrCtrlHandler::semifuture_getDrainState(
     std::unique_ptr<std::string> nodeName) {
-  // Open/R does not have a dedicated config to differentiate undrain or drain
-  // config. It is the LSDB state to indicate if node is drained or not.
+  /*
+   * Open/R does not have a dedicated config to differentiate undrain or drain
+   * config. It is the LSDB state to indicate if node is drained or not.
+   */
   CHECK_NOTNULL(decision_);
   return decision_->getDecisionDrainState(*nodeName);
 }
@@ -489,9 +503,11 @@ OpenrCtrlHandler::getSingleAreaOrThrow(std::string const& caller) {
   return std::make_unique<std::string>(areas.begin()->first);
 }
 
-//
-// PrefixManager APIs
-//
+/*
+ *
+ * PrefixManager APIs
+ *
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_advertisePrefixes(
     std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) {
@@ -584,9 +600,11 @@ OpenrCtrlHandler::semifuture_getAdvertisedRoutesWithOriginationPolicy(
       std::move(routeFilterType), std::move(*filter));
 }
 
-//
-// Fib APIs
-//
+/*
+ *
+ * Fib APIs
+ *
+ */
 
 folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
 OpenrCtrlHandler::semifuture_getRouteDb() {
@@ -627,9 +645,11 @@ OpenrCtrlHandler::semifuture_getMplsRoutesFiltered(
   return fib_->getMplsRoutes(std::move(*labels));
 }
 
-//
-// Spark APIs
-//
+/*
+ *
+ * Spark APIs
+ *
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_floodRestartingMsg() {
   CHECK(spark_);
@@ -642,18 +662,22 @@ OpenrCtrlHandler::semifuture_getNeighbors() {
   return spark_->getNeighbors();
 }
 
-//
-// Performance stats APIs
-//
+/*
+ *
+ * Performance stats APIs
+ *
+ */
 folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
 OpenrCtrlHandler::semifuture_getPerfDb() {
   CHECK(fib_);
   return fib_->getPerfDb();
 }
 
-//
-// Decision APIs
-//
+/*
+ *
+ * Decision APIs
+ *
+ */
 
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
 OpenrCtrlHandler::semifuture_getReceivedRoutes() {
@@ -706,9 +730,11 @@ OpenrCtrlHandler::semifuture_getDecisionAreaAdjacenciesFiltered(
   return decision_->getDecisionAreaAdjacenciesFiltered(std::move(*filter));
 }
 
-//
-// Dispatcher APIs
-//
+/*
+ *
+ * Dispatcher APIs
+ *
+ */
 folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
 OpenrCtrlHandler::semifuture_getDispatcherFilters() {
   if (!dispatcher_) {
@@ -720,9 +746,11 @@ OpenrCtrlHandler::semifuture_getDispatcherFilters() {
   return dispatcher_->getDispatcherFilters();
 }
 
-//
-// Profiler APIs
-//
+/*
+ *
+ * Profiler APIs
+ *
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_startProfiler(bool enable) {
   OpenrProfiler::getInstance()->setEnabled(enable);
@@ -769,9 +797,11 @@ OpenrCtrlHandler::semifuture_resetRecvToAdvertiseMax() {
   return folly::makeSemiFuture(folly::Unit{});
 }
 
-//
-// KvStore APIs
-//
+/*
+ *
+ * KvStore APIs
+ *
+ */
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
@@ -956,8 +986,10 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
 
   thrift::KeyDumpParams params;
 
-  // build thrift::KeyVals with "adj:" key ONLY
-  // to ensure KvStore ONLY compare "adj:" key
+  /*
+   * build thrift::KeyVals with "adj:" key ONLY
+   * to ensure KvStore ONLY compare "adj:" key
+   */
   thrift::KeyVals adjKeyVals;
   for (auto& [key, val] : *snapshot) {
     if (key.find(Constants::kAdjDbMarker.toString()) == 0) {
@@ -998,9 +1030,11 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
     XLOG(DBG3, "AdjKey has been deleted/expired. Notify immediately");
     p.setValue(true);
   } else {
-    // Client provided data is consistent with KvStore.
-    // Store req for future processing when there is publication
-    // from KvStore.
+    /*
+     * Client provided data is consistent with KvStore.
+     * Store req for future processing when there is publication
+     * from KvStore.
+     */
     XLOG(DBG3, "No adj change detected. Store req as pending request");
     longPollReqs_.withWLock([&](auto& longPollReq) {
       longPollReq[*area].emplace(
@@ -1303,9 +1337,11 @@ OpenrCtrlHandler::semifuture_subscribeAndGetFibDetail() {
       });
 }
 
-//
-// LinkMonitor APIs
-//
+/*
+ *
+ * LinkMonitor APIs
+ *
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setNodeOverload() {
   CHECK(linkMonitor_);
@@ -1453,9 +1489,11 @@ OpenrCtrlHandler::semifuture_getLinkMonitorAreaAdjacenciesFiltered(
   return linkMonitor_->semifuture_getAreaAdjacencies(std::move(*filter));
 }
 
-//
-// ConfigStore API
-//
+/*
+ *
+ * ConfigStore API
+ *
+ */
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setConfigKey(
     std::unique_ptr<std::string> key, std::unique_ptr<std::string> value) {
@@ -1483,9 +1521,11 @@ OpenrCtrlHandler::semifuture_getConfigKey(std::unique_ptr<std::string> key) {
       });
 }
 
-//
-// RibPolicy APIs
-//
+/*
+ *
+ * RibPolicy APIs
+ *
+ */
 
 folly::SemiFuture<folly::Unit>
 OpenrCtrlHandler::semifuture_setRibPolicy(

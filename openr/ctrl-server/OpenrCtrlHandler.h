@@ -68,9 +68,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   ~OpenrCtrlHandler() override;
 
-  //
-  // fb303 service APIs
-  //
+  /*
+   *
+   * fb303 service APIs
+   *
+   */
 
   facebook::fb303::cpp2::fb303_status getStatus() override;
 
@@ -86,9 +88,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   // Openr Node Name
   folly::coro::Task<std::unique_ptr<std::string>> co_getMyNodeName() override;
 
-  //
-  // config APIs
-  //
+  /*
+   *
+   * config APIs
+   *
+   */
 
   void getRunningConfig(std::string& _return) override;
 
@@ -100,9 +104,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::OpenrDrainState>>
   semifuture_getDrainState(std::unique_ptr<std::string> nodeName) override;
 
-  //
-  // OpenR initialization APIs
-  //
+  /*
+   *
+   * OpenR initialization APIs
+   *
+   */
 
   void getInitializationEvents(
       std::map<thrift::InitializationEvent, int64_t>& _return) override;
@@ -111,15 +117,19 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   int64_t getInitializationDurationMs() override;
 
-  //
-  // Monitor APIs
-  //
+  /*
+   *
+   * Monitor APIs
+   *
+   */
 
   void getEventLogs(std::vector<::std::string>& _return) override;
 
-  //
-  // PrefixManager APIs
-  //
+  /*
+   *
+   * PrefixManager APIs
+   *
+   */
 
   folly::SemiFuture<folly::Unit> semifuture_advertisePrefixes(
       std::unique_ptr<std::vector<thrift::PrefixEntry>> prefixes) override;
@@ -166,9 +176,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
   semifuture_getOriginatedPrefixes() override;
 
-  //
-  // Fib APIs
-  //
+  /*
+   *
+   * Fib APIs
+   *
+   */
 
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
   semifuture_getRouteDb() override;
@@ -190,25 +202,31 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::vector<openr::thrift::MplsRoute>>>
   semifuture_getMplsRoutes() override;
 
-  //
-  // Spark APIs
-  //
+  /*
+   *
+   * Spark APIs
+   *
+   */
 
   folly::SemiFuture<folly::Unit> semifuture_floodRestartingMsg() override;
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::SparkNeighbor>>>
   semifuture_getNeighbors() override;
 
-  //
-  // Performance stats APIs
-  //
+  /*
+   *
+   * Performance stats APIs
+   *
+   */
 
   folly::SemiFuture<std::unique_ptr<thrift::PerfDatabase>>
   semifuture_getPerfDb() override;
 
-  //
-  // Decision APIs
-  //
+  /*
+   *
+   * Decision APIs
+   *
+   */
 
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
   semifuture_getReceivedRoutes() override;
@@ -220,8 +238,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
   semifuture_getDecisionAdjacencyDbs() override;
 
-  // DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas
-  // as well.
+  /*
+   * DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas
+   * as well.
+   */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getDecisionAdjacenciesFiltered(
       std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
@@ -234,16 +254,20 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::RouteDatabase>>
   semifuture_getRouteDbComputed(std::unique_ptr<std::string> nodeName) override;
 
-  //
-  // Dispatcher APIs
-  //
+  /*
+   *
+   * Dispatcher APIs
+   *
+   */
 
   folly::SemiFuture<std::unique_ptr<std::vector<std::vector<std::string>>>>
   semifuture_getDispatcherFilters() override;
 
-  //
-  // Profiler APIs
-  //
+  /*
+   *
+   * Profiler APIs
+   *
+   */
 
   folly::SemiFuture<folly::Unit> semifuture_startProfiler(bool enable) override;
 
@@ -394,9 +418,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   co_getKvStoreAreaSummary(
       std::unique_ptr<std::set<std::string>> selectAreas) override;
 
-  // Stream API's
-  // Intentionally not use SemiFuture as stream is async by nature and we will
-  // immediately create and return the stream handler
+  /*
+   * Stream API's
+   * Intentionally not use SemiFuture as stream is async by nature and we will
+   * immediately create and return the stream handler
+   */
   apache::thrift::ServerStream<thrift::Publication> subscribeKvStoreFilter(
       std::unique_ptr<thrift::KeyDumpParams> filter,
       std::unique_ptr<std::set<std::string>> selectAreas);
@@ -442,9 +468,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::unique_ptr<std::string> area,
       std::unique_ptr<thrift::KeyVals> snapshot) override;
 
-  //
-  // LinkMonitor APIs
-  //
+  /*
+   *
+   * LinkMonitor APIs
+   *
+   */
 
   folly::SemiFuture<folly::Unit> semifuture_setNodeOverload() override;
   folly::SemiFuture<folly::Unit> semifuture_unsetNodeOverload() override;
@@ -490,8 +518,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
   semifuture_getLinkMonitorAdjacencies() override;
 
-  // DEPRECATED. Perfer getLinkMonitorAreaAdjacenciesFiltered to return the
-  // areas as well.
+  /*
+   * DEPRECATED. Perfer getLinkMonitorAreaAdjacenciesFiltered to return the
+   * areas as well.
+   */
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
   semifuture_getLinkMonitorAdjacenciesFiltered(
       std::unique_ptr<thrift::AdjacenciesFilter> filter) override;
@@ -505,9 +535,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   void getOpenrVersion(thrift::OpenrVersions& openrVersion) override;
   void getBuildInfo(thrift::BuildInfo& buildInfo) override;
 
-  //
-  // PersistentStore APIs
-  //
+  /*
+   *
+   * PersistentStore APIs
+   *
+   */
 
   folly::SemiFuture<folly::Unit> semifuture_setConfigKey(
       std::unique_ptr<std::string> key,
@@ -519,9 +551,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::SemiFuture<std::unique_ptr<std::string>> semifuture_getConfigKey(
       std::unique_ptr<std::string> key) override;
 
-  //
-  // RibPolicy APIs
-  //
+  /*
+   *
+   * RibPolicy APIs
+   *
+   */
 
   folly::SemiFuture<folly::Unit> semifuture_setRibPolicy(
       std::unique_ptr<thrift::RibPolicy> policy) override;
@@ -531,9 +565,11 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
 
   folly::SemiFuture<folly::Unit> semifuture_clearRibPolicy() override;
 
-  //
-  // APIs to expose state of private variables
-  //
+  /*
+   *
+   * APIs to expose state of private variables
+   *
+   */
 
   inline size_t
   getNumKvStorePublishers() {
@@ -555,17 +591,21 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
     return fibDetailSubscribers_.wlock()->size();
   }
 
-  //
-  // API to cleanup private variables
-  //
+  /*
+   *
+   * API to cleanup private variables
+   *
+   */
   inline void
   cleanupPendingLongPollReqs() {
     longPollReqs_->clear();
   }
 
  private:
-  // returns the single area name configured for this node or throws if not
-  // eaxclty 1 area is configured
+  /*
+   * returns the single area name configured for this node or throws if not
+   * eaxclty 1 area is configured
+   */
   std::unique_ptr<std::string> getSingleAreaOrThrow(std::string const& caller);
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
@@ -624,8 +664,10 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   folly::Synchronized<folly::F14FastMap<int64_t, FibStreamSubscriber>>
       fibDetailSubscribers_;
 
-  // pending longPoll requests from clients, which consists of
-  // 1). promise; 2). timestamp when req received on server
+  /*
+   * pending longPoll requests from clients, which consists of
+   * 1). promise; 2). timestamp when req received on server
+   */
   std::atomic<int64_t> pendingRequestId_{0};
   folly::ImplicitSynchronized<folly::F14FastMap<
       std::string /* area */,

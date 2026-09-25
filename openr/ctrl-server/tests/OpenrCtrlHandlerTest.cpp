@@ -627,9 +627,11 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
       createThriftValue(1, "node1", std::string("valuePlane2"));
 
   const std::string kSimpleNodeId = "node1";
-  //
-  // area list get
-  //
+  /*
+   *
+   * area list get
+   *
+   */
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
     folly::F14FastSet<std::string> areas;
@@ -709,9 +711,11 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreSetApi) {
       EXPECT_EQ(thrift::KvStoreNoMergeReason::NO_NEED_TO_UPDATE, v);
     }
   }
-  // TODO:
-  // NO_MATCHED_KEY = 1,
-  // INCONSISTENCY_DETECTED = 6,
+  /*
+   * TODO:
+   * NO_MATCHED_KEY = 1,
+   * INCONSISTENCY_DETECTED = 6,
+   */
 }
 
 CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
@@ -738,9 +742,11 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
   keyValsPlane["keyPlane2"] =
       createThriftValue(1, "node1", std::string("valuePlane2"));
 
-  //
-  // area list get
-  //
+  /*
+   *
+   * area list get
+   *
+   */
   {
     auto config = handler_->semifuture_getRunningConfigThrift().get();
     folly::F14FastSet<std::string> areas;
@@ -831,16 +837,20 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(value333, keyVals["key333"]);
   }
 
-  //
-  // getKvStoreAreaSummary() related
-  //
+  /*
+   *
+   * getKvStoreAreaSummary() related
+   *
+   */
   {
     std::set<std::string> areaSetAll{
         kPodAreaId, kPlaneAreaId, kSpineAreaId, kTestingAreaName};
     std::map<std::string, int> areaKVCountMap{};
 
-    // get summary from KvStore for all configured areas (one extra
-    // non-existent area is provided)
+    /*
+     * get summary from KvStore for all configured areas (one extra
+     * non-existent area is provided)
+     */
     auto summary =
         co_await getOpenrCtrlClient().co_getKvStoreAreaSummary(areaSetAll);
     EXPECT_THAT(summary, testing::SizeIs(3));
@@ -849,16 +859,20 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     areaKVCountMap[*summary.at(0).area()] = *summary.at(0).keyValsCount();
     areaKVCountMap[*summary.at(1).area()] = *summary.at(1).keyValsCount();
     areaKVCountMap[*summary.at(2).area()] = *summary.at(2).keyValsCount();
-    // test # of keyVals for each area, as per config above.
-    // area names are being implicitly tested as well
+    /*
+     * test # of keyVals for each area, as per config above.
+     * area names are being implicitly tested as well
+     */
     EXPECT_EQ(9, areaKVCountMap[kSpineAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPodAreaId]);
     EXPECT_EQ(2, areaKVCountMap[kPlaneAreaId]);
   }
 
-  //
-  // Peers APIs
-  //
+  /*
+   *
+   * Peers APIs
+   *
+   */
   const thrift::PeersMap peers{
       {"peer1", createPeerSpec(Constants::kPlatformHost.toString())},
       {"peer2", createPeerSpec(Constants::kPlatformHost.toString())},
@@ -913,9 +927,11 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_TRUE(ret.count("peer11"));
   }
 
-  // Not using params.prefix. Instead using keys. params.prefix will be
-  // deprecated soon. There are three sub-tests with different prefix
-  // key values.
+  /*
+   * Not using params.prefix. Instead using keys. params.prefix will be
+   * deprecated soon. There are three sub-tests with different prefix
+   * key values.
+   */
   {
     thrift::KeyDumpParams params;
     params.originatorIds()->insert("node3");
@@ -944,8 +960,10 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
   }
 
   {
-    // Two updates because the operator is OR and originator ids for keys
-    // key33 and key333 are same.
+    /*
+     * Two updates because the operator is OR and originator ids for keys
+     * key33 and key333 are same.
+     */
     thrift::KeyDumpParams params;
     params.originatorIds() = {"node33"};
     params.keys() = {"key333"};
@@ -957,8 +975,10 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(kvs.at("key333"), keyVals["key333"]);
   }
 
-  // with areas but do not use prefix (to be deprecated). use prefixes/keys
-  // instead.
+  /*
+   * with areas but do not use prefix (to be deprecated). use prefixes/keys
+   * instead.
+   */
   {
     thrift::KeyDumpParams params;
     params.originatorIds()->insert("node1");
@@ -972,8 +992,10 @@ CO_TEST_F(OpenrCtrlFixture, KvStoreApis) {
     EXPECT_EQ(keyValsPlane.at("keyPlane2"), keyVals["keyPlane2"]);
   }
 
-  // Operator is OR and params.prefix is empty.
-  // Use HashFiltered
+  /*
+   * Operator is OR and params.prefix is empty.
+   * Use HashFiltered
+   */
   {
     thrift::KeyDumpParams params;
     params.originatorIds() = {"node3"};
@@ -1018,9 +1040,11 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
   co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
       createKeySetParams(kvs), kSpineAreaId);
 
-  //
-  // Subscribe and Get API
-  //
+  /*
+   *
+   * Subscribe and Get API
+   *
+   */
   {
     // Add more keys and values
     const std::string key{"snoop-key"};
@@ -1059,8 +1083,10 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
                 std::make_unique<thrift::KeyDumpParams>(),
                 std::make_unique<std::set<std::string>>(kSpineOnlySet))
             .get();
-    // Expect 10 keys in the initial dump
-    // NOTE: there may be extra keys from PrefixManager & LinkMonitor)
+    /*
+     * Expect 10 keys in the initial dump
+     * NOTE: there may be extra keys from PrefixManager & LinkMonitor)
+     */
     EXPECT_LE(
         10, (*responseAndSubscription.response.begin()->keyVals()).size());
     CO_ASSERT_EQ(
@@ -1074,8 +1100,10 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(
                 folly::getEventBase(), [&received, &diff, key](auto&& t) {
-                  // Consider publication only if `key` is present
-                  // NOTE: There can be updates to prefix or adj keys
+                  /*
+                   * Consider publication only if `key` is present
+                   * NOTE: There can be updates to prefix or adj keys
+                   */
                   if (!t.hasValue() || !t->keyVals()->count(key)) {
                     return;
                   }
@@ -1138,10 +1166,12 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // No entry is found in the initial shapshot
-  // Matching prefixes get injected later.
-  // AND operator is used. There are two clients for kv store updates.
+  /*
+   * Subscribe and Get API
+   * No entry is found in the initial shapshot
+   * Matching prefixes get injected later.
+   * AND operator is used. There are two clients for kv store updates.
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"key4"};
@@ -1182,8 +1212,10 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              // Consider publication only if `key` is present
-              // NOTE: There can be updates to prefix or adj keys
+              /*
+               * Consider publication only if `key` is present
+               * NOTE: There can be updates to prefix or adj keys
+               */
               if (!t.hasValue() || !t->keyVals()->count(key)) {
                 return;
               }
@@ -1243,10 +1275,12 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // Initial kv store snapshot has matching entries
-  // More Matching prefixes get injected later.
-  // AND operator is used in the filter.
+  /*
+   * Subscribe and Get API
+   * Initial kv store snapshot has matching entries
+   * More Matching prefixes get injected later.
+   * AND operator is used in the filter.
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"key333"};
@@ -1274,16 +1308,20 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
         std::move(responseAndSubscription.stream)
             .toClientStreamUnsafeDoNotUse()
             .subscribeExTry(folly::getEventBase(), [&received, key](auto&& t) {
-              // Consider publication only if `key` is present
-              // NOTE: There can be updates to prefix or adj keys
+              /*
+               * Consider publication only if `key` is present
+               * NOTE: There can be updates to prefix or adj keys
+               */
               if (!t.hasValue() || !t->keyVals()->count(key)) {
                 return;
               }
               auto& pub = *t;
               EXPECT_EQ(1, (*pub.keyVals()).size());
               ASSERT_EQ(1, (*pub.keyVals()).count(key));
-              // Validates value is set with KeyDumpParams.doNotPublishValue =
-              // false
+              /*
+               * Validates value is set with KeyDumpParams.doNotPublishValue =
+               * false
+               */
               EXPECT_EQ("value333", (*pub.keyVals()).at(key).value().value());
               received++;
             });
@@ -1309,10 +1347,12 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // Initial kv store snapshot has matching entries
-  // More Matching prefixes get injected later.
-  // Prefix is a regex and operator is OR.
+  /*
+   * Subscribe and Get API
+   * Initial kv store snapshot has matching entries
+   * More Matching prefixes get injected later.
+   * Prefix is a regex and operator is OR.
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"key33.*"};
@@ -1389,9 +1429,11 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // Multiple matching keys
-  // AND operator is used
+  /*
+   * Subscribe and Get API
+   * Multiple matching keys
+   * AND operator is used
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"test-key"};
@@ -1479,9 +1521,11 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // OR operator is used. A random-prefix is injected which matches only
-  // originator-id.
+  /*
+   * Subscribe and Get API
+   * OR operator is used. A random-prefix is injected which matches only
+   * originator-id.
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"test-key"};
@@ -1574,8 +1618,10 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // No matching originator id in initial snapshot
+  /*
+   * Subscribe and Get API
+   * No matching originator id in initial snapshot
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"test_key"};
@@ -1630,9 +1676,11 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithKeysNoTtlUpdate) {
     }
   }
 
-  // Subscribe and Get API
-  // No matching originator id
-  // Operator OR is used. Matching is based on prefix keys only
+  /*
+   * Subscribe and Get API
+   * No matching originator id
+   * Operator OR is used. Matching is based on prefix keys only
+   */
   {
     std::atomic<int> received{0};
     const std::string key{"test_key"};
@@ -1742,8 +1790,10 @@ CO_TEST_F(
   co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
       createKeySetParams(kvs), kSpineAreaId);
 
-  // ignoreTTL = false is specified in filter.
-  // Client should receive publication associated with TTL update
+  /*
+   * ignoreTTL = false is specified in filter.
+   * Client should receive publication associated with TTL update
+   */
   {
     const std::string key{"key1"};
     const folly::F14FastMap<std::string, std::string> keyvals{{key, "value1"}};
@@ -1841,8 +1891,10 @@ CO_TEST_F(
     }
   }
 
-  // ignoreTTL = true is specified in filter.
-  // Client should not receive publication associated with TTL update
+  /*
+   * ignoreTTL = true is specified in filter.
+   * Client should not receive publication associated with TTL update
+   */
   {
     const std::string key{"key3"};
     thrift::KeyDumpParams filter;
@@ -1945,10 +1997,12 @@ CO_TEST_F(
   }
 }
 
-// Verify that we can subscribe kvStore without value.
-// We use filters exactly mimicking what is needed for kvstore monitor.
-// Verify both in initial full dump and incremental updates we do not
-// see value.
+/*
+ * Verify that we can subscribe kvStore without value.
+ * We use filters exactly mimicking what is needed for kvstore monitor.
+ * Verify both in initial full dump and incremental updates we do not
+ * see value.
+ */
 CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithoutValue) {
   thrift::KeyVals keyVals;
   keyVals["key1"] =
@@ -1960,9 +2014,11 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithoutValue) {
   co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
       createKeySetParams(keyVals), kSpineAreaId);
 
-  // doNotPublishValue = true is specified in filter.
-  // ignoreTTL = false is specified in filter.
-  // Client should receive publication associated with TTL update
+  /*
+   * doNotPublishValue = true is specified in filter.
+   * ignoreTTL = false is specified in filter.
+   * Client should receive publication associated with TTL update
+   */
   thrift::KeyDumpParams filter;
   filter.ignoreTtl() = false;
   filter.doNotPublishValue() = true;
@@ -2006,8 +2062,10 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStoreFilteredWithoutValue) {
                 ASSERT_EQ(1, (*pub.keyVals()).count(test_key));
                 const auto& val = (*pub.keyVals())[test_key];
                 if (*val.ttlVersion() < 2) {
-                  // Ignore this version since it is NOT the update
-                  // the subscriber interested in
+                  /*
+                   * Ignore this version since it is NOT the update
+                   * the subscriber interested in
+                   */
                   return;
                 }
 
@@ -2355,8 +2413,10 @@ CO_TEST_F(OpenrCtrlFixture, VerifyDataPathTest) {
        {"key111",
         createThriftValue(1, "node1", std::string("value11"), 30000, 1)}});
 
-  // will get same thrift publications as OpenrCtrlHandler
-  // filters are the same as filters of OpenrCtrlHandlerReader
+  /*
+   * will get same thrift publications as OpenrCtrlHandler
+   * filters are the same as filters of OpenrCtrlHandlerReader
+   */
   auto reader = dispatcher_->getReader();
 
   // set new keyVals in KvStore
@@ -2432,8 +2492,10 @@ checkPublications(thrift::Publication& expected, thrift::Publication& actual) {
   EXPECT_EQ(sortedExpectedExpiredKey, sortedActualExpiredKey);
 }
 
-// Test Streaming scenario. We inject keys into KvStore and verify that the
-// stream is updated accordingly.
+/*
+ * Test Streaming scenario. We inject keys into KvStore and verify that the
+ * stream is updated accordingly.
+ */
 CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   std::string kNewEntry = "newEntry";
   std::string kEntry1 = "key1";
@@ -2448,8 +2510,10 @@ CO_TEST_F(OpenrCtrlFixture, SubscribeAndGetKvStore) {
   co_await getOpenrCtrlClient().co_setKvStoreKeyVals(
       createKeySetParams(kvs), kSpineAreaId);
 
-  // Get AsyncGenerator to process handler client stream response.
-  // Filter to only receive publications for the keys we care about.
+  /*
+   * Get AsyncGenerator to process handler client stream response.
+   * Filter to only receive publications for the keys we care about.
+   */
   thrift::KeyDumpParams params;
   params.keys() = {kEntry1, kEntry2, kNewEntry};
   auto ssit = std::make_unique<apache::thrift::ScopedServerInterfaceThread>(

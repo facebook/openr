@@ -53,8 +53,10 @@ class LongPollFixture : public ::testing::Test {
         nullptr /* config shared-ptr */,
         dispatcher_.get());
 
-    // ATTN: ctrlEvb must running in separate thread to mimick receiving
-    // adj update for long-poll
+    /*
+     * ATTN: ctrlEvb must running in separate thread to mimick receiving
+     * adj update for long-poll
+     */
     ctrlEvbThread_ = std::thread([&]() { ctrlEvb_.run(); });
     ctrlEvb_.waitUntilRunning();
   }
