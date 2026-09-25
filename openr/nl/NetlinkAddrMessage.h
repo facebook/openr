@@ -54,8 +54,10 @@ class NetlinkAddrMessage final : public NetlinkMessageBase {
   // initiallize address message with default params
   void init(int type);
 
-  // create netlink message to add/delete interface address
-  // type - RTM_NEWADDR or RTM_DELADDR
+  /*
+   * create netlink message to add/delete interface address
+   * type - RTM_NEWADDR or RTM_DELADDR
+   */
   int addOrDeleteIfAddress(const IfAddress& ifAddr, const int type);
 
   // parse Netlink Address message
@@ -67,9 +69,11 @@ class NetlinkAddrMessage final : public NetlinkMessageBase {
 
   int addCacheInfo(const IfAddress& ifAddr);
 
-  //
-  // Private variables for rtnetlink msg exchange
-  //
+  /*
+   *
+   * Private variables for rtnetlink msg exchange
+   *
+   */
 
   // pointer to interface message header
   struct ifaddrmsg* ifaddrmsg_{nullptr};

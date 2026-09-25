@@ -23,8 +23,10 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
       evb_(evb),
       netlinkEventsQueue_(netlinkEventsQ),
       enableIPv6RouteReplaceSemantics_(enableIPv6RouteReplaceSemantics) {
-  // We expect ctrl-evb not be running. Attaching and scheduling
-  // of timers is not thread safe.
+  /*
+   * We expect ctrl-evb not be running. Attaching and scheduling
+   * of timers is not thread safe.
+   */
   CHECK_NOTNULL(evb_);
   CHECK(!evb_->isRunning());
 
@@ -64,8 +66,10 @@ NetlinkProtocolSocket::NetlinkProtocolSocket(
       folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>>::Consumer::
           make([this](std::unique_ptr<NetlinkMessageBase>&& nlmsg) noexcept {
             msgQueue_.push(std::move(nlmsg));
-            // Invoke send messages API if socket is initialized and no in
-            // flight messages
+            /*
+             * Invoke send messages API if socket is initialized and no in
+             * flight messages
+             */
             if (nlSock_ >= 0 && !nlMessageTimer_->isScheduled()) {
               sendNetlinkMessage();
             }
@@ -144,9 +148,11 @@ NetlinkProtocolSocket::init() {
   portId_ = saddr.nl_pid;
   XLOGF(INFO, "Created netlink socket. fd={}, port={}", nlSock_, portId_);
 
-  // Set fd in event handler and register for polling
-  // NOTE: We mask `READ` event with `PERSIST` to make sure the handler remains
-  // registered after the read event
+  /*
+   * Set fd in event handler and register for polling
+   * NOTE: We mask `READ` event with `PERSIST` to make sure the handler remains
+   * registered after the read event
+   */
   XLOGF(
       INFO,
       "Registering netlink socket fd {} with EventBase for read events",
@@ -203,9 +209,11 @@ NetlinkProtocolSocket::processAck(uint32_t ack, int status) {
     nlMessageTimer_->scheduleTimeout(kNlRequestAckTimeout);
   }
 
-  // We've successfully completed at-least one message. Send more messages
-  // if any pending. Here we add optimization to wait for some more acks and
-  // send pending message in batch of atleast `kMinIovMsg`
+  /*
+   * We've successfully completed at-least one message. Send more messages
+   * if any pending. Here we add optimization to wait for some more acks and
+   * send pending message in batch of atleast `kMinIovMsg`
+   */
   if (nlSeqNumMap_.empty() || (kMaxIovMsg - nlSeqNumMap_.size() > kMinIovMsg)) {
     sendNetlinkMessage();
   }
@@ -269,8 +277,10 @@ NetlinkProtocolSocket::sendNetlinkMessage() {
   outMsg->msg_iov = &iov[0];
   outMsg->msg_iovlen = count;
 
-  // `sendmsg` return -1 in case of error else number of bytes sent. `errno`
-  // will be set to an appropriate code in case of error.
+  /*
+   * `sendmsg` return -1 in case of error else number of bytes sent. `errno`
+   * will be set to an appropriate code in case of error.
+   */
   int bytesSent = sendmsg(nlSock_, outMsg.get(), 0);
   if (bytesSent < 0) {
     XLOGF(
@@ -363,9 +373,11 @@ NetlinkProtocolSocket::processMessage(
           // Received link in response to request
           request->rcvdIfAddress(std::move(addr));
         } else {
-          // Response to a add/del request - generate addr event for handler.
-          // This occurs when we add/del IPv4 addresses generates address event
-          // with the same sequence as the original request.
+          /*
+           * Response to a add/del request - generate addr event for handler.
+           * This occurs when we add/del IPv4 addresses generates address event
+           * with the same sequence as the original request.
+           */
 
           // IfAddress notification
           XLOGF(DBG1, "Address event. {}", addr.str());
@@ -449,8 +461,10 @@ NetlinkProtocolSocket::processMessage(
 
 void
 NetlinkProtocolSocket::recvNetlinkMessage() {
-  // messages buffer, set the size same as what is set as receive
-  // buffer size for nlSock_
+  /*
+   * messages buffer, set the size same as what is set as receive
+   * buffer size for nlSock_
+   */
   std::array<char, kNetlinkSockRecvBuf> recvMsg = {};
 
   int32_t bytesRead = ::recv(nlSock_, recvMsg.data(), kNetlinkSockRecvBuf, 0);
@@ -501,9 +515,11 @@ NetlinkProtocolSocket::addRoute(const openr::fbnl::Route& route) {
   switch (route.getFamily()) {
   case AF_INET6:
     if (!enableIPv6RouteReplaceSemantics_) {
-      // Special case for IPv6 route add. We first delete the route and then
-      // add it.
-      // NOTE: We ignore the error for the deleteRoute
+      /*
+       * Special case for IPv6 route add. We first delete the route and then
+       * add it.
+       * NOTE: We ignore the error for the deleteRoute
+       */
       deleteRoute(route);
     }
     [[fallthrough]];

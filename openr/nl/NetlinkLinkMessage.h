@@ -85,9 +85,11 @@ class NetlinkLinkMessage final : public NetlinkMessageBase {
       std::array<char, kMaxNlSendPayloadSize>& linkInfo,
       const Link& link) const;
 
-  //
-  // Private variables for rtnetlink msg exchange
-  //
+  /*
+   *
+   * Private variables for rtnetlink msg exchange
+   *
+   */
 
   // pointer to link message header
   struct ifinfomsg* ifinfomsg_{nullptr};

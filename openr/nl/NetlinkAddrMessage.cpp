@@ -98,9 +98,11 @@ NetlinkAddrMessage::addOrDeleteIfAddress(
     return status;
   }
 
-  // For IPv4, need to specify the ip address in IFA_LOCAL attribute as well
-  // for point-to-point interfaces
-  // For IPv6, the extra attribute has no effect
+  /*
+   * For IPv4, need to specify the ip address in IFA_LOCAL attribute as well
+   * for point-to-point interfaces
+   * For IPv6, the extra attribute has no effect
+   */
   return addAttributes(IFA_LOCAL, ipptr, ip.byteCount());
 }
 

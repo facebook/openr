@@ -57,24 +57,30 @@ class NetlinkRuleMessage final : public NetlinkMessageBase {
   // add FRA attributs to rule message
   int addRuleAttributes(const Rule& rule);
 
-  //
-  // Private variables for rtnetlink msg exchange
-  //
+  /*
+   *
+   * Private variables for rtnetlink msg exchange
+   *
+   */
 
-  // pointer to rule message header
-  //   struct fib_rule_hdr {
-  //     __u8 family;
-  //     __u8 dst_len;
-  //     __u8 src_len;
-  //     __u8 tos;
+  /*
+   * pointer to rule message header
+   *   struct fib_rule_hdr {
+   *     __u8 family;
+   *     __u8 dst_len;
+   *     __u8 src_len;
+   *     __u8 tos;
+   */
 
   //     __u8 table;
   //     __u8 res1; /* reserved */
   //     __u8 res2; /* reserved */
   //     __u8 action;
 
-  //     __u32 flags;
-  //   };
+  /*
+   *     __u32 flags;
+   *   };
+   */
   struct fib_rule_hdr* rulehdr_{nullptr};
 
   // promise to be fulfilled when receiving kernel reply

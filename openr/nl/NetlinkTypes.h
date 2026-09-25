@@ -69,8 +69,10 @@ class NextHopBuilder final {
   NextHopBuilder& setPushLabels(const std::vector<int32_t>& pushLabels);
   std::optional<std::vector<int32_t>> getPushLabels() const;
 
-  // ATTN: `family_` will be set based on `gateway_` family.
-  // No explicit mutator method provided.
+  /*
+   * ATTN: `family_` will be set based on `gateway_` family.
+   * No explicit mutator method provided.
+   */
   uint8_t getFamily() const;
 
  private:
@@ -199,12 +201,14 @@ class RouteBuilder {
   RouteBuilder& setValid(bool isValid);
   bool isValid() const;
 
-  // rtm flag related methods
-  //
-  // rtm_flags have the following value and meaning:
-  //    RTM_F_NOTIFY     if the route changes, notify the user via rtnetlink
-  //    RTM_F_CLONED     route is cloned from another route
-  //    RTM_F_EQUALIZE   a multipath equalizer (not yet implemented)
+  /*
+   * rtm flag related methods
+   *
+   * rtm_flags have the following value and meaning:
+   *    RTM_F_NOTIFY     if the route changes, notify the user via rtnetlink
+   *    RTM_F_CLONED     route is cloned from another route
+   *    RTM_F_EQUALIZE   a multipath equalizer (not yet implemented)
+   */
   RouteBuilder& setFlags(uint32_t flags);
   std::optional<uint32_t> getFlags() const;
 
@@ -224,11 +228,13 @@ class RouteBuilder {
   RouteBuilder& setAdvMss(uint32_t tos);
   std::optional<uint32_t> getAdvMss() const;
 
-  // ATTN: `family_` will be set when:
-  //    UNICAST: `dst_` is set;
-  //    MPLS: `mplsLabel_` is set;
-  //
-  // No explicit mutator method provided.
+  /*
+   * ATTN: `family_` will be set when:
+   *    UNICAST: `dst_` is set;
+   *    MPLS: `mplsLabel_` is set;
+   *
+   * No explicit mutator method provided.
+   */
   uint8_t getFamily() const;
 
   RouteBuilder& setMultiPath(bool isMultiPath);

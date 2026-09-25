@@ -154,9 +154,11 @@ class NetlinkRouteMessage final : public NetlinkMessageBase {
   static void showRtmMsg(const struct rtmsg* const hdr);
   static void showMultiPathAttributes(const struct rtattr* const rta);
 
-  //
-  // Private variables for rtnetlink msg exchange
-  //
+  /*
+   *
+   * Private variables for rtnetlink msg exchange
+   *
+   */
 
   // pointer to route message header
   struct rtmsg* rtmsg_{nullptr};

@@ -33,15 +33,19 @@ using NetlinkEvent =
 // Receive socket buffer for netlink socket
 constexpr uint32_t kNetlinkSockRecvBuf{1 * 1024 * 1024};
 
-// Maximum number of in-flight messages. `kMinIovMsg` indicates the soft
-// requirement for sending bufferred messages.
+/*
+ * Maximum number of in-flight messages. `kMinIovMsg` indicates the soft
+ * requirement for sending bufferred messages.
+ */
 constexpr size_t kMaxIovMsg{500};
 constexpr size_t kMinIovMsg{200};
 
-// Timeout for an ack from kernel for netlink messages we sent. The response for
-// big request (e.g. adding 5k routes or getting 10k routes) is sent back in
-// multiple parts. If we don't receive any part of below specified timeout, we
-// assume kernel is not responsive.
+/*
+ * Timeout for an ack from kernel for netlink messages we sent. The response for
+ * big request (e.g. adding 5k routes or getting 10k routes) is sent back in
+ * multiple parts. If we don't receive any part of below specified timeout, we
+ * assume kernel is not responsive.
+ */
 constexpr std::chrono::milliseconds kNlRequestAckTimeout{1000};
 
 /**
@@ -255,28 +259,38 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Send a message batch to netlink socket from queue_
   void sendNetlinkMessage();
 
-  // Receive messages from netlink socket. Invoke `processMessage` for every
-  // message received.
+  /*
+   * Receive messages from netlink socket. Invoke `processMessage` for every
+   * message received.
+   */
   void recvNetlinkMessage();
 
-  // Process received netlink message. Set return values for pending requests
-  // or send notifications.
+  /*
+   * Process received netlink message. Set return values for pending requests
+   * or send notifications.
+   */
   void processMessage(
       const std::array<char, kNetlinkSockRecvBuf>& rxMsg, uint32_t bytesRead);
 
-  // Process ack message. Set return status on pending requests in nlSeqNumMap_
-  // Resume sending messages from queue_ if any pending
+  /*
+   * Process ack message. Set return status on pending requests in nlSeqNumMap_
+   * Resume sending messages from queue_ if any pending
+   */
   void processAck(uint32_t ack, int status);
 
-  // Event base for serializing read/write requests to netlink socket. Also
-  // ensure thread safety of private member variables.
+  /*
+   * Event base for serializing read/write requests to netlink socket. Also
+   * ensure thread safety of private member variables.
+   */
   folly::EventBase* evb_{nullptr};
 
   // Queue to publish LINK/ADDR/NEIGHBOR/RULE update received from kernel
   messaging::ReplicateQueue<NetlinkEvent>& netlinkEventsQueue_;
 
-  // Notification queue for thread safe enqueuing of messages from external
-  // threads. All the messages enqueued are processed by the event thread.
+  /*
+   * Notification queue for thread safe enqueuing of messages from external
+   * threads. All the messages enqueued are processed by the event thread.
+   */
   folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>> notifQueue_;
   std::unique_ptr<
       folly::NotificationQueue<std::unique_ptr<NetlinkMessageBase>>::Consumer,
@@ -286,57 +300,71 @@ class NetlinkProtocolSocket : public folly::EventHandler {
   // Use new IPv6 route replace semantics. See documentation for addRoute(...)
   const bool enableIPv6RouteReplaceSemantics_{false};
 
-  // Netlink socket fd. Created when class is constructed. Re-created on timeout
-  // when no response is received for any of our pending requests.
+  /*
+   * Netlink socket fd. Created when class is constructed. Re-created on timeout
+   * when no response is received for any of our pending requests.
+   */
   int nlSock_{-1};
 
-  // nl_pid stands for port-ID and not process-ID. Netlink sockets are bound on
-  // this specified port. This must be unique for every netlink socket that
-  // is created on the system. Ironically kernel assigns the process-ID as the
-  // port-ID for the first socket that is created by process. All subsequent
-  // netlink sockets created by process gets assigned some unique-ID.
+  /*
+   * nl_pid stands for port-ID and not process-ID. Netlink sockets are bound on
+   * this specified port. This must be unique for every netlink socket that
+   * is created on the system. Ironically kernel assigns the process-ID as the
+   * port-ID for the first socket that is created by process. All subsequent
+   * netlink sockets created by process gets assigned some unique-ID.
+   */
   uint32_t portId_{UINT_MAX};
 
-  // Next available sequence number to use. It is possible to wrap this around,
-  // and should be fine. We put hard check to avoid conflict between pending
-  // seq number with next sequence number.
-  // NOTE: We intentionally start from sequence from 1 and not 0. Notification
-  // messages from kernel are not associated with any sequence number and they
-  // have `nlmsg_seq` set to `0`. There are two message exchanges over nlSock.
-  // 1) REQ-REP (for querying data e.g. links/routes from kernel) -- Here we
-  //    send request with non-zero sequence number. The messages sent from
-  //    kernel in reply will bear the appropriate sequence numbers
-  // 2) PUSH (notification message from kernel) -- This notification is from
-  //    kernel on any event. There is no sequence number associated with it and
-  //    value of nlh->nlmsg_seq will set to 0.
+  /*
+   * Next available sequence number to use. It is possible to wrap this around,
+   * and should be fine. We put hard check to avoid conflict between pending
+   * seq number with next sequence number.
+   * NOTE: We intentionally start from sequence from 1 and not 0. Notification
+   * messages from kernel are not associated with any sequence number and they
+   * have `nlmsg_seq` set to `0`. There are two message exchanges over nlSock.
+   * 1) REQ-REP (for querying data e.g. links/routes from kernel) -- Here we
+   *    send request with non-zero sequence number. The messages sent from
+   *    kernel in reply will bear the appropriate sequence numbers
+   * 2) PUSH (notification message from kernel) -- This notification is from
+   *    kernel on any event. There is no sequence number associated with it and
+   *    value of nlh->nlmsg_seq will set to 0.
+   */
   uint32_t nextNlSeqNum_{1};
 
-  // Netlink message queue. Every add/del/get call for
-  // route/addr/neighbor/link/rule translates into one or more NetlinkMessages.
-  // These messages are first stored in the queue and sent to kernel in rate
-  // limiting fashion. When ack for in-flight messages is received, subsequent
-  // messages are sent.
+  /*
+   * Netlink message queue. Every add/del/get call for
+   * route/addr/neighbor/link/rule translates into one or more NetlinkMessages.
+   * These messages are first stored in the queue and sent to kernel in rate
+   * limiting fashion. When ack for in-flight messages is received, subsequent
+   * messages are sent.
+   */
   std::queue<std::unique_ptr<NetlinkMessageBase>> msgQueue_;
 
-  // Sequence number to NetlinkMesage request mapping. Each in-flight message
-  // sent to kernel, is assigned a unique sequence-number and stored in this
-  // map. On receipt of ack from kernel (either success or error) we clear the
-  // corresponding entry from this map.
+  /*
+   * Sequence number to NetlinkMesage request mapping. Each in-flight message
+   * sent to kernel, is assigned a unique sequence-number and stored in this
+   * map. On receipt of ack from kernel (either success or error) we clear the
+   * corresponding entry from this map.
+   */
   folly::F14FastMap<uint32_t, std::shared_ptr<NetlinkMessageBase>> nlSeqNumMap_;
 
-  // Timer to help keep track of timeout of messages sent to kernel. It also
-  // ensures the aliveness of the netlink socket-fd. Timer is
-  // - Started when a new message is sent
-  // - Reset whenever we receive update about one of the pending ack
-  // - Cleared when there is no pending ack in nlSeqNumMap_
-  // When timer fires, it is an indication that we didn't receive the ack for
-  // one of the entry in nlSeqNoMap, for at-least past kNlRequestAckTimeout
-  // time. Netlink socket is re-initiaited on timeout for any of our pending
-  // message, and `nlSeqNumMap_` is cleared.
+  /*
+   * Timer to help keep track of timeout of messages sent to kernel. It also
+   * ensures the aliveness of the netlink socket-fd. Timer is
+   * - Started when a new message is sent
+   * - Reset whenever we receive update about one of the pending ack
+   * - Cleared when there is no pending ack in nlSeqNumMap_
+   * When timer fires, it is an indication that we didn't receive the ack for
+   * one of the entry in nlSeqNoMap, for at-least past kNlRequestAckTimeout
+   * time. Netlink socket is re-initiaited on timeout for any of our pending
+   * message, and `nlSeqNumMap_` is cleared.
+   */
   std::unique_ptr<folly::AsyncTimeout> nlMessageTimer_{nullptr};
 
-  // Timer for initializing this socket. This gets cancelled automatically if
-  // event-base is never started
+  /*
+   * Timer for initializing this socket. This gets cancelled automatically if
+   * event-base is never started
+   */
   std::unique_ptr<folly::AsyncTimeout> nlInitTimer_{nullptr};
 };
 

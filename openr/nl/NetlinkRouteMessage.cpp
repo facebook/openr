@@ -19,9 +19,11 @@ NetlinkRouteMessage::~NetlinkRouteMessage() {
 
 void
 NetlinkRouteMessage::rcvdRoute(Route&& route) {
-  //
-  // Implement application side filters for table and protocol if specified
-  //
+  /*
+   *
+   * Implement application side filters for table and protocol if specified
+   *
+   */
 
   if (filters_.table && filters_.table != route.getRouteTable()) {
     return; // ignore the route
@@ -79,9 +81,11 @@ NetlinkRouteMessage::init(int type, uint32_t rtFlags, const Route& route) {
   if (type == RTM_GETROUTE) {
     // Get routes matching subsequent criteria specified below
     msghdr_->nlmsg_flags |= NLM_F_DUMP;
-    // NOTE - Only `rtmsg_->rtm_family` will be used by kernel as filter
-    // parameter. Other parameters such as table, protocol, scope, type will
-    // need to be filtered on user side.
+    /*
+     * NOTE - Only `rtmsg_->rtm_family` will be used by kernel as filter
+     * parameter. Other parameters such as table, protocol, scope, type will
+     * need to be filtered on user side.
+     */
     filters_.table = route.getRouteTable();
     filters_.type = route.getType();
     filters_.protocol = route.getProtocolId();
@@ -191,8 +195,10 @@ NetlinkRouteMessage::addIpNexthop(
     return EINVAL;
   }
 
-  // In case of route family is different from the NH gateway family,
-  // it requires to specify `RTA_VIA` field instead of `RTA_GATEWAY`.
+  /*
+   * In case of route family is different from the NH gateway family,
+   * it requires to specify `RTA_VIA` field instead of `RTA_GATEWAY`.
+   */
   const auto& gw = via.value();
   if (isV4RouteOverV6Nexthop(route, path)) {
     // RTA_VIA
@@ -694,8 +700,10 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
       parseNextHopAttribute(routeAttr, routeEntry->rtm_family, nhBuilder);
     } break;
 
-    // If there are multiple nexthops in the route, the nexthop attributes
-    // are subattributes in RTA_MULTIPATH
+    /*
+     * If there are multiple nexthops in the route, the nexthop attributes
+     * are subattributes in RTA_MULTIPATH
+     */
     case RTA_MULTIPATH: {
       singleNextHopFlag = false;
       auto nextHops = parseNextHops(routeAttr, routeEntry->rtm_family);
@@ -713,10 +721,12 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
       routeBuilder.setRouteTable(table);
     } break;
 
-    // Preferred source address, one of the use case is IPv4 link prefix routes.
-    // For example, when add ip address 10.0.0.1/31 to interface eth1, the
-    // following routes will be added by Linux kernel automatically:
-    //    10.0.0.0/31 dev eth1 proto kernel scope link src 10.0.0.1
+    /*
+     * Preferred source address, one of the use case is IPv4 link prefix routes.
+     * For example, when add ip address 10.0.0.1/31 to interface eth1, the
+     * following routes will be added by Linux kernel automatically:
+     *    10.0.0.0/31 dev eth1 proto kernel scope link src 10.0.0.1
+     */
     case RTA_PREFSRC: {
       auto ipAddr = parseIp(routeAttr, routeEntry->rtm_family);
       if (ipAddr.hasValue()) {
@@ -736,8 +746,10 @@ NetlinkRouteMessage::parseMessage(const struct nlmsghdr* nlmsg) {
     }
   }
 
-  // Default route might be missing RTA_DST attribute. So explicitly set
-  // destination here.
+  /*
+   * Default route might be missing RTA_DST attribute. So explicitly set
+   * destination here.
+   */
   if (routeEntry->rtm_dst_len == 0 && routeBuilder.getFamily() == AF_UNSPEC) {
     if (routeEntry->rtm_family == AF_INET) {
       routeBuilder.setDestination({folly::IPAddressV4("0.0.0.0"), 0});
