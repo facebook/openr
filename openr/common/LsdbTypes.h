@@ -24,9 +24,11 @@
 
 namespace openr {
 
-//
-// Aliases for data-structures
-//
+/*
+ *
+ * Aliases for data-structures
+ *
+ */
 
 using AdjacencyKey = std::
     pair<std::string /* remoteNodeName */, std::string /* localInterfaceName*/>;

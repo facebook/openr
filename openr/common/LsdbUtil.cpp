@@ -222,8 +222,10 @@ getNthPrefix(
       reinterpret_cast<const char*>(seedPrefix.first.bytes()),
       seedPrefix.first.byteCount());
 
-  // host number bit length
-  // in seed prefix
+  /*
+   * host number bit length
+   * in seed prefix
+   */
   const uint32_t seedHostBitLen = bitCount - seedPrefix.second;
   // in allocated prefix
   const uint32_t allocHostBitLen = bitCount - allocPrefixLen;
@@ -238,8 +240,10 @@ getNthPrefix(
     throw std::invalid_argument("Prefix index is out of range.");
   }
 
-  // using bits (seedHostBitLen-allocHostBitLen-1)..0 of @prefixIndex to
-  // set bits (seedHostBitLen - 1)..allocHostBitLen of ipBytes
+  /*
+   * using bits (seedHostBitLen-allocHostBitLen-1)..0 of @prefixIndex to
+   * set bits (seedHostBitLen - 1)..allocHostBitLen of ipBytes
+   */
   for (uint8_t i = 0; i < allocBits; ++i) {
     // global bit index across bytes
     auto idx = i + allocHostBitLen;
@@ -490,8 +494,10 @@ createPrefixDb(
   return prefixDb;
 }
 
-// TODO: Create and return thrift::PrefixEntry as a
-// shared_ptr after adding support in BGPRIB/FIB/UT
+/*
+ * TODO: Create and return thrift::PrefixEntry as a
+ * shared_ptr after adding support in BGPRIB/FIB/UT
+ */
 thrift::PrefixEntry
 createPrefixEntry(
     thrift::IpPrefix prefix,

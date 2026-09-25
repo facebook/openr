@@ -82,8 +82,10 @@ setUpThriftServer(
   server->setWorkersJoinTimeout(
       std::chrono::seconds{
           *config->getThriftServerConfig().workers_join_timeout()});
-  // Set the time the thrift requests are allowed to stay on the queue.
-  // (if not set explicitly, the default value is 100ms)
+  /*
+   * Set the time the thrift requests are allowed to stay on the queue.
+   * (if not set explicitly, the default value is 100ms)
+   */
   server->setQueueTimeout(Constants::kThriftServerQueueTimeout);
 
   // Setup TLS

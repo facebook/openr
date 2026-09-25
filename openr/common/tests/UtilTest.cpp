@@ -138,9 +138,7 @@ createPrefixEntryPtr(int32_t pp, int32_t sp, int32_t d) {
 };
 
 TEST(UtilTest, NetworkUtilTest) {
-  //
   // Test for: toString()
-  //
   {
     folly::IPAddress v4{"192.168.0.2"};
     folly::IPAddress v6{"fe80::2"};
@@ -152,9 +150,7 @@ TEST(UtilTest, NetworkUtilTest) {
     EXPECT_EQ("", toString(empty));
   }
 
-  //
   // Test for: toIpPrefix()
-  //
   {
     // Positive test for valid ip addrs(V4 + V6)
     const std::string v4Addr{"10.1.1.1/32"};
@@ -175,9 +171,7 @@ TEST(UtilTest, NetworkUtilTest) {
     EXPECT_THROW(toIpPrefix(invalidV6Addr), thrift::OpenrError);
   }
 
-  //
   // Test for: toIPNetwork()
-  //
   {
     // Negative test for invalid ip addr length(V4 + V6)
     folly::IPAddress v4Addr = folly::IPAddress("10.1.1.1");
@@ -195,9 +189,7 @@ TEST(UtilTest, NetworkUtilTest) {
     EXPECT_THROW(toIPNetwork(v6Prefix), thrift::OpenrError);
   }
 
-  //
   // Test for: createIpPrefix()
-  //
   {
     folly::IPAddress v4Addr = folly::IPAddress("10.1.1.1");
     thrift::BinaryAddress v4AddrBin = toBinaryAddress(v4Addr);
@@ -406,8 +398,10 @@ TEST(UtilTest, getNthPrefix) {
       folly::IPAddress::createNetwork("10.1.0.0/16"),
       getNthPrefix(v4SeedPrefix, 16, 0));
 
-  // Some error cases
-  // 1. prefixIndex is out of range
+  /*
+   * Some error cases
+   * 1. prefixIndex is out of range
+   */
   EXPECT_THROW(getNthPrefix(v4SeedPrefix, 24, 256), std::invalid_argument);
   // 2. alloc block is bigger than seed prefix block
   EXPECT_THROW(getNthPrefix(v4SeedPrefix, 15, 0), std::invalid_argument);
@@ -595,9 +589,7 @@ TEST(UtilTest, findDeltaRoutes) {
 }
 
 TEST(UtilTest, MplsActionValidate) {
-  //
   // PHP
-  //
   {
     thrift::MplsAction mplsAction;
     mplsAction.action() = thrift::MplsActionCode::PHP;
@@ -612,9 +604,7 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.pushLabels().reset();
   }
 
-  //
   // POP_AND_LOOKUP
-  //
   {
     thrift::MplsAction mplsAction;
     mplsAction.action() = thrift::MplsActionCode::POP_AND_LOOKUP;
@@ -629,9 +619,7 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.pushLabels().reset();
   }
 
-  //
   // SWAP
-  //
   {
     thrift::MplsAction mplsAction;
     mplsAction.action() = thrift::MplsActionCode::SWAP;
@@ -645,9 +633,7 @@ TEST(UtilTest, MplsActionValidate) {
     mplsAction.pushLabels().reset();
   }
 
-  //
   // PUSH
-  //
   {
     thrift::MplsAction mplsAction;
     mplsAction.action() = thrift::MplsActionCode::PUSH;
@@ -692,9 +678,7 @@ TEST(UtilTest, hasBestRoutesInAreaTest) {
 
   EXPECT_TRUE(hasBestRoutesInArea("area1", prefixes, bestNodeAreas));
 
-  //
   // Create a prefix entry with "node1" in "area2"
-  //
   prefixes[{"node1", "area2"}] = std::make_shared<thrift::PrefixEntry>(
       createPrefixEntry(toIpPrefix("10.0.0.0/8")));
   // node1 is in both area1 and area2
@@ -703,9 +687,7 @@ TEST(UtilTest, hasBestRoutesInAreaTest) {
   EXPECT_FALSE(hasBestRoutesInArea("area2", prefixes, {{"node2", "area2"}}));
   // bestNodeAreas does not have {"node1":"area2"}
   EXPECT_FALSE(hasBestRoutesInArea("area2", prefixes, bestNodeAreas));
-  //
   // Create a prefix entry with "node4" in "area2"
-  //
   prefixes[{"node4", "area2"}] = std::make_shared<thrift::PrefixEntry>(
       createPrefixEntry(toIpPrefix("10.0.0.0/8")));
 
@@ -742,17 +724,13 @@ TEST(UtilTest, AddJitter) {
 }
 
 TEST(UtilTest, BestMetricsSelection) {
-  //
   // No entry. Returns empty set
-  //
   {
     folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes;
     EXPECT_EQ(0, selectBestPrefixMetrics(prefixes).size());
   }
 
-  //
   // Single entry. Returns the entry itself
-  //
   {
     folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(0, 0, 0)}};
@@ -761,9 +739,7 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY1"));
   }
 
-  //
   // Multiple entries. Single best route, tie on path-preference (prefer higher)
-  //
   {
     folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 0, 0)},
@@ -774,10 +750,10 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY3"));
   }
 
-  //
-  // Multiple entries. Single best route, tie on source-preference (prefer
-  // higher)
-  //
+  /*
+   * Multiple entries. Single best route, tie on source-preference (prefer
+   * higher)
+   */
   {
     folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 10, 0)},
@@ -788,9 +764,7 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY2"));
   }
 
-  //
   // Multiple entries. Single best route, tie on distance (prefer lower)
-  //
   {
     folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 10, 1)},
@@ -801,9 +775,7 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY1"));
   }
 
-  //
   // Multiple entries. Multiple best routes
-  //
   {
     folly::F14FastMap<std::string, thrift::PrefixEntry> prefixes = {
         {"KEY1", createPrefixEntry(100, 10, 1)},
@@ -818,11 +790,11 @@ TEST(UtilTest, BestMetricsSelection) {
     EXPECT_EQ(1, bestKeys.count("KEY4"));
   }
 
-  //
-  // Multiple entries. Each node will choose local as best. If a node announce
-  // best entry to two areas, choose the one with lower area id
-  // (based on std::map key hash)
-  //
+  /*
+   * Multiple entries. Each node will choose local as best. If a node announce
+   * best entry to two areas, choose the one with lower area id
+   * (based on std::map key hash)
+   */
   {
     folly::F14FastMap<NodeAndArea, thrift::PrefixEntry> prefixes = {
         {{"node1", "area1"}, createPrefixEntry(100, 10, 1)},
@@ -867,8 +839,10 @@ TEST(UtilTest, SelectRoutesShortestDistance) {
     EXPECT_EQ(1, ret.count(node21Area2));
   }
 
-  // Multiple entries. Single best route, tie on source-preference (prefer
-  // higher)
+  /*
+   * Multiple entries. Single best route, tie on source-preference (prefer
+   * higher)
+   */
   {
     PrefixEntries prefixes = {
         {node11Area1, createPrefixEntryPtr(100, 10, 0)},
@@ -934,9 +908,7 @@ TEST(UtilTest, SelectRoutesPerAreaShortestDistance) {
     EXPECT_EQ(1, ret.count(node21Area2));
   }
 
-  //
   // Multi areas multiple entries. Multi best entries are selected in each area.
-  //
   {
     PrefixEntries prefixes = {
         {node11Area1, createPrefixEntryPtr(100, 10, 1)},

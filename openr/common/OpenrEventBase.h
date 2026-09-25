@@ -161,8 +161,10 @@ class OpenrEventBase {
   folly::fibers::FiberManager& fiberManager_;
   std::vector<folly::Future<folly::Unit>> fiberTaskFutures_;
 
-  // Data structure to hold fd and their handlers
-  // Note: Using unordered_map because OpenrEventHandler is not moveable
+  /*
+   * Data structure to hold fd and their handlers
+   * Note: Using unordered_map because OpenrEventHandler is not moveable
+   */
   std::unordered_map<int /* fd */, OpenrEventHandler> fdHandlers_;
 
   // Timestamp

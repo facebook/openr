@@ -52,8 +52,10 @@ startEventBase(
     watchdog->addEvb(evb.get());
   }
 
-  // Emplace evb into ordered list of evbs. So that we can destroy
-  // them in revserse order of their creation.
+  /*
+   * Emplace evb into ordered list of evbs. So that we can destroy
+   * them in revserse order of their creation.
+   */
   orderedEvbs.emplace_back(std::move(evb));
 
   return t;

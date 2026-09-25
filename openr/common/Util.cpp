@@ -131,8 +131,10 @@ createThriftValue(
   return value;
 }
 
-// Create thrift::Value without setting thrift::Value.value
-// Used for monitoring applications.
+/*
+ * Create thrift::Value without setting thrift::Value.value
+ * Used for monitoring applications.
+ */
 thrift::Value
 createThriftValueWithoutBinaryValue(const thrift::Value& val) {
   thrift::Value updatedVal;
@@ -179,10 +181,12 @@ namespace memory {
 uint64_t
 getThreadBytesImpl(bool isAllocated) {
   uint64_t bytes{0};
-  // thread.allocated/deallocated are jemalloc-only mallctl stats. When the
-  // binary is not linked against jemalloc (e.g. the OSS build), mallctlRead
-  // throws; skip the read and report 0 instead of logging an error on every
-  // watchdog tick for every thread.
+  /*
+   * thread.allocated/deallocated are jemalloc-only mallctl stats. When the
+   * binary is not linked against jemalloc (e.g. the OSS build), mallctlRead
+   * throws; skip the read and report 0 instead of logging an error on every
+   * watchdog tick for every thread.
+   */
   if (!folly::usingJEMalloc()) {
     return bytes;
   }

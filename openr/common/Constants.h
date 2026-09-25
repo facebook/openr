@@ -28,14 +28,18 @@ class Constants {
 
   // TODO: we may consider define upper-limit for each stage of initialization
 
-  //
-  // Common
-  //
+  /*
+   *
+   * Common
+   *
+   */
 
-  // this is the maximum time we wait for read data on a socket
-  // this is an important constant, as we do not implement any
-  // recovery from read errors. We expect in our network reads
-  // to be "fast" since we talk to directly adjacent nodes
+  /*
+   * this is the maximum time we wait for read data on a socket
+   * this is an important constant, as we do not implement any
+   * recovery from read errors. We expect in our network reads
+   * to be "fast" since we talk to directly adjacent nodes
+   */
   static constexpr std::chrono::milliseconds kReadTimeout{1000};
 
   static constexpr auto kInitEventCounterFormat =
@@ -61,8 +65,10 @@ class Constants {
   static constexpr auto kKvStoreNumPeerByStateCounter =
       "kvstore.num_peers.{}.{}";
 
-  // 0 if there is at least 1 peer in initiliazed state
-  // 1 if all peers are NOT in initialized state
+  /*
+   * 0 if there is at least 1 peer in initiliazed state
+   * 1 if all peers are NOT in initialized state
+   */
   static constexpr auto kKvStoreAllPeerNotInitialized =
       "kvstore.all_peers_not_initialized.{}";
 
@@ -90,13 +96,17 @@ class Constants {
    * [LinkMonitor Constants]
    */
 
-  // Hold time to wait before advertising link events. We use different
-  // timers for UP (Throttle=100ms) and DOWN events are immediately
+  /*
+   * Hold time to wait before advertising link events. We use different
+   * timers for UP (Throttle=100ms) and DOWN events are immediately
+   */
   static constexpr std::chrono::milliseconds kLinkThrottleTimeout{100};
   static constexpr std::chrono::milliseconds kLinkImmediateTimeout{1};
 
-  // Hold time to wait before advertising adjacency UP event to KvStore.
-  // Adjacency DOWN event is immediately advertised.
+  /*
+   * Hold time to wait before advertising adjacency UP event to KvStore.
+   * Adjacency DOWN event is immediately advertised.
+   */
   static constexpr std::chrono::milliseconds kAdjacencyThrottleTimeout{1000};
 
   /*
@@ -106,13 +116,17 @@ class Constants {
   // the multicast address used by Spark
   static constexpr folly::StringPiece kSparkMcastAddr{"ff02::1"};
 
-  // The maximum number of spark packets per second we will process from
-  // a iface, ip addr pairs that hash to the same bucket in our
-  // fixed size list of BucketedTimeSeries
+  /*
+   * The maximum number of spark packets per second we will process from
+   * a iface, ip addr pairs that hash to the same bucket in our
+   * fixed size list of BucketedTimeSeries
+   */
   static constexpr uint32_t kMaxAllowedPps{50};
 
-  // Number of BucketedTimeSeries to spread potential neighbors across
-  // for the purpose of limiting the number of packets per second processed
+  /*
+   * Number of BucketedTimeSeries to spread potential neighbors across
+   * for the purpose of limiting the number of packets per second processed
+   */
   static constexpr size_t kNumTimeSeries{1024};
 
   /*
@@ -155,8 +169,10 @@ class Constants {
   // Default thrift client keep alive interval to avoid idle timeout
   static constexpr std::chrono::seconds kThriftClientKeepAliveInterval{20};
 
-  // Count of maximum pending kvstore sync response before waiting for
-  // kMaxBackoff to send the next sync request
+  /*
+   * Count of maximum pending kvstore sync response before waiting for
+   * kMaxBackoff to send the next sync request
+   */
   static constexpr size_t kMaxFullSyncPendingCountThreshold{32};
 
   // If version is undefined, the corresponding thrift::Value is invalid.
@@ -236,9 +252,11 @@ class Constants {
   // delimiter separating prefix and name in kvstore key
   static constexpr folly::StringPiece kPrefixNameSeparator{":"};
 
-  // NOTE: this is a special areaId that is treated as the wildcard.
-  // Interfaces configured into this area will form adjacencies with any other
-  // node not validating what area they claim to be in.
+  /*
+   * NOTE: this is a special areaId that is treated as the wildcard.
+   * Interfaces configured into this area will form adjacencies with any other
+   * node not validating what area they claim to be in.
+   */
   static constexpr folly::StringPiece kDefaultArea{"0"};
 
   // KvStore key markers
@@ -274,12 +292,16 @@ class Constants {
   // hold time for longPoll requests in openrCtrl thrift server
   static constexpr std::chrono::milliseconds kLongPollReqHoldTime{20000};
 
-  //
-  // Prefix manager specific
-  //
+  /*
+   *
+   * Prefix manager specific
+   *
+   */
 
-  // Default metrics (path and source preference) for Open/R originated routes
-  // (loopback address & interface subnets).
+  /*
+   * Default metrics (path and source preference) for Open/R originated routes
+   * (loopback address & interface subnets).
+   */
   static constexpr int32_t kDefaultPathPreference{1000}; // LIVE routes
   static constexpr int32_t kDefaultSourcePreference{200}; // Source pref
 
@@ -296,13 +318,15 @@ class Constants {
   // Thrift server's queue timeout
   static constexpr std::chrono::milliseconds kThriftServerQueueTimeout{1000};
 
-  //
-  // See https://github.com/facebook/openr/blob/master/openr/docs/Versions.md
-  // for details of version history
-  //
-  // ATTN: Please update `Versions.md` when current Open/R version
-  //       is bumped up.
-  //
+  /*
+   *
+   * See https://github.com/facebook/openr/blob/master/openr/docs/Versions.md
+   * for details of version history
+   *
+   * ATTN: Please update `Versions.md` when current Open/R version
+   *       is bumped up.
+   *
+   */
 
   // Current OpenR version
   static constexpr int32_t kOpenrVersion{20200825};

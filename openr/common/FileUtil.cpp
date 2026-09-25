@@ -12,12 +12,16 @@ namespace openr {
 
 bool
 FileUtil::readFileToString(const std::string& path, std::string& contents) {
-  // realpath() expands all symbolic links and resolves references to
-  // /./, /../ and extra '/' characters in the null-terminated string
-  // named by path to produce a canonicalized absolute pathname.
+  /*
+   * realpath() expands all symbolic links and resolves references to
+   * /./, /../ and extra '/' characters in the null-terminated string
+   * named by path to produce a canonicalized absolute pathname.
+   */
 
-  // This prevents directory traversal attacks, e.g. writing to
-  // "../../../etc/passwd".
+  /*
+   * This prevents directory traversal attacks, e.g. writing to
+   * "../../../etc/passwd".
+   */
   std::array<char, PATH_MAX + 1> resolvedPath;
   if (realpath(path.c_str(), resolvedPath.data()) == nullptr) {
     XLOGF(ERR, "Failed to resolve path: {}", path);

@@ -314,9 +314,11 @@ std::set<NodeAndArea> selectRoutes(
     thrift::RouteSelectionAlgorithm algorithm,
     const folly::F14FastSet<NodeAndArea>& drainedNodes = {});
 
-// Deterministically choose one as best path from multipaths. Used in Decision.
-// Choose local if local node is a part of the multipaths.
-// Otherwise choose smallest key: allNodeAreas.begin().
+/*
+ * Deterministically choose one as best path from multipaths. Used in Decision.
+ * Choose local if local node is a part of the multipaths.
+ * Otherwise choose smallest key: allNodeAreas.begin().
+ */
 NodeAndArea selectBestNodeArea(
     std::set<NodeAndArea> const& allNodeAreas, std::string const& myNodeName);
 

@@ -12,8 +12,10 @@
 // openr config file
 DECLARE_string(config);
 
-// [TO_BE_DEPRECATED]
-// security related flags
+/*
+ * [TO_BE_DEPRECATED]
+ * security related flags
+ */
 DECLARE_string(x509_cert_path);
 DECLARE_string(x509_key_path);
 DECLARE_string(x509_ca_path);

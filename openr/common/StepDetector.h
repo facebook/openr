@@ -86,8 +86,10 @@ class StepDetector {
             "Step detected at time: {}, new mean: {}",
             now.count(),
             fastAvg);
-        // report fast average since slow average may not have caught up with
-        // new mean yet
+        /*
+         * report fast average since slow average may not have caught up with
+         * new mean yet
+         */
         stepCb_(fastAvg);
         lastAvg_ = fastAvg;
         lastAvgInit_ = true;
@@ -100,8 +102,10 @@ class StepDetector {
       }
     }
 
-    // detect slow boiling, i.e., gradual change, missed by state machine
-    // only check when time series is stable, e.g., slow and fast mean are close
+    /*
+     * detect slow boiling, i.e., gradual change, missed by state machine
+     * only check when time series is stable, e.g., slow and fast mean are close
+     */
     if (diff <= loThreshold_ && lastAvgInit_ &&
         std::abs(slowAvg - lastAvg_) >= absThreshold_) {
       XLOGF(
@@ -154,8 +158,10 @@ class StepDetector {
   // is lastAvg_ initialized
   bool lastAvgInit_{false};
 
-  // current state of time series, between upper threshold on the rising edge
-  // and lower threshold on the falling
+  /*
+   * current state of time series, between upper threshold on the rising edge
+   * and lower threshold on the falling
+   */
   bool inTransit_{false};
 };
 } // namespace openr

@@ -58,8 +58,10 @@ TEST(StepDetectorTest, LargeStep) {
   uint32_t changeCount = 0;
   uint32_t timeStamp = 0;
   double expectedAvg = 0.0;
-  // sampled mean can still be more than delta away from population mean
-  // but the probability is so small we regard it would not happen in testing
+  /*
+   * sampled mean can still be more than delta away from population mean
+   * but the probability is so small we regard it would not happen in testing
+   */
   double delta = 1.0;
 
   auto stepCb = [&](const double& avg) {
@@ -120,8 +122,10 @@ TEST(StepDetectorTest, SlowBoiling) {
   uint32_t changeCount = 0;
   uint32_t timeStamp = 0;
   double expectedAvg = 0.0;
-  // sampled mean can still be more than delta away from population mean
-  // but the probability is so small we regard it would not happen in testing
+  /*
+   * sampled mean can still be more than delta away from population mean
+   * but the probability is so small we regard it would not happen in testing
+   */
   double delta = 1.0;
 
   auto stepCb = [&](const double& avg) {

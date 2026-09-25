@@ -67,13 +67,17 @@ getOpenrCtrlPlainTextClient(
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
     std::optional<int> maybeIpTos = std::nullopt,
     bool enableKeepAlive = false) {
-  // NOTE: It is possible to have caching for socket. We're not doing it as
-  // we expect clients to be persistent/sticky.
+  /*
+   * NOTE: It is possible to have caching for socket. We're not doing it as
+   * we expect clients to be persistent/sticky.
+   */
   std::unique_ptr<ClientType> client{nullptr};
 
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
-    // Create a new UNCONNECTED AsyncSocket
-    // ATTN: don't change contructor flavor to connect automatically.
+    /*
+     * Create a new UNCONNECTED AsyncSocket
+     * ATTN: don't change contructor flavor to connect automatically.
+     */
     const folly::SocketAddress sa(addr, port);
     auto transport = folly::AsyncSocket::newSocket(&evb);
 
@@ -117,8 +121,10 @@ getOpenrCtrlPlainTextClient(
     auto channel = ClientChannel::newChannel(std::move(transport));
     channel->setTimeout(processingTimeout.count());
 
-    // Enable compression for efficient transport when available. This will
-    // incur CPU cost but it is insignificant for usual queries.
+    /*
+     * Enable compression for efficient transport when available. This will
+     * incur CPU cost but it is insignificant for usual queries.
+     */
     detail::setCompressionTransform(channel.get());
 
     // Create client
@@ -145,8 +151,10 @@ getOpenrCtrlSecureClient(
     const folly::SocketAddress& bindAddr = folly::AsyncSocket::anyAddress(),
     std::optional<int> maybeIpTos = std::nullopt,
     bool enableKeepAlive = false) {
-  // NOTE: It is possible to have caching for socket. We're not doing it as
-  // we expect clients to be persistent/sticky.
+  /*
+   * NOTE: It is possible to have caching for socket. We're not doing it as
+   * we expect clients to be persistent/sticky.
+   */
   std::unique_ptr<ClientType> client{nullptr};
 
   evb.runImmediatelyOrRunInEventBaseThreadAndWait([&]() mutable {
@@ -197,8 +205,10 @@ getOpenrCtrlSecureClient(
         apache::thrift::RocketClientChannel::newChannel(std::move(transport));
     channel->setTimeout(processingTimeout.count());
 
-    // Enable compression for efficient transport when available. This will
-    // incur CPU cost but it is insignificant for usual queries.
+    /*
+     * Enable compression for efficient transport when available. This will
+     * incur CPU cost but it is insignificant for usual queries.
+     */
     detail::setCompressionTransform(channel.get());
 
     // Create client
