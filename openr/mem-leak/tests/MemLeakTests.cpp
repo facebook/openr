@@ -24,9 +24,11 @@ TEST(MemLeakTest, StartMemoryLeakThread) {
   /* sleep override */
   std::this_thread::sleep_for(std::chrono::seconds(30));
 
-  // Check if the process memory usage has increased significantly
-  // Note: This is a simple check and may not be accurate in all cases
-  // Get the process memory usage
+  /*
+   * Check if the process memory usage has increased significantly
+   * Note: This is a simple check and may not be accurate in all cases
+   * Get the process memory usage
+   */
   struct rusage ru;
   getrusage(RUSAGE_SELF, &ru);
   auto memUsage = ru.ru_maxrss * 1024; // Convert from kilobytes to bytes
