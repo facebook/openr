@@ -244,15 +244,21 @@ class Fib final : public OpenrEventBase {
      * Enumeration depicting the current state of Routes
      */
     enum State {
-      // FIB starts in this state. It is awaiting RIB, but meanwhile will
-      // program any received static route update.
+      /*
+       * FIB starts in this state. It is awaiting RIB, but meanwhile will
+       * program any received static route update.
+       */
       AWAITING = 0,
-      // Once the first RIB update aka snapshot is received, FIB transitions
-      // to syncing state. State may also downgrade to this state from SYNCED
-      // on FIB_CONNECTED (FibAgent reconnects).
+      /*
+       * Once the first RIB update aka snapshot is received, FIB transitions
+       * to syncing state. State may also downgrade to this state from SYNCED
+       * on FIB_CONNECTED (FibAgent reconnects).
+       */
       SYNCING = 1,
-      // After successful SYNC of routes, FIB enters this state and perform
-      // only incremental route updates, deletes or retries.
+      /*
+       * After successful SYNC of routes, FIB enters this state and perform
+       * only incremental route updates, deletes or retries.
+       */
       SYNCED = 2,
     };
     State state{AWAITING}; // We start in AWAITING state
@@ -326,8 +332,10 @@ class Fib final : public OpenrEventBase {
   // Switch agent thrift server port
   const int32_t thriftPort_{0};
 
-  // Config Knob - In dry run FIB will not invoke route programming
-  // APIs, and mimick the whole logic as programming is successful.
+  /*
+   * Config Knob - In dry run FIB will not invoke route programming
+   * APIs, and mimick the whole logic as programming is successful.
+   */
   const bool dryrun_{true};
 
   /*
@@ -343,18 +351,24 @@ class Fib final : public OpenrEventBase {
    */
   const bool enableQueueCoalescing_{false};
 
-  // Config knob - Minimum delay (in milliseconds) to be incurred before
-  // deleting a a route (both unicast and mpls).
+  /*
+   * Config knob - Minimum delay (in milliseconds) to be incurred before
+   * deleting a a route (both unicast and mpls).
+   */
   const std::chrono::milliseconds routeDeleteDelay_{0};
 
-  // Thrift client connection to switch FIB Agent using which we actually
-  // manipulate routes.
+  /*
+   * Thrift client connection to switch FIB Agent using which we actually
+   * manipulate routes.
+   */
   std::unique_ptr<apache::thrift::Client<thrift::FibService>> client_{nullptr};
 
-  // State variables for RetryRoutes programming fiber.
-  // - Stop signal to terminate retryRoutesFiber, sent only once
-  // - Semaphore used for signalling when routes are available for programming
-  // - Exponential backoff to ease of things on repetitive failures
+  /*
+   * State variables for RetryRoutes programming fiber.
+   * - Stop signal to terminate retryRoutesFiber, sent only once
+   * - Semaphore used for signalling when routes are available for programming
+   * - Exponential backoff to ease of things on repetitive failures
+   */
   folly::fibers::Baton retryRoutesStopSignal_;
   folly::fibers::Semaphore retryRoutesSemaphore_{1};
   ExponentialBackoff<std::chrono::milliseconds> retryRoutesExpBackoff_;
@@ -362,21 +376,27 @@ class Fib final : public OpenrEventBase {
   // Stop signal for KeepAlive fiber
   folly::fibers::Baton keepAliveStopSignal_;
 
-  // Queues to publish programmed incremental IP/label routes or those from Fib
-  // sync. (Fib streaming)
+  /*
+   * Queues to publish programmed incremental IP/label routes or those from Fib
+   * sync. (Fib streaming)
+   */
   messaging::ReplicateQueue<DecisionRouteUpdate>& fibRouteUpdatesQueue_;
 
-  // Latest aliveSince heard from FibService. If the next one is different then
-  // it means that FibAgent has restarted and we need to perform sync.
+  /*
+   * Latest aliveSince heard from FibService. If the next one is different then
+   * it means that FibAgent has restarted and we need to perform sync.
+   */
   int64_t latestAliveSince_{0};
 
   // Open/R ClientID for programming routes
   const int16_t kFibId_{static_cast<int16_t>(thrift::FibClient::OPENR)};
 
-  // Semaphore to serialize route programming across multiple fibers & async
-  // timers. e.g. static route updates queue, decision route updates queue and
-  // route programming retry timers
-  // NOTE: We initialize with a single slot for exclusive locking
+  /*
+   * Semaphore to serialize route programming across multiple fibers & async
+   * timers. e.g. static route updates queue, decision route updates queue and
+   * route programming retry timers
+   * NOTE: We initialize with a single slot for exclusive locking
+   */
   folly::fibers::Semaphore updateRoutesSemaphore_{1};
 };
 

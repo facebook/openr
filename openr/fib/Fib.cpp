@@ -60,34 +60,40 @@ Fib::Fib(
   // On startup we do require routedb_sync so explicitly set the counter to 0
   fb303::fbData->setCounter("fib.synced", 0);
 
-  //
-  // Start RetryRoute fiber with stop signal.
-  //
+  /*
+   *
+   * Start RetryRoute fiber with stop signal.
+   *
+   */
   addFiberTask([this]() mutable noexcept {
     XLOG(DBG1, "Starting retryRoutes task");
     retryRoutesTask(retryRoutesStopSignal_);
     XLOG(DBG1, "[Exit] RetryRoutes task finished");
   });
 
-  //
-  // Create KeepAlive task with stop signal. Signalling part consists of two
-  // - Promise retained in state variable of Fib module. Fiber awaits on it. The
-  //   promise is fulfilled in Fib::stop()
-  // - SemiFuture is passed to fiber for awaiting
-  //
+  /*
+   *
+   * Create KeepAlive task with stop signal. Signalling part consists of two
+   * - Promise retained in state variable of Fib module. Fiber awaits on it. The
+   *   promise is fulfilled in Fib::stop()
+   * - SemiFuture is passed to fiber for awaiting
+   *
+   */
   addFiberTask([this]() mutable noexcept {
     XLOG(DBG1, "Starting keepAlive task");
     keepAliveTask(keepAliveStopSignal_);
     XLOG(DBG1, "[Exit] KeepAlive task finished");
   });
 
-  // Fiber to process route updates from Decision.
-  // NOTE: bounding of this queue's backlog under route churn is handled at the
-  // queue layer (push-time coalescing on the Decision->Fib routeUpdatesQueue
-  // reader, wired in Main.cpp and gated by the
-  // disable_fib_route_update_coalescing config knob), so a stalled/slow Fib
-  // cannot let the backlog grow unbounded. Here we just process each (possibly
-  // already-coalesced) update.
+  /*
+   * Fiber to process route updates from Decision.
+   * NOTE: bounding of this queue's backlog under route churn is handled at the
+   * queue layer (push-time coalescing on the Decision->Fib routeUpdatesQueue
+   * reader, wired in Main.cpp and gated by the
+   * disable_fib_route_update_coalescing config knob), so a stalled/slow Fib
+   * cannot let the backlog grow unbounded. Here we just process each (possibly
+   * already-coalesced) update.
+   */
   addFiberTask([q = std::move(routeUpdatesQueue), this]() mutable noexcept {
     XLOG(DBG1, "Starting route-update task");
     while (true) {
@@ -381,10 +387,12 @@ DecisionRouteUpdate
 Fib::RouteState::createUpdate() {
   DecisionRouteUpdate update;
 
-  //
-  // Case - First Sync
-  // Return all updates
-  //
+  /*
+   *
+   * Case - First Sync
+   * Return all updates
+   *
+   */
 
   if (state == SYNCING && !isInitialSynced) {
     update.type = DecisionRouteUpdate::FULL_SYNC;
@@ -393,10 +401,12 @@ Fib::RouteState::createUpdate() {
     return update;
   }
 
-  //
-  // Case - Subsequent Sync or re-programming of failed routes
-  // Return updates based on dirty state
-  //
+  /*
+   *
+   * Case - Subsequent Sync or re-programming of failed routes
+   * Return updates based on dirty state
+   *
+   */
   update.type = DecisionRouteUpdate::INCREMENTAL;
   auto const currentTime = std::chrono::steady_clock::now();
 
@@ -420,14 +430,18 @@ Fib::RouteState::createUpdate() {
   return update;
 }
 
-// Computes the minimum timestamp among unicast and mpls routes w.r.t
-// current timestamp. In case there is a delete event which expired in the
-// past, retry timer is scheduled immediately.
+/*
+ * Computes the minimum timestamp among unicast and mpls routes w.r.t
+ * current timestamp. In case there is a delete event which expired in the
+ * past, retry timer is scheduled immediately.
+ */
 std::chrono::milliseconds
 Fib::nextRetryDuration() const {
-  // Schedule retry timer immediately if this is initial Fib sync, or delayed
-  // deletion is not enabled, or if there is no pending (dirty) routes for
-  // processing.
+  /*
+   * Schedule retry timer immediately if this is initial Fib sync, or delayed
+   * deletion is not enabled, or if there is no pending (dirty) routes for
+   * processing.
+   */
   if ((routeState_.state == RouteState::SYNCING) ||
       (routeState_.dirtyPrefixes.empty() && routeState_.dirtyLabels.empty())) {
     // Return backoff duration if any
@@ -454,9 +468,11 @@ void
 Fib::RouteState::processFibUpdateError(
     thrift::PlatformFibUpdateError const& fibError,
     std::chrono::time_point<std::chrono::steady_clock> retryAt) {
-  // Mark prefixes as dirty. All newly failed unicast routes are added into
-  // dirtyPrefixes map. We can distinguish between add/update and delete updates
-  // in createUpdate().
+  /*
+   * Mark prefixes as dirty. All newly failed unicast routes are added into
+   * dirtyPrefixes map. We can distinguish between add/update and delete updates
+   * in createUpdate().
+   */
   for (auto& [_, prefixes] : *fibError.vrf2failedAddUpdatePrefixes()) {
     for (auto& prefix : prefixes) {
       dirtyPrefixes.insert_or_assign(toIPNetwork(prefix), retryAt);
@@ -476,8 +492,10 @@ Fib::processDecisionRouteUpdate(DecisionRouteUpdate&& routeUpdate) {
   // Process state transition event
   transitionRouteState(RouteState::RIB_UPDATE);
 
-  // Update perfEvents_ .. We replace existing perf events with new one as
-  // convergence is going to be based on new data, not the old.
+  /*
+   * Update perfEvents_ .. We replace existing perf events with new one as
+   * convergence is going to be based on new data, not the old.
+   */
   if (routeUpdate.perfEvents.has_value()) {
     addPerfEvent(
         routeUpdate.perfEvents.value(), myNodeName_, "FIB_ROUTE_DB_RECVD");
@@ -541,9 +559,11 @@ Fib::updateUnicastRoutes(
     DecisionRouteUpdate& routeUpdate,
     thrift::RouteDatabaseDelta& routeDbDelta) {
   bool success{true};
-  //
-  // Delete Unicast routes
-  //
+  /*
+   *
+   * Delete Unicast routes
+   *
+   */
   auto& unicastRoutesToDelete = *routeDbDelta.unicastRoutesToDelete();
   if (delayedDeletionEnabled() && useDeleteDelay) {
     // Clear the routes to delete
@@ -586,8 +606,10 @@ Fib::updateUnicastRoutes(
             ERR,
             "Failed to delete unicast routes from FIB. Error: {}",
             folly::exceptionStr(e));
-        // Marked all routes to be deleted as dirty. So we try to remove them
-        // again from FIB.
+        /*
+         * Marked all routes to be deleted as dirty. So we try to remove them
+         * again from FIB.
+         */
         for (const auto& prefix : routeUpdate.unicastRoutesToDelete) {
           routeState_.dirtyPrefixes.insert_or_assign(prefix, retryAt);
         }
@@ -596,9 +618,11 @@ Fib::updateUnicastRoutes(
     }
   }
 
-  //
-  // Update Unicast routes
-  //
+  /*
+   *
+   * Update Unicast routes
+   *
+   */
   auto const& unicastRoutesToUpdate = *routeDbDelta.unicastRoutesToUpdate();
   if (unicastRoutesToUpdate.size()) {
     XLOGF(
@@ -628,10 +652,12 @@ Fib::updateUnicastRoutes(
             ERR,
             "Failed to add/update unicast routes in FIB. Error: {}",
             folly::exceptionStr(e));
-        // Mark routes we failed to update as dirty for retry. Also declare
-        // these routes as deleted to client, because we failed to update them
-        // Next retry should restore, but meanwhile clients can take appropriate
-        // action because FIB state is unclear e.g. withdraw route from KvStore
+        /*
+         * Mark routes we failed to update as dirty for retry. Also declare
+         * these routes as deleted to client, because we failed to update them
+         * Next retry should restore, but meanwhile clients can take appropriate
+         * action because FIB state is unclear e.g. withdraw route from KvStore
+         */
         for (auto& [prefix, _] : routeUpdate.unicastRoutesToUpdate) {
           routeState_.dirtyPrefixes.insert_or_assign(prefix, retryAt);
           routeUpdate.unicastRoutesToDelete.emplace(prefix);
@@ -671,16 +697,20 @@ Fib::updateRoutes(
     return true;
   }
 
-  // Backup routes in routeState_. In case update routes failed, routes will be
-  // programmed in later scheduled FIB sync.
+  /*
+   * Backup routes in routeState_. In case update routes failed, routes will be
+   * programmed in later scheduled FIB sync.
+   */
   routeState_.update(routeUpdate);
 
   // Update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
-  // Skip route programming if we're in the SYNCING state. We only perform
-  // incremental route programming in AWAITING or SYNCED state. In SYNCING
-  // state we let `syncRoutes` do the work instead.
+  /*
+   * Skip route programming if we're in the SYNCING state. We only perform
+   * incremental route programming in AWAITING or SYNCED state. In SYNCING
+   * state we let `syncRoutes` do the work instead.
+   */
   if (routeState_.state == RouteState::SYNCING) {
     XLOG(INFO, "Skip route programming in SYNCING state");
     return true;
@@ -692,8 +722,10 @@ Fib::updateRoutes(
       currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
   bool success{true};
 
-  // Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
-  // with the FibService client APIs
+  /*
+   * Convert DecisionRouteUpdate to RouteDatabaseDelta to use UnicastRoute
+   * with the FibService client APIs
+   */
   auto routeDbDelta = routeUpdate.toThrift();
 
   success &= updateUnicastRoutes(
@@ -731,16 +763,20 @@ Fib::syncRoutes() {
       currentTime + retryRoutesExpBackoff_.getTimeRemainingUntilRetry();
   fb303::fbData->addStatValue("fib.sync_fib_calls", 1, fb303::COUNT);
 
-  // Create DecisionRouteUpdate that'll be published after successful sync. On
-  // partial failures we remove routes from this update.
+  /*
+   * Create DecisionRouteUpdate that'll be published after successful sync. On
+   * partial failures we remove routes from this update.
+   */
   auto fibRouteUpdates = routeState_.createUpdate();
 
   // update flat counters here as they depend on routeState_ and its change
   updateGlobalCounters();
 
-  //
-  // Sync Unicast routes
-  //
+  /*
+   *
+   * Sync Unicast routes
+   *
+   */
   XLOGF(INFO, "Syncing {} unicast routes in FIB", unicastRoutes.size());
 
   printUnicastRoutesAddUpdate(unicastRoutes);
@@ -801,15 +837,19 @@ Fib::syncRoutes() {
     }
   }
 
-  // NOTE: We set counter for sync time as it is one time event. We report the
-  // value of last sync duration
+  /*
+   * NOTE: We set counter for sync time as it is one time event. We report the
+   * value of last sync duration
+   */
   const auto elapsedTime = std::chrono::ceil<std::chrono::milliseconds>(
       std::chrono::steady_clock::now() - currentTime);
   XLOGF(INFO, "It took {}ms to sync routes in FIB", elapsedTime.count());
   fb303::fbData->setCounter("fib.route_sync.time_ms", elapsedTime.count());
 
-  // Publish route update. We'll do so only if sync is successful.
-  // NOTE: even empty Fib sync will be published to fibRouteUpdatesQueue_.
+  /*
+   * Publish route update. We'll do so only if sync is successful.
+   * NOTE: even empty Fib sync will be published to fibRouteUpdatesQueue_.
+   */
   fibRouteUpdatesQueue_.push(std::move(fibRouteUpdates));
 
   // Transition state on successful sync. Also record our first sync
@@ -927,8 +967,10 @@ Fib::keepAlive() noexcept {
           folly::exceptionStr(e));
     }
   }
-  // Check if switch agent has restarted or not. Applicable only if we have
-  // initialized alive-since
+  /*
+   * Check if switch agent has restarted or not. Applicable only if we have
+   * initialized alive-since
+   */
   if (latestAliveSince_ != 0 && aliveSince != latestAliveSince_) {
     XLOG(
         WARNING,
@@ -1001,9 +1043,11 @@ Fib::RouteState::toStr(RouteState::State state) {
 
 void
 Fib::transitionRouteState(const RouteState::Event event) {
-  // Static matrix representing state transition. Here we handle all events
-  // across all states. First index represent the current state, second level
-  // index represents the event. Value represents the new state.
+  /*
+   * Static matrix representing state transition. Here we handle all events
+   * across all states. First index represent the current state, second level
+   * index represents the event. Value represents the new state.
+   */
   static const std::array<std::array<std::optional<RouteState::State>, 4>, 3>
       stateMap = {
           {{
@@ -1044,10 +1088,12 @@ Fib::transitionRouteState(const RouteState::Event event) {
   // Update current state
   routeState_.state = nextState.value();
 
-  // NOTE: Special processing
-  // Clear all existing routes if we transition from AWAITING -> SYNCING
-  // First RIB update is a SYNC and should be treated as source of truth. Any
-  // previously installed static route should be ignored.
+  /*
+   * NOTE: Special processing
+   * Clear all existing routes if we transition from AWAITING -> SYNCING
+   * First RIB update is a SYNC and should be treated as source of truth. Any
+   * previously installed static route should be ignored.
+   */
   if (prevState == RouteState::AWAITING && nextState == RouteState::SYNCING) {
     routeState_.unicastRoutes.clear();
   }

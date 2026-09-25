@@ -162,8 +162,10 @@ BM_FibAddUnicastRoute(
     }
 
     {
-      // Update routes by randomly regenerating nextHops for numOfUpdatePrefixes
-      // prefixes.
+      /*
+       * Update routes by randomly regenerating nextHops for numOfUpdatePrefixes
+       * prefixes.
+       */
       DecisionRouteUpdate routeUpdate;
       for (uint32_t index = 0; index < numOfUpdateRoutes; index++) {
         auto nhs = fibWrapper->prefixGenerator.getRandomNextHopsUnicast(
