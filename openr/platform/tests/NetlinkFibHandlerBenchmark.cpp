@@ -42,8 +42,10 @@ const int16_t kFibId{static_cast<int16_t>(openr::thrift::FibClient::OPENR)};
 
 namespace openr {
 
-// This class creates virtual interface (veths)
-// which the Benchmark test can use to add routes (via interface)
+/*
+ * This class creates virtual interface (veths)
+ * which the Benchmark test can use to add routes (via interface)
+ */
 class NetlinkFibWrapper {
  public:
   NetlinkFibWrapper() {

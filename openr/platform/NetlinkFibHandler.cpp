@@ -21,10 +21,12 @@ namespace openr {
 
 namespace {
 
-// iproute2 protocol IDs in the kernel are a shared resource
-// Various well known and custom protocols use it
-// This is a *Weak* attempt to protect against some already
-// known protocols
+/*
+ * iproute2 protocol IDs in the kernel are a shared resource
+ * Various well known and custom protocols use it
+ * This is a *Weak* attempt to protect against some already
+ * known protocols
+ */
 const uint8_t kMinRouteProtocolId = 17;
 const uint8_t kMaxRouteProtocolId = 253;
 
@@ -219,10 +221,12 @@ NetlinkFibHandler::semifuture_syncFib(
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
 
-  // Create set of existing route
-  // NOTE: Synchronous call to retrieve all the routes. We first make both
-  // requests to retrieve IPv4 and IPv6 routes. Subsequently we wait on them
-  // to complete and prepare the map of existing routes
+  /*
+   * Create set of existing route
+   * NOTE: Synchronous call to retrieve all the routes. We first make both
+   * requests to retrieve IPv4 and IPv6 routes. Subsequently we wait on them
+   * to complete and prepare the map of existing routes
+   */
   folly::F14FastMap<folly::CIDRNetwork, fbnl::Route> existingRoutes;
   {
     auto v4Routes = nlSock_->getIPv4Routes(protocol.value(), routeTable_).get();
@@ -236,8 +240,10 @@ NetlinkFibHandler::semifuture_syncFib(
     for (auto& routesPtr : {&v4Routes, &v6Routes}) {
       for (auto& route : routesPtr->value()) {
         const auto prefix = route.getDestination();
-        // Linux will report a null next-hop for RTN_BLACKHOLE type while
-        // RIB does not
+        /*
+         * Linux will report a null next-hop for RTN_BLACKHOLE type while
+         * RIB does not
+         */
         if (route.getType() == RTN_BLACKHOLE) {
           route.setNextHops({});
         }
@@ -284,9 +290,11 @@ NetlinkFibHandler::semifuture_syncFib(
     result.emplace_back(nlSock_->deleteRoute(nlRoute));
   }
 
-  // Return collected result
-  // NOTE: We're ignoring EEXIST error code. ESRCH error code must not be
-  // raised because we're deleting route that already exist
+  /*
+   * Return collected result
+   * NOTE: We're ignoring EEXIST error code. ESRCH error code must not be
+   * raised because we're deleting route that already exist
+   */
   return fbnl::NetlinkProtocolSocket::collectReturnStatus(
       std::move(result), {EEXIST});
 }
@@ -309,8 +317,10 @@ NetlinkFibHandler::semifuture_syncMplsFib(
   // SemiFuture vector for collecting return values of all API calls
   std::vector<folly::SemiFuture<int>> result;
 
-  // Create set of existing route
-  // NOTE: Synchronous call to retrieve all the routes
+  /*
+   * Create set of existing route
+   * NOTE: Synchronous call to retrieve all the routes
+   */
   folly::F14FastMap<int32_t, fbnl::Route> existingRoutes;
   auto nlRoutes = nlSock_->getMplsRoutes(protocol.value(), routeTable_).get();
   if (nlRoutes.hasError()) {
@@ -458,8 +468,10 @@ NetlinkFibHandler::toThriftNextHops(const fbnl::NextHopSet& nextHops) {
             getIfName(nh.getIfIndex().value()).value();
       }
     } else {
-      // POP_AND_LOOKUP mpls nexthop has no nexthop address so we assign
-      // valid but zeroed ipv6 address.
+      /*
+       * POP_AND_LOOKUP mpls nexthop has no nexthop address so we assign
+       * valid but zeroed ipv6 address.
+       */
       CHECK(labelAction.has_value());
       CHECK(thrift::MplsActionCode::POP_AND_LOOKUP == labelAction.value());
       *nextHop.address() = toBinaryAddress(folly::IPAddressV6("::"));
@@ -535,8 +547,10 @@ NetlinkFibHandler::buildNextHop(
 }
 fbnl::Route
 NetlinkFibHandler::buildInterfaceRoute(const thrift::UnicastRoute& route) {
-  // Create interface prefix route object, use RTPROT_KERNEL to avoid being
-  // messed up by routing protocol.
+  /*
+   * Create interface prefix route object, use RTPROT_KERNEL to avoid being
+   * messed up by routing protocol.
+   */
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setDestination(toIPNetwork(*route.dest()))
       .setRouteTable(routeTable_)
@@ -594,8 +608,10 @@ NetlinkFibHandler::buildRoute(const thrift::UnicastRoute& route, int protocol) {
 fbnl::Route
 NetlinkFibHandler::buildMplsRoute(
     const thrift::MplsRoute& mplsRoute, int protocol) {
-  // Create route object
-  // NOTE: Priority for MPLS routes is not supported in Linux
+  /*
+   * Create route object
+   * NOTE: Priority for MPLS routes is not supported in Linux
+   */
   fbnl::RouteBuilder rtBuilder;
   rtBuilder.setMplsLabel(static_cast<uint32_t>(*mplsRoute.topLabel()))
       .setRouteTable(routeTable_)
@@ -628,8 +644,10 @@ NetlinkFibHandler::checkIfIndex(const int ifIndex) {
 
 std::optional<int>
 NetlinkFibHandler::getIfIndex(const std::string& ifName) {
-  // The cache can become invalid if network interfaces are destroyed and
-  // recreated. If the cache is found to be invalid, rebuild the cache.
+  /*
+   * The cache can become invalid if network interfaces are destroyed and
+   * recreated. If the cache is found to be invalid, rebuild the cache.
+   */
   if (cacheInvalid_) {
     initializeInterfaceCache();
     cacheInvalid_ = false;
@@ -747,8 +765,10 @@ NetlinkFibHandler::invokeNeighborListeners(
     ThreadLocalListener* listener,
     const std::vector<std::string>& neighborIps,
     bool isReachable) {
-  // Collect the iterators to avoid erasing and potentially reordering
-  // the iterators in the list.
+  /*
+   * Collect the iterators to avoid erasing and potentially reordering
+   * the iterators in the list.
+   */
   for (const auto& ctx : brokenClients_) {
     listener->clients.erase(ctx);
   }

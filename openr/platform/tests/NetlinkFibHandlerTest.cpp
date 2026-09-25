@@ -171,10 +171,12 @@ class FibHandlerFixture : public testing::TestWithParam<bool> {
       dynamic_cast<fbnl::NetlinkProtocolSocket*>(&nlSock_)};
 };
 
-//
-// Tests static API - NetlinkFibHandler::getProtocol
-// For mapping see `clientIdToProtocolId` in `Platform.thrift`
-//
+/*
+ *
+ * Tests static API - NetlinkFibHandler::getProtocol
+ * For mapping see `clientIdToProtocolId` in `Platform.thrift`
+ *
+ */
 TEST(NetlinkFibHandler, getProtocol) {
   EXPECT_EQ(99, NetlinkFibHandler::getProtocol(786));
   EXPECT_EQ(253, NetlinkFibHandler::getProtocol(0));
@@ -183,9 +185,11 @@ TEST(NetlinkFibHandler, getProtocol) {
   EXPECT_EQ(std::nullopt, NetlinkFibHandler::getProtocol(110));
 }
 
-//
-// Tests static API - NetlinkFibHandler::getClientName
-//
+/*
+ *
+ * Tests static API - NetlinkFibHandler::getClientName
+ *
+ */
 TEST(NetlinkFibHandler, getClientName) {
   EXPECT_EQ("OPENR", NetlinkFibHandler::getClientName(786));
   EXPECT_EQ("BGP", NetlinkFibHandler::getClientName(0));
@@ -194,9 +198,11 @@ TEST(NetlinkFibHandler, getClientName) {
   EXPECT_EQ("110", NetlinkFibHandler::getClientName(110));
 }
 
-//
-// Tests static API - NetlinkFibHandler::protocolToPriority
-//
+/*
+ *
+ * Tests static API - NetlinkFibHandler::protocolToPriority
+ *
+ */
 TEST(NetlinkFibHandler, protocolToPriority) {
   EXPECT_EQ(
       10, NetlinkFibHandler::protocolToPriority(static_cast<uint8_t>(99)));
@@ -209,9 +215,11 @@ TEST(NetlinkFibHandler, protocolToPriority) {
       NetlinkFibHandler::protocolToPriority(17));
 }
 
-//
-// Get routes for invalid client ID
-//
+/*
+ *
+ * Get routes for invalid client ID
+ *
+ */
 TEST(NetlinkFibHandler, getRoutesWithInvalidClient) {
   const int16_t kInvalidClient = 111;
   folly::EventBase evb;
@@ -223,18 +231,20 @@ TEST(NetlinkFibHandler, getRoutesWithInvalidClient) {
       fbnl::NlException);
 }
 
-//
-// Test correctness of route add, update, and remove
-//
-// Add a route - verify it gets added
-// Add the same route again - verify it remains the same
-//
-// Update the route with a new nexthop
-// Update the route with one less nexthop
-//
-// Del the route
-// Del the route again - no effect
-//
+/*
+ *
+ * Test correctness of route add, update, and remove
+ *
+ * Add a route - verify it gets added
+ * Add the same route again - verify it remains the same
+ *
+ * Update the route with a new nexthop
+ * Update the route with one less nexthop
+ *
+ * Del the route
+ * Del the route again - no effect
+ *
+ */
 TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   const int16_t kClientId = 786;
   const bool isV4 = GetParam();
@@ -288,8 +298,10 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   sortNextHops(*routes);
   EXPECT_EQ(r1, routes->at(0));
 
-  // Update route with new nexthops (remove first nexthop, add 2 more nexthops)
-  // NOTE: NetlinkTypes may organize nexthops in the arbitrary order
+  /*
+   * Update route with new nexthops (remove first nexthop, add 2 more nexthops)
+   * NOTE: NetlinkTypes may organize nexthops in the arbitrary order
+   */
   *r1.nextHops() = createNextHops(5, isV4);
   r1.nextHops()->at(0) = r1.nextHops()->at(4);
   r1.nextHops()->pop_back();
@@ -320,10 +332,12 @@ TEST_P(FibHandlerFixture, UnicastAddUpdateDel) {
   EXPECT_EQ(0, routes->size());
 }
 
-//
-// Add route with different weights. Make sure the code translates the weight
-// and reads it again when working with fbnl data structures
-//
+/*
+ *
+ * Add route with different weights. Make sure the code translates the weight
+ * and reads it again when working with fbnl data structures
+ *
+ */
 TEST_P(FibHandlerFixture, UnicastAddUcmp) {
   const int16_t kClientId = 786;
   const bool isV4 = GetParam();
@@ -348,9 +362,11 @@ TEST_P(FibHandlerFixture, UnicastAddUcmp) {
   EXPECT_EQ(r1, routes->at(0));
 }
 
-//
-// Add/Get route with label push action
-//
+/*
+ *
+ * Add/Get route with label push action
+ *
+ */
 TEST_P(FibHandlerFixture, UnicastAddRouteWithLabelPush) {
   const int16_t kClientId = 786;
   const bool isV4 = GetParam();
@@ -374,12 +390,14 @@ TEST_P(FibHandlerFixture, UnicastAddRouteWithLabelPush) {
   EXPECT_EQ(r1, routes->at(0));
 }
 
-//
-// Test correctness of SyncFib
-//
-// syncFib with [r1, r2, r3] routes - ensure all gets added
-// syncFib with [r1, r2', r4] routes - ensure r2-update, r3-delete and r4-add
-//
+/*
+ *
+ * Test correctness of SyncFib
+ *
+ * syncFib with [r1, r2, r3] routes - ensure all gets added
+ * syncFib with [r1, r2', r4] routes - ensure r2-update, r3-delete and r4-add
+ *
+ */
 TEST_P(FibHandlerFixture, UnicastSync) {
   const int16_t kClientId = 786;
   const bool isV4 = GetParam();
@@ -412,11 +430,13 @@ TEST_P(FibHandlerFixture, UnicastSync) {
   EXPECT_EQ(rts, *routes);
 }
 
-//
-// Test correctness of multiple client support. Incrementally add and remove
-// route for same prefix1 from client1 and client2. Verify that addition or
-// removal of routes for one client doesn't affect the other client.
-//
+/*
+ *
+ * Test correctness of multiple client support. Incrementally add and remove
+ * route for same prefix1 from client1 and client2. Verify that addition or
+ * removal of routes for one client doesn't affect the other client.
+ *
+ */
 TEST_P(FibHandlerFixture, UnicastMultipleClients) {
   const int16_t kClient1 = 786;
   const int16_t kClient2 = 0;
@@ -501,9 +521,11 @@ TEST_P(FibHandlerFixture, UnicastMultipleClients) {
   }
 }
 
-//
-// Add and Remove for POP label
-//
+/*
+ *
+ * Add and Remove for POP label
+ *
+ */
 TEST_P(FibHandlerFixture, MplsAddDelPop) {
   const int16_t kClientId = 786;
 
@@ -604,8 +626,10 @@ TEST_P(FibHandlerFixture, MplsAddUpdateDelSwapPhp) {
   sortNextHops(*routes);
   EXPECT_EQ(r1, routes->at(0));
 
-  // Update route with new nexthops (remove first nexthop, add 2 more nexthops)
-  // NOTE: NetlinkTypes may organize nexthops in the arbitrary order
+  /*
+   * Update route with new nexthops (remove first nexthop, add 2 more nexthops)
+   * NOTE: NetlinkTypes may organize nexthops in the arbitrary order
+   */
   *r1.nextHops() = createNextHops(5, isV4, phpAction);
   handler
       .semifuture_addMplsRoutes(
@@ -761,9 +785,11 @@ TEST_P(FibHandlerFixture, MplsMultipleClient) {
   }
 }
 
-//
-// instantiate parameterized tests
-//
+/*
+ *
+ * instantiate parameterized tests
+ *
+ */
 INSTANTIATE_TEST_CASE_P(Netlink, FibHandlerFixture, testing::Bool());
 
 int
