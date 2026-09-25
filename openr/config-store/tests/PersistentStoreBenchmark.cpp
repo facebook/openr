@@ -11,8 +11,10 @@
 #include <openr/config-store/PersistentStoreWrapper.h>
 
 namespace {
-// kIterations <= n: change this to 10 singce n starts from 10,
-// n is in BENCHMARK_PARAM(BM_PersistentStoreWrite, n)
+/*
+ * kIterations <= n: change this to 10 singce n starts from 10,
+ * n is in BENCHMARK_PARAM(BM_PersistentStoreWrite, n)
+ */
 uint32_t kIterations = 10;
 } // namespace
 
@@ -155,8 +157,10 @@ BM_PersistentStoreCreateDestroy(uint32_t iters, size_t numOfStringKeys) {
   }
 }
 
-// The parameter is the number of keys already written to store
-// before benchmarking the time.
+/*
+ * The parameter is the number of keys already written to store
+ * before benchmarking the time.
+ */
 BENCHMARK_PARAM(BM_PersistentStoreWrite, 10);
 BENCHMARK_PARAM(BM_PersistentStoreWrite, 100);
 BENCHMARK_PARAM(BM_PersistentStoreWrite, 1000);

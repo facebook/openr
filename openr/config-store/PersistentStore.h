@@ -75,9 +75,11 @@ class PersistentStore : public OpenrEventBase {
   static folly::Expected<std::optional<PersistentObject>, std::string>
   decodePersistentObject(folly::io::Cursor& cursor) noexcept;
 
-  //
-  // Public API
-  //
+  /*
+   *
+   * Public API
+   *
+   */
 
   // Store key-value
   folly::SemiFuture<folly::Unit> store(std::string key, std::string value);
@@ -117,8 +119,10 @@ class PersistentStore : public OpenrEventBase {
   }
 
  private:
-  // Function to save/load `database_` to local disk. Returns true on success
-  // else false. Doesn't throw exception.
+  /*
+   * Function to save/load `database_` to local disk. Returns true on success
+   * else false. Doesn't throw exception.
+   */
   bool saveDatabaseToDisk() noexcept;
   bool loadDatabaseFromDisk() noexcept;
 
@@ -132,8 +136,10 @@ class PersistentStore : public OpenrEventBase {
   // Function to save Persistent Object to local disk.
   bool savePersistentObjectToDisk() noexcept;
 
-  // Write IoBuf ro local disk
-  // NOLINTNEXTLINE(clang-diagnostic-unused-member-function)
+  /*
+   * Write IoBuf ro local disk
+   * NOLINTNEXTLINE(clang-diagnostic-unused-member-function)
+   */
   folly::Expected<folly::Unit, std::string> writeIoBufToDisk(
       const std::unique_ptr<folly::IOBuf>& ioBuf, WriteType writeType) noexcept;
 
@@ -147,12 +153,16 @@ class PersistentStore : public OpenrEventBase {
   // Keeps track of number of writes of PersistentObject to disk
   std::atomic<std::uint64_t> numOfNewWritesToDisk_{0};
 
-  // Whether the TlvFormatMarker has been written to the file.
-  // Set on successful load or full database save.
+  /*
+   * Whether the TlvFormatMarker has been written to the file.
+   * Set on successful load or full database save.
+   */
   bool tlvMarkerWritten_{false};
 
-  // Location on disk where data will be synced up. A file will be created
-  // if doesn't exists.
+  /*
+   * Location on disk where data will be synced up. A file will be created
+   * if doesn't exists.
+   */
   const fs::path storageFilePath_;
 
   // Dryrun to avoid disk writes in UTs
@@ -163,8 +173,10 @@ class PersistentStore : public OpenrEventBase {
   std::unique_ptr<ExponentialBackoff<std::chrono::milliseconds>>
       saveDbTimerBackoff_;
 
-  // Database to store config data. It is synced up on a persistent storage
-  // layer (disk) in a file.
+  /*
+   * Database to store config data. It is synced up on a persistent storage
+   * layer (disk) in a file.
+   */
   std::unordered_map<std::string, std::string> database_;
 
   // Define a persistent object

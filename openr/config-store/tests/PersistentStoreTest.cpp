@@ -117,10 +117,12 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
     EXPECT_FALSE(responseReEraseKey3);
   }
 
-  //
-  // Destroy store and re-create it, enforcing dump to file followed by
-  // reloading of content on creation. Verify stored content is recovered.
-  //
+  /*
+   *
+   * Destroy store and re-create it, enforcing dump to file followed by
+   * reloading of content on creation. Verify stored content is recovered.
+   *
+   */
   {
     PersistentStoreWrapper store(tid);
     store.run();
@@ -137,9 +139,11 @@ TEST(PersistentStoreTest, LoadStoreEraseTest) {
 }
 
 TEST(PersistentStoreTest, EncodeDecodePersistentObject) {
-  //
-  // Verify the encodePersistentObject and decodePersistentObject
-  //
+  /*
+   *
+   * Verify the encodePersistentObject and decodePersistentObject
+   *
+   */
 
   // Encode (ADD, key1, val1), and (DEL, key1),
   auto keyVal = std::make_pair("key1", "val1");
@@ -190,9 +194,11 @@ TEST(PersistentStoreTest, BulkStoreLoad) {
     store.run();
     filePath = store.filePath;
 
-    //
-    // Vefirying whether 100 pobjects can be successfully written to disk
-    //
+    /*
+     *
+     * Vefirying whether 100 pobjects can be successfully written to disk
+     *
+     */
 
     for (auto index = 0; index < 100; index++) {
       const std::pair<std::string, std::string> tmpKeyVal{

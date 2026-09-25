@@ -48,8 +48,10 @@ PersistentStore::PersistentStore(
     });
   }
 
-  // Load initial database. On failure we will just report error and continue
-  // with empty database
+  /*
+   * Load initial database. On failure we will just report error and continue
+   * with empty database
+   */
   if (!loadDatabaseFromDisk()) {
     XLOGF(
         ERR,
@@ -121,8 +123,10 @@ PersistentStore::load(std::string key) {
 void
 PersistentStore::maybeSaveObjectToDisk() noexcept {
   if (!saveDbTimerBackoff_) {
-    // This is primarily used for unit testing to save DB immediately
-    // Block the response till file is saved
+    /*
+     * This is primarily used for unit testing to save DB immediately
+     * Block the response till file is saved
+     */
     savePersistentObjectToDisk();
   } else if (!saveDbTimer_->isScheduled()) {
     saveDbTimer_->scheduleTimeout(
@@ -139,8 +143,10 @@ PersistentStore::savePersistentObjectToDisk() noexcept {
 
     auto queue = folly::IOBufQueue(folly::IOBufQueue::cacheChainLength());
 
-    // Prepend the TLV format marker if it hasn't been written yet.
-    // This happens when the file is new and no full database save has occurred.
+    /*
+     * Prepend the TLV format marker if it hasn't been written yet.
+     * This happens when the file is new and no full database save has occurred.
+     */
     if (!tlvMarkerWritten_) {
       queue.append(kTlvFormatMarker.data(), kTlvFormatMarker.size());
       tlvMarkerWritten_ = true;
@@ -361,8 +367,10 @@ PersistentStore::encodePersistentObject(
     appender.writeBE<uint32_t>(static_cast<uint32_t>(pObject.key.size()));
     appender.push(folly::StringPiece(pObject.key));
 
-    // If 'pObject.data' has value, append the length and the data to buf
-    // Otherwise, append 0 to buf
+    /*
+     * If 'pObject.data' has value, append the length and the data to buf
+     * Otherwise, append 0 to buf
+     */
     if (pObject.data.has_value()) {
       appender.writeBE<uint32_t>(
           static_cast<uint32_t>(pObject.data.value().size()));
