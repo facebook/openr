@@ -87,8 +87,10 @@ class AreaConfiguration {
 
 class FabricConfig {
  public:
-  // KvStore key marker for a fabric node's drain status. The full key is
-  // "drainStatus:<fabricName>".
+  /*
+   * KvStore key marker for a fabric node's drain status. The full key is
+   * "drainStatus:<fabricName>".
+   */
   static constexpr folly::StringPiece kDrainStatusMarker{"drainStatus:"};
 
   explicit FabricConfig(const thrift::FabricConfig& fabricConfig);
@@ -129,9 +131,11 @@ class Config {
     populateInternalDb();
   }
 
-  //
-  // config
-  //
+  /*
+   *
+   * config
+   *
+   */
   const thrift::OpenrConfig&
   getConfig() const {
     return config_;
@@ -143,9 +147,11 @@ class Config {
     return *config_.node_name();
   }
 
-  //
-  // feature knobs
-  //
+  /*
+   *
+   * feature knobs
+   *
+   */
 
   bool
   isV4Enabled() const {
@@ -191,9 +197,11 @@ class Config {
     return config_.enable_openr_queue_coalescing().value_or(false);
   }
 
-  //
-  // area
-  //
+  /*
+   *
+   * area
+   *
+   */
 
   void populateAreaConfig();
 
@@ -214,17 +222,21 @@ class Config {
     return ids;
   }
 
-  //
-  // spark
-  //
+  /*
+   *
+   * spark
+   *
+   */
   const thrift::SparkConfig&
   getSparkConfig() const {
     return *config_.spark_config();
   }
 
-  //
-  // kvstore
-  //
+  /*
+   *
+   * kvstore
+   *
+   */
   thrift::KvStoreConfig toThriftKvStoreConfig() const;
 
   const thrift::KvstoreConfig&
@@ -237,25 +249,31 @@ class Config {
     return std::chrono::milliseconds(*config_.kvstore_config()->key_ttl_ms());
   }
 
-  //
-  // link monitor
-  //
+  /*
+   *
+   * link monitor
+   *
+   */
   const thrift::LinkMonitorConfig&
   getLinkMonitorConfig() const {
     return *config_.link_monitor_config();
   }
 
-  //
-  // neighbor-monitor
-  //
+  /*
+   *
+   * neighbor-monitor
+   *
+   */
   bool
   isNeighborMonitorEnabled() const {
     return *config_.enable_neighbor_monitor();
   }
 
-  //
-  // watch dog
-  //
+  /*
+   *
+   * watch dog
+   *
+   */
   bool
   isWatchdogEnabled() const {
     return config_.enable_watchdog().value_or(false);
@@ -267,25 +285,31 @@ class Config {
     return *config_.watchdog_config();
   }
 
-  //
-  // monitor
-  //
+  /*
+   *
+   * monitor
+   *
+   */
   const thrift::MonitorConfig&
   getMonitorConfig() const {
     return *config_.monitor_config();
   }
 
-  //
-  // policy
-  //
+  /*
+   *
+   * policy
+   *
+   */
   std::optional<neteng::config::routing_policy::PolicyConfig>
   getAreaPolicies() const {
     return config_.area_policies().to_optional();
   }
 
-  //
-  // thrift server
-  //
+  /*
+   *
+   * thrift server
+   *
+   */
   const thrift::ThriftServerConfig
   getThriftServerConfig() const {
     return *config_.thrift_server();
@@ -455,9 +479,11 @@ class Config {
     }
   }
 
-  //
-  // thrift client
-  //
+  /*
+   *
+   * thrift client
+   *
+   */
   std::optional<thrift::ThriftClientConfig>
   getThriftClientConfig() const {
     return config_.thrift_client().to_optional();
@@ -499,9 +525,11 @@ class Config {
     return *config_.softdrained_node_increment();
   }
 
-  //
-  // Memory profiling
-  //
+  /*
+   *
+   * Memory profiling
+   *
+   */
   bool
   isMemoryProfilingEnabled() const {
     auto memProfileConf = config_.memory_profiling_config();
@@ -558,8 +586,10 @@ class Config {
   // fabric config if this node is in a fabric.
   std::optional<FabricConfig> fabricConfig_;
 
-// per class placeholder for test code
-// only need to be setup once here
+/*
+ * per class placeholder for test code
+ * only need to be setup once here
+ */
 #ifdef Config_TEST_FRIENDS
   Config_TEST_FRIENDS
 #endif

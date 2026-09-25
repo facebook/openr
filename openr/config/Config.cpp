@@ -191,10 +191,12 @@ Config::checkSparkConfig() const {
             "hello_time_s ({}) should be > 0", *sparkConfig.hello_time_s()));
   }
 
-  // When a node starts or a new link comes up we perform fast initial neighbor
-  // discovery by sending hello packets with solicitResponse bit set to request
-  // an immediate reply. This allows us to discover new neighbors in hundreds
-  // of milliseconds (or as configured).
+  /*
+   * When a node starts or a new link comes up we perform fast initial neighbor
+   * discovery by sending hello packets with solicitResponse bit set to request
+   * an immediate reply. This allows us to discover new neighbors in hundreds
+   * of milliseconds (or as configured).
+   */
   if (*sparkConfig.fastinit_hello_time_ms() <= 0) {
     throw std::out_of_range(
         fmt::format(
@@ -211,8 +213,10 @@ Config::checkSparkConfig() const {
             *sparkConfig.hello_time_s()));
   }
 
-  // The rate of hello packet send is defined by keepAliveTime.
-  // This time must be less than the holdTime for each node.
+  /*
+   * The rate of hello packet send is defined by keepAliveTime.
+   * This time must be less than the holdTime for each node.
+   */
   if (*sparkConfig.keepalive_time_s() <= 0) {
     throw std::out_of_range(
         fmt::format(
@@ -372,8 +376,10 @@ Config::checkThriftServerConfig() const {
         "x509_ca_path or x509_cert_path is specified in the config or THRIFT_TLS_SRV_CERT/THRIFT_TLS_CL_CERT_PATH environment variables not found in the disk.");
   }
 
-  // x509_key_path could be empty. If specified, need to be present in the
-  // file system.
+  /*
+   * x509_key_path could be empty. If specified, need to be present in the
+   * file system.
+   */
   const auto& keyPath = getThriftServerConfig().x509_key_path().to_optional();
   if (!fallBackCheck && keyPath && !fs::exists(keyPath.value())) {
     throw std::invalid_argument(
@@ -629,8 +635,10 @@ FabricConfig::isFabricPrefixKey(const std::string& key) const {
 
 bool
 FabricConfig::isFabricDrainStatusKey(std::string_view key) const {
-  // The fabric drain-status key is "drainStatus:<fabricName>". Match it
-  // exactly. Taking std::string_view avoids allocating on every call.
+  /*
+   * The fabric drain-status key is "drainStatus:<fabricName>". Match it
+   * exactly. Taking std::string_view avoids allocating on every call.
+   */
   if (!key.starts_with(kDrainStatusMarker)) {
     return false;
   }

@@ -334,10 +334,12 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
-  // Exception step_detector_fast_window_size >= 0
-  //           step_detector_slow_window_size >= 0
-  //           step_detector_lower_threshold >= 0
-  //           step_detector_upper_threshold >= 0
+  /*
+   * Exception step_detector_fast_window_size >= 0
+   *           step_detector_slow_window_size >= 0
+   *           step_detector_lower_threshold >= 0
+   *           step_detector_upper_threshold >= 0
+   */
   {
     auto confInvalidSpark = getBasicOpenrConfig();
     confInvalidSpark.spark_config()->step_detector_conf()->fast_window_size() =
@@ -354,8 +356,10 @@ TEST(ConfigTest, PopulateInternalDb) {
     EXPECT_THROW(auto c = Config(confInvalidSpark), std::invalid_argument);
   }
 
-  // Exception step_detector_fast_window_size > step_detector_slow_window_size
-  //           step_detector_lower_threshold > step_detector_upper_threshold
+  /*
+   * Exception step_detector_fast_window_size > step_detector_slow_window_size
+   *           step_detector_lower_threshold > step_detector_upper_threshold
+   */
   {
     auto confInvalidSpark = getBasicOpenrConfig();
     confInvalidSpark.spark_config()->step_detector_conf()->fast_window_size() =
@@ -574,8 +578,10 @@ TEST(ConfigTest, LinkMonitorGetter) {
   tConfig.areas().emplace();
   auto config = Config(tConfig);
 
-  // check to see the link monitor options got converted to an area config
-  // with domainName
+  /*
+   * check to see the link monitor options got converted to an area config
+   * with domainName
+   */
   auto const& domainNameArea =
       config.getAreas().at(Constants::kDefaultArea.toString());
   EXPECT_FALSE(domainNameArea.shouldDiscoverOnIface("eth0"));
@@ -589,10 +595,12 @@ TEST(ConfigTest, ToThriftKvStoreConfig) {
 
   EXPECT_NO_THROW(config.toThriftKvStoreConfig());
 
-  // enable_flood_pub_pre_compression is optional; when unset the effective
-  // default is false (value_or(false) in Config::toThriftKvStoreConfig), and an
-  // explicit value is plumbed through OpenrConfig::KvstoreConfig ->
-  // KvStore.thrift KvStoreConfig.
+  /*
+   * enable_flood_pub_pre_compression is optional; when unset the effective
+   * default is false (value_or(false) in Config::toThriftKvStoreConfig), and an
+   * explicit value is plumbed through OpenrConfig::KvstoreConfig ->
+   * KvStore.thrift KvStoreConfig.
+   */
   EXPECT_FALSE(
       *config.toThriftKvStoreConfig().enable_flood_pub_pre_compression());
 
@@ -604,16 +612,20 @@ TEST(ConfigTest, ToThriftKvStoreConfig) {
 }
 
 TEST(ConfigTest, FloodMemBudgetKnobs) {
-  // Both knobs are optional and are deliberately left unset when absent, so
-  // that KvStoreParams is the single place the Constants fallback is applied.
+  /*
+   * Both knobs are optional and are deliberately left unset when absent, so
+   * that KvStoreParams is the single place the Constants fallback is applied.
+   */
   auto tConfig = getBasicOpenrConfig();
   auto config = Config(tConfig);
   const auto defaulted = config.toThriftKvStoreConfig();
   EXPECT_FALSE(defaulted.flood_mem_budget_bytes().has_value());
   EXPECT_FALSE(defaulted.flood_drain_reconcile_threshold_ms().has_value());
 
-  // An explicit value is plumbed through OpenrConfig::KvstoreConfig ->
-  // KvStore.thrift KvStoreConfig.
+  /*
+   * An explicit value is plumbed through OpenrConfig::KvstoreConfig ->
+   * KvStore.thrift KvStoreConfig.
+   */
   auto tConfigSet = getBasicOpenrConfig();
   tConfigSet.kvstore_config()->flood_mem_budget_bytes() = 4096;
   tConfigSet.kvstore_config()->flood_drain_reconcile_threshold_ms() = 10000;
@@ -624,9 +636,11 @@ TEST(ConfigTest, FloodMemBudgetKnobs) {
 }
 
 TEST(ConfigTest, FloodMemBudgetKnobsRejectUnsafeValues) {
-  // A zero/negative budget is not "unlimited" -- it latches flooding off
-  // permanently (every publication defers, every drain early-returns), so the
-  // config must be rejected rather than silently blackholing the area.
+  /*
+   * A zero/negative budget is not "unlimited" -- it latches flooding off
+   * permanently (every publication defers, every drain early-returns), so the
+   * config must be rejected rather than silently blackholing the area.
+   */
   auto tConfigZeroBudget = getBasicOpenrConfig();
   tConfigZeroBudget.kvstore_config()->flood_mem_budget_bytes() = 0;
   EXPECT_THROW((Config(tConfigZeroBudget)), std::out_of_range);
@@ -663,16 +677,20 @@ TEST(ConfigTest, FloodMemBudgetKnobsRejectUnsafeValues) {
 }
 
 TEST(ConfigTest, FibRouteUpdateCoalescingKnob) {
-  // Optional (no thrift default): unset unless a config explicitly sets it, so
-  // the effective value is false (coalescing enabled) via value_or(false) in
-  // Main.cpp.
+  /*
+   * Optional (no thrift default): unset unless a config explicitly sets it, so
+   * the effective value is false (coalescing enabled) via value_or(false) in
+   * Main.cpp.
+   */
   auto tConfig = getBasicOpenrConfig();
   auto config = Config(tConfig);
   EXPECT_FALSE(
       config.getConfig().disable_fib_route_update_coalescing().has_value());
 
-  // An explicit value is preserved verbatim for per-scope (configerator)
-  // blast-radius control.
+  /*
+   * An explicit value is preserved verbatim for per-scope (configerator)
+   * blast-radius control.
+   */
   auto tConfigKnob = getBasicOpenrConfig();
   tConfigKnob.disable_fib_route_update_coalescing() = true;
   auto configDisabled = Config(tConfigKnob);
@@ -689,8 +707,10 @@ TEST(ConfigTest, FibRouteUpdateCoalescingKnob) {
 }
 
 TEST(ConfigTest, QueueCoalescingKnob) {
-  // Optional (no thrift default): unset unless a config explicitly sets it, so
-  // the effective value is false -- coalescing off until a scope opts in.
+  /*
+   * Optional (no thrift default): unset unless a config explicitly sets it, so
+   * the effective value is false -- coalescing off until a scope opts in.
+   */
   auto tConfig = getBasicOpenrConfig();
   auto config = Config(tConfig);
   EXPECT_FALSE(config.getConfig().enable_openr_queue_coalescing().has_value());
@@ -1023,8 +1043,10 @@ TEST(ConfigTest, FabricConfigPrefixKeys) {
       fabricConfig.isFabricPrefixKey("prefix:unknown:[10.0.0.0/8]"),
       ::testing::IsFalse());
 
-  // Keys with other prefixes should not match prefix key checks
-  // This tests the early return in getNodeNameFromPrefixKey
+  /*
+   * Keys with other prefixes should not match prefix key checks
+   * This tests the early return in getNodeNameFromPrefixKey
+   */
   EXPECT_THAT(
       fabricConfig.isLeafPrefixKey("adj:eb01-ld002.dfw1"),
       ::testing::IsFalse());
