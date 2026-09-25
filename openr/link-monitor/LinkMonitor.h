@@ -32,19 +32,23 @@ namespace openr {
 
 // KvStore Peer Value
 struct KvStorePeerValue {
-  // Current established KvStorePeer Spec, this usually is taken from the first
-  // established Spark Neighbor
+  /*
+   * Current established KvStorePeer Spec, this usually is taken from the first
+   * established Spark Neighbor
+   */
   thrift::PeerSpec tPeerSpec;
 
-  // Established spark neighbors related to remoteNodeName. KvStore Peer State
-  // Machine is a continuation of Spark Neighbor State Machine, tracking spark
-  // neighbors here help us decide when to send ADD/DEL KvStorePeer request.
-  //
-  // ATTN: this is different from adjacencies_ collection!
-  //
-  // An adjancency remains UP when remote spark neighbor performs a graceful
-  // restart(GR). However, neighbor is not in ESTABLISHED state during GR. Here
-  // we only track spark neighbors in ESTABLISHED state.
+  /*
+   * Established spark neighbors related to remoteNodeName. KvStore Peer State
+   * Machine is a continuation of Spark Neighbor State Machine, tracking spark
+   * neighbors here help us decide when to send ADD/DEL KvStorePeer request.
+   *
+   * ATTN: this is different from adjacencies_ collection!
+   *
+   * An adjancency remains UP when remote spark neighbor performs a graceful
+   * restart(GR). However, neighbor is not in ESTABLISHED state during GR. Here
+   * we only track spark neighbors in ESTABLISHED state.
+   */
   folly::F14FastSet<AdjacencyKey> establishedSparkNeighbors;
 
   KvStorePeerValue(
@@ -232,9 +236,11 @@ class LinkMonitor final : public OpenrEventBase {
   void syncInterfaceTask() noexcept;
   bool syncInterfaces();
 
-  // Get or create InterfaceEntry object.
-  // Returns nullptr if ifName doesn't qualify regex match
-  // used in syncInterfaces() and LINK/ADDRESS EVENT
+  /*
+   * Get or create InterfaceEntry object.
+   * Returns nullptr if ifName doesn't qualify regex match
+   * used in syncInterfaces() and LINK/ADDRESS EVENT
+   */
   InterfaceEntry* FOLLY_NULLABLE
   getOrCreateInterfaceEntry(const std::string& ifName);
 
@@ -294,16 +300,20 @@ class LinkMonitor final : public OpenrEventBase {
    * [Util function] general function used for util purpose
    */
 
-  // call advertiseInterfaces() and advertiseRedistAddrs()
-  // throttle updates if there's any unstable interface by
-  // getRetryTimeOnUnstableInterfaces() time
-  // used in advertiseIfaceAddrThrottled_ and advertiseIfaceAddrTimer_
-  // called upon interface change in getOrCreateInterfaceEntry()
+  /*
+   * call advertiseInterfaces() and advertiseRedistAddrs()
+   * throttle updates if there's any unstable interface by
+   * getRetryTimeOnUnstableInterfaces() time
+   * used in advertiseIfaceAddrThrottled_ and advertiseIfaceAddrTimer_
+   * called upon interface change in getOrCreateInterfaceEntry()
+   */
   void advertiseIfaceAddr();
 
-  // get next try time, which should be the minimum remaining time among
-  // all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
-  // return 0 if no more unstable interface
+  /*
+   * get next try time, which should be the minimum remaining time among
+   * all unstable (getTimeRemainingUntilRetry() > 0) interfaces.
+   * return 0 if no more unstable interface
+   */
   std::chrono::milliseconds getRetryTimeOnUnstableInterfaces();
 
   // build AdjacencyDatabase
@@ -339,31 +349,39 @@ class LinkMonitor final : public OpenrEventBase {
       const std::string& peerName,
       const thrift::PeerSpec& peerSpec);
 
-  //
-  // immutable state/invariants
-  //
+  /*
+   *
+   * immutable state/invariants
+   *
+   */
 
   // used to build the key names for this node
   const std::string nodeId_;
   // enable performance measurement
   const bool enablePerfMeasurement_{false};
-  // keep track of current status of all links in router
-  // with timestamps at when they change their status.
+  /*
+   * keep track of current status of all links in router
+   * with timestamps at when they change their status.
+   */
   const bool enableLinkStatusMeasurement_{false};
   // enable v4
   bool enableV4_{false};
   // Use spark measured RTT to neighbor as link metric
   bool useRttMetric_{false};
-  // Ordered list of (compiled interface-name regex set -> static metric),
-  // built from LinkMonitorConfig::static_interface_metrics. For an interface
-  // matching any regex in an entry, that entry's metric is used in place of the
-  // RTT-derived metric. First matching entry wins.
+  /*
+   * Ordered list of (compiled interface-name regex set -> static metric),
+   * built from LinkMonitorConfig::static_interface_metrics. For an interface
+   * matching any regex in an entry, that entry's metric is used in place of the
+   * RTT-derived metric. First matching entry wins.
+   */
   std::vector<std::pair<std::shared_ptr<re2::RE2::Set>, int32_t>>
       staticInterfaceMetrics_;
-  // Ordered list of (compiled interface-name regex set -> max metric), built
-  // from LinkMonitorConfig::static_interface_metrics entries with `max_metric`
-  // set. The final adjacency metric for a matching interface is clamped to this
-  // value. First matching entry wins.
+  /*
+   * Ordered list of (compiled interface-name regex set -> max metric), built
+   * from LinkMonitorConfig::static_interface_metrics entries with `max_metric`
+   * set. The final adjacency metric for a matching interface is clamped to this
+   * value. First matching entry wins.
+   */
   std::vector<std::pair<std::shared_ptr<re2::RE2::Set>, int32_t>>
       maxInterfaceMetrics_;
   // link flap back offs
@@ -382,9 +400,11 @@ class LinkMonitor final : public OpenrEventBase {
   bool enableInitOptimization_{false};
   folly::F14FastMap<std::string, AreaConfiguration> const areas_;
 
-  //
-  // Mutable state
-  //
+  /*
+   *
+   * Mutable state
+   *
+   */
 
   // flag to indicate whether it's running in mock mode or not
   bool mockMode_{false};
@@ -410,11 +430,13 @@ class LinkMonitor final : public OpenrEventBase {
   // ser/deser binary data for transmission
   apache::thrift::CompactSerializer serializer_;
 
-  // Currently active adjacencies.
-  // An adjacency is uniquely identified by interface and remote node within an
-  // area.
-  // There can be multiple interfaces to a remote node, but at most 1 interface
-  // (we use the "min" interface) for tcp connection.
+  /*
+   * Currently active adjacencies.
+   * An adjacency is uniquely identified by interface and remote node within an
+   * area.
+   * There can be multiple interfaces to a remote node, but at most 1 interface
+   * (we use the "min" interface) for tcp connection.
+   */
   folly::F14FastMap<
       std::string /* area */,
       folly::F14FastMap<AdjacencyKey, AdjacencyEntry>>
@@ -426,8 +448,10 @@ class LinkMonitor final : public OpenrEventBase {
       folly::F14FastMap<std::string /* node name */, KvStorePeerValue>>
       peers_;
 
-  // all interfaces states, including DOWN one
-  // Keyed by interface Name
+  /*
+   * all interfaces states, including DOWN one
+   * Keyed by interface Name
+   */
   folly::F14NodeMap<std::string /* interface name */, InterfaceEntry>
       interfaces_;
 
@@ -437,15 +461,21 @@ class LinkMonitor final : public OpenrEventBase {
   // Container storing map of advertised prefixes - Map<prefix, list<area>>
   std::map<folly::CIDRNetwork, std::vector<std::string>> advertisedPrefixes_;
 
-  // Cache of interface index to name. Used for resolving ifIndex
-  // on address events
+  /*
+   * Cache of interface index to name. Used for resolving ifIndex
+   * on address events
+   */
   folly::F14FastMap<int64_t, std::string> ifIndexToName_;
 
-  // Throttled versions of "advertise<>" functions. It batches
-  // up multiple calls and send them in one go!
+  /*
+   * Throttled versions of "advertise<>" functions. It batches
+   * up multiple calls and send them in one go!
+   */
 
-  // Advertise Adj needs per area throttle as KvStore calls can interrupt
-  // and cause race conditions, some batched call may otherwise be lost
+  /*
+   * Advertise Adj needs per area throttle as KvStore calls can interrupt
+   * and cause race conditions, some batched call may otherwise be lost
+   */
   folly::F14FastMap<std::string /* area */, std::unique_ptr<AsyncThrottle>>
       advertiseAdjacenciesThrottledPerArea_;
   std::unique_ptr<AsyncThrottle> advertiseIfaceAddrThrottled_;
@@ -465,12 +495,16 @@ class LinkMonitor final : public OpenrEventBase {
   // Timer for initial hold time expiry
   std::unique_ptr<folly::AsyncTimeout> adjHoldTimer_;
 
-  // Boolean flag indicating whether initial neighbors are received in OpenR
-  // initialization procedure.
+  /*
+   * Boolean flag indicating whether initial neighbors are received in OpenR
+   * initialization procedure.
+   */
   bool initialNeighborsReceived_{false};
 
-  // Boolean flag indicating whether initial links are discovered during Open/R
-  // initialization procedure
+  /*
+   * Boolean flag indicating whether initial links are discovered during Open/R
+   * initialization procedure
+   */
   bool initialLinksDiscovered_{false};
 
   // Stop signal for fiber to periodically dump interface info from platform

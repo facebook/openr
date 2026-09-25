@@ -36,8 +36,10 @@ using namespace folly::literals::shell_literals;
 
 using ::testing::InSequence;
 
-// node-1 connects node-2 via interface iface_2_1 and iface_2_2, node-3 via
-// interface iface_3_1
+/*
+ * node-1 connects node-2 via interface iface_2_1 and iface_2_2, node-3 via
+ * interface iface_3_1
+ */
 namespace {
 
 /**
@@ -506,8 +508,10 @@ class LinkMonitorTestFixture : public testing::Test {
     return kv->second;
   }
 
-  // recv publicatons from kv store until we get what we were
-  // expecting for a given key
+  /*
+   * recv publicatons from kv store until we get what we were
+   * expecting for a given key
+   */
   void
   checkNextAdjPub(
       std::string const& key, std::string const& area = kTestingAreaName) {
@@ -670,8 +674,10 @@ class RttMetricTestFixture : public LinkMonitorTestFixture {
   }
 };
 
-// Test communication between LinkMonitor and KvStore via KeyValueRequeust
-// queue.
+/*
+ * Test communication between LinkMonitor and KvStore via KeyValueRequeust
+ * queue.
+ */
 TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
   const auto nodeKey = "adj:myNode";
   const auto adjacencies = "adjacencies-for-myNode";
@@ -688,8 +694,10 @@ TEST_F(LinkMonitorTestFixture, BasicKeyValueRequestQueue) {
   EXPECT_EQ(*maybeValue.value().value(), adjacencies);
 }
 
-// Start LinkMonitor and ensure empty adjacency database and prefixes are
-// received upon initial hold-timeout expiry
+/*
+ * Start LinkMonitor and ensure empty adjacency database and prefixes are
+ * received upon initial hold-timeout expiry
+ */
 TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
   // Verify that we receive empty adjacency database
   expectedAdjDbs.push(createAdjDb("node-1", {}, kNodeLabel));
@@ -699,8 +707,10 @@ TEST_F(LinkMonitorTestFixture, NoNeighborEvent) {
   checkNextAdjPub("adj:node-1");
 }
 
-// Start LinkMonitor and ensure drain state are set correctly according to
-// parameters
+/*
+ * Start LinkMonitor and ensure drain state are set correctly according to
+ * parameters
+ */
 TEST_F(LinkMonitorTestFixture, DrainState) {
   /*
    * Test 1: start with empty persistent store
@@ -767,8 +777,10 @@ TEST_F(LinkMonitorTestFixture, DrainState) {
   }
 }
 
-// receive neighbor up/down events from "spark"
-// form peer connections and inform KvStore of adjacencies
+/*
+ * receive neighbor up/down events from "spark"
+ * form peer connections and inform KvStore of adjacencies
+ */
 TEST_F(LinkMonitorTestFixture, BasicOperation) {
   const int linkMetric = 123;
   const int adjMetric = 100;
@@ -887,8 +899,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // 11.1 expect node-level metric increment value set on the link override
-      // metric
+      /*
+       * 11.1 expect node-level metric increment value set on the link override
+       * metric
+       */
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = nodeMetric + linkMetric;
 
@@ -897,8 +911,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       adjDb.nodeMetricIncrementVal() = nodeMetric;
       expectedAdjDbs.push(std::move(adjDb));
 
-      // 11.2 change node-level metric
-      // it will add the new metric to the previous the link override metric
+      /*
+       * 11.2 change node-level metric
+       * it will add the new metric to the previous the link override metric
+       */
       adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = changeNodeMetric + linkMetric;
 
@@ -932,8 +948,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // 12.1 expect node-level metric increment value unset, only keeping
-      // metric override + interface-level metric increment
+      /*
+       * 12.1 expect node-level metric increment value unset, only keeping
+       * metric override + interface-level metric increment
+       */
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric + changelinkIncMetric;
       adj_2_1_modified.linkMetricIncrementVal() = changelinkIncMetric;
@@ -941,8 +959,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
       auto adjDb = createAdjDb("node-1", {adj_2_1_modified}, kNodeLabel);
       adjDb.isOverloaded() = true;
       expectedAdjDbs.push(std::move(adjDb));
-      // 12.2 expect interface-level metric increment value unset, only keeping
-      // metric override
+      /*
+       * 12.2 expect interface-level metric increment value unset, only keeping
+       * metric override
+       */
       adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
 
@@ -959,8 +979,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     }
 
     {
-      // link-monitor and config-store is restarted but state will be
-      // retained. expect neighbor up with overrides
+      /*
+       * link-monitor and config-store is restarted but state will be
+       * retained. expect neighbor up with overrides
+       */
       auto adj_2_1_modified = adj_2_1;
       adj_2_1_modified.metric() = linkMetric;
 
@@ -996,20 +1018,22 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
     checkNextAdjPub("adj:node-1");
   }
 
-  // testing for set/unset overload bit and custom metric values
-  // 1. set overload bit
-  // 2. set custom metric on link: No adjacency advertisement
-  // 3. set link overload
-  // 4. unset overload bit
-  // 5. unset link overload bit - custom metric value should be in effect
-  // 6. unset custom metric on link
-  // 7: set overload bit
-  // 8: custom metric on link
-  // 9. Set overload bit and link metric value
-  // 10. set and unset adjacency metric
-  // 11. set node-level/interface-level metric increment
-  // 12. unset node-level/interface-level metric increment
-  // 13. neighbor down
+  /*
+   * testing for set/unset overload bit and custom metric values
+   * 1. set overload bit
+   * 2. set custom metric on link: No adjacency advertisement
+   * 3. set link overload
+   * 4. unset overload bit
+   * 5. unset link overload bit - custom metric value should be in effect
+   * 6. unset custom metric on link
+   * 7: set overload bit
+   * 8: custom metric on link
+   * 9. Set overload bit and link metric value
+   * 10. set and unset adjacency metric
+   * 11. set node-level/interface-level metric increment
+   * 12. unset node-level/interface-level metric increment
+   * 13. neighbor down
+   */
   {
     const std::string interfaceName = "iface_2_1";
     const std::string nodeName = "node-2";
@@ -1191,8 +1215,10 @@ TEST_F(LinkMonitorTestFixture, BasicOperation) {
   kvStoreWrapper->stop();
   kvStoreWrapper.reset();
 
-  // Create new
-  // neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
+  /*
+   * Create new
+   * neighborUpdatesQ/initialSyncEventsQ/peerUpdatesQ/platformUpdatesQ.
+   */
   neighborUpdatesQueue = messaging::ReplicateQueue<NeighborInitEvent>();
   initializationEventQueue =
       messaging::ReplicateQueue<thrift::InitializationEvent>(),
@@ -1275,8 +1301,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
       expectedAdjDbs.push(std::move(adjDb));
     }
 
-    // neighbor 2 up on iface_2_1
-    // still use iface_2_2 because it's the first established adj
+    /*
+     * neighbor 2 up on iface_2_1
+     * still use iface_2_2 because it's the first established adj
+     */
     {
       // note: adj_2_1 is hashed ahead of adj_2_2
       auto adjDb = createAdjDb("node-1", {adj_2_1, adj_2_2}, kNodeLabel);
@@ -1295,8 +1323,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
       expectedAdjDbs.push(std::move(adjDb));
     }
 
-    // neighbor 2 up on iface_2_1
-    // make sure new kvstore peer is created, peer add request is sent out
+    /*
+     * neighbor 2 up on iface_2_1
+     * make sure new kvstore peer is created, peer add request is sent out
+     */
     {
       auto adjDb = createAdjDb("node-1", {adj_2_2}, kNodeLabel);
       expectedAdjDbs.push(std::move(adjDb));
@@ -1339,8 +1369,10 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
     neighborUpdatesQueue.push(
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
-    // KvStore Peer has reached to the initial sync state,
-    // publish Adj UP immediately
+    /*
+     * KvStore Peer has reached to the initial sync state,
+     * publish Adj UP immediately
+     */
     checkNextAdjPub("adj:node-1");
 
     // kvstore still have peerSpec_2_2
@@ -1414,32 +1446,34 @@ TEST_F(LinkMonitorTestFixture, ParallelAdj) {
   }
 }
 
-// Verify neighbor-restarting event (parallel link)
-//
-// Event Sequence:
-//
-// neighbor 2 up on adj_2_1
-// neighbor 2 up on adj_2_2
-// neighbor 2 kvstore initial sync
-// check kvstore publication have both adj_2_1 and adj_2_2
-//
-// neighbor restarting on iface_2_1 (GR)
-// neighbor restarting on iface_2_2 (GR)
-// check no new publication
-//
-// neighbor restarted on iface_2_1 (GR Success)
-// neighbor restarted on iface_2_1 (GR Success)
-// check no new publication
-//
-// before neighbor 2 finish initial sync, make sure additional events will
-// not accidentally trigger adj withdrawn
-// - send neighbor 3 up;
-// - adj_2_1 rtt change;
-// check kvstore publication still have adj_2_1 and adj_2_2
-//
-// kvstore initial sync
-// check no new publication
-//
+/*
+ * Verify neighbor-restarting event (parallel link)
+ *
+ * Event Sequence:
+ *
+ * neighbor 2 up on adj_2_1
+ * neighbor 2 up on adj_2_2
+ * neighbor 2 kvstore initial sync
+ * check kvstore publication have both adj_2_1 and adj_2_2
+ *
+ * neighbor restarting on iface_2_1 (GR)
+ * neighbor restarting on iface_2_2 (GR)
+ * check no new publication
+ *
+ * neighbor restarted on iface_2_1 (GR Success)
+ * neighbor restarted on iface_2_1 (GR Success)
+ * check no new publication
+ *
+ * before neighbor 2 finish initial sync, make sure additional events will
+ * not accidentally trigger adj withdrawn
+ * - send neighbor 3 up;
+ * - adj_2_1 rtt change;
+ * check kvstore publication still have adj_2_1 and adj_2_2
+ *
+ * kvstore initial sync
+ * check no new publication
+ *
+ */
 TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   // neighbor 2 up on adj_2_1
   {
@@ -1529,9 +1563,11 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
   }
 
-  // before neighbor 2 finish initial sync, make sure additional events will
-  // not accidentally trigger adj withdrawn
-  // send neighbor 3 up
+  /*
+   * before neighbor 2 finish initial sync, make sure additional events will
+   * not accidentally trigger adj withdrawn
+   * send neighbor 3 up
+   */
   {
     auto neighborEvent = nb3_up_event;
     neighborUpdatesQueue.push(
@@ -1546,8 +1582,10 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
     checkNextAdjPub("adj:node-1");
   }
 
-  // send adj_2_1 rtt event
-  // make sure adj_2_1 is still getting advertised
+  /*
+   * send adj_2_1 rtt event
+   * make sure adj_2_1 is still getting advertised
+   */
   {
     auto neighborEvent = nb2_up_event;
     neighborEvent.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
@@ -1571,27 +1609,29 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartSuccess) {
   }
 }
 
-// Verify neighbor-restarting failure event (parallel link)
-//
-// Event Sequence:
-//
-// neighbor 2 up on adj_2_1
-// neighbor 2 up on adj_2_2
-// neighbor 2 kvstore initial sync
-// check kvstore publication have both adj_2_1 and adj_2_2
-//
-// neighbor restarting on iface_2_1 (GR)
-// neighbor restarting on iface_2_2 (GR)
-// check no new publication
-//
-// make sure additional events will not accidentally trigger adj withdrawn
-// send neighbor 3 up
-// check kvstore publication still have adj_2_1 and adj_2_2
-//
-// neighbor down on iface_2_1 (GR Success)
-// neighbor down on iface_2_2 (GR Success)
-// check kvstore publication withdraw iface_2_1 and iface_2_2
-//
+/*
+ * Verify neighbor-restarting failure event (parallel link)
+ *
+ * Event Sequence:
+ *
+ * neighbor 2 up on adj_2_1
+ * neighbor 2 up on adj_2_2
+ * neighbor 2 kvstore initial sync
+ * check kvstore publication have both adj_2_1 and adj_2_2
+ *
+ * neighbor restarting on iface_2_1 (GR)
+ * neighbor restarting on iface_2_2 (GR)
+ * check no new publication
+ *
+ * make sure additional events will not accidentally trigger adj withdrawn
+ * send neighbor 3 up
+ * check kvstore publication still have adj_2_1 and adj_2_2
+ *
+ * neighbor down on iface_2_1 (GR Success)
+ * neighbor down on iface_2_2 (GR Success)
+ * check kvstore publication withdraw iface_2_1 and iface_2_2
+ *
+ */
 TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
   // neighbor 2 up on adj_2_1
   {
@@ -1658,9 +1698,11 @@ TEST_F(LinkMonitorTestFixture, NeighborGracefulRestartFailure) {
     CHECK_EQ(0, kvStoreWrapper->getReader().size());
   }
 
-  // make sure additional events will
-  // not accidentally trigger adj withdrawn
-  // send neighbor 3 up
+  /*
+   * make sure additional events will
+   * not accidentally trigger adj withdrawn
+   * send neighbor 3 up
+   */
   {
     auto neighborEvent = nb3_up_event;
     neighborUpdatesQueue.push(
@@ -1743,8 +1785,10 @@ TEST_F(RttMetricTestFixture, RttChangeUpdatesAdvertisedMetric) {
     checkNextAdjPub("adj:node-1");
   }
 
-  // Send NEIGHBOR_RTT_CHANGE with a different RTT and verify the next
-  // publication advertises the new metric.
+  /*
+   * Send NEIGHBOR_RTT_CHANGE with a different RTT and verify the next
+   * publication advertises the new metric.
+   */
   {
     auto rttEvent = nb2_up_event;
     rttEvent.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
@@ -1759,9 +1803,11 @@ TEST_F(RttMetricTestFixture, RttChangeUpdatesAdvertisedMetric) {
   }
 }
 
-// Fixture with a static per-interface metric configured for interfaces matching
-// "iface_2.*". use_rtt_metric is enabled so the tests also prove that the
-// static metric takes precedence over the RTT-derived metric.
+/*
+ * Fixture with a static per-interface metric configured for interfaces matching
+ * "iface_2.*". use_rtt_metric is enabled so the tests also prove that the
+ * static metric takes precedence over the RTT-derived metric.
+ */
 class StaticInterfaceMetricTestFixture : public LinkMonitorTestFixture {
  public:
   thrift::OpenrConfig
@@ -1777,8 +1823,10 @@ class StaticInterfaceMetricTestFixture : public LinkMonitorTestFixture {
   }
 };
 
-// A neighbor discovered on an interface matching static_interface_metrics is
-// advertised with the configured metric instead of the RTT-derived metric.
+/*
+ * A neighbor discovered on an interface matching static_interface_metrics is
+ * advertised with the configured metric instead of the RTT-derived metric.
+ */
 TEST_F(
     StaticInterfaceMetricTestFixture,
     StaticMetricOverridesRttOnMatchingInterface) {
@@ -1807,8 +1855,10 @@ TEST_F(
   checkNextAdjPub("adj:node-1");
 }
 
-// A neighbor on an interface that does NOT match static_interface_metrics falls
-// back to the RTT-derived metric.
+/*
+ * A neighbor on an interface that does NOT match static_interface_metrics falls
+ * back to the RTT-derived metric.
+ */
 TEST_F(StaticInterfaceMetricTestFixture, RttMetricUsedOnNonMatchingInterface) {
   constexpr int64_t kRttUs = 50000;
   const int32_t rttMetric = std::max(static_cast<int>(kRttUs / 100), 1); // 500
@@ -1836,9 +1886,11 @@ TEST_F(StaticInterfaceMetricTestFixture, RttMetricUsedOnNonMatchingInterface) {
   checkNextAdjPub("adj:node-1");
 }
 
-// An RTT change on a static-metric interface is ignored (its metric stays
-// fixed), while an RTT change on a non-static interface still updates its
-// metric. nb2 (iface_2_1) has a static metric; nb3 (iface_3_1) does not.
+/*
+ * An RTT change on a static-metric interface is ignored (its metric stays
+ * fixed), while an RTT change on a non-static interface still updates its
+ * metric. nb2 (iface_2_1) has a static metric; nb3 (iface_3_1) does not.
+ */
 TEST_F(
     StaticInterfaceMetricTestFixture,
     RttChangeIgnoredForStaticMetricInterface) {
@@ -1897,10 +1949,12 @@ TEST_F(
     checkNextAdjPub("adj:node-1");
   }
 
-  // RTT change on nb2 (static iface) is ignored -> no publication. The
-  // subsequent RTT change on nb3 (rtt iface) is applied and triggers a
-  // publication; the resulting DB must show nb2 unchanged (still the static
-  // metric and its original rtt) and nb3 updated.
+  /*
+   * RTT change on nb2 (static iface) is ignored -> no publication. The
+   * subsequent RTT change on nb3 (rtt iface) is applied and triggers a
+   * publication; the resulting DB must show nb2 unchanged (still the static
+   * metric and its original rtt) and nb3 updated.
+   */
   {
     auto rtt2 = nb2_up_event;
     rtt2.eventType = NeighborEventType::NEIGHBOR_RTT_CHANGE;
@@ -1923,8 +1977,10 @@ TEST_F(
   }
 }
 
-// Fixture with two overlapping static-metric entries that both match iface_2_1;
-// the first matching entry (in list order) must win.
+/*
+ * Fixture with two overlapping static-metric entries that both match iface_2_1;
+ * the first matching entry (in list order) must win.
+ */
 class StaticInterfaceMetricFirstMatchTestFixture
     : public LinkMonitorTestFixture {
  public:
@@ -1968,9 +2024,11 @@ TEST_F(StaticInterfaceMetricFirstMatchTestFixture, FirstMatchingEntryWins) {
   checkNextAdjPub("adj:node-1");
 }
 
-// Fixture with a static metric (50) and a max metric (100) for interfaces
-// matching "iface_2.*", so tests can show the final advertised metric is capped
-// at max_metric even after soft-drain increments push it above the cap.
+/*
+ * Fixture with a static metric (50) and a max metric (100) for interfaces
+ * matching "iface_2.*", so tests can show the final advertised metric is capped
+ * at max_metric even after soft-drain increments push it above the cap.
+ */
 constexpr int32_t kStaticBaseMetric{50};
 constexpr int32_t kMaxInterfaceMetric{100};
 
@@ -1990,8 +2048,10 @@ class MaxInterfaceMetricTestFixture : public LinkMonitorTestFixture {
   }
 };
 
-// A metric below max_metric is advertised unchanged (the cap does not lower
-// it).
+/*
+ * A metric below max_metric is advertised unchanged (the cap does not lower
+ * it).
+ */
 TEST_F(MaxInterfaceMetricTestFixture, MetricBelowMaxNotClamped) {
   auto upEvent = nb2_up_event; // iface_2_1 matches "iface_2.*"
   neighborUpdatesQueue.push(
@@ -2015,8 +2075,10 @@ TEST_F(MaxInterfaceMetricTestFixture, MetricBelowMaxNotClamped) {
   checkNextAdjPub("adj:node-1");
 }
 
-// The max clamp applies even after a soft-drain node metric increment:
-// (base metric + increment) is capped at max_metric.
+/*
+ * The max clamp applies even after a soft-drain node metric increment:
+ * (base metric + increment) is capped at max_metric.
+ */
 TEST_F(MaxInterfaceMetricTestFixture, MaxMetricClampsAfterNodeDrain) {
   constexpr int32_t kNodeIncrement = 70; // 50 + 70 = 120 -> clamped to 100
 
@@ -2042,8 +2104,10 @@ TEST_F(MaxInterfaceMetricTestFixture, MaxMetricClampsAfterNodeDrain) {
   expectedAdjDbs.push(createAdjDb("node-1", {baseAdj}, kNodeLabel));
   checkNextAdjPub("adj:node-1");
 
-  // Apply soft-drain node metric increment; base + increment exceeds max and is
-  // clamped to max_metric.
+  /*
+   * Apply soft-drain node metric increment; base + increment exceeds max and is
+   * clamped to max_metric.
+   */
   auto ret =
       linkMonitor->semifuture_setNodeInterfaceMetricIncrement(kNodeIncrement)
           .get();
@@ -2097,8 +2161,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
   recvAndReplyIfUpdate(); // Updates will be coalesced by throttling
 
   {
-    // Both interfaces report as down on creation
-    // expect sparkIfDb to have two interfaces DOWN
+    /*
+     * Both interfaces report as down on creation
+     * expect sparkIfDb to have two interfaces DOWN
+     */
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 2 interfaces
@@ -2150,8 +2216,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
 
   // at this point, both interface should have backoff=~2s
   {
-    // we expect all interfaces are down at this point because backoff hasn't
-    // been cleared up yet
+    /*
+     * we expect all interfaces are down at this point because backoff hasn't
+     * been cleared up yet
+     */
     auto res = collateIfUpdates(sparkIfDb);
     auto links1 = linkMonitor->semifuture_getInterfaces().get();
     EXPECT_EQ(2, res.size());
@@ -2186,8 +2254,10 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
   }
   auto linkUpTs = std::chrono::steady_clock::now();
 
-  // Elapsed total time between interface down->up must be greater than
-  // backoff time of 2s. Also ensure upper bound
+  /*
+   * Elapsed total time between interface down->up must be greater than
+   * backoff time of 2s. Also ensure upper bound
+   */
   EXPECT_LE(
       std::chrono::seconds(2) - kBackoffTimerTolerance, linkUpTs - linkDownTs);
   EXPECT_GE(std::chrono::seconds(3), linkUpTs - linkDownTs);
@@ -2269,16 +2339,20 @@ TEST_F(DampenLinkTestFixture, DampenLinkFlaps) {
   }
   linkUpTs = std::chrono::steady_clock::now();
 
-  // Elapsed total time between interface down->up must be greater than
-  // backoff time of 4s. Also ensure upper bound
+  /*
+   * Elapsed total time between interface down->up must be greater than
+   * backoff time of 4s. Also ensure upper bound
+   */
   EXPECT_LE(
       std::chrono::seconds(4) - kBackoffTimerTolerance, linkUpTs - linkDownTs);
   EXPECT_GE(std::chrono::seconds(5), linkUpTs - linkDownTs);
 
   // at this point, both interface should have backoff back to init value
   {
-    // expect sparkIfDb to have two interfaces UP
-    // Make sure to wait long enough to clear out backoff timers
+    /*
+     * expect sparkIfDb to have two interfaces UP
+     * Make sure to wait long enough to clear out backoff timers
+     */
     auto res = collateIfUpdates(sparkIfDb);
     auto links3 = linkMonitor->semifuture_getInterfaces().get();
 
@@ -2317,10 +2391,12 @@ TEST_F(LinkMonitorTestFixture, verifyLinkEventSubscription) {
       false /* is up */);
   recvAndReplyIfUpdate();
 
-  // Both interfaces report as down on creation
-  // We receive 2 IfUpUpdates in spark for each interface
-  // Both with status as false (DOWN)
-  // We let spark return success for each
+  /*
+   * Both interfaces report as down on creation
+   * We receive 2 IfUpUpdates in spark for each interface
+   * Both with status as false (DOWN)
+   * We let spark return success for each
+   */
   EXPECT_NO_THROW({
     auto res = collateIfUpdates(sparkIfDb);
 
@@ -2380,10 +2456,12 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       false /* is up */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
 
-  // Both interfaces report as down on creation
-  // We receive 2 IfUpUpdates in spark for each interface
-  // Both with status as false (DOWN)
-  // We let spark return success for each
+  /*
+   * Both interfaces report as down on creation
+   * We receive 2 IfUpUpdates in spark for each interface
+   * Both with status as false (DOWN)
+   * We let spark return success for each
+   */
   EXPECT_NO_THROW({
     auto res = collateIfUpdates(sparkIfDb);
 
@@ -2408,8 +2486,10 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       linkY /* link name */,
       kTestVethIfIndex[1] /* ifIndex */,
       true /* is up */);
-  // Emulate add address event: v6 while interfaces are in UP state. Both
-  // v4 and v6 addresses should be reported.
+  /*
+   * Emulate add address event: v6 while interfaces are in UP state. Both
+   * v4 and v6 addresses should be reported.
+   */
   nlEventsInjector->sendAddrEvent(linkX, "fe80::1/128", true /* is valid */);
   nlEventsInjector->sendAddrEvent(linkY, "fe80::2/128", true /* is valid */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
@@ -2471,10 +2551,12 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
     }
   });
 
-  // Emulate address and link events coming in out of order
-  // FixMe NOTE: For interface index to name mapping must exists for address
-  // event to be advertised with interface name instead of index. Once we index
-  // interfaces by `ifIndex` in LinkMonitor we can send events in any order
+  /*
+   * Emulate address and link events coming in out of order
+   * FixMe NOTE: For interface index to name mapping must exists for address
+   * event to be advertised with interface name instead of index. Once we index
+   * interfaces by `ifIndex` in LinkMonitor we can send events in any order
+   */
   const std::string linkZ = kTestVethNamePrefix + "Z";
 
   // Link event comes in later - FixMe
@@ -2514,8 +2596,10 @@ TEST_F(LinkMonitorTestFixture, verifyAddrEventSubscription) {
       false /* is up */);
   recvAndReplyIfUpdate(); // coalesced updates by throttling
   {
-    // Both interfaces report as down on creation
-    // expect sparkIfDb to have two interfaces DOWN
+    /*
+     * Both interfaces report as down on creation
+     * expect sparkIfDb to have two interfaces DOWN
+     */
     auto res = collateIfUpdates(sparkIfDb);
 
     // messages for 3 interfaces
@@ -2561,17 +2645,21 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
   const std::string loopbackAddrV6_2 = "2803:6080:4958:b403::1/128";
   const std::string loopbackAddrV6Subnet = "2803:6080:4958:b403::1/64";
 
-  //
-  // Verify that initial DB has empty prefix entries
-  //
+  /*
+   *
+   * Verify that initial DB has empty prefix entries
+   *
+   */
   EXPECT_EQ(0, getNextPrefixDb(nodeName, area1_).size());
   EXPECT_EQ(0, getNextPrefixDb(nodeName, area2_).size());
   auto prefixEventsReader =
       prefixUpdatesQueue.getReader("loopback-prefix-order");
 
-  //
-  // Send link UP event(i.e. mixed with VALID and INVALID loopback address)
-  //
+  /*
+   *
+   * Send link UP event(i.e. mixed with VALID and INVALID loopback address)
+   *
+   */
 
   nlEventsInjector->sendLinkEvent("loopback", 101, true);
 
@@ -2628,9 +2716,11 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
     EXPECT_EQ(prefixesArea1, prefixesArea2);
   }
 
-  //
-  // Withdraw prefix and see it is being withdrawn
-  //
+  /*
+   *
+   * Withdraw prefix and see it is being withdrawn
+   *
+   */
 
   // 1) withdraw addresses WITHOUT subnet
   nlEventsInjector->sendAddrEvent("loopback", loopbackAddrV4, false);
@@ -2677,9 +2767,11 @@ TEST_F(TwoAreaTestFixture, LoopbackPrefixAdvertisement) {
     EXPECT_EQ(prefixesArea1, prefixesArea2);
   }
 
-  //
-  // Send link down event
-  //
+  /*
+   *
+   * Send link down event
+   *
+   */
 
   nlEventsInjector->sendLinkEvent("loopback", 101, false);
   recvAndReplyIfUpdate();
@@ -2779,16 +2871,20 @@ TEST_F(LinkMonitorTestFixture, InitialLinkDiscoveredNegativeTest) {
 }
 
 TEST_F(LinkMonitorTestFixture, AdjacencyUpWithGracefulRestartTest) {
-  // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
-  // with `adjOnlyUsedByOtherNode` set to true.
+  /*
+   * NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
+   * with `adjOnlyUsedByOtherNode` set to true.
+   */
   auto neighborEvent = nb2_up_event;
   neighborEvent.eventType = NeighborEventType::NEIGHBOR_RESTARTED;
   neighborUpdatesQueue.push(
       NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
-  // NOTE: adjacency db will contain adj_2_1 with
-  // `adjOnlyUsedByOtherNode=false` as special flag is not set when neighboring
-  // node does WARM_BOOT(GR).
+  /*
+   * NOTE: adjacency db will contain adj_2_1 with
+   * `adjOnlyUsedByOtherNode=false` as special flag is not set when neighboring
+   * node does WARM_BOOT(GR).
+   */
   auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
   expectedAdjDbs.push(std::move(adjDb));
   checkNextAdjPub("adj:node-1");
@@ -2796,16 +2892,20 @@ TEST_F(LinkMonitorTestFixture, AdjacencyUpWithGracefulRestartTest) {
 
 TEST_F(LinkMonitorTestFixture, AdjacencyUpTest) {
   {
-    // NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
-    // with `adjOnlyUsedByOtherNode` set to true.
+    /*
+     * NOTE: explicitly override thrift::SparkNeighbor to mimick Spark => LM
+     * with `adjOnlyUsedByOtherNode` set to true.
+     */
     auto neighborEvent = nb2_up_event;
     neighborEvent.adjOnlyUsedByOtherNode = true;
     neighborUpdatesQueue.push(
         NeighborInitEvent(NeighborEvents({std::move(neighborEvent)})));
 
-    // NOTE: adjacency db will contain adj_2_1 with
-    // `adjOnlyUsedByOtherNode=true` as the neighbor is coming up for the first
-    // time i.e cold booting.
+    /*
+     * NOTE: adjacency db will contain adj_2_1 with
+     * `adjOnlyUsedByOtherNode=true` as the neighbor is coming up for the first
+     * time i.e cold booting.
+     */
     auto adj_2_1Copy = folly::copy(adj_2_1);
     adj_2_1Copy.adjOnlyUsedByOtherNode() = true;
     auto adjDb = createAdjDb("node-1", {adj_2_1Copy}, kNodeLabel);
@@ -2859,8 +2959,10 @@ TEST_F(DrainStatusTestFixture, SoftDrainStatusUponStart) {
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
   }
   {
-    // Create expected adjacency.
-    // ATTN: expect node metric increment to be applied.
+    /*
+     * Create expected adjacency.
+     * ATTN: expect node metric increment to be applied.
+     */
     auto adj_2_1_modified = adj_2_1;
     adj_2_1_modified.metric() =
         *adj_2_1.metric() + config->getNodeMetricIncrement();
@@ -2942,18 +3044,22 @@ TEST_F(MultiAreaTestFixture, DISABLED_AreaTest) {
   checkNextAdjPub("adj:node-1", planeArea_);
   checkNextAdjPub("adj:node-1", podArea_);
 
-  // add link up event. AdjDB should get updated with link interface
-  // Will be updated in all areas
-  // TODO: Change this when interfaced base areas is implemented, in which
-  // case only corresponding area kvstore should get the update
+  /*
+   * add link up event. AdjDB should get updated with link interface
+   * Will be updated in all areas
+   * TODO: Change this when interfaced base areas is implemented, in which
+   * case only corresponding area kvstore should get the update
+   */
 
   {
     InSequence dummy;
 
     nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
     recvAndReplyIfUpdate();
-    // expect neighbor up first
-    // node-2 neighbor up in iface_2_1
+    /*
+     * expect neighbor up first
+     * node-2 neighbor up in iface_2_1
+     */
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
     {
@@ -2965,8 +3071,10 @@ TEST_F(MultiAreaTestFixture, DISABLED_AreaTest) {
       checkNextAdjPub("adj:node-1", kTestingAreaName);
     }
 
-    // bring up iface3_1, neighbor up event in plane area. Adj db in "plane"
-    // area should contain only 'adj_3_1'
+    /*
+     * bring up iface3_1, neighbor up event in plane area. Adj db in "plane"
+     * area should contain only 'adj_3_1'
+     */
     nlEventsInjector->sendLinkEvent("iface_3_1", 100, true);
     recvAndReplyIfUpdate();
     adjDb = createAdjDb("node-1", {adj_3_1}, kNodeLabel, false, planeArea_);
@@ -3044,8 +3152,10 @@ TEST_F(LinkMonitorTestFixture, AdjHoldTimerExpireTestWithoutFlag) {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
   }
-  // Find the configured time after which adjacency will be advertised
-  // to KvStore. This will be default value of 4 sec.
+  /*
+   * Find the configured time after which adjacency will be advertised
+   * to KvStore. This will be default value of 4 sec.
+   */
   const std::chrono::seconds initialAdjHoldTime{
       *config->getConfig().adj_hold_time_s()};
   {
@@ -3091,8 +3201,10 @@ TEST_F(LinkMonitorTestFlagFixture, AdjHoldTimerExpireTestWithFlag) {
   nlEventsInjector->sendLinkEvent("iface_2_1", 100, true);
   recvAndReplyIfUpdate();
 
-  // Trigger KVSTORE_SYNCED initialization event
-  // but it should be ignored because of flag setting
+  /*
+   * Trigger KVSTORE_SYNCED initialization event
+   * but it should be ignored because of flag setting
+   */
   triggerInitializationEventKvStoreSynced(
       kvStoreWrapper->getKvStoreUpdatesQueueWriter());
 
@@ -3106,8 +3218,10 @@ TEST_F(LinkMonitorTestFlagFixture, AdjHoldTimerExpireTestWithFlag) {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
   }
-  // Find the configured time after which adjacency will be advertised
-  // to KvStore. This will be default value of 4 sec.
+  /*
+   * Find the configured time after which adjacency will be advertised
+   * to KvStore. This will be default value of 4 sec.
+   */
   const std::chrono::seconds initialAdjHoldTime{
       *config->getConfig().adj_hold_time_s()};
   {
@@ -3151,8 +3265,10 @@ TEST_F(LinkMonitorTestFixture, EventBasedInitializationTest) {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
   }
-  // Find the configured time after which adjacency will be advertised
-  // to KvStore. This will be default value of 4 sec.
+  /*
+   * Find the configured time after which adjacency will be advertised
+   * to KvStore. This will be default value of 4 sec.
+   */
   const std::chrono::seconds initialAdjHoldTime{
       *config->getConfig().adj_hold_time_s()};
 
@@ -3169,10 +3285,12 @@ TEST_F(LinkMonitorTestFixture, EventBasedInitializationTest) {
         << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
         << " sec";
 
-    // TODO(agrewal): Enable the below assertion after turning on event
-    // based initialization.
-    // Publication should have been received prior to adj_hold_time expiry.
-    // ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+    /*
+     * TODO(agrewal): Enable the below assertion after turning on event
+     * based initialization.
+     * Publication should have been received prior to adj_hold_time expiry.
+     * ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+     */
   }
 }
 
@@ -3190,8 +3308,10 @@ TEST_F(LinkMonitorTestFixture, NotAllNeighborsUpInitializationTest) {
   recvAndReplyIfUpdate();
 
   {
-    // Send neighbor up for 1 and not the other to simulate the 2nd neighbor
-    // not coming up before Spark dumps initial set of discovered neighbors.
+    /*
+     * Send neighbor up for 1 and not the other to simulate the 2nd neighbor
+     * not coming up before Spark dumps initial set of discovered neighbors.
+     */
     auto neighborEvent = nb2_up_event;
     neighborUpdatesQueue.push(NeighborEvents({std::move(neighborEvent)}));
     // Signal Intialization event.
@@ -3202,8 +3322,10 @@ TEST_F(LinkMonitorTestFixture, NotAllNeighborsUpInitializationTest) {
     auto adjDb = createAdjDb("node-1", {adj_2_1}, kNodeLabel);
     expectedAdjDbs.push(std::move(adjDb));
   }
-  // Find the configured time after which adjacency will be advertised
-  // to KvStore. This will be default value of 4 sec.
+  /*
+   * Find the configured time after which adjacency will be advertised
+   * to KvStore. This will be default value of 4 sec.
+   */
   const std::chrono::seconds initialAdjHoldTime{
       *config->getConfig().adj_hold_time_s()};
 
@@ -3220,10 +3342,12 @@ TEST_F(LinkMonitorTestFixture, NotAllNeighborsUpInitializationTest) {
         << std::chrono::duration_cast<std::chrono::seconds>(elapsedTime).count()
         << " sec";
 
-    // TODO(agrewal): Enable the below assertion after turning on event
-    // based initialization.
-    // Publication should have been received prior to adj_hold_time expiry.
-    // ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+    /*
+     * TODO(agrewal): Enable the below assertion after turning on event
+     * based initialization.
+     * Publication should have been received prior to adj_hold_time expiry.
+     * ASSERT_TRUE(elapsedTime < std::chrono::seconds(initialAdjHoldTime));
+     */
   }
 }
 
@@ -3247,8 +3371,10 @@ TEST_F(LinkStatusTestFixture, LinkStatusRecords) {
   std::string area = kTestingAreaName;
   int64_t ifTs = INT64_MAX;
 
-  // Create an UP interface with UP neighbor.
-  // KvStore should have an entry in LinkStatusRecords with status UP.
+  /*
+   * Create an UP interface with UP neighbor.
+   * KvStore should have an entry in LinkStatusRecords with status UP.
+   */
   {
     nlEventsInjector->sendLinkEvent(ifName, 100, true /* up */);
     recvAndReplyIfUpdate();
@@ -3268,9 +3394,11 @@ TEST_F(LinkStatusTestFixture, LinkStatusRecords) {
     ifTs = *linkStatusMap->at(ifName).unixTs();
   }
 
-  // Flip the interface DOWN and so neighbor is DOWN.
-  // KvStore should still have one entry in LinkStatusRecords, but status is
-  // now DOWN and timestamp is larger.
+  /*
+   * Flip the interface DOWN and so neighbor is DOWN.
+   * KvStore should still have one entry in LinkStatusRecords, but status is
+   * now DOWN and timestamp is larger.
+   */
   {
     nlEventsInjector->sendLinkEvent(ifName, 100, false /* down */);
     recvAndReplyIfUpdate();
@@ -3292,10 +3420,12 @@ TEST_F(LinkStatusTestFixture, LinkStatusRecords) {
     ifTs = *linkStatusMap->at(ifName).unixTs();
   }
 
-  // Flip the interface back to UP with UP neighbor. And then, push
-  // neighbor DOWN but link to it is still UP (i.e., neighbor crashes).
-  // KvStore should still have one entry in LinkStatusRecords, but status is
-  // now DOWN (last status) and timestamp is the largest.
+  /*
+   * Flip the interface back to UP with UP neighbor. And then, push
+   * neighbor DOWN but link to it is still UP (i.e., neighbor crashes).
+   * KvStore should still have one entry in LinkStatusRecords, but status is
+   * now DOWN (last status) and timestamp is the largest.
+   */
   {
     nlEventsInjector->sendLinkEvent(ifName, 100, true /* up */);
     recvAndReplyIfUpdate();

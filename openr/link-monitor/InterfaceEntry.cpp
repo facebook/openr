@@ -24,9 +24,11 @@ InterfaceEntry::InterfaceEntry(
       updateCallback_(updateCallback),
       updateTimeout_(updateTimeout) {
   CHECK(!ifName.empty());
-  // other attributes will be updated via:
-  //  - updateAttrs()
-  //  - updateAddr()
+  /*
+   * other attributes will be updated via:
+   *  - updateAttrs()
+   *  - updateAddr()
+   */
   info_.ifName = ifName;
 }
 

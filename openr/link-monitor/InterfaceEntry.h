@@ -39,8 +39,10 @@ class InterfaceEntry final {
   // Update addresses
   bool updateAddr(folly::CIDRNetwork const& ipNetwork, bool isValid);
 
-  // Is interface active. Interface is active only when it is in UP state and
-  // it's not backed off
+  /*
+   * Is interface active. Interface is active only when it is in UP state and
+   * it's not backed off
+   */
   bool isActive();
 
   // Get backoff time

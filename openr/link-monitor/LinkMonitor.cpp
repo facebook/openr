@@ -98,9 +98,11 @@ struct LinkMonitor::NetlinkEventProcessor {
   operator()(fbnl::Rule&&) {}
 };
 
-//
-// LinkMonitor code
-//
+/*
+ *
+ * LinkMonitor code
+ *
+ */
 LinkMonitor::LinkMonitor(
     std::shared_ptr<const Config> config,
     fbnl::NetlinkProtocolSocket* nlSock,
@@ -150,9 +152,11 @@ LinkMonitor::LinkMonitor(
     }
   }
 
-  // Hold time for synchronizing adjacencies in KvStore. We expect all the
-  // adjacencies to be fully established within hold time after Open/R starts.
-  // TODO: remove this with strict Open/R initialization sequence
+  /*
+   * Hold time for synchronizing adjacencies in KvStore. We expect all the
+   * adjacencies to be fully established within hold time after Open/R starts.
+   * TODO: remove this with strict Open/R initialization sequence
+   */
   const std::chrono::seconds initialAdjHoldTime{
       *config->getConfig().adj_hold_time_s()};
 
@@ -197,8 +201,10 @@ LinkMonitor::LinkMonitor(
   // Create timer. Timer is used for immediate or delayed executions.
   advertiseIfaceAddrTimer_ = folly::AsyncTimeout::make(
       *getEvb(), [this]() noexcept { advertiseIfaceAddr(); });
-  // ATTN: LINK_DISCOVERY stage can't stuck forever if there is NO interface
-  // being discovered.
+  /*
+   * ATTN: LINK_DISCOVERY stage can't stuck forever if there is NO interface
+   * being discovered.
+   */
   advertiseIfaceAddrTimer_->scheduleTimeout(
       Constants::kMaxDurationLinkDiscovery);
 
@@ -448,8 +454,10 @@ LinkMonitor::getMaxInterfaceMetric(const std::string& ifName) const {
 
 int32_t
 LinkMonitor::getMetric(std::string const& ifName, int64_t rttUs) const {
-  // A static per-interface metric takes precedence over the RTT-derived (or
-  // default hop-count) metric.
+  /*
+   * A static per-interface metric takes precedence over the RTT-derived (or
+   * default hop-count) metric.
+   */
   if (const std::optional<int32_t> staticMetric = getStaticMetric(ifName)) {
     return *staticMetric;
   }
@@ -513,9 +521,11 @@ LinkMonitor::neighborUpEvent(
   const auto tPeerSpec =
       createPeerSpec(peerAddr, ctrlThriftPort, thrift::KvStorePeerState::IDLE);
 
-  // NOTE: for Graceful Restart(GR) case, we don't expect any adjacency
-  // information change. Ignore the `onlyUsedByOtherNode` flag for adjacency
-  // advertisement.
+  /*
+   * NOTE: for Graceful Restart(GR) case, we don't expect any adjacency
+   * information change. Ignore the `onlyUsedByOtherNode` flag for adjacency
+   * advertisement.
+   */
   adjacencies_[area].insert_or_assign(
       adjKey,
       AdjacencyEntry(
@@ -578,10 +588,12 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
                << " is down on interface " << localIfName;
   fb303::fbData->addStatValue("link_monitor.neighbor_down", 1, fb303::SUM);
 
-  // A neighbor is down, but it's not necessary that link is down.
-  // So we may not receive down netlink event.
-  // However, we consider a down neighbor event indicates link to the
-  // neighbor is down in link event database context.
+  /*
+   * A neighbor is down, but it's not necessary that link is down.
+   * So we may not receive down netlink event.
+   * However, we consider a down neighbor event indicates link to the
+   * neighbor is down in link event database context.
+   */
   auto linkStatus = linkStatusRecords_.linkStatusMap()->find(localIfName);
   if (linkStatus != linkStatusRecords_.linkStatusMap()->end() &&
       *linkStatus->second.status() == thrift::LinkStatusEnum::UP) {
@@ -614,11 +626,13 @@ LinkMonitor::neighborDownEvent(const NeighborEvent& event) {
     adjacencies_.erase(areaAdjIt);
   }
 
-  // Advertise adjacencies. Note - If all adjacencies in the area are gone,
-  // the below function will persist an empty list of adjacencies to the
-  // kvstore. Thus, correctly synchornizing kvstore with current state of
-  // adjacencies. As an improvement, we could consider erasing this key
-  // altogether.
+  /*
+   * Advertise adjacencies. Note - If all adjacencies in the area are gone,
+   * the below function will persist an empty list of adjacencies to the
+   * kvstore. Thus, correctly synchornizing kvstore with current state of
+   * adjacencies. As an improvement, we could consider erasing this key
+   * altogether.
+   */
   advertiseAdjacencies(area);
 }
 
@@ -659,8 +673,10 @@ LinkMonitor::neighborRttChangeEvent(const NeighborEvent& event) {
   const auto& localIfName = event.localIfName;
   const auto& rttUs = event.rttUs;
 
-  // Interfaces with a static metric keep their configured metric and ignore
-  // RTT changes.
+  /*
+   * Interfaces with a static metric keep their configured metric and ignore
+   * RTT changes.
+   */
   if (getStaticMetric(localIfName).has_value()) {
     XLOGF(
         DBG2,
@@ -718,8 +734,10 @@ LinkMonitor::updateKvStorePeerNeighborUp(
   // create new KvStore Peer struct if it's first adj up
   areaPeers->second.emplace(remoteNodeName, KvStorePeerValue(spec, {adjId}));
 
-  // Do not publish incremental peer event before initial peers are received and
-  // published.
+  /*
+   * Do not publish incremental peer event before initial peers are received and
+   * published.
+   */
   if (!initialNeighborsReceived_) {
     return;
   }
@@ -767,12 +785,14 @@ LinkMonitor::updateKvStorePeerNeighborDown(
   // remove neighbor from establishedSparkNeighbors list
   peer.establishedSparkNeighbors.erase(adjId);
 
-  // send PEER_DEL request to bring DOWN TCP session if all Spark neighbor
-  // sessions are down.
-  //
-  // ATTN:
-  //  - TCP session MUST be brought DOWN if this is the last neighbor session;
-  //  - A new TCP session(PEER_UP) will be established once UP/RESTARTED;
+  /*
+   * send PEER_DEL request to bring DOWN TCP session if all Spark neighbor
+   * sessions are down.
+   *
+   * ATTN:
+   *  - TCP session MUST be brought DOWN if this is the last neighbor session;
+   *  - A new TCP session(PEER_UP) will be established once UP/RESTARTED;
+   */
   if (peer.establishedSparkNeighbors.empty()) {
     logPeerEvent("DEL_PEER", remoteNodeName, peer.tPeerSpec);
 
@@ -788,16 +808,20 @@ LinkMonitor::updateKvStorePeerNeighborDown(
     return;
   }
 
-  // If current KvStore tPeerSpec != this sparkNeighbor's peerSpec, no need to
-  // update peer spec, we are done.
+  /*
+   * If current KvStore tPeerSpec != this sparkNeighbor's peerSpec, no need to
+   * update peer spec, we are done.
+   */
   if (spec != peer.tPeerSpec) {
     return;
   }
 
-  // Update tPeerSpec to peerSpec in remaining establishedSparkNeighbors.
-  // e.g. adj_1 up -> adj_1 peer spec is used in KvStore Peer
-  //      adj_2 up -> peer spec does not change
-  //      adj_1 down -> Now adj_2 will be the peer-spec being used to establish
+  /*
+   * Update tPeerSpec to peerSpec in remaining establishedSparkNeighbors.
+   * e.g. adj_1 up -> adj_1 peer spec is used in KvStore Peer
+   *      adj_2 up -> peer spec does not change
+   *      adj_1 down -> Now adj_2 will be the peer-spec being used to establish
+   */
   peer.tPeerSpec = adjacencies_.at(area)
                        .at(*peer.establishedSparkNeighbors.begin())
                        .peerSpec_;
@@ -859,8 +883,10 @@ LinkMonitor::advertiseAdjacencies(const std::string& area) {
 
 void
 LinkMonitor::advertiseAdjacencies() {
-  // advertise to all areas. Once area configuration per link is implemented
-  // then adjacencies can be advertised to a specific area
+  /*
+   * advertise to all areas. Once area configuration per link is implemented
+   * then adjacencies can be advertised to a specific area
+   */
   for (const auto& [areaId, _] : areas_) {
     // Update KvStore
     advertiseAdjacencies(areaId);
@@ -879,8 +905,10 @@ LinkMonitor::advertiseIfaceAddr() {
     advertiseIfaceAddrThrottled_->cancel();
   }
 
-  // Schedule new timeout if needed to advertise UP but UNSTABLE interfaces
-  // once their backoff is clear.
+  /*
+   * Schedule new timeout if needed to advertise UP but UNSTABLE interfaces
+   * once their backoff is clear.
+   */
   if (retryTime.count() != 0) {
     advertiseIfaceAddrTimer_->scheduleTimeout(retryTime);
     XLOGF(
@@ -1066,8 +1094,10 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
   // [Soft-Drain] set nodeMetricIncrementVal
   adjDb.nodeMetricIncrementVal() = *state_.nodeMetricIncrementVal();
 
-  // populate thrift::AdjacencyDatabase.adjacencies based on
-  // various condition.
+  /*
+   * populate thrift::AdjacencyDatabase.adjacencies based on
+   * various condition.
+   */
   auto areaAdjIt = adjacencies_.find(area);
   if (areaAdjIt != adjacencies_.end()) {
     for (auto& [adjKey, adjValue] : areaAdjIt->second) {
@@ -1082,16 +1112,20 @@ LinkMonitor::buildAdjacencyDatabase(const std::string& area) {
           linkMetricIt != state_.linkMetricIncrementMap()->end()
           ? linkMetricIt->second
           : 0;
-      // Calculate the adj metric - there are 3 places potentially contributing
-      // to the final result, which is stackable:
-      //
-      // 1. base metric derived from round-trip-time(RTT) or default hop-count;
-      // 2. [Soft-Drain] node-level incremental metric;
-      // 3. [Soft-Drain] link-level incremental metric.
+      /*
+       * Calculate the adj metric - there are 3 places potentially contributing
+       * to the final result, which is stackable:
+       *
+       * 1. base metric derived from round-trip-time(RTT) or default hop-count;
+       * 2. [Soft-Drain] node-level incremental metric;
+       * 3. [Soft-Drain] link-level incremental metric.
+       */
       const int32_t baseMetric = *adj.metric();
 
-      // [TO BE DEPRECATED]
-      // override metric with link metric if it exists
+      /*
+       * [TO BE DEPRECATED]
+       * override metric with link metric if it exists
+       */
       int32_t metric = folly::get_default(
           *state_.linkMetricOverrides(), *adj.ifName(), baseMetric);
 
@@ -1172,8 +1206,10 @@ LinkMonitor::getOrCreateInterfaceEntry(const std::string& ifName) {
 
 void
 LinkMonitor::syncInterfaceTask() noexcept {
-  // ATTN: use initial timeoff as the default value to wait for
-  // small amount of time when thread starts before syncing
+  /*
+   * ATTN: use initial timeoff as the default value to wait for
+   * small amount of time when thread starts before syncing
+   */
   std::chrono::milliseconds timeout{expBackoff_.getInitialBackoff()};
 
   while (true) { // Break when stop signal is ready
@@ -1229,8 +1265,10 @@ LinkMonitor::syncInterfaces() {
     return false;
   }
 
-  // ATTN: treat empty link as failure to make sure LinkMonitor can keep
-  // retrying to retrieve data from underneath platform.
+  /*
+   * ATTN: treat empty link as failure to make sure LinkMonitor can keep
+   * retrying to retrieve data from underneath platform.
+   */
   InterfaceDatabase ifDb = std::move(maybeIfDb).value();
   if (ifDb.empty()) {
     XLOG(ERR, "[Interface Sync] No interface found. Retry in a moment.");
@@ -1244,9 +1282,11 @@ LinkMonitor::syncInterfaces() {
 
   // Make updates in InterfaceEntry objects
   for (const auto& info : ifDb) {
-    // update cache of ifIndex -> ifName mapping
-    //  1) if ifIndex exists, override it with new ifName;
-    //  2) if ifIndex does NOT exist, cache the ifName;
+    /*
+     * update cache of ifIndex -> ifName mapping
+     *  1) if ifIndex exists, override it with new ifName;
+     *  2) if ifIndex does NOT exist, cache the ifName;
+     */
     ifIndexToName_[info.ifIndex] = info.ifName;
 
     // Get interface entry
@@ -1301,9 +1341,11 @@ LinkMonitor::processLinkEvent(fbnl::Link&& link) {
   auto ifIndex = link.getIfIndex();
   auto isUp = link.isUp();
 
-  // Cache interface index name mapping
-  // ATTN: will create new ifIndex -> ifName mapping if it is unknown link
-  //       `[]` operator is used in purpose
+  /*
+   * Cache interface index name mapping
+   * ATTN: will create new ifIndex -> ifName mapping if it is unknown link
+   *       `[]` operator is used in purpose
+   */
   ifIndexToName_[ifIndex] = ifName;
 
   auto interfaceEntry = getOrCreateInterfaceEntry(ifName);
@@ -1406,8 +1448,10 @@ LinkMonitor::processNeighborEvents(NeighborEvents&& events) {
   } // for
 }
 
-// NOTE: add commands which set/unset overload bit or metric values will
-// immediately advertise new adjacencies into the KvStore.
+/*
+ * NOTE: add commands which set/unset overload bit or metric values will
+ * immediately advertise new adjacencies into the KvStore.
+ */
 folly::SemiFuture<folly::Unit>
 LinkMonitor::semifuture_setNodeOverload(bool isOverloaded) {
   folly::Promise<folly::Unit> p;
@@ -1486,11 +1530,13 @@ LinkMonitor::semifuture_setInterfaceOverload(
   return sf;
 }
 
-// [TO_BE_DEPRECATED]
-//
-// ATTN: this achieves the SAME functionality of:
-//
-// semifuture_setInterfaceMetricIncrement
+/*
+ * [TO_BE_DEPRECATED]
+ *
+ * ATTN: this achieves the SAME functionality of:
+ *
+ * semifuture_setInterfaceMetricIncrement
+ */
 folly::SemiFuture<folly::Unit>
 LinkMonitor::semifuture_setLinkMetric(
     std::string interfaceName, std::optional<int32_t> overrideMetric) {

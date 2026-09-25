@@ -87,8 +87,10 @@ TEST(InterfaceEntry, GetSetTest) {
       v6LinkLocalAddrs,
       interface.getInterfaceInfo().getSortedV6LinkLocalAddrs());
 
-  // Validate redistriubte prefixes (link-local and multicast addrs will
-  // be ignored)
+  /*
+   * Validate redistriubte prefixes (link-local and multicast addrs will
+   * be ignored)
+   */
   folly::F14FastSet<folly::CIDRNetwork> redistAddrsAll = {
       folly::IPAddress::createNetwork("1.2.3.4/24"),
       folly::IPAddress::createNetwork("24:db:21:6048:face:0:1b:0/64")};
@@ -126,8 +128,10 @@ TEST(InterfaceEntry, BackoffTest) {
   EXPECT_FALSE(timeout->isScheduled());
   throttle.cancel();
 
-  // 2. Set interface to DOWN (backoff = 8ms)
-  // NOTE: Ensure timeout gets scheduled
+  /*
+   * 2. Set interface to DOWN (backoff = 8ms)
+   * NOTE: Ensure timeout gets scheduled
+   */
   EXPECT_TRUE(interface.updateAttrs(1, false));
   EXPECT_FALSE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
@@ -155,8 +159,10 @@ TEST(InterfaceEntry, BackoffTest) {
   EXPECT_FALSE(timeout->isScheduled());
   throttle.cancel();
 
-  // 5. Bring down interface again (backoff = 16ms)
-  // NOTE: Ensure timeout gets scheduled
+  /*
+   * 5. Bring down interface again (backoff = 16ms)
+   * NOTE: Ensure timeout gets scheduled
+   */
   EXPECT_TRUE(interface.updateAttrs(1, false));
   EXPECT_FALSE(interface.isUp());
   EXPECT_FALSE(interface.isActive());
