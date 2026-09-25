@@ -60,9 +60,11 @@ class Watchdog final : public OpenrEventBase,
   // force to abort, aka, crash process
   void fireCrash(const std::string& msg);
 
-  //
-  // Private vars for internal state
-  //
+  /*
+   *
+   * Private vars for internal state
+   *
+   */
   const std::string myNodeName_;
 
   // Timer for checking aliveness periodically
@@ -95,8 +97,10 @@ class Watchdog final : public OpenrEventBase,
       std::reference_wrapper<messaging::ReplicateQueueBase>>
       monitoredQs_;
 
-  // Best-effort hook invoked just before fireCrash() aborts the process, e.g.
-  // to announce graceful restart to peers. See setPreCrashCallback().
+  /*
+   * Best-effort hook invoked just before fireCrash() aborts the process, e.g.
+   * to announce graceful restart to peers. See setPreCrashCallback().
+   */
   std::function<void()> preCrashCallback_{nullptr};
 };
 

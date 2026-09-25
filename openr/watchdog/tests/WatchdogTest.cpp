@@ -243,8 +243,10 @@ TEST(WatchdogDeathTest, PreCrashCallbackRunsBeforeAbort) {
         auto config = std::make_shared<Config>(tConfig);
 
         auto watchdog = std::make_unique<Watchdog>(config);
-        // Posted from the pre-crash hook so the waiter below blocks only as
-        // long as the watchdog needs to fire -- no fixed sleep.
+        /*
+         * Posted from the pre-crash hook so the waiter below blocks only as
+         * long as the watchdog needs to fire -- no fixed sleep.
+         */
         folly::Baton<> preCrashHookRan;
         watchdog->setPreCrashCallback([&]() {
           std::cerr << "PRECRASH_HOOK_RAN" << std::endl;
@@ -254,17 +256,21 @@ TEST(WatchdogDeathTest, PreCrashCallbackRunsBeforeAbort) {
         std::thread watchdogThread([&]() { watchdog->run(); });
         watchdog->waitUntilRunning();
 
-        // A "stuck" evb: constructed but never run, so its heartbeat timestamp
-        // never advances and the watchdog declares it a dead thread, which
-        // triggers fireCrash() after two monitor cycles.
+        /*
+         * A "stuck" evb: constructed but never run, so its heartbeat timestamp
+         * never advances and the watchdog declares it a dead thread, which
+         * triggers fireCrash() after two monitor cycles.
+         */
         OpenrEventBase stuckEvb;
         stuckEvb.setEvbName("stuckEvb");
         watchdog->addEvb(&stuckEvb);
 
-        // Wait only as long as the watchdog needs to detect the dead thread
-        // and run the pre-crash hook (signalled via the baton). If it never
-        // fires within the bound, exit cleanly with a clear message so
-        // EXPECT_DEATH fails fast (no SIGABRT) instead of hanging on join().
+        /*
+         * Wait only as long as the watchdog needs to detect the dead thread
+         * and run the pre-crash hook (signalled via the baton). If it never
+         * fires within the bound, exit cleanly with a clear message so
+         * EXPECT_DEATH fails fast (no SIGABRT) instead of hanging on join().
+         */
         if (!preCrashHookRan.try_wait_for(std::chrono::seconds(10))) {
           std::cerr << "watchdog did not fire pre-crash hook within 10s"
                     << std::endl;

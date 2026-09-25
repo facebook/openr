@@ -196,9 +196,11 @@ Watchdog::fireCrash(const std::string& msg) {
 
 void
 Watchdog::updateQueueCounters() {
-  // TODO: T98478475 - Currently we only log the counters but don't take any
-  // action if the queue keeps growing. In future, via T98478475, we should
-  // invoke fireCrash() if the queue keeps growing.
+  /*
+   * TODO: T98478475 - Currently we only log the counters but don't take any
+   * action if the queue keeps growing. In future, via T98478475, we should
+   * invoke fireCrash() if the queue keeps growing.
+   */
   for (auto const& [qName, q] : monitoredQs_) {
     fb303::fbData->setCounter(
         fmt::format("messaging.replicate_queue.{}.readers", qName),
@@ -207,10 +209,12 @@ Watchdog::updateQueueCounters() {
         fmt::format("messaging.replicate_queue.{}.messages_sent", qName),
         q.get().getNumWrites());
 
-    // Get the stats for each replicated queue
-    // TODO: 1. Handle the delete scenario where a reader disconnects
-    // TODO: 2. Assign keys to each reader so we can record the stats without
-    //          risk of mixup
+    /*
+     * Get the stats for each replicated queue
+     * TODO: 1. Handle the delete scenario where a reader disconnects
+     * TODO: 2. Assign keys to each reader so we can record the stats without
+     *          risk of mixup
+     */
     std::vector<messaging::RWQueueStats> stats = q.get().getReplicationStats();
     for (auto& stat : stats) {
       fb303::fbData->setCounter(
