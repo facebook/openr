@@ -53,6 +53,8 @@
 #include <openr/tests/scale/TopologyFactory.h>
 #include <openr/tests/scale/TopologyGenerator.h>
 
+#include <neteng/test_infra/routing_qualification/telemetry/ScaleTestUsageLogger.h>
+
 DEFINE_string(dut_host, "192.168.1.1", "DUT hostname or IP address");
 
 DEFINE_int32(dut_port, 2018, "DUT OpenR thrift port");
@@ -143,6 +145,9 @@ DEFINE_string(
     "Empty or a single name keeps single-area behavior (default area \"0\").");
 
 namespace {
+
+constexpr std::string_view kUsageScubaDataset{
+    "dc_routing_openr_scale_test_usage"};
 
 /*
  * Node ID for the DUT router entry in the topology. Chosen to be well
@@ -429,6 +434,8 @@ processCommand(
 int
 main(int argc, char** argv) {
   folly::Init init(&argc, &argv);
+  facebook::neteng::routing_qualification::ScaleTestUsageLogger usageLogger{
+      kUsageScubaDataset};
 
   std::signal(SIGINT, signalHandler);
   std::signal(SIGTERM, signalHandler);
@@ -1210,5 +1217,6 @@ main(int argc, char** argv) {
   injector.disconnect();
 
   XLOG(INFO, "[SCALE-TEST] Scale test complete.");
+  usageLogger.recordExit();
   return 0;
 }

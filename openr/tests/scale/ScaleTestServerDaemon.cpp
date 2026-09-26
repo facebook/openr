@@ -16,10 +16,15 @@
 
 #include <openr/tests/scale/ScaleTestServerHandler.h>
 
+#include <neteng/test_infra/routing_qualification/telemetry/ScaleTestUsageLogger.h>
+
 DEFINE_int32(thrift_port, 2019, "Port for the scale-test Thrift server");
 DEFINE_bool(loopback_only, true, "Bind to loopback only (lab tool default)");
 
 namespace {
+
+constexpr std::string_view kUsageScubaDataset{
+    "dc_routing_openr_scale_test_usage"};
 
 /*
  * SIGINT/SIGTERM handlers need a server handle. We can't pass state through
@@ -41,6 +46,8 @@ shutdownHandler(int /* signal */) {
 int
 main(int argc, char** argv) {
   folly::Init init(&argc, &argv);
+  facebook::neteng::routing_qualification::ScaleTestUsageLogger usageLogger{
+      kUsageScubaDataset};
 
   std::signal(SIGINT, shutdownHandler);
   std::signal(SIGTERM, shutdownHandler);
@@ -57,5 +64,6 @@ main(int argc, char** argv) {
   XLOGF(INFO, "ScaleTestServer daemon listening on port {}", FLAGS_thrift_port);
   g_server->serve();
   XLOGF(INFO, "ScaleTestServer daemon stopped");
+  usageLogger.recordExit();
   return 0;
 }
