@@ -72,6 +72,16 @@ std::shared_ptr<apache::thrift::ThriftServer> setUpThriftServer(
     std::shared_ptr<wangle::SSLContextConfig> sslContext,
     int32_t port);
 
+/**
+ * Apply the aggregate ingress-memory bound to the dedicated KvStore peer
+ * server on port 2028. All peer connections share the 128 MiB budget; this
+ * does not reserve a per-peer share or identify the largest consumer.
+ *
+ * Do not apply these settings to the OpenrCtrl server on port 2018.
+ */
+void configureKvStorePeerThriftServerMemoryLimits(
+    apache::thrift::ThriftServer& server);
+
 void waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server);
 
 } // namespace openr

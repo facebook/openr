@@ -315,6 +315,14 @@ class Constants {
   // KvStore peer thrift server port
   static constexpr int32_t kKvStorePeerPort{2028};
 
+  /*
+   * Aggregate 134,217,728-byte (128 MiB) ingress-memory budget shared by all
+   * connections to the dedicated KvStore peer Thrift server; this does not
+   * reserve a per-peer share.
+   */
+  static constexpr size_t kKvStorePeerIngressMemoryLimitBytes{
+      128 * 1024 * 1024};
+
   // Thrift server's queue timeout
   static constexpr std::chrono::milliseconds kThriftServerQueueTimeout{1000};
 

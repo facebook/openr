@@ -592,6 +592,7 @@ main(int argc, char** argv) {
         createKvStoreServiceHandler(config->getNodeName(), kvStore);
     kvStorePeerServer = setUpThriftServer(
         config, kvStorePeerHandler, sslContext, *kvStorePeerPort);
+    configureKvStorePeerThriftServerMemoryLimits(*kvStorePeerServer);
     kvStorePeerServerThread = std::thread([&]() noexcept {
       folly::setThreadName("openr-KvStore");
       XLOGF(

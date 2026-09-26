@@ -100,6 +100,22 @@ setUpThriftServer(
 }
 
 void
+configureKvStorePeerThriftServerMemoryLimits(
+    apache::thrift::ThriftServer& server) {
+  /*
+   * This server has one IO worker, so every peer connection draws from the
+   * same ingress-memory counter. fbthrift stops reading from and drains/closes
+   * the connection delivering the payload whose accounting increment crosses
+   * the limit, even if other connections hold most of the accounted memory.
+   * It does not wait for memory to become available and resume reading, so
+   * this is connection-level load shedding rather than per-peer fairness or
+   * sustained TCP backpressure.
+   */
+  server.setIngressMemoryLimit(Constants::kKvStorePeerIngressMemoryLimitBytes);
+  server.setMinPayloadSizeToEnforceIngressMemoryLimit(0);
+}
+
+void
 waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server) {
   while (true) {
     auto evb = server->getServeEventBase();
