@@ -919,6 +919,61 @@ TEST(RWQueueTest, QueuedTimeCoalescingKeepsTailTime) {
   EXPECT_DOUBLE_EQ(20.0, stats.maxQueuedTimeMs);
 }
 
+TEST(RWQueueTest, SuppressionsCoalescing) {
+  RWQueue<int> q("coalescing", [](int& existing, int& incoming) {
+    if (incoming > 0) {
+      existing += incoming;
+      return true;
+    }
+    return false;
+  });
+
+  q.push(1); // empty queue: appended, nothing to collapse
+  EXPECT_EQ(0, q.getStats().suppressions);
+  q.push(2); // consumed by the coalescer
+  EXPECT_EQ(1, q.getStats().suppressions);
+  q.push(-5); // declined: new tail element
+  EXPECT_EQ(1, q.getStats().suppressions);
+  EXPECT_EQ(2, q.size());
+}
+
+TEST(RWQueueTest, SuppressionsReplacePending) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+
+  q.push(StateUpdate{"a", 1}); // first of key: plain append
+  EXPECT_EQ(0, q.getStats().suppressions);
+  q.push(StateUpdate{"a", 2}); // displaces the pending entry
+  EXPECT_EQ(1, q.getStats().suppressions);
+  q.push(StateUpdate{"b", 1}); // first of a new key
+  EXPECT_EQ(1, q.getStats().suppressions);
+  EXPECT_EQ(2, q.size());
+}
+
+TEST(RWQueueTest, SuppressionsMergeAndDrop) {
+  RWQueue<StateUpdate> q("state-reset", getResettingSuppressionPolicy());
+
+  q.push(StateUpdate{"drop", 1}); // DROP action
+  EXPECT_EQ(1, q.getStats().suppressions);
+  q.push(StateUpdate{"add", 10}); // PURGEABLE: retained, not counted
+  EXPECT_EQ(1, q.getStats().suppressions);
+  q.push(StateUpdate{"withdraw", 1}); // first of key: appended
+  EXPECT_EQ(1, q.getStats().suppressions);
+  q.push(StateUpdate{"withdraw", 2}); // folded into the pending entry
+  EXPECT_EQ(2, q.getStats().suppressions);
+  EXPECT_EQ(1, q.size());
+}
+
+TEST(RWQueueTest, SuppressionsZeroForPlainQueue) {
+  RWQueue<int> q;
+  q.push(1);
+  q.push(2);
+  EXPECT_EQ(1, q.get().value());
+  auto stats = q.getStats();
+  EXPECT_EQ(0, stats.suppressions);
+  EXPECT_EQ(2, stats.writes);
+  EXPECT_EQ(1, stats.reads);
+}
+
 TEST(RWQueueTest, QueuedTimeWithStateSuppression) {
   RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
   q.setNowFn(manualNow);

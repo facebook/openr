@@ -83,6 +83,7 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
 
   if (stateSuppressionQueue_ && stateSuppressionQueue_->shouldDrop(val)) {
     ++writes_;
+    ++suppressions_;
     return true;
   }
 
@@ -98,7 +99,9 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     pendingRead.baton.post();
     pendingReads_.pop_front();
   } else if (stateSuppressionQueue_) {
-    stateSuppressionQueue_->push(std::forward<ValueTypeT>(val));
+    if (stateSuppressionQueue_->push(std::forward<ValueTypeT>(val))) {
+      ++suppressions_;
+    }
   } else if (coalesceFn_ && !queue_.empty()) {
     /*
      * Offer the incoming value to be merged into the pending tail element. If
@@ -110,6 +113,8 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     ValueType incoming(std::forward<ValueTypeT>(val));
     if (!coalesceFn_(queue_.back().value, incoming)) {
       queue_.emplace_back(std::move(incoming), nowFn_());
+    } else {
+      ++suppressions_;
     }
   } else {
     // Add data into the queue
@@ -324,6 +329,7 @@ RWQueue<ValueType>::getStats() {
       reads_,
       writes_,
       stateSuppressionQueue_ ? stateSuppressionQueue_->size() : queue_.size(),
+      suppressions_,
       avgMs,
       maxMs};
 }

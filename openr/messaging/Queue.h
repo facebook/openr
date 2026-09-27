@@ -105,6 +105,13 @@ struct RWQueueStats {
   const size_t reads{0};
   const size_t writes{0};
   const size_t size{0};
+  /*
+   * Number of pushed messages collapsed by state suppression instead of
+   * growing the backlog: consumed by the tail coalescer, dropped, replaced
+   * a pending entry, or merged into one. First-time keys, barriers, and
+   * retained purgeables are not counted.
+   */
+  const size_t suppressions{0};
   // Average time in ms spent waiting in the queue, over all dequeued
   // messages. Messages handed directly to a waiting reader count as zero.
   const double avgQueuedTimeMs{0};
@@ -300,8 +307,14 @@ class RWQueue {
       nowFn_ = nowFn;
     }
 
+    /*
+     * Returns true when the push was collapsed by suppression instead of
+     * growing the backlog: dropped, displaced a pending entry, or merged
+     * into one. Plain appends (first-time keys, barriers, retained
+     * purgeables, pre-activation backlog) return false.
+     */
     template <typename ValueTypeT>
-    void
+    bool
     push(ValueTypeT&& val) {
       const auto now = nowFn_();
       if (!suppressionActive_) {
@@ -309,12 +322,12 @@ class RWQueue {
         if (queue_.size() > activationThreshold_) {
           activateSuppression();
         }
-        return;
+        return false;
       }
 
       auto key = classifyState_(val);
       queue_.emplace_back(std::move(key), std::forward<ValueTypeT>(val), now);
-      indexPendingState(std::prev(queue_.end()));
+      return indexPendingState(std::prev(queue_.end()));
     }
 
     bool
@@ -408,7 +421,13 @@ class RWQueue {
       suppressionActive_ = true;
     }
 
-    void
+    /*
+     * Indexes a newly pushed node, collapsing it against pending state for
+     * its key. Returns true when the push was suppressed instead of growing
+     * the backlog: dropped, displaced a pending entry for the same key, or
+     * merged into one. Activation-time compaction ignores the result.
+     */
+    bool
     indexPendingState(StateIterator stateIt) {
       CHECK(stateIt->stateKey.has_value());
       // Copied: the referenced node may be erased below.
@@ -416,7 +435,7 @@ class RWQueue {
 
       if (action == StateSuppressionAction::DROP) {
         queue_.erase(stateIt);
-        return;
+        return true;
       }
 
       if (action == StateSuppressionAction::KEY_BARRIER) {
@@ -425,14 +444,15 @@ class RWQueue {
         } else {
           pendingStateByKey_.erase(std::string_view{stateIt->stateKey->key});
         }
-        return;
+        return false;
       }
 
       if (action == StateSuppressionAction::PURGEABLE) {
-        return;
+        return false;
       }
 
       auto survivorIt = stateIt;
+      bool suppressed{false};
       /*
        * Erase and append rather than overwrite in place. This preserves the
        * production order of surviving state: A1, B1, A2 becomes B1, A2.
@@ -462,6 +482,7 @@ class RWQueue {
         } else {
           queue_.erase(previousStateIt);
         }
+        suppressed = true;
       }
       if (action == StateSuppressionAction::MERGE_PENDING_AND_PURGE) {
         queue_.remove_if([](const PendingState& pendingState) {
@@ -473,6 +494,7 @@ class RWQueue {
           pendingStateByKey_
               .emplace(std::string_view{survivorIt->stateKey->key}, survivorIt)
               .second);
+      return suppressed;
     }
 
     std::list<PendingState> queue_;
@@ -561,6 +583,12 @@ class RWQueue {
    */
   uint64_t totalQueuedTimeUs_{0};
   uint64_t maxQueuedTimeUs_{0};
+
+  /*
+   * Number of pushed messages collapsed by state suppression instead of
+   * growing the backlog (see RWQueueStats::suppressions). Guarded by lock_.
+   */
+  size_t suppressions_{0};
 
   /*
    * Fold one dequeued message's dwell time into the running total/max.

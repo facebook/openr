@@ -196,6 +196,13 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
           ASSERT_EQ(
               fb303::fbData->getCounter(
                   fmt::format(
+                      "messaging.rw_queue.{}-{}.suppressions",
+                      "Queue1",
+                      stat.queueId)),
+              stat.suppressions);
+          ASSERT_EQ(
+              fb303::fbData->getCounter(
+                  fmt::format(
                       "messaging.rw_queue.{}-{}.time_spent_avg_ms",
                       "Queue1",
                       stat.queueId)),
@@ -225,6 +232,13 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
                   fmt::format(
                       "messaging.rw_queue.{}-{}.sent", "Queue2", stat.queueId)),
               stat.writes);
+          ASSERT_EQ(
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.suppressions",
+                      "Queue2",
+                      stat.queueId)),
+              stat.suppressions);
           ASSERT_EQ(
               fb303::fbData->getCounter(
                   fmt::format(

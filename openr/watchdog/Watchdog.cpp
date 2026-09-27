@@ -233,6 +233,11 @@ Watchdog::updateQueueCounters() {
 
       fb303::fbData->setCounter(
           fmt::format(
+              "messaging.rw_queue.{}-{}.suppressions", qName, stat.queueId),
+          stat.suppressions);
+
+      fb303::fbData->setCounter(
+          fmt::format(
               "messaging.rw_queue.{}-{}.time_spent_avg_ms",
               qName,
               stat.queueId),
