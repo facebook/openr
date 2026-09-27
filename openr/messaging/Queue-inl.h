@@ -63,7 +63,7 @@ RWQueue<ValueType>::RWQueue(
     : queueId_(queueId),
       stateSuppressionQueue_(
           std::make_unique<StateSuppressionQueue>(
-              std::move(stateSuppressionPolicy))) {}
+              std::move(stateSuppressionPolicy), nowFn_)) {}
 
 template <typename ValueType>
 RWQueue<ValueType>::~RWQueue() {
@@ -86,6 +86,11 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     return true;
   }
 
+  /*
+   * Handed directly to a waiting reader: the message never waits in the
+   * backlog, so its queue dwell time is zero and no timing is recorded. The
+   * read side still counts it in reads_, which keeps the average honest.
+   */
   if (pendingReads_.size()) {
     // Unblock a pending read
     auto& pendingRead = pendingReads_.front().get();
@@ -99,14 +104,16 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
      * Offer the incoming value to be merged into the pending tail element. If
      * the coalescer consumes it (returns true) nothing is appended, bounding
      * the backlog even when the reader is slow/stalled; otherwise append it.
+     * A consumed value keeps the surviving tail's enqueue time, so no clock
+     * read happens on that path.
      */
     ValueType incoming(std::forward<ValueTypeT>(val));
-    if (!coalesceFn_(queue_.back(), incoming)) {
-      queue_.emplace_back(std::move(incoming));
+    if (!coalesceFn_(queue_.back().value, incoming)) {
+      queue_.emplace_back(std::move(incoming), nowFn_());
     }
   } else {
     // Add data into the queue
-    queue_.emplace_back(std::forward<ValueTypeT>(val));
+    queue_.emplace_back(std::forward<ValueTypeT>(val), nowFn_());
   }
   ++writes_;
 
@@ -181,15 +188,25 @@ RWQueue<ValueType>::getAnyImpl(PendingRead& pendingRead) {
     return folly::makeUnexpected(QueueError::QUEUE_CLOSED);
   }
 
-  // Perform immediate read if data is available
+  /*
+   * The clock is read only on paths that actually pop a message. When the
+   * backlog is empty the reader just parks on pendingReads_, so no timestamp
+   * is needed.
+   */
   if (stateSuppressionQueue_ && !stateSuppressionQueue_->empty()) {
-    pendingRead.data.emplace(stateSuppressionQueue_->pop());
+    const auto now = nowFn_();
+    auto [value, enqueueTime] = stateSuppressionQueue_->pop();
+    recordQueueDwellTime(enqueueTime, now);
+    pendingRead.data.emplace(std::move(value));
     return true;
   }
 
   if (!queue_.empty()) {
-    pendingRead.data.emplace(std::move(queue_.front()));
+    const auto now = nowFn_();
+    auto entry = std::move(queue_.front());
     queue_.pop_front();
+    recordQueueDwellTime(entry.enqueueTime, now);
+    pendingRead.data.emplace(std::move(entry.value));
     return true;
   }
 
@@ -266,14 +283,49 @@ RWQueue<ValueType>::numReads() {
 }
 
 template <typename ValueType>
+void
+RWQueue<ValueType>::recordQueueDwellTime(
+    std::chrono::steady_clock::time_point enqueueTime,
+    std::chrono::steady_clock::time_point now) {
+  const auto dwellUs = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::microseconds>(now - enqueueTime)
+          .count());
+  totalQueuedTimeUs_ += dwellUs;
+  if (dwellUs > maxQueuedTimeUs_) {
+    maxQueuedTimeUs_ = dwellUs;
+  }
+}
+
+template <typename ValueType>
+void
+RWQueue<ValueType>::setNowFn(NowFn nowFn) {
+  std::lock_guard<std::mutex> l(lock_);
+  nowFn_ = nowFn;
+  if (stateSuppressionQueue_) {
+    stateSuppressionQueue_->setNowFn(nowFn);
+  }
+}
+
+template <typename ValueType>
 RWQueueStats
 RWQueue<ValueType>::getStats() {
   std::lock_guard<std::mutex> l(lock_);
+  /*
+   * The ms conversion and averaging happen here on the poll path (Watchdog
+   * tick), never per message: the hot path accumulates integer microseconds
+   * only. Stamping integer milliseconds at record time would erase sub-ms
+   * dwells (0.9ms would read as 0), so precision is kept until this point.
+   */
+  const double avgMs =
+      reads_ ? static_cast<double>(totalQueuedTimeUs_) / reads_ / 1000.0 : 0.0;
+  const double maxMs = static_cast<double>(maxQueuedTimeUs_) / 1000.0;
   return RWQueueStats{
       "",
       reads_,
       writes_,
-      stateSuppressionQueue_ ? stateSuppressionQueue_->size() : queue_.size()};
+      stateSuppressionQueue_ ? stateSuppressionQueue_->size() : queue_.size(),
+      avgMs,
+      maxMs};
 }
 
 } // namespace openr::messaging

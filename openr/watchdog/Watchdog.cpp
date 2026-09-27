@@ -5,6 +5,8 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <cmath>
+
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 #include <openr/common/Constants.h>
@@ -228,6 +230,20 @@ Watchdog::updateQueueCounters() {
       fb303::fbData->setCounter(
           fmt::format("messaging.rw_queue.{}-{}.sent", qName, stat.queueId),
           stat.writes);
+
+      fb303::fbData->setCounter(
+          fmt::format(
+              "messaging.rw_queue.{}-{}.time_spent_avg_ms",
+              qName,
+              stat.queueId),
+          std::llround(stat.avgQueuedTimeMs));
+
+      fb303::fbData->setCounter(
+          fmt::format(
+              "messaging.rw_queue.{}-{}.time_spent_max_ms",
+              qName,
+              stat.queueId),
+          std::llround(stat.maxQueuedTimeMs));
     }
   }
 }

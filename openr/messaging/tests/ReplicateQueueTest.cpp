@@ -8,6 +8,8 @@
 #include "openr/messaging/ReplicateQueue.h"
 #include <gtest/gtest.h>
 
+#include <algorithm>
+
 #include <folly/fibers/EventBaseLoopController.h>
 #include <folly/fibers/FiberManagerMap.h>
 #include <folly/io/async/EventBase.h>
@@ -156,6 +158,29 @@ TEST(ReplicateQueueTest, ReaderStateSuppression) {
   EXPECT_EQ(2, suppressed.size());
   EXPECT_EQ(1, suppressed.get().value().value);
   EXPECT_EQ(2, suppressed.get().value().value);
+
+  q.close();
+}
+
+/*
+ * Each reader owns an independent RWQueue, so draining only r1 leaves exactly
+ * one reader with a completed read. Dwell timing itself is covered
+ * deterministically at the RWQueue level (QueuedTimeIsPerQueue); this pins
+ * the per-reader plumbing end to end with no wall-clock dependence.
+ */
+TEST(ReplicateQueueTest, PerReaderQueuedTimeIsIsolated) {
+  ReplicateQueue<int> q;
+  auto r1 = q.getReader("r1");
+  auto r2 = q.getReader("r2");
+
+  q.push(1);
+  EXPECT_EQ(1, r1.get().value());
+
+  auto stats = q.getReplicationStats();
+  ASSERT_EQ(2, stats.size());
+  EXPECT_EQ(1, stats[0].reads + stats[1].reads);
+  EXPECT_EQ(0, std::min(stats[0].reads, stats[1].reads));
+  EXPECT_EQ(1, std::max(stats[0].reads, stats[1].reads));
 
   q.close();
 }

@@ -9,6 +9,8 @@
 
 #include <any>
 #include <atomic>
+#include <chrono>
+#include <cstdint>
 #include <deque>
 #include <functional>
 #include <iterator>
@@ -103,6 +105,11 @@ struct RWQueueStats {
   const size_t reads{0};
   const size_t writes{0};
   const size_t size{0};
+  // Average time in ms spent waiting in the queue, over all dequeued
+  // messages. Messages handed directly to a waiting reader count as zero.
+  const double avgQueuedTimeMs{0};
+  // Max time in ms spent waiting in the queue by any dequeued message.
+  const double maxQueuedTimeMs{0};
 };
 
 template <typename ValueType>
@@ -154,6 +161,14 @@ class RQueue {
 template <typename ValueType>
 class RWQueue {
  public:
+  using Clock = std::chrono::steady_clock;
+  using NowFn = Clock::time_point (*)();
+
+  static Clock::time_point
+  defaultNow() {
+    return Clock::now();
+  }
+
   RWQueue();
   explicit RWQueue(const std::string&);
   /**
@@ -245,6 +260,12 @@ class RWQueue {
    */
   RWQueueStats getStats();
 
+  /*
+   * Test hook (UT only): override the clock used for enqueue timestamps and
+   * dwell computation, forwarded to the state-suppression queue when present.
+   */
+  void setNowFn(NowFn nowFn);
+
  private:
   // Name/id of the queue
   std::string queueId_;
@@ -257,12 +278,12 @@ class RWQueue {
   class StateSuppressionQueue {
    public:
     explicit StateSuppressionQueue(
-        StateSuppressionPolicy<ValueType> stateSuppressionPolicy)
+        StateSuppressionPolicy<ValueType> stateSuppressionPolicy, NowFn nowFn)
         : activationThreshold_(stateSuppressionPolicy.activationThreshold),
           suppressionActive_(activationThreshold_ == 0),
           classifyState_(std::move(stateSuppressionPolicy.classify)),
-          mergeIntoPending_(
-              std::move(stateSuppressionPolicy.mergeIntoPending)) {
+          mergeIntoPending_(std::move(stateSuppressionPolicy.mergeIntoPending)),
+          nowFn_(nowFn) {
       CHECK(classifyState_);
       /*
        * activateSuppression() walks the backlog calling indexPendingState,
@@ -274,20 +295,25 @@ class RWQueue {
           << "mergeIntoPending requires activationThreshold 0";
     }
 
+    void
+    setNowFn(NowFn nowFn) {
+      nowFn_ = nowFn;
+    }
+
     template <typename ValueTypeT>
     void
     push(ValueTypeT&& val) {
-      ValueType incoming(std::forward<ValueTypeT>(val));
+      const auto now = nowFn_();
       if (!suppressionActive_) {
-        queue_.emplace_back(PendingState{std::nullopt, std::move(incoming)});
+        queue_.emplace_back(std::nullopt, std::forward<ValueTypeT>(val), now);
         if (queue_.size() > activationThreshold_) {
           activateSuppression();
         }
         return;
       }
 
-      queue_.emplace_back(
-          PendingState{classifyState_(incoming), std::move(incoming)});
+      auto key = classifyState_(val);
+      queue_.emplace_back(std::move(key), std::forward<ValueTypeT>(val), now);
       indexPendingState(std::prev(queue_.end()));
     }
 
@@ -296,7 +322,12 @@ class RWQueue {
       return classifyState_(value).action == StateSuppressionAction::DROP;
     }
 
-    ValueType
+    /*
+     * Pops the head value along with its enqueue timestamp so the caller can
+     * record the queue dwell time. A merged survivor keeps its original
+     * (older) enqueue time; a replacement carries the newer value's time.
+     */
+    std::pair<ValueType, std::chrono::steady_clock::time_point>
     pop() {
       auto stateIt = queue_.begin();
       if (suppressionActive_) {
@@ -317,12 +348,13 @@ class RWQueue {
         }
       }
       auto value = std::move(stateIt->value);
+      const auto enqueueTime = stateIt->enqueueTime;
       queue_.erase(stateIt);
       if (queue_.empty() && activationThreshold_ != 0) {
         pendingStateByKey_.clear();
         suppressionActive_ = false;
       }
-      return value;
+      return {std::move(value), enqueueTime};
     }
 
     bool
@@ -346,6 +378,22 @@ class RWQueue {
     struct PendingState {
       std::optional<StateSuppressionKey> stateKey;
       ValueType value;
+      std::chrono::steady_clock::time_point enqueueTime;
+
+      /*
+       * In-place constructors so emplace_back forwards the value directly
+       * into list storage with a single construction -- no temporary node.
+       */
+      PendingState(
+          std::optional<StateSuppressionKey> k,
+          ValueType&& v,
+          std::chrono::steady_clock::time_point t)
+          : stateKey(std::move(k)), value(std::move(v)), enqueueTime(t) {}
+      PendingState(
+          std::optional<StateSuppressionKey> k,
+          const ValueType& v,
+          std::chrono::steady_clock::time_point t)
+          : stateKey(std::move(k)), value(v), enqueueTime(t) {}
     };
 
     using StateIterator = typename std::list<PendingState>::iterator;
@@ -436,6 +484,7 @@ class RWQueue {
     std::function<StateSuppressionKey(const ValueType&)> classifyState_;
     std::function<void(ValueType& pending, ValueType& incoming)>
         mergeIntoPending_;
+    NowFn nowFn_;
   };
 
   /**
@@ -455,8 +504,26 @@ class RWQueue {
   // Pending reads - readers are actively waiting for data
   std::deque<std::reference_wrapper<PendingRead>> pendingReads_;
 
-  // Existing FIFO storage for ordinary and tail-coalescing readers.
-  std::deque<ValueType> queue_;
+  struct QueuedEntry {
+    ValueType value;
+    std::chrono::steady_clock::time_point enqueueTime;
+
+    /*
+     * In-place constructors so emplace_back forwards the value directly into
+     * deque storage with a single construction -- no temporary entry.
+     */
+    QueuedEntry(ValueType&& v, std::chrono::steady_clock::time_point t)
+        : value(std::move(v)), enqueueTime(t) {}
+    QueuedEntry(const ValueType& v, std::chrono::steady_clock::time_point t)
+        : value(v), enqueueTime(t) {}
+  };
+
+  /*
+   * Existing FIFO storage for ordinary and tail-coalescing readers. Each
+   * entry carries its enqueue timestamp so the pop path can record the time
+   * the message spent waiting in the queue.
+   */
+  std::deque<QueuedEntry> queue_;
 
   /*
    * Optional push-time coalescer (see constructor). Set once at construction;
@@ -464,6 +531,14 @@ class RWQueue {
    */
   std::function<bool(ValueType& existing, ValueType& incoming)> coalesceFn_{
       nullptr};
+
+  /*
+   * Clock for enqueue timestamps and pop-time dwell computation. Plain
+   * function pointer (defaulting to Clock::now) so the common case costs one
+   * indirect call; tests override it via setNowFn for deterministic timing.
+   * Declared before stateSuppressionQueue_ so constructors can pass it in.
+   */
+  NowFn nowFn_{defaultNow};
 
   /*
    * Allocated only for readers that explicitly enable keyed state suppression.
@@ -477,6 +552,23 @@ class RWQueue {
 
   // Received messages
   std::atomic<size_t> reads_{0};
+
+  /*
+   * Total and max time in microseconds spent waiting in the queue, folded in
+   * at pop time for each message dequeued from the backlog. Messages handed
+   * directly to a waiting reader skip the backlog and contribute zero.
+   * Guarded by lock_.
+   */
+  uint64_t totalQueuedTimeUs_{0};
+  uint64_t maxQueuedTimeUs_{0};
+
+  /*
+   * Fold one dequeued message's dwell time into the running total/max.
+   * Must be called with lock_ held.
+   */
+  void recordQueueDwellTime(
+      std::chrono::steady_clock::time_point enqueueTime,
+      std::chrono::steady_clock::time_point now);
 };
 
 } // namespace openr::messaging

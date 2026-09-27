@@ -5,6 +5,7 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 
@@ -192,6 +193,20 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
                   fmt::format(
                       "messaging.rw_queue.{}-{}.sent", "Queue1", stat.queueId)),
               stat.writes);
+          ASSERT_EQ(
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.time_spent_avg_ms",
+                      "Queue1",
+                      stat.queueId)),
+              std::llround(stat.avgQueuedTimeMs));
+          ASSERT_EQ(
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.time_spent_max_ms",
+                      "Queue1",
+                      stat.queueId)),
+              std::llround(stat.maxQueuedTimeMs));
         }
         stats = q2.getReplicationStats();
         for (auto& stat : stats) {
@@ -210,6 +225,20 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
                   fmt::format(
                       "messaging.rw_queue.{}-{}.sent", "Queue2", stat.queueId)),
               stat.writes);
+          ASSERT_EQ(
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.time_spent_avg_ms",
+                      "Queue2",
+                      stat.queueId)),
+              std::llround(stat.avgQueuedTimeMs));
+          ASSERT_EQ(
+              fb303::fbData->getCounter(
+                  fmt::format(
+                      "messaging.rw_queue.{}-{}.time_spent_max_ms",
+                      "Queue2",
+                      stat.queueId)),
+              std::llround(stat.maxQueuedTimeMs));
         }
 
         evb.stop();

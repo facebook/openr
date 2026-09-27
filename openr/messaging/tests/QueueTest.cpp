@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
+
 #include <folly/executors/ManualExecutor.h>
 #include <folly/fibers/EventBaseLoopController.h>
 #include <folly/fibers/FiberManager.h>
@@ -86,6 +88,27 @@ getResettingSuppressionPolicy() {
       getResettingSuppressionKey,
       0 /* activationThreshold */,
       mergeStateUpdateIntoPending};
+}
+
+/*
+ * Manual clock for deterministic dwell-time tests: the queue reads time
+ * through this instead of the wall clock, so assertions are exact and need
+ * no sleeps. Function-local storage keeps mutable state out of globals.
+ */
+std::chrono::steady_clock::time_point&
+manualNowStorage() {
+  static auto now = std::chrono::steady_clock::now();
+  return now;
+}
+
+std::chrono::steady_clock::time_point
+manualNow() {
+  return manualNowStorage();
+}
+
+void
+setManualNow(std::chrono::steady_clock::time_point t) {
+  manualNowStorage() = t;
 }
 
 } // namespace
@@ -794,4 +817,120 @@ TEST(RWQueueTest, KeyedStateSuppressionReturnsToFifoAfterDrain) {
   EXPECT_EQ(2, q.size());
   EXPECT_EQ((StateUpdate{"c", 1}), q.get().value());
   EXPECT_EQ((StateUpdate{"c", 2}), q.get().value());
+}
+
+TEST(RWQueueTest, QueuedTimeReflectsDelay) {
+  RWQueue<int> q;
+  q.setNowFn(manualNow);
+
+  const auto t0 = std::chrono::steady_clock::now();
+  setManualNow(t0);
+  q.push(1);
+  setManualNow(t0 + std::chrono::milliseconds(50));
+  EXPECT_EQ(1, q.get().value());
+
+  auto stats = q.getStats();
+  EXPECT_EQ(1, stats.reads);
+  EXPECT_DOUBLE_EQ(50.0, stats.maxQueuedTimeMs);
+  EXPECT_DOUBLE_EQ(50.0, stats.avgQueuedTimeMs);
+}
+
+TEST(RWQueueTest, QueuedTimeAvgAndMax) {
+  RWQueue<int> q;
+  q.setNowFn(manualNow);
+
+  const auto t0 = std::chrono::steady_clock::now();
+  setManualNow(t0);
+  q.push(1);
+  setManualNow(t0 + std::chrono::milliseconds(50));
+  EXPECT_EQ(1, q.get().value());
+
+  // Second round-trip at the same instant: zero dwell pulls avg below max.
+  q.push(2);
+  EXPECT_EQ(2, q.get().value());
+
+  auto stats = q.getStats();
+  EXPECT_EQ(2, stats.reads);
+  EXPECT_DOUBLE_EQ(50.0, stats.maxQueuedTimeMs);
+  EXPECT_DOUBLE_EQ(25.0, stats.avgQueuedTimeMs);
+}
+
+TEST(RWQueueTest, QueuedTimeIsPerQueue) {
+  RWQueue<int> q1;
+  RWQueue<int> q2;
+  q1.setNowFn(manualNow);
+  q2.setNowFn(manualNow);
+
+  const auto t0 = std::chrono::steady_clock::now();
+  setManualNow(t0);
+  q1.push(1);
+  q2.push(1);
+
+  // Each queue tracks its own dwell independently.
+  setManualNow(t0 + std::chrono::milliseconds(10));
+  EXPECT_EQ(1, q1.get().value());
+  setManualNow(t0 + std::chrono::milliseconds(50));
+  EXPECT_EQ(1, q2.get().value());
+
+  EXPECT_DOUBLE_EQ(10.0, q1.getStats().maxQueuedTimeMs);
+  EXPECT_DOUBLE_EQ(50.0, q2.getStats().maxQueuedTimeMs);
+}
+
+TEST(RWQueueTest, QueuedTimeZeroForDirectHandoff) {
+  RWQueue<int> q;
+
+  folly::EventBase evb;
+  auto& manager = folly::fibers::getFiberManager(evb);
+  manager.addTask([&q]() { EXPECT_EQ(42, q.get().value()); });
+  evb.loopOnce();
+  ASSERT_EQ(1, q.numPendingReads());
+
+  // A waiting reader takes the value without it ever sitting in the backlog.
+  q.push(42);
+  evb.loopOnce();
+  EXPECT_EQ(0, q.numPendingReads());
+
+  auto stats = q.getStats();
+  EXPECT_EQ(1, stats.reads);
+  EXPECT_DOUBLE_EQ(0.0, stats.maxQueuedTimeMs);
+  EXPECT_DOUBLE_EQ(0.0, stats.avgQueuedTimeMs);
+}
+
+TEST(RWQueueTest, QueuedTimeCoalescingKeepsTailTime) {
+  RWQueue<int> q("coalescing", [](int& existing, int& incoming) {
+    existing += incoming;
+    return true;
+  });
+  q.setNowFn(manualNow);
+
+  const auto t0 = std::chrono::steady_clock::now();
+  setManualNow(t0);
+  q.push(1);
+  // Merged into the tail: the survivor keeps the older enqueue time.
+  setManualNow(t0 + std::chrono::milliseconds(10));
+  q.push(2);
+  ASSERT_EQ(1, q.size());
+
+  setManualNow(t0 + std::chrono::milliseconds(20));
+  EXPECT_EQ(3, q.get().value());
+
+  auto stats = q.getStats();
+  EXPECT_EQ(1, stats.reads);
+  EXPECT_DOUBLE_EQ(20.0, stats.maxQueuedTimeMs);
+}
+
+TEST(RWQueueTest, QueuedTimeWithStateSuppression) {
+  RWQueue<StateUpdate> q("state-suppression", getStateSuppressionPolicy());
+  q.setNowFn(manualNow);
+
+  const auto t0 = std::chrono::steady_clock::now();
+  setManualNow(t0);
+  q.push(StateUpdate{"a", 1});
+  setManualNow(t0 + std::chrono::milliseconds(30));
+  EXPECT_EQ((StateUpdate{"a", 1}), q.get().value());
+
+  auto stats = q.getStats();
+  EXPECT_EQ(1, stats.reads);
+  EXPECT_DOUBLE_EQ(30.0, stats.maxQueuedTimeMs);
+  EXPECT_DOUBLE_EQ(30.0, stats.avgQueuedTimeMs);
 }
