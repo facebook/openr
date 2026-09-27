@@ -184,3 +184,22 @@ TEST(ReplicateQueueTest, PerReaderQueuedTimeIsIsolated) {
 
   q.close();
 }
+
+TEST(ReplicateQueueTest, ReaderIdsSurfaceInStats) {
+  ReplicateQueue<int> q;
+  auto r1 = q.getReader("consumer-a");
+  auto r2 = q.getReader("consumer-b");
+
+  q.push(1);
+  EXPECT_EQ(1, r1.get().value());
+
+  // Each reader's explicit ID surfaces in order; per-reader reads stay split.
+  auto stats = q.getReplicationStats();
+  ASSERT_EQ(2, stats.size());
+  EXPECT_EQ("consumer-a", stats[0].queueId);
+  EXPECT_EQ("consumer-b", stats[1].queueId);
+  EXPECT_EQ(1, stats[0].reads);
+  EXPECT_EQ(0, stats[1].reads);
+
+  q.close();
+}

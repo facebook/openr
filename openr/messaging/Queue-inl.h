@@ -325,7 +325,7 @@ RWQueue<ValueType>::getStats() {
       reads_ ? static_cast<double>(totalQueuedTimeUs_) / reads_ / 1000.0 : 0.0;
   const double maxMs = static_cast<double>(maxQueuedTimeUs_) / 1000.0;
   return RWQueueStats{
-      "",
+      queueId_,
       reads_,
       writes_,
       stateSuppressionQueue_ ? stateSuppressionQueue_->size() : queue_.size(),

@@ -45,9 +45,10 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
    * there will be no filtering by prefix, and the reader will get every key
    * from Dispatcher. A prefix will be the start of any key coming from KvStore.
    *
-   * `readerId` names the reader's underlying RWQueue. ATTN: it does NOT yet
-   * surface in getReplicationStats() -- RWQueue::getStats() hardcodes an empty
-   * queueId (T98477650), so stats still fall back to a positional index.
+   * `readerId` names the reader's underlying RWQueue and surfaces in
+   * per-reader telemetry (getReplicationStats). Production readers must pass
+   * an explicit functional ID (stable across restarts by construction);
+   * unnamed readers fall back to a positional index (T98477650).
    *
    * With `suppressionPolicy` set, this reader keeps at most one pending element
    * per state key instead of an unbounded FIFO, which bounds the backlog even

@@ -350,11 +350,8 @@ Fib::getFibUpdatesReader() {
    * fibDetailSubscribers_). A slow snoop client would otherwise grow this
    * reader's backlog without bound, so coalesce at push time.
    *
-   * The reader id is documentary for now: RWQueue::getStats() discards
-   * queueId_, so ReplicateQueue::getReplicationStats() still labels this
-   * reader's messaging.rw_queue.* counters with a positional index (T98477650).
-   * Naming it here means the follow-on getStats() fix makes those counters
-   * attributable without another change to this call site.
+   * The reader id surfaces in getReplicationStats(), so this reader's
+   * messaging.rw_queue.* counters are attributable by name (T98477650).
    *
    * NOTE: this uses coalesceIncrementalRouteUpdates, NOT the
    * coalesceDecisionRouteUpdates used for the PrefixManager reader. Snoop

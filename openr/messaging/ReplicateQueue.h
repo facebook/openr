@@ -34,6 +34,12 @@ class ReplicateQueueBase {
 template <typename ValueType>
 class ReplicateQueue : public ReplicateQueueBase {
  public:
+  /*
+   * NOTE: there is deliberately no queue-level name or auto-ID scheme. Every
+   * production reader passes an explicit functional ID at getReader time
+   * (see T98477650); unnamed (test) readers fall back to a positional index
+   * in getReplicationStats, as before.
+   */
   ReplicateQueue();
 
   ~ReplicateQueue();
@@ -61,6 +67,11 @@ class ReplicateQueue : public ReplicateQueueBase {
    * Get new reader stream of this queue. Stream will get closed automatically
    * when reader is destructed.
    *
+   * `readerId` names the reader's RWQueue and surfaces in per-reader
+   * telemetry (getReplicationStats). Production readers must pass an explicit
+   * functional ID (stable across restarts by construction); unnamed readers
+   * fall back to a positional index (T98477650).
+   *
    * If `coalesceFn` is provided, this reader's backlog is coalesced at push
    * time (see RWQueue constructor): a newly-pushed value is offered to merge
    * into the reader's pending tail element instead of being appended. Use this
@@ -79,7 +90,8 @@ class ReplicateQueue : public ReplicateQueueBase {
    * each key. Key barriers remain queued and split suppression history only
    * for their own key. Suppression starts after the policy's activation
    * threshold is exceeded and remains active until the reader drains. State
-   * suppression is isolated to this reader.
+   * suppression is isolated to this reader. `readerId` names the reader (see
+   * above).
    */
   RQueue<ValueType> getReader(
       const std::optional<std::string>& readerId,

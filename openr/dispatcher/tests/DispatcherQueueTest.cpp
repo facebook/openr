@@ -384,4 +384,17 @@ TEST(DispatcherQueueTest, DispatcherQueueFilterApiTest) {
   }
 }
 
+TEST(DispatcherQueueTest, ReaderIdsSurfaceInStats) {
+  DispatcherQueue q;
+  auto r1 = q.getReader({}, "consumer-a");
+  auto r2 = q.getReader({}, "consumer-b");
+
+  auto stats = q.getReplicationStats();
+  ASSERT_EQ(2, stats.size());
+  EXPECT_EQ("consumer-a", stats[0].queueId);
+  EXPECT_EQ("consumer-b", stats[1].queueId);
+
+  q.close();
+}
+
 } // namespace openr

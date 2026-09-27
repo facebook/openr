@@ -819,6 +819,14 @@ TEST(RWQueueTest, KeyedStateSuppressionReturnsToFifoAfterDrain) {
   EXPECT_EQ((StateUpdate{"c", 2}), q.get().value());
 }
 
+TEST(RWQueueTest, GetStatsReturnsQueueId) {
+  RWQueue<int> named("my-queue");
+  EXPECT_EQ("my-queue", named.getStats().queueId);
+
+  RWQueue<int> unnamed;
+  EXPECT_TRUE(unnamed.getStats().queueId.empty());
+}
+
 TEST(RWQueueTest, QueuedTimeReflectsDelay) {
   RWQueue<int> q;
   q.setNowFn(manualNow);
