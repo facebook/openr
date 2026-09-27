@@ -31,10 +31,11 @@ KvStoreWrapper<ClientType>::KvStoreWrapper(
   // create kvStore instance
   kvStore_ = std::make_unique<KvStore<ClientType>>(
       kvStoreUpdatesQueue_,
-      peerUpdatesQueue.has_value() ? peerUpdatesQueue.value()
-                                   : dummyPeerUpdatesQueue_.getReader(),
+      peerUpdatesQueue.has_value()
+          ? peerUpdatesQueue.value()
+          : dummyPeerUpdatesQueue_.getReader("kvstore"),
       kvRequestQueue.has_value() ? kvRequestQueue.value()
-                                 : dummyKvRequestQueue_.getReader(),
+                                 : dummyKvRequestQueue_.getReader("kvstore"),
       logSampleQueue_,
       areaIds_,
       kvStoreConfig_,

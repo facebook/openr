@@ -26,18 +26,18 @@ SparkWrapper::SparkWrapper(
    */
   spark_ = isRateLimitEnabled
       ? std::make_shared<Spark>(
-            interfaceUpdatesQueue_.getReader(),
-            initializationEventQueue_.getReader(),
-            addrEventQueue_.getReader(),
+            interfaceUpdatesQueue_.getReader("spark"),
+            initializationEventQueue_.getReader("spark"),
+            addrEventQueue_.getReader("spark"),
             neighborUpdatesQueue_,
             std::move(ioProvider),
             config,
             version,
             std::nullopt) // no Spark receive rate-limit, for testing
       : std::make_shared<Spark>(
-            interfaceUpdatesQueue_.getReader(),
-            initializationEventQueue_.getReader(),
-            addrEventQueue_.getReader(),
+            interfaceUpdatesQueue_.getReader("spark"),
+            initializationEventQueue_.getReader("spark"),
+            addrEventQueue_.getReader("spark"),
             neighborUpdatesQueue_,
             std::move(ioProvider),
             config,

@@ -124,7 +124,7 @@ class SparkWrapper {
   // Queue to send neighbor event to LinkMonitor
   messaging::ReplicateQueue<NeighborInitEvent> neighborUpdatesQueue_;
   messaging::RQueue<NeighborInitEvent> neighborUpdatesReader_{
-      neighborUpdatesQueue_.getReader()};
+      neighborUpdatesQueue_.getReader("linkMonitor")};
 
   // Queue to receive interface update from LinkMonitor
   messaging::ReplicateQueue<InterfaceDatabase> interfaceUpdatesQueue_;

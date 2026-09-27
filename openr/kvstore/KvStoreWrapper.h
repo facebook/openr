@@ -269,7 +269,7 @@ class KvStoreWrapper {
   // Queue for streaming KvStore updates
   messaging::ReplicateQueue<KvStorePublication> kvStoreUpdatesQueue_;
   messaging::RQueue<KvStorePublication> kvStoreUpdatesQueueReader_{
-      kvStoreUpdatesQueue_.getReader()};
+      kvStoreUpdatesQueue_.getReader("kvstore")};
 
   // Queue for publishing the event log
   messaging::ReplicateQueue<LogSample> logSampleQueue_;
