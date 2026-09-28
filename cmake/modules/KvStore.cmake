@@ -15,16 +15,6 @@ set(OPENR_KVSTORE_EXPECTED_SOURCE_COUNT 3)
 # KvStoreWrapper is test infrastructure and deliberately remains separate
 # from the core KvStore target, matching the Buck dependency direction.
 macro(openr_add_kvstore_libraries)
-  add_library(openr_client_util INTERFACE)
-  target_link_libraries(
-    openr_client_util
-    INTERFACE
-      openr_constants
-      Folly::folly
-      FBThrift::thriftcpp2
-  )
-  add_library(OpenR::client_util ALIAS openr_client_util)
-
   # Buck2 target: //openr/kvstore:kvstore-util
   openr_add_library(
     NAME openr_kvstore_util

@@ -52,7 +52,12 @@ set(
   openr/common/Util.cpp
 )
 
-set(OPENR_COMMON_EXPECTED_SOURCE_COUNT 11)
+set(
+  OPENR_CLIENT_SOURCES
+  openr/common/OpenrClient.cpp
+)
+
+set(OPENR_COMMON_EXPECTED_SOURCE_COUNT 12)
 
 # Create the Buck-aligned common libraries after generated Thrift targets exist.
 macro(openr_add_common_libraries)
@@ -174,4 +179,16 @@ macro(openr_add_common_libraries)
       ${Boost_LIBRARIES}
   )
   add_library(OpenR::util ALIAS openr_util)
+
+  # Buck2 target: //openr/common:openr_client_util
+  openr_add_library(
+    NAME openr_client_util
+    SOURCES ${OPENR_CLIENT_SOURCES}
+    PRIVATE_DEPENDENCIES glog::glog gflags
+    PUBLIC_DEPENDENCIES
+      openr_constants
+      Folly::folly
+      FBThrift::thriftcpp2
+  )
+  add_library(OpenR::client_util ALIAS openr_client_util)
 endmacro()

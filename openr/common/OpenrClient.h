@@ -13,34 +13,95 @@
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Constants.h>
+#include <thrift/lib/cpp2/async/PooledRequestChannel.h>
+#include <thrift/lib/cpp2/async/ReconnectingRequestChannel.h>
+#include <thrift/lib/cpp2/async/RetryingRequestChannel.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
 namespace openr {
 
+struct OpenrClientOpts {
+  /* Populate to use TLS. */
+  std::shared_ptr<folly::SSLContext> sslContext = nullptr;
+  /* Default connect timeout assumes TLS and is more conservative; for plaintext
+   * consider the shorter timeout available in Constants. */
+  std::chrono::milliseconds connectTimeout = Constants::kServiceConnSSLTimeout;
+  std::chrono::milliseconds processingTimeout = Constants::kServiceProcTimeout;
+  folly::SocketAddress bindAddr = folly::AsyncSocket::anyAddress();
+  /* How many times we retry non-application failures before returning an error.
+   * This does not guarantee that the backend did not receive your request so
+   * should never be set for non-idempotent operations */
+  int numTransportFailureRetries = 0;
+  /* This does not alter the underlying threadpool (which is sized automatically
+   * based on core count) but how many of those threads we multiplex onto.
+   * Pick 0 to use the entire executor threadpool. */
+  size_t numIOThreads = 1;
+  std::optional<int> maybeIpTos = std::nullopt;
+  /* Whether we try to enable TCP keepalive. Failures are unlikely but this
+   * is technically best-effort and the client will proceed if it can't apply
+   * the relevant configuration to the underlying socket. */
+  bool enableKeepAlive = false;
+};
+
 namespace detail {
+/* Sets compression on innerermost (probably Rocket) channel */
+void setCompressionTransform(apache::thrift::ClientChannel* channel);
 
-static void
-setCompressionTransform(apache::thrift::ClientChannel* channel) {
-  CHECK(channel);
-  apache::thrift::CompressionConfig compressionConfig;
-  compressionConfig.codecConfig().ensure().set_zstdConfig();
-  channel->setDesiredCompressionConfig(compressionConfig);
-}
+/* Produces a folly-compatible version of IP ToS. */
+folly::SocketOptionMap getSocketOptionMap(std::optional<int> maybeIpTos);
 
-/*
- * Build OptionMap for client socket connection
- */
-static folly::SocketOptionMap
-getSocketOptionMap(std::optional<int> maybeIpTos) {
-  folly::SocketOptionMap optionMap = folly::emptySocketOptionMap;
-  if (maybeIpTos.has_value()) {
-    folly::SocketOptionKey v6Opts = {IPPROTO_IPV6, IPV6_TCLASS};
-    optionMap.emplace(v6Opts, maybeIpTos.value());
-  }
-  return optionMap;
-}
+/* Tries to enable TCP keepalive. */
+void tryEnableKeepAliveForSocket(folly::AsyncSocket* socket);
+
+/* Returns the number of threads in the folly global I/O executor. */
+size_t getFollyIOPoolConcurrency();
+
+/* Returns a factory function called on each reconnection attempt to
+ * produce a new Rocket channel using a new socket */
+apache::thrift::ReconnectingRequestChannel::ImplCreatorWithCallback
+getInnerSocketChannelFactory(
+    folly::IPAddress addr, int32_t port, OpenrClientOpts opts);
 
 } // namespace detail
+
+/*
+ * Templated method to create a client for thrift service over tls or
+ * plain-text communication channel. Different clients for different services
+ * can be used. The returned client will recover automatically from connection
+ * errors, can optionally retry and can be used in arbitrary threads.
+ *
+ * For example,
+ *  - thrift::OpenrCtrlCppAsyncClient -> OpenrCtrlCpp service
+ *  - thrift::KvStoreServiceAsyncClient -> KvStoreService
+ *
+ * Pass a valid SSLContext in the options if you want TLS.
+ */
+template <typename ClientType>
+std::shared_ptr<apache::thrift::Client<ClientType>>
+getOpenrClient(
+    const folly::IPAddress& addr,
+    int32_t port = Constants::kOpenrCtrlPort,
+    const OpenrClientOpts& opts = {}) {
+  // 0 scales to entire executor
+  const size_t threads = opts.numIOThreads == 0
+      ? detail::getFollyIOPoolConcurrency()
+      : opts.numIOThreads;
+  /* Top-level channel gives us thread-safety + reuse of appropriate
+   * folly threadpools. */
+  auto channel = apache::thrift::PooledRequestChannel::newChannel(
+      [addr, port, opts](folly::EventBase& evb) {
+        // Retries transport errors
+        return apache::thrift::RetryingRequestChannel::newChannel(
+            evb,
+            static_cast<int>(opts.numTransportFailureRetries),
+            // Rebuilds internal Rocket channel if socket isn't usable
+            apache::thrift::ReconnectingRequestChannel::newChannel(
+                evb, detail::getInnerSocketChannelFactory(addr, port, opts)));
+      },
+      threads);
+  return std::make_shared<apache::thrift::Client<ClientType>>(
+      std::move(channel));
+}
 
 /*
  * This is templated method to create client for thrift service over plain-text
@@ -48,7 +109,7 @@ getSocketOptionMap(std::optional<int> maybeIpTos) {
  *
  * For example,
  *  - thrift::OpenrCtrlCppAsyncClient -> OpenrCtrlCpp service
- *  - thrift::KvStoreServicAsyncClient -> KvStoreService
+ *  - thrift::KvStoreServiceAsyncClient -> KvStoreService
  *
  * Underneath client support multiple channel. Here we recommend to use
  * apache::thrift::RocketClientChannel, which supports streaming APIs.
@@ -90,31 +151,7 @@ getOpenrCtrlPlainTextClient(
         bindAddr);
 
     if (enableKeepAlive) {
-      /*
-       * Set up socket keepalive options so that we break the connection in a
-       * timely manner in the case of ungraceful disconnect when FIN/RST is not
-       * received from the remote end.
-       */
-      int optval = 1;
-      if (transport->setSockOpt(SOL_SOCKET, SO_KEEPALIVE, &optval) != 0) {
-        XLOGF(
-            WARNING,
-            "Could not set SO_KEEPALIVE flag on socket. Error: {}",
-            errno);
-      }
-
-      // The time (in seconds) between individual keepalive probes
-      int interval = Constants::kThriftClientKeepAliveInterval.count();
-      if (transport->setSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, &interval) != 0) {
-        XLOGF(
-            WARNING,
-            "Could not set TCP_KEEPINTVL value on socket. Error: {}",
-            errno);
-      }
-      XLOGF(
-          INFO,
-          "Successfully set TCP socket keepalive with interval: {}",
-          interval);
+      detail::tryEnableKeepAliveForSocket(transport.get());
     }
 
     // Create channel and set timeout
@@ -173,31 +210,7 @@ getOpenrCtrlSecureClient(
         bindAddr);
 
     if (enableKeepAlive) {
-      /*
-       * Set up socket keepalive options so that we break the connection in a
-       * timely manner in the case of ungraceful disconnect when FIN/RST is not
-       * received from the remote end.
-       */
-      int optval = 1;
-      if (transport->setSockOpt(SOL_SOCKET, SO_KEEPALIVE, &optval) != 0) {
-        XLOGF(
-            WARNING,
-            "Could not set SO_KEEPALIVE flag on socket. Error: {}",
-            errno);
-      }
-
-      // The time (in seconds) between individual keepalive probes
-      int interval = Constants::kThriftClientKeepAliveInterval.count();
-      if (transport->setSockOpt(IPPROTO_TCP, TCP_KEEPINTVL, &interval) != 0) {
-        XLOGF(
-            WARNING,
-            "Could not set TCP_KEEPINTVL value on socket. Error: {}",
-            errno);
-      }
-      XLOGF(
-          INFO,
-          "Successfully set TCP socket keepalive with interval: {}",
-          interval);
+      detail::tryEnableKeepAliveForSocket(transport.get());
     }
 
     // Create channel and set timeout
