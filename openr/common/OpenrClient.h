@@ -30,15 +30,15 @@ struct OpenrClientOpts {
   folly::SocketAddress bindAddr = folly::AsyncSocket::anyAddress();
   /* How many times we retry non-application failures before returning an error.
    * This does not guarantee that the backend did not receive your request so
-   * should never be set for non-idempotent operations */
+   * should never be set for non-idempotent operations. */
   int numTransportFailureRetries = 0;
   /* This does not alter the underlying threadpool (which is sized automatically
-   * based on core count) but how many of those threads we multiplex onto.
+   * based on core count) but how many of those threads we round-robin on to.
    * Pick 0 to use the entire executor threadpool. */
   size_t numIOThreads = 1;
   std::optional<int> maybeIpTos = std::nullopt;
   /* Whether we try to enable TCP keepalive. Failures are unlikely but this
-   * is technically best-effort and the client will proceed if it can't apply
+   * is technically best-effort and the client will continue if it can't apply
    * the relevant configuration to the underlying socket. */
   bool enableKeepAlive = false;
 };
