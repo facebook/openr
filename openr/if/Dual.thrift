@@ -88,17 +88,13 @@ struct DualPerRootCounters {
 /**
  * Map of neighbor-node to neighbor-counters
  */
-@cpp.Type{
-  name = "std::unordered_map<std::string, /* neighbor */ openr::thrift::DualPerNeighborCounters>",
-}
+@cpp.Type{template = "::std::unordered_map"}
 typedef map<string, DualPerNeighborCounters> NeighborCounters
 
 /**
  * Map of root-node to root-counters
  */
-@cpp.Type{
-  name = "std::unordered_map<std::string, /* root */ std::map<std::string /* neighbor */, openr::thrift::DualPerRootCounters>>",
-}
+@cpp.Type{template = "::std::unordered_map"}
 typedef map<string, map<string, DualPerRootCounters>> RootCounters
 
 /**
