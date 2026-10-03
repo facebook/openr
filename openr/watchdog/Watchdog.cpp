@@ -5,8 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <cmath>
-
 #include <fb303/ServiceData.h>
 #include <folly/logging/xlog.h>
 #include <openr/common/Constants.h>
@@ -55,6 +53,11 @@ Watchdog::addEvb(OpenrEventBase* evb) {
 void
 Watchdog::addQueue(messaging::ReplicateQueueBase& q, const std::string& qName) {
   if (monitoredQs_.find(qName) == monitoredQs_.end()) {
+    /*
+     * Names the queue for per-reader dwell telemetry keying; (re)binds the
+     * dwell-sample sink of readers created before this registration.
+     */
+    q.setQueueName(qName);
     monitoredQs_.emplace(qName, std::ref(q));
   } else {
     XLOGF(INFO, "Queue {} is already registered.", qName);
@@ -235,20 +238,6 @@ Watchdog::updateQueueCounters() {
           fmt::format(
               "messaging.rw_queue.{}-{}.suppressions", qName, stat.queueId),
           stat.suppressions);
-
-      fb303::fbData->setCounter(
-          fmt::format(
-              "messaging.rw_queue.{}-{}.time_spent_avg_ms",
-              qName,
-              stat.queueId),
-          std::llround(stat.avgQueuedTimeMs));
-
-      fb303::fbData->setCounter(
-          fmt::format(
-              "messaging.rw_queue.{}-{}.time_spent_max_ms",
-              qName,
-              stat.queueId),
-          std::llround(stat.maxQueuedTimeMs));
     }
   }
 }

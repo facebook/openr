@@ -22,6 +22,14 @@ class ReplicateQueueBase {
   virtual size_t getNumWrites() = 0;
 
   virtual std::vector<RWQueueStats> getReplicationStats() = 0;
+
+  /*
+   * Names the queue for per-reader telemetry keying
+   * (`messaging.rw_queue.<name>-<reader>`). Called by Watchdog registration;
+   * (re)binds every reader's dwell-sample sink so readers created before
+   * registration are keyed correctly.
+   */
+  virtual void setQueueName(const std::string& name) = 0;
 };
 
 /**
@@ -35,10 +43,11 @@ template <typename ValueType>
 class ReplicateQueue : public ReplicateQueueBase {
  public:
   /*
-   * NOTE: there is deliberately no queue-level name or auto-ID scheme. Every
-   * production reader passes an explicit functional ID at getReader time
-   * (see T98477650); unnamed (test) readers fall back to a positional index
-   * in getReplicationStats, as before.
+   * NOTE: there is no queue-level auto-ID scheme. Every production reader
+   * passes an explicit functional ID at getReader time (see T98477650);
+   * unnamed (test) readers fall back to a positional index in
+   * getReplicationStats, as before. The queue-level name used for telemetry
+   * keying is assigned separately via setQueueName (Watchdog registration).
    */
   ReplicateQueue();
 
@@ -126,10 +135,17 @@ class ReplicateQueue : public ReplicateQueueBase {
    */
   std::vector<RWQueueStats> getReplicationStats() override;
 
+  /**
+   * Names the queue for per-reader dwell telemetry (see ReplicateQueueBase).
+   */
+  void setQueueName(const std::string& name) override;
+
  private:
   folly::Synchronized<std::list<std::shared_ptr<RWQueue<ValueType>>>> readers_;
   bool closed_{false}; // Protected by above Synchronized lock
   size_t writes_{0};
+  // Telemetry name assigned by Watchdog registration; empty until then.
+  std::string queueName_;
 };
 
 } // namespace openr::messaging

@@ -89,8 +89,8 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
 
   /*
    * Handed directly to a waiting reader: the message never waits in the
-   * backlog, so its queue dwell time is zero and no timing is recorded. The
-   * read side still counts it in reads_, which keeps the average honest.
+   * backlog, so a 0-ns dwell sample is emitted to keep the quantile
+   * average consistent with the reads count.
    */
   if (pendingReads_.size()) {
     // Unblock a pending read
@@ -98,6 +98,9 @@ RWQueue<ValueType>::push(ValueTypeT&& val) {
     pendingRead.data.emplace(std::forward<ValueTypeT>(val));
     pendingRead.baton.post();
     pendingReads_.pop_front();
+    if (dwellSampleSink_) {
+      dwellSampleSink_(0.0);
+    }
   } else if (stateSuppressionQueue_) {
     if (stateSuppressionQueue_->push(std::forward<ValueTypeT>(val))) {
       ++suppressions_;
@@ -292,12 +295,11 @@ void
 RWQueue<ValueType>::recordQueueDwellTime(
     std::chrono::steady_clock::time_point enqueueTime,
     std::chrono::steady_clock::time_point now) {
-  const auto dwellUs = static_cast<uint64_t>(
-      std::chrono::duration_cast<std::chrono::microseconds>(now - enqueueTime)
+  const auto dwellNs = static_cast<uint64_t>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(now - enqueueTime)
           .count());
-  totalQueuedTimeUs_ += dwellUs;
-  if (dwellUs > maxQueuedTimeUs_) {
-    maxQueuedTimeUs_ = dwellUs;
+  if (dwellSampleSink_) {
+    dwellSampleSink_(static_cast<double>(dwellNs));
   }
 }
 
@@ -312,26 +314,22 @@ RWQueue<ValueType>::setNowFn(NowFn nowFn) {
 }
 
 template <typename ValueType>
+void
+RWQueue<ValueType>::setDwellSampleSink(DwellSampleSink sink) {
+  std::lock_guard<std::mutex> l(lock_);
+  dwellSampleSink_ = std::move(sink);
+}
+
+template <typename ValueType>
 RWQueueStats
 RWQueue<ValueType>::getStats() {
   std::lock_guard<std::mutex> l(lock_);
-  /*
-   * The ms conversion and averaging happen here on the poll path (Watchdog
-   * tick), never per message: the hot path accumulates integer microseconds
-   * only. Stamping integer milliseconds at record time would erase sub-ms
-   * dwells (0.9ms would read as 0), so precision is kept until this point.
-   */
-  const double avgMs =
-      reads_ ? static_cast<double>(totalQueuedTimeUs_) / reads_ / 1000.0 : 0.0;
-  const double maxMs = static_cast<double>(maxQueuedTimeUs_) / 1000.0;
   return RWQueueStats{
       queueId_,
       reads_,
       writes_,
       stateSuppressionQueue_ ? stateSuppressionQueue_->size() : queue_.size(),
-      suppressions_,
-      avgMs,
-      maxMs};
+      suppressions_};
 }
 
 } // namespace openr::messaging

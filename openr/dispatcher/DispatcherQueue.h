@@ -88,6 +88,12 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
   std::vector<messaging::RWQueueStats> getReplicationStats() override;
 
   /**
+   * Names the queue for per-reader dwell telemetry (see
+   * messaging::ReplicateQueueBase); (re)binds every reader's sample sink.
+   */
+  void setQueueName(const std::string& name) override;
+
+  /**
    * DispatcherQueue API to get all of the filters for
    * each of the internal RW queues
    */
@@ -110,6 +116,8 @@ class DispatcherQueue : public messaging::ReplicateQueueBase {
       readers_;
   bool closed_{false}; // Protected by above Synchronized lock
   size_t writes_{0};
+  // Telemetry name assigned by Watchdog registration; empty until then.
+  std::string queueName_;
 
 #ifdef DispatcherQueue_TEST_FRIENDS
   DispatcherQueue_TEST_FRIENDS

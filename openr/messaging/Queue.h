@@ -112,11 +112,6 @@ struct RWQueueStats {
    * retained purgeables are not counted.
    */
   const size_t suppressions{0};
-  // Average time in ms spent waiting in the queue, over all dequeued
-  // messages. Messages handed directly to a waiting reader count as zero.
-  const double avgQueuedTimeMs{0};
-  // Max time in ms spent waiting in the queue by any dequeued message.
-  const double maxQueuedTimeMs{0};
 };
 
 template <typename ValueType>
@@ -272,6 +267,17 @@ class RWQueue {
    * dwell computation, forwarded to the state-suppression queue when present.
    */
   void setNowFn(NowFn nowFn);
+
+  /*
+   * Per-dequeue dwell sample in integer nanoseconds (the native
+   * steady_clock capture precision), invoked on the pop path for every
+   * message (backlog pops and direct handoffs, the latter as zero). No
+   * truncation or scaling is applied. The sink feeds the rolling-window
+   * quantile stat, so it runs under the queue lock and must be cheap and
+   * non-blocking (same constraint as coalesceFn_).
+   */
+  using DwellSampleSink = std::function<void(double dwellNs)>;
+  void setDwellSampleSink(DwellSampleSink sink);
 
  private:
   // Name/id of the queue
@@ -576,13 +582,10 @@ class RWQueue {
   std::atomic<size_t> reads_{0};
 
   /*
-   * Total and max time in microseconds spent waiting in the queue, folded in
-   * at pop time for each message dequeued from the backlog. Messages handed
-   * directly to a waiting reader skip the backlog and contribute zero.
+   * Optional per-dequeue dwell-sample sink (see setDwellSampleSink).
    * Guarded by lock_.
    */
-  uint64_t totalQueuedTimeUs_{0};
-  uint64_t maxQueuedTimeUs_{0};
+  DwellSampleSink dwellSampleSink_{nullptr};
 
   /*
    * Number of pushed messages collapsed by state suppression instead of
@@ -591,7 +594,7 @@ class RWQueue {
   size_t suppressions_{0};
 
   /*
-   * Fold one dequeued message's dwell time into the running total/max.
+   * Fold one dequeued message's dwell time into the sample sink.
    * Must be called with lock_ held.
    */
   void recordQueueDwellTime(

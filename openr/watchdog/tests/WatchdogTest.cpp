@@ -10,6 +10,7 @@
 #include <iostream>
 
 #include <fb303/ServiceData.h>
+#include <fb303/ThreadCachedServiceData.h>
 #include <gtest/gtest.h>
 #include <openr/common/OpenrEventBase.h>
 #include <openr/messaging/ReplicateQueue.h>
@@ -200,20 +201,6 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
                       "Queue1",
                       stat.queueId)),
               stat.suppressions);
-          ASSERT_EQ(
-              fb303::fbData->getCounter(
-                  fmt::format(
-                      "messaging.rw_queue.{}-{}.time_spent_avg_ms",
-                      "Queue1",
-                      stat.queueId)),
-              std::llround(stat.avgQueuedTimeMs));
-          ASSERT_EQ(
-              fb303::fbData->getCounter(
-                  fmt::format(
-                      "messaging.rw_queue.{}-{}.time_spent_max_ms",
-                      "Queue1",
-                      stat.queueId)),
-              std::llround(stat.maxQueuedTimeMs));
         }
         stats = q2.getReplicationStats();
         for (auto& stat : stats) {
@@ -239,20 +226,6 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
                       "Queue2",
                       stat.queueId)),
               stat.suppressions);
-          ASSERT_EQ(
-              fb303::fbData->getCounter(
-                  fmt::format(
-                      "messaging.rw_queue.{}-{}.time_spent_avg_ms",
-                      "Queue2",
-                      stat.queueId)),
-              std::llround(stat.avgQueuedTimeMs));
-          ASSERT_EQ(
-              fb303::fbData->getCounter(
-                  fmt::format(
-                      "messaging.rw_queue.{}-{}.time_spent_max_ms",
-                      "Queue2",
-                      stat.queueId)),
-              std::llround(stat.maxQueuedTimeMs));
         }
 
         evb.stop();
@@ -260,6 +233,52 @@ TEST_F(WatchdogTestFixture, QueueCounterReport) {
 
   evb.run();
   teardownDummyEvb();
+}
+
+TEST_F(WatchdogTestFixture, QueueDwellQuantileExport) {
+  // cleanup the counters before testing
+  fb303::fbData->resetAllData();
+
+  messaging::ReplicateQueue<int> q;
+  auto reader = q.getReader("r1");
+  watchdog_->addQueue(q, "Queue1");
+
+  OpenrEventBase evb;
+  evb.scheduleTimeout(std::chrono::milliseconds(0), [&]() {
+    q.push(1);
+    EXPECT_EQ(1, reader.get().value());
+
+    /*
+     * Publish per-thread caches, then force-merge buffered samples into
+     * the digest, so the just-recorded sample is visible.
+     * (Quantile aggregates only materialize in getCounters(), not via
+     * getCounter(), which throws on derived keys.)
+     */
+    fb303::ThreadCachedServiceData::get()->publishStats();
+    fb303::fbData->flushAllData();
+    auto counters = fb303::fbData->getCounters();
+    const std::string countKey =
+        "messaging.rw_queue.Queue1-r1.time_spent_ns.count.60";
+    EXPECT_TRUE(counters.count(countKey));
+    EXPECT_GT(counters[countKey], 0);
+    EXPECT_TRUE(
+        counters.count("messaging.rw_queue.Queue1-r1.time_spent_ns.avg.60"));
+    EXPECT_TRUE(
+        counters.count("messaging.rw_queue.Queue1-r1.time_spent_ns.p50.60"));
+    EXPECT_TRUE(
+        counters.count("messaging.rw_queue.Queue1-r1.time_spent_ns.p95.60"));
+    EXPECT_TRUE(
+        counters.count("messaging.rw_queue.Queue1-r1.time_spent_ns.p99.60"));
+    EXPECT_TRUE(
+        counters.count("messaging.rw_queue.Queue1-r1.time_spent_ns.p100.60"));
+    // Lifetime max gauge is gone; the rolling-window max is p100.60
+    EXPECT_FALSE(
+        counters.count("messaging.rw_queue.Queue1-r1.time_spent_max_ms"));
+
+    evb.stop();
+  });
+
+  evb.run();
 }
 
 /*

@@ -12,6 +12,7 @@
 #include <openr/common/Types.h>
 #include <openr/common/Util.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
+#include <openr/messaging/MessagingStats.h>
 #include <memory>
 
 namespace openr {
@@ -104,6 +105,8 @@ DispatcherQueue::getReader(
             readerId, std::move(*suppressionPolicy))
       : std::make_shared<messaging::RWQueue<KvStorePublication>>(readerId);
 
+  messaging::bindRwQueueDwellSink(readerQueue, queueName_);
+
   lockedReaders->emplace_back(
       std::make_shared<std::pair<
           std::shared_ptr<messaging::RWQueue<KvStorePublication>>,
@@ -129,6 +132,15 @@ size_t
 DispatcherQueue::getNumWrites() {
   auto lockedReaders = readers_.wlock();
   return writes_;
+}
+
+void
+DispatcherQueue::setQueueName(const std::string& name) {
+  auto lockedReaders = readers_.wlock();
+  queueName_ = name;
+  for (auto& pair : *lockedReaders) {
+    messaging::bindRwQueueDwellSink(pair->first, queueName_);
+  }
 }
 
 std::vector<messaging::RWQueueStats>

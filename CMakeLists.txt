@@ -142,6 +142,7 @@ SET(OPENR_THRIFT_LIBS)
 set(OPENR_EXPORTED_COMPONENT_TARGETS
   openr_constants
   openr_fbnl
+  openr_messaging_stats
   openr_network_util
   openr_system_metrics
 )
@@ -589,6 +590,14 @@ if(BUILD_TESTS)
   )
 
   openr_add_source_group_test(
+    NAME OpenrMessagingSourceGroupTest
+    SOURCE_GROUP_FILE cmake/modules/Messaging.cmake
+    SOURCE_VARIABLES
+      OPENR_MESSAGING_STATS_SOURCES
+    EXPECTED_SOURCE_COUNT ${OPENR_MESSAGING_STATS_EXPECTED_SOURCE_COUNT}
+  )
+
+  openr_add_source_group_test(
     NAME OpenrDecisionSourceGroupTest
     SOURCE_GROUP_FILE cmake/modules/Decision.cmake
     SOURCE_VARIABLES
@@ -1004,6 +1013,7 @@ if(BUILD_TESTS)
     LIBRARIES
       openr_decision_structs
       openr_lsdb_util
+      openr_messaging
       Folly::folly
     DESTINATION sbin/tests/openr/decision
   )

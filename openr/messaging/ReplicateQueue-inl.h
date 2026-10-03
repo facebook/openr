@@ -9,6 +9,7 @@
 
 #include <cstddef>
 #include <vector>
+#include "openr/messaging/MessagingStats.h"
 #include "openr/messaging/Queue.h"
 #include "openr/messaging/ReplicateQueue.h"
 namespace openr::messaging {
@@ -73,6 +74,7 @@ ReplicateQueue<ValueType>::getReader(
   lockedReaders->emplace_back(
       std::make_shared<RWQueue<ValueType>>(
           readerId ? *readerId : std::string{}, std::move(coalesceFn)));
+  bindRwQueueDwellSink(lockedReaders->back(), queueName_);
   return RQueue<ValueType>(lockedReaders->back());
 }
 
@@ -89,6 +91,7 @@ ReplicateQueue<ValueType>::getReader(
       std::make_shared<RWQueue<ValueType>>(
           readerId ? *readerId : std::string{},
           std::move(stateSuppressionPolicy)));
+  bindRwQueueDwellSink(lockedReaders->back(), queueName_);
   return RQueue<ValueType>(lockedReaders->back());
 }
 
@@ -123,6 +126,16 @@ size_t
 ReplicateQueue<ValueType>::getNumWrites() {
   auto lockedReaders = readers_.wlock();
   return writes_;
+}
+
+template <typename ValueType>
+void
+ReplicateQueue<ValueType>::setQueueName(const std::string& name) {
+  auto lockedReaders = readers_.wlock();
+  queueName_ = name;
+  for (auto& reader : *lockedReaders) {
+    bindRwQueueDwellSink(reader, queueName_);
+  }
 }
 
 template <typename ValueType>

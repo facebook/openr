@@ -839,28 +839,44 @@ TEST(RWQueueTest, QueuedTimeReflectsDelay) {
 
   auto stats = q.getStats();
   EXPECT_EQ(1, stats.reads);
-  EXPECT_DOUBLE_EQ(50.0, stats.maxQueuedTimeMs);
-  EXPECT_DOUBLE_EQ(50.0, stats.avgQueuedTimeMs);
 }
 
-TEST(RWQueueTest, QueuedTimeAvgAndMax) {
+TEST(RWQueueTest, DwellSampleSinkReceivesPerPopSample) {
   RWQueue<int> q;
   q.setNowFn(manualNow);
+
+  std::vector<double> samples;
+  q.setDwellSampleSink([&](double dwellNs) { samples.push_back(dwellNs); });
 
   const auto t0 = std::chrono::steady_clock::now();
   setManualNow(t0);
   q.push(1);
-  setManualNow(t0 + std::chrono::milliseconds(50));
-  EXPECT_EQ(1, q.get().value());
-
-  // Second round-trip at the same instant: zero dwell pulls avg below max.
+  setManualNow(t0 + std::chrono::milliseconds(10));
   q.push(2);
+  setManualNow(t0 + std::chrono::milliseconds(30));
+  EXPECT_EQ(1, q.get().value());
   EXPECT_EQ(2, q.get().value());
 
-  auto stats = q.getStats();
-  EXPECT_EQ(2, stats.reads);
-  EXPECT_DOUBLE_EQ(50.0, stats.maxQueuedTimeMs);
-  EXPECT_DOUBLE_EQ(25.0, stats.avgQueuedTimeMs);
+  ASSERT_EQ(2, samples.size());
+  EXPECT_DOUBLE_EQ(30'000'000.0, samples[0]);
+  EXPECT_DOUBLE_EQ(20'000'000.0, samples[1]);
+}
+
+TEST(RWQueueTest, DwellSampleSinkCanBeCleared) {
+  RWQueue<int> q;
+
+  std::vector<double> samples;
+  q.setDwellSampleSink([&](double dwellNs) { samples.push_back(dwellNs); });
+  q.push(1);
+  EXPECT_EQ(1, q.get().value());
+  ASSERT_EQ(1, samples.size());
+
+  /* Clearing the sink (e.g. unregistered queue) stops samples. */
+  q.setDwellSampleSink(nullptr);
+  q.push(2);
+  EXPECT_EQ(2, q.get().value());
+  EXPECT_EQ(1, samples.size());
+  EXPECT_EQ(2, q.getStats().reads);
 }
 
 TEST(RWQueueTest, QueuedTimeIsPerQueue) {
@@ -869,23 +885,32 @@ TEST(RWQueueTest, QueuedTimeIsPerQueue) {
   q1.setNowFn(manualNow);
   q2.setNowFn(manualNow);
 
+  std::vector<double> samples1, samples2;
+  q1.setDwellSampleSink([&](double dwellNs) { samples1.push_back(dwellNs); });
+  q2.setDwellSampleSink([&](double dwellNs) { samples2.push_back(dwellNs); });
+
   const auto t0 = std::chrono::steady_clock::now();
   setManualNow(t0);
   q1.push(1);
   q2.push(1);
 
-  // Each queue tracks its own dwell independently.
+  // Each queue samples its own dwell independently.
   setManualNow(t0 + std::chrono::milliseconds(10));
   EXPECT_EQ(1, q1.get().value());
   setManualNow(t0 + std::chrono::milliseconds(50));
   EXPECT_EQ(1, q2.get().value());
 
-  EXPECT_DOUBLE_EQ(10.0, q1.getStats().maxQueuedTimeMs);
-  EXPECT_DOUBLE_EQ(50.0, q2.getStats().maxQueuedTimeMs);
+  ASSERT_EQ(1, samples1.size());
+  ASSERT_EQ(1, samples2.size());
+  EXPECT_DOUBLE_EQ(10'000'000.0, samples1[0]);
+  EXPECT_DOUBLE_EQ(50'000'000.0, samples2[0]);
 }
 
 TEST(RWQueueTest, QueuedTimeZeroForDirectHandoff) {
   RWQueue<int> q;
+
+  std::vector<double> samples;
+  q.setDwellSampleSink([&](double dwellNs) { samples.push_back(dwellNs); });
 
   folly::EventBase evb;
   auto& manager = folly::fibers::getFiberManager(evb);
@@ -898,10 +923,15 @@ TEST(RWQueueTest, QueuedTimeZeroForDirectHandoff) {
   evb.loopOnce();
   EXPECT_EQ(0, q.numPendingReads());
 
+  /*
+   * Direct handoffs still emit a zero sample so the quantile average stays
+   * consistent with the lifetime average below.
+   */
+  ASSERT_EQ(1, samples.size());
+  EXPECT_DOUBLE_EQ(0.0, samples[0]);
+
   auto stats = q.getStats();
   EXPECT_EQ(1, stats.reads);
-  EXPECT_DOUBLE_EQ(0.0, stats.maxQueuedTimeMs);
-  EXPECT_DOUBLE_EQ(0.0, stats.avgQueuedTimeMs);
 }
 
 TEST(RWQueueTest, QueuedTimeCoalescingKeepsTailTime) {
@@ -924,7 +954,6 @@ TEST(RWQueueTest, QueuedTimeCoalescingKeepsTailTime) {
 
   auto stats = q.getStats();
   EXPECT_EQ(1, stats.reads);
-  EXPECT_DOUBLE_EQ(20.0, stats.maxQueuedTimeMs);
 }
 
 TEST(RWQueueTest, SuppressionsCoalescing) {
@@ -994,6 +1023,4 @@ TEST(RWQueueTest, QueuedTimeWithStateSuppression) {
 
   auto stats = q.getStats();
   EXPECT_EQ(1, stats.reads);
-  EXPECT_DOUBLE_EQ(30.0, stats.maxQueuedTimeMs);
-  EXPECT_DOUBLE_EQ(30.0, stats.avgQueuedTimeMs);
 }
