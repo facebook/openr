@@ -8,6 +8,8 @@
 #include <openr/common/OpenrProfiler.h>
 
 #include <fb303/ServiceData.h>
+#include <fb303/ThreadCachedServiceData.h>
+#include <fb303/detail/QuantileStatWrappers.h>
 #include <folly/logging/xlog.h>
 
 DEFINE_bool(
@@ -33,7 +35,40 @@ constexpr int64_t kMaxUs = 30000000; /* 30s in microseconds */
 
 thread_local ProfilerThread currentThread = ProfilerThread::KVSTORE;
 
+/*
+ * ODS keys cannot contain "::", so "KvStore::mergePublication" is exported
+ * as "KvStore.mergePublication". Sanitized once per function at ProfileStat
+ * creation; the per-finish sample feed reuses it (no per-call cost).
+ */
+std::string
+sanitizeKey(std::string_view name) {
+  std::string key;
+  key.reserve(name.size());
+  for (size_t i = 0; i < name.size(); ++i) {
+    if (i + 1 < name.size() && name[i] == ':' && name[i + 1] == ':') {
+      key.push_back('.');
+      ++i;
+    } else {
+      key.push_back(name[i]);
+    }
+  }
+  return key;
+}
+
 } // namespace
+
+/*
+ * Rolling-window per-function latency, mirroring the BGP profiler migration:
+ * one sample per finished profiled call in integer nanoseconds (the native
+ * capture precision); ODS natively derives
+ * `openr.profiler.<Func>.latency_ns.{count,avg,p50,p95,p99}.60`.
+ */
+DEFINE_dynamic_quantile_stat(
+    openrProfilerLatencyNs,
+    "openr.profiler.{}.latency_ns",
+    facebook::fb303::ExportTypeConsts::kCountAvg,
+    facebook::fb303::QuantileConsts::kP50_P95_P99,
+    facebook::fb303::SlidingWindowPeriodConsts::kOneMinTenMin);
 
 ProfileStat::ThreadData::ThreadData()
     : histogram(kBucketSizeUs, kMinUs, kMaxUs) {}
@@ -199,6 +234,7 @@ OpenrProfiler::getStat(std::string_view name) {
   auto [it, inserted] = lockedStats->try_emplace(std::string(name), nullptr);
   if (inserted) {
     it->second = std::make_shared<ProfileStat>();
+    it->second->sanitizedName = sanitizeKey(name);
   }
   return it->second;
 }
@@ -219,6 +255,16 @@ OpenrProfiler::recordFinish(
     data.maxUs = us;
   }
   data.totalUs += us;
+
+  /*
+   * Rolling-window feed: one sample per finished call into the quantile
+   * stat (thread-local append, same cost class as the histogram add above).
+   * Nanoseconds go out unscaled; the local histogram machinery (which bins
+   * microseconds) is retained for getStats()/exportToOds().
+   */
+  const auto ns = static_cast<double>(
+      std::chrono::duration_cast<std::chrono::nanoseconds>(duration).count());
+  STATS_openrProfilerLatencyNs.addValue(ns, stat->sanitizedName);
 }
 
 std::vector<OpenrProfiler::StatSummary>
@@ -262,21 +308,7 @@ OpenrProfiler::exportToOds() {
 
   auto stats = getStats();
   for (const auto& s : stats) {
-    /*
-     * Sanitize name: "KvStore::mergePublication" -> "KvStore.mergePublication"
-     * ODS keys cannot contain ::
-     */
-    const auto& name = s.name;
-    std::string key;
-    key.reserve(name.size());
-    for (size_t i = 0; i < name.size(); ++i) {
-      if (i + 1 < name.size() && name[i] == ':' && name[i + 1] == ':') {
-        key.push_back('.');
-        ++i;
-      } else {
-        key.push_back(name[i]);
-      }
-    }
+    const std::string key = sanitizeKey(s.name);
 
     fb303::fbData->setCounter(
         fmt::format("openr.profiler.{}.count", key), s.count);

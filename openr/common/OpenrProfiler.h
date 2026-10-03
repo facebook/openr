@@ -47,6 +47,14 @@ inline constexpr size_t kNumThreadTypes = 3;
 struct ProfileStat {
   std::atomic<uint64_t> count{0};
 
+  /*
+   * ODS-safe function name ("KvStore::mergePublication" ->
+   * "KvStore.mergePublication"), computed once at creation for the
+   * rolling-window quantile feed. Written under the stats_ wlock before
+   * publication; read-only afterwards.
+   */
+  std::string sanitizedName;
+
   struct ThreadData {
     folly::Histogram<int64_t> histogram;
     int64_t maxUs{0};

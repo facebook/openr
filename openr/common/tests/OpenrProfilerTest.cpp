@@ -6,14 +6,19 @@
  */
 
 #include <fmt/core.h>
+#include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
 #include <chrono>
 
+#include <fb303/ServiceData.h>
+#include <fb303/ThreadCachedServiceData.h>
 #include <openr/common/OpenrProfiler.h>
 
 using namespace openr;
+
+namespace fb303 = facebook::fb303;
 
 class OpenrProfilerTest : public ::testing::Test {
  protected:
@@ -88,6 +93,35 @@ TEST_F(OpenrProfilerTest, MultipleInvocations) {
   EXPECT_EQ(stats[0].name, "Decision::rebuildRoutes");
   EXPECT_EQ(stats[0].count, kIterations);
   EXPECT_EQ(stats[0].totalMs, kIterations);
+}
+
+/*
+ * Each finished call feeds the rolling-window quantile stat under the
+ * sanitized function name; the .60 keys carry count/avg/percentiles.
+ */
+TEST_F(OpenrProfilerTest, QuantileFeedExportsRollingWindow) {
+  auto* profiler = OpenrProfiler::getInstance();
+  profiler->setEnabled(true);
+
+  constexpr int kIterations = 5;
+  for (int i = 0; i < kIterations; ++i) {
+    profiler->recordFinish("Quantile::feed", std::chrono::milliseconds(10));
+  }
+
+  /*
+   * Publish per-thread caches, then force-merge buffered samples into
+   * the digest before checking the rolling-window keys.
+   */
+  fb303::ThreadCachedServiceData::get()->publishStats();
+  fb303::fbData->flushAllData();
+  auto counters = fb303::fbData->getCounters();
+  const std::string base = "openr.profiler.Quantile.feed.latency_ns";
+  EXPECT_TRUE(counters.count(base + ".count.60"));
+  EXPECT_GE(counters[base + ".count.60"], kIterations);
+  EXPECT_TRUE(counters.count(base + ".avg.60"));
+  EXPECT_TRUE(counters.count(base + ".p50.60"));
+  EXPECT_TRUE(counters.count(base + ".p95.60"));
+  EXPECT_TRUE(counters.count(base + ".p99.60"));
 }
 
 /*
@@ -362,4 +396,11 @@ TEST_F(OpenrProfilerTest, EndToEndDemo) {
   profiler->setEnabled(false);
   EXPECT_TRUE(profiler->getStats().empty());
   EXPECT_FALSE(profiler->isEnabled());
+}
+
+int
+main(int argc, char* argv[]) {
+  ::testing::InitGoogleTest(&argc, argv);
+  folly::Init init(&argc, &argv);
+  return RUN_ALL_TESTS();
 }
