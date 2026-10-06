@@ -14,8 +14,24 @@
 #include <gtest/gtest.h>
 
 #include <openr/common/OpenrEventBase.h>
+#include <openr/if/gen-cpp2/Health_types.h>
 
 using namespace openr;
+
+namespace {
+
+class HealthReportEventBase final : public OpenrEventBase {
+ public:
+  thrift::HealthModuleReport
+  getHealthReport() const override {
+    populated_ = true;
+    return {};
+  }
+
+  mutable bool populated_{false};
+};
+
+} // namespace
 
 class OpenrEventBaseTestFixture : public ::testing::Test {
  protected:
@@ -42,6 +58,22 @@ class OpenrEventBaseTestFixture : public ::testing::Test {
 TEST(OpenrEventBaseTest, CreateDestroy) {
   OpenrEventBase evb;
   EXPECT_TRUE(evb.getEvb() != nullptr);
+}
+
+TEST(OpenrEventBaseTest, DefaultHealthReportPopulationIsEmpty) {
+  OpenrEventBase evb;
+  const auto report = evb.getHealthReport();
+
+  EXPECT_TRUE(report.checks()->empty());
+}
+
+TEST(OpenrEventBaseTest, HealthReportPopulationUsesVirtualDispatch) {
+  HealthReportEventBase evb;
+  const OpenrEventBase& base = evb;
+
+  base.getHealthReport();
+
+  EXPECT_TRUE(evb.populated_);
 }
 
 TEST(OpenrEventBaseTest, FiberTest) {

@@ -14,8 +14,9 @@
 #include <folly/io/async/AsyncSignalHandler.h>
 #include <folly/io/async/EventHandler.h>
 
-namespace openr {
+#include <openr/if/gen-cpp2/Health_types.h>
 
+namespace openr {
 using SocketCallback = folly::Function<void(uint16_t revents) noexcept>;
 
 class EventBaseStopSignalHandler : public folly::AsyncSignalHandler {
@@ -93,6 +94,16 @@ class OpenrEventBase {
   virtual void run();
 
   virtual void stop();
+
+  /**
+   * Return this module's health report.
+   *
+   * The health validator owns the module identifier and aggregate status.
+   * Derived modules should populate only checks they implement. The default
+   * report is intentionally empty until a module implements a concrete health
+   * check.
+   */
+  virtual thrift::HealthModuleReport getHealthReport() const;
 
   bool isRunning() const;
 

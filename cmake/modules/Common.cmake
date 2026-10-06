@@ -76,6 +76,7 @@ macro(openr_add_common_libraries)
     PRIVATE_DEPENDENCIES glog::glog
     PUBLIC_DEPENDENCIES
       openr_constants
+      health_cpp2
       kv_store_cpp2
       fmt::fmt
       Folly::folly
@@ -83,6 +84,11 @@ macro(openr_add_common_libraries)
       ${Boost_LIBRARIES}
   )
   add_library(OpenR::common ALIAS openr_common)
+
+  # Buck2 target: //openr/common:evb_utils
+  add_library(openr_evb_utils INTERFACE)
+  target_link_libraries(openr_evb_utils INTERFACE Folly::folly)
+  add_library(OpenR::evb_utils ALIAS openr_evb_utils)
 
   # The remaining compiled targets in common/ stay separate because their
   # Buck ownership and dependency surfaces are independent. In particular,

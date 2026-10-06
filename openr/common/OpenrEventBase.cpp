@@ -87,6 +87,11 @@ OpenrEventBase::stop() {
   evb_.terminateLoopSoon();
 }
 
+thrift::HealthModuleReport
+OpenrEventBase::getHealthReport() const {
+  return {};
+}
+
 bool
 OpenrEventBase::isRunning() const {
   return evb_.isRunning();

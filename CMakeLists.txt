@@ -822,6 +822,16 @@ if(BUILD_TESTS)
     DESTINATION sbin/tests/openr/common
   )
 
+  add_openr_test(EvbUtilsTest evb_utils_test
+    SOURCES
+      openr/common/tests/EvbUtilsTest.cpp
+    LIBRARIES
+      openr_evb_utils
+      Folly::folly
+      Threads::Threads
+    DESTINATION sbin/tests/openr/common
+  )
+
   add_openr_test(UtilTest util_test
     SOURCES
       openr/common/tests/UtilTest.cpp
