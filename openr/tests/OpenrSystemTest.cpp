@@ -6,6 +6,7 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <fb303/ThreadCachedServiceData.h>
 #include <folly/IPAddress.h>
 #include <folly/init/Init.h>
 #include <glog/logging.h>
@@ -239,7 +240,8 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
 
   std::string memKey{"process.memory.rss"};
   std::string cpuKey{"process.cpu.pct"};
-  std::string cpuPeakKey{"process.cpu.peak_pct"};
+  std::string cpuPeakCountKey{"process.cpu.peak_pct.count.60"};
+  std::string cpuPeakP100Key{"process.cpu.peak_pct.p100.60"};
   std::string upTimeKey{"process.uptime.seconds"};
   uint32_t rssMemInUse{0};
 
@@ -270,14 +272,26 @@ TEST_P(SimpleRingTopologyFixture, RersouceMonitor) {
    * Check if counters contain the uptime, cpu and memory usage counters.
    */
   auto counters1 = openr1->getCounters();
+  const auto cpuCounterDeadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(60);
   while (true) {
-    if (counters1.find(cpuKey) != counters1.end()) {
+    if (counters1.contains(cpuKey)) {
+      fb303::ThreadCachedServiceData::get()->publishStats();
+      fb303::fbData->flushAllData();
+      counters1 = openr1->getCounters();
+    }
+    if (counters1.contains(cpuKey) && counters1.contains(cpuPeakCountKey) &&
+        counters1.contains(cpuPeakP100Key)) {
       EXPECT_TRUE(counters1.contains(cpuKey));
-      EXPECT_TRUE(counters1.contains(cpuPeakKey));
+      EXPECT_TRUE(counters1.contains(cpuPeakCountKey));
+      EXPECT_TRUE(counters1.contains(cpuPeakP100Key));
+      EXPECT_GT(counters1.at(cpuPeakCountKey), 0);
       EXPECT_TRUE(counters1.contains(memKey));
       EXPECT_TRUE(counters1.contains(upTimeKey));
       break;
     }
+    ASSERT_TRUE(std::chrono::steady_clock::now() < cpuCounterDeadline)
+        << "Timed out waiting for CPU and rolling peak counters";
     counters1 = openr1->getCounters();
     std::this_thread::yield();
   }

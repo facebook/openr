@@ -7,9 +7,26 @@
 
 #include "openr/monitor/MonitorBase.h"
 #include <folly/logging/xlog.h>
+
+#include <fb303/ThreadCachedServiceData.h>
+#include <fb303/detail/QuantileStatWrappers.h>
+
 #include <openr/common/Constants.h>
 
 namespace openr {
+
+/*
+ * Rolling-window CPU tail replacing the lifetime peak hold: one sample per
+ * counter tick (5s); p100.60 is the estimated window max. COUNT-only export
+ * plus quantiles -- the legacy process.cpu.pct.avg.60 timeseries already
+ * covers the average.
+ */
+DEFINE_quantile_stat(
+    cpuPeakPct,
+    "process.cpu.peak_pct",
+    facebook::fb303::ExportTypeConsts::kCount,
+    std::array<double, 4>{{0.5, 0.95, 0.99, 1.0}},
+    facebook::fb303::SlidingWindowPeriodConsts::kOneMinTenMin);
 
 MonitorBase::MonitorBase(
     std::shared_ptr<const Config> config,
@@ -117,9 +134,13 @@ MonitorBase::updateProcessCounters() {
   const auto cpuPct = systemMetrics_.getCPUpercentage();
   if (cpuPct.has_value()) {
     fb303::fbData->setCounter("process.cpu.pct", cpuPct.value());
-    cpuPeakPct_ = std::max(cpuPeakPct_, cpuPct.value());
     fb303::fbData->addStatValue("process.cpu.pct", cpuPct.value(), fb303::AVG);
-    fb303::fbData->setCounter("process.cpu.peak_pct", cpuPeakPct_);
+    /*
+     * Rolling-window tail (p100.60 is the estimated window max) instead
+     * of a lifetime peak hold that never decays.
+     */
+    STATS_cpuPeakPct.addValue(cpuPct.value());
+    onCpuSampleRecorded();
   }
 }
 

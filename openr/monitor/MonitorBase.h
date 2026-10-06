@@ -46,6 +46,13 @@ class MonitorBase : public OpenrEventBase {
   // Category for log message
   const std::string category_;
 
+  /*
+   * Notification after a valid CPU sample is published. Tests can wait for
+   * this event instead of racing the periodic counter timer.
+   */
+  virtual void
+  onCpuSampleRecorded() {}
+
  private:
   // Pure virtual function for processing and publishing a log
   virtual void processEventLog(LogSample const& eventLog) = 0;
@@ -76,9 +83,6 @@ class MonitorBase : public OpenrEventBase {
 
   // Get the system metrics for resource usage counters
   SystemMetrics systemMetrics_{};
-
-  // Keep track of peak CPU usage
-  double cpuPeakPct_{0.0};
 };
 
 } // namespace openr

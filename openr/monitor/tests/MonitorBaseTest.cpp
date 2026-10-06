@@ -7,9 +7,18 @@
 
 #include <openr/monitor/MonitorBase.h>
 
+#include <atomic>
+#include <mutex>
+
+#include <folly/init/Init.h>
+#include <folly/synchronization/Baton.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+
+#include <fb303/ServiceData.h>
+#include <fb303/ThreadCachedServiceData.h>
+
 #include <openr/common/Constants.h>
 #include <openr/config/Config.h>
 
@@ -27,6 +36,7 @@ class MonitorMock : public MonitorBase {
       : MonitorBase(config, category, eventLogUpdatesQueue) {}
   MOCK_METHOD1(processEventLog, void(LogSample const& eventLog));
   MOCK_METHOD0(dumpHeapProfile, void());
+  MOCK_METHOD0(onCpuSampleRecorded, void());
 };
 
 class MonitorTestFixture : public ::testing::Test {
@@ -41,6 +51,15 @@ class MonitorTestFixture : public ::testing::Test {
         std::make_unique<openr::Config>(config),
         category,
         eventLogUpdatesQueue.getReader());
+    EXPECT_CALL(*monitor, onCpuSampleRecorded())
+        .Times(AnyNumber())
+        .WillRepeatedly([this]() {
+          std::call_once(
+              cpuSampleRecordedOnce, [this]() { cpuSampleRecorded.post(); });
+          if (cpuSampleCount.fetch_add(1) == 1) {
+            secondCpuSampleRecorded.post();
+          }
+        });
     monitorThread = std::make_unique<std::thread>([this]() {
       LOG(INFO) << "monitor thread starting";
       monitor->run();
@@ -68,6 +87,11 @@ class MonitorTestFixture : public ::testing::Test {
 
   // category for testing
   std::string category = "openr_scribe_mock_test";
+
+  folly::Baton<> cpuSampleRecorded;
+  std::once_flag cpuSampleRecordedOnce;
+  std::atomic<uint32_t> cpuSampleCount{0};
+  folly::Baton<> secondCpuSampleRecorded;
 };
 
 // Matcher macro for comparing LogSample in UT LogBasicOperation
@@ -110,27 +134,36 @@ TEST_F(MonitorTestFixture, LogBasicOperation) {
 }
 
 TEST_F(MonitorTestFixture, ProcessCounterTest) {
-  // Wait for calling getCPUpercentage() twice for calculating the cpu% counter
-  while (true) {
-    auto counters = facebook::fb303::fbData->getCounters();
-    if (counters.contains("process.cpu.peak_pct")) {
-      EXPECT_GT(counters["process.cpu.pct"], 0);
-      EXPECT_GT(counters["process.cpu.peak_pct"], 0);
-      EXPECT_GT(counters["process.cpu.pct.avg.60"], 0);
-      EXPECT_GT(counters["process.memory.rss"], 0);
-      // Need kCounterSubmitInterval seconds to call getCPUpercentage() twice
-      EXPECT_GE(
-          counters["process.uptime.seconds"],
-          Constants::kCounterSubmitInterval.count());
-      break;
-    }
-    std::this_thread::yield();
-  }
+  ASSERT_TRUE(cpuSampleRecorded.try_wait_for(std::chrono::seconds(60)))
+      << "No successful CPU sample was recorded within 60 seconds";
+
+  /*
+   * Publish per-thread caches, then force-merge buffered samples into
+   * the digest before checking the rolling-window tail.
+   */
+  facebook::fb303::ThreadCachedServiceData::get()->publishStats();
+  facebook::fb303::fbData->flushAllData();
+  auto counters = facebook::fb303::fbData->getCounters();
+  EXPECT_TRUE(counters.contains("process.cpu.pct"));
+  EXPECT_TRUE(counters.contains("process.cpu.pct.avg.60"));
+  EXPECT_GT(counters["process.memory.rss"], 0);
+  EXPECT_TRUE(counters.count("process.cpu.peak_pct.count.60"));
+  EXPECT_GT(counters["process.cpu.peak_pct.count.60"], 0);
+  EXPECT_TRUE(counters.count("process.cpu.peak_pct.p99.60"));
+  EXPECT_TRUE(counters.count("process.cpu.peak_pct.p100.60"));
+  // Lifetime peak-hold gauge is gone; the rolling window max replaces it.
+  EXPECT_FALSE(counters.contains("process.cpu.peak_pct"));
+}
+
+TEST_F(MonitorTestFixture, RepeatedCpuSamplesDoNotPostBatonTwice) {
+  ASSERT_TRUE(secondCpuSampleRecorded.try_wait_for(std::chrono::seconds(60)));
+  EXPECT_GE(cpuSampleCount.load(), 2);
 }
 
 int
 main(int argc, char* argv[]) {
   ::testing::InitGoogleTest(&argc, argv);
+  folly::Init init(&argc, &argv);
   google::InstallFailureSignalHandler();
 
   return RUN_ALL_TESTS();
