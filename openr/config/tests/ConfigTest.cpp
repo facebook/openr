@@ -726,6 +726,20 @@ TEST(ConfigTest, QueueCoalescingKnob) {
   EXPECT_FALSE(Config(tConfigKnob).isQueueCoalescingEnabled());
 }
 
+TEST(ConfigTest, HealthValidatorKnob) {
+  auto tConfig = getBasicOpenrConfig();
+  auto config = Config(tConfig);
+  EXPECT_FALSE(config.getConfig().enable_health_validator().has_value());
+  EXPECT_FALSE(config.isHealthValidatorEnabled());
+
+  auto tConfigKnob = getBasicOpenrConfig();
+  tConfigKnob.enable_health_validator() = true;
+  EXPECT_TRUE(Config(tConfigKnob).isHealthValidatorEnabled());
+
+  tConfigKnob.enable_health_validator() = false;
+  EXPECT_FALSE(Config(tConfigKnob).isHealthValidatorEnabled());
+}
+
 TEST(ConfigTest, NonDefaultVrfConfigGetter) {
   std::string mgmtVrf{"mgmtVrf"};
   thrift::ThriftServerConfig thrift_server_config;

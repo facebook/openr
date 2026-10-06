@@ -23,6 +23,7 @@ namespace wiki Open_Routing.Thrift_APIs.OpenrCtrl
 
 include "openr/if/Network.thrift"
 include "openr/if/KvStore.thrift"
+include "openr/if/Health.thrift"
 include "openr/if/OpenrConfig.thrift"
 include "openr/if/Types.thrift"
 include "thrift/annotation/thrift.thrift"
@@ -320,6 +321,17 @@ service OpenrCtrl extends KvStore.KvStoreService {
    * if OpenR initialization is not completed yet.
    */
   i64 getInitializationDurationMs();
+
+  //
+  // Health APIs
+  //
+
+  /**
+   * Collect health checks from registered Open/R modules. The aggregate status
+   * covers every check implemented by this Open/R version. Collection failures
+   * are represented by report statuses rather than an RPC exception.
+   */
+  Health.HealthReport getHealthReport(1: Health.HealthReportRequest request);
 
   //
   // PrefixManager APIs

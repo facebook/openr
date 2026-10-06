@@ -17,6 +17,7 @@ NON_SERVICE_THRIFT_MODULES = (
     "facebook/thrift/annotation/thrift",
     "neteng/config/routing_policy",
     "openr/thrift/Dual",
+    "openr/thrift/Health",
     "openr/thrift/Network",
     "openr/thrift/OpenrConfig",
     "openr/thrift/Types",

@@ -32,6 +32,7 @@ def validate_breeze(package_root):
     from neteng.config.routing_policy.thrift_types import BgpCommunity
     from openr.py.openr.cli import breeze
     from openr.thrift.Dual.thrift_types import DualMessages
+    from openr.thrift.Health.thrift_types import HealthReport
     from openr.thrift.KvStore.thrift_types import Publication
     from openr.thrift.Network.thrift_types import IpPrefix
     from openr.thrift.OpenrConfig.thrift_types import KvstoreFloodRate
@@ -59,6 +60,7 @@ def validate_breeze(package_root):
         AdjacencyDatabase,
         BgpCommunity,
         DualMessages,
+        HealthReport,
         IpPrefix,
         OpenrError,
         Publication,

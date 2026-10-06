@@ -19,6 +19,7 @@ project(openr)
 # - platform_cpp2
 # - kv_store_cpp2
 # - types_cpp2
+# - health_cpp2
 # - openr_ctrl_cpp2
 # Public Open/R/common headers and Thrift definitions are included. Open/R
 # daemons, tools, tests, and unrelated libraries are omitted.
@@ -153,6 +154,7 @@ set(OPENR_EXPORTED_THRIFT_TARGETS
   platform_cpp2
   kv_store_cpp2
   types_cpp2
+  health_cpp2
   openr_ctrl_cpp2
 )
 set(OPENR_EXPORTED_TARGETS
@@ -234,6 +236,14 @@ add_fbthrift_cpp_library(
 SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} types_cpp2)
 
 add_fbthrift_cpp_library(
+  health_cpp2
+  openr/if/Health.thrift
+  OPTIONS
+    json
+)
+SET(OPENR_THRIFT_LIBS ${OPENR_THRIFT_LIBS} health_cpp2)
+
+add_fbthrift_cpp_library(
   openr_ctrl_cpp2
   openr/if/OpenrCtrl.thrift
   SERVICES
@@ -241,6 +251,7 @@ add_fbthrift_cpp_library(
   OPTIONS
     json
   DEPENDS
+    health_cpp2
     openr_config_cpp2
     kv_store_cpp2
     types_cpp2

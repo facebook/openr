@@ -197,6 +197,14 @@ class Config {
     return config_.enable_openr_queue_coalescing().value_or(false);
   }
 
+  /**
+   * Open/R health validation is disabled until a scope explicitly opts in.
+   */
+  bool
+  isHealthValidatorEnabled() const {
+    return config_.enable_health_validator().value_or(false);
+  }
+
   /*
    *
    * area

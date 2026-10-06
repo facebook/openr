@@ -782,4 +782,11 @@ struct OpenrConfig {
    * per-scope (configerator) rollout, and unset/false to roll back.
    */
   204: optional bool enable_openr_queue_coalescing;
+
+  /**
+   * Enable the Open/R health validator and its control-service report. This is
+   * optional so existing generated configurations remain unchanged; unset and
+   * false both preserve the disabled rollout default.
+   */
+  205: optional bool enable_health_validator;
 }

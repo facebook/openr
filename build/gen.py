@@ -11,6 +11,7 @@ from subprocess import check_call
 # Breeze uses OpenrConfig V1; V2 needs separate routing-policy-v2 packaging.
 SUPPORTED_OPENR_THRIFT_FILES = (
     "Dual.thrift",
+    "Health.thrift",
     "KvStore.thrift",
     "Network.thrift",
     "OpenrConfig.thrift",
