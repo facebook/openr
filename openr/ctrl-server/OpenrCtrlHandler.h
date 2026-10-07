@@ -69,6 +69,18 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   ~OpenrCtrlHandler() override;
 
   /*
+   * Complete every request that only this handler can finish: parked
+   * long-polls and KvStore/Fib streams. Long-polls arriving afterwards
+   * return immediately instead of parking.
+   *
+   * Must be called before stopping the Thrift servers serving this handler.
+   * Once the inter-module queues are closed nothing else completes a parked
+   * long-poll, so the server cannot drain it within its workers join timeout
+   * and aborts. Safe to call more than once; the destructor calls it too.
+   */
+  void stop();
+
+  /*
    *
    * fb303 service APIs
    *
@@ -629,6 +641,8 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
   void authorizeConnection();
   void closeKvStorePublishers();
   void closeFibPublishers();
+  void closeFibDetailSubscribers();
+  void completePendingLongPollReqs();
 
   const std::string nodeName_;
   const folly::F14FastSet<std::string> acceptablePeerCommonNames_;
@@ -673,6 +687,9 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
       std::string /* area */,
       folly::F14FastMap<int64_t, std::pair<folly::Promise<bool>, int64_t>>>>
       longPollReqs_;
+
+  // Set by stop(); checked under the longPollReqs_ lock before parking
+  std::atomic<bool> stopping_{false};
 
   // fiber task future hold for kvStore update, fib update reader's
   std::vector<folly::Future<folly::Unit>> workers_;

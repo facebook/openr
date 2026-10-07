@@ -159,14 +159,42 @@ OpenrCtrlHandler::OpenrCtrlHandler(
 }
 
 OpenrCtrlHandler::~OpenrCtrlHandler() {
-  closeKvStorePublishers();
-  closeFibPublishers();
-
-  XLOG(INFO, "[Exit] Cleanup all pending request(s).");
-  longPollReqs_.withWLock([&](auto& longPollReqs) { longPollReqs.clear(); });
+  stop();
 
   folly::collectAll(workers_.begin(), workers_.end()).get();
   XLOG(INFO, "[Exit] Successfully stopped OpenrCtrlHandler.");
+}
+
+void
+OpenrCtrlHandler::stop() {
+  stopping_ = true;
+  completePendingLongPollReqs();
+  closeKvStorePublishers();
+  closeFibPublishers();
+  closeFibDetailSubscribers();
+}
+
+void
+OpenrCtrlHandler::completePendingLongPollReqs() {
+  size_t numReqs{0};
+  longPollReqs_.withWLock([&](auto& longPollReqs) {
+    for (auto& areaReqs : longPollReqs) {
+      for (auto& entry : areaReqs.second) {
+        /*
+         * A parked long-poll stays an in-flight Thrift request until its
+         * promise is fulfilled; only then is the response sent. At shutdown
+         * the publications that normally fulfill it have stopped, so fulfill
+         * it here (false: no adjacency change seen, the client polls again).
+         * Otherwise the server waits workers_join_timeout (e.g. 4s) to drain
+         * it and then aborts.
+         */
+        entry.second.first.setValue(false);
+        ++numReqs;
+      }
+    }
+    longPollReqs.clear();
+  });
+  XLOGF(INFO, "[Exit] Completed {} pending long-poll request(s).", numReqs);
 }
 
 /*
@@ -216,6 +244,24 @@ OpenrCtrlHandler::closeFibPublishers() {
       fibPublishers_close.size());
   for (auto& fibPublisher : fibPublishers_close) {
     std::move(fibPublisher).complete();
+  }
+}
+
+// Refer to note on top of closeKvStorePublishers
+void
+OpenrCtrlHandler::closeFibDetailSubscribers() {
+  std::vector<FibStreamSubscriber> subscribers;
+  fibDetailSubscribers_.withWLock([&subscribers](auto& fibDetailSubscribers) {
+    for (auto& [_, subscriber] : fibDetailSubscribers) {
+      subscribers.emplace_back(std::move(subscriber));
+    }
+  });
+  XLOGF(
+      INFO,
+      "[Exit] Terminating {} active Fib detail snoop stream(s).",
+      subscribers.size());
+  for (auto& subscriber : subscribers) {
+    std::move(*subscriber.publisher).complete();
   }
 }
 
@@ -1037,6 +1083,14 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
      */
     XLOG(DBG3, "No adj change detected. Store req as pending request");
     longPollReqs_.withWLock([&](auto& longPollReq) {
+      /*
+       * Checked under the lock so a request cannot park after stop() has
+       * completed the pending ones; nothing would complete it later.
+       */
+      if (stopping_) {
+        p.setValue(false);
+        return;
+      }
       longPollReq[*area].emplace(
           requestId, std::make_pair(std::move(p), timeStamp));
     });

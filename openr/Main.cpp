@@ -644,6 +644,11 @@ main(int argc, char** argv) {
     kvStorePeerHandler.reset();
   }
 
+  /*
+   * Reply to parked long-polls and end streams first: the server below aborts
+   * if it cannot drain them within workers_join_timeout.
+   */
+  ctrlHandler->stop();
   // Stop & destroy control thrift server. Will reduce ref-count on ctrlHandler
   server->stop();
   serverThread.join();

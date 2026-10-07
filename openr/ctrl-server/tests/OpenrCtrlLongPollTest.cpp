@@ -8,6 +8,7 @@
 #include <folly/init/Init.h>
 #include <glog/logging.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/util/ScopedServerInterfaceThread.h>
 
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
@@ -292,6 +293,67 @@ TEST_F(LongPollFixture, LongPollAdjExpired) {
   // make sure when there is publication, processing delay is less than 50ms
   ASSERT_LE(endTime - startTime, std::chrono::milliseconds(50));
   ASSERT_TRUE(isAdjChanged);
+}
+
+/*
+ * stop() completes a parked long-poll with "no change". At shutdown nothing
+ * else can: the publications that would complete it stop once the
+ * inter-module queues close.
+ */
+TEST_F(LongPollFixture, StopCompletesPendingLongPoll) {
+  // KvStore holds no "adj:" key and the snapshot is empty, so it parks.
+  auto isAdjChanged = handler_->semifuture_longPollKvStoreAdjArea(
+      std::make_unique<std::string>(kTestingAreaName),
+      std::make_unique<thrift::KeyVals>());
+  ASSERT_FALSE(isAdjChanged.isReady());
+  ASSERT_EQ(1, handler_->getNumPendingLongPollReqs());
+
+  handler_->stop();
+
+  EXPECT_FALSE(std::move(isAdjChanged).within(std::chrono::seconds(5)).get());
+  EXPECT_EQ(0, handler_->getNumPendingLongPollReqs());
+}
+
+/*
+ * A long-poll arriving after stop() returns at once instead of parking with
+ * nothing left to complete it.
+ */
+TEST_F(LongPollFixture, LongPollAfterStopDoesNotPark) {
+  handler_->stop();
+
+  auto isAdjChanged = handler_->semifuture_longPollKvStoreAdjArea(
+      std::make_unique<std::string>(kTestingAreaName),
+      std::make_unique<thrift::KeyVals>());
+
+  ASSERT_TRUE(isAdjChanged.isReady());
+  EXPECT_FALSE(std::move(isAdjChanged).get());
+  EXPECT_EQ(0, handler_->getNumPendingLongPollReqs());
+}
+
+/*
+ * Mirrors Open/R shutdown: a client long-poll is parked when the server
+ * stops. Without stop() first, the server cannot drain it within the workers
+ * join timeout and aborts the process.
+ */
+TEST_F(LongPollFixture, ServerStopsCleanlyWithParkedLongPoll) {
+  auto runner = std::make_unique<apache::thrift::ScopedServerInterfaceThread>(
+      handler_, [](apache::thrift::ThriftServer& server) {
+        server.setWorkersJoinTimeout(std::chrono::seconds(1));
+      });
+  auto client = runner->newClient<thrift::OpenrCtrlCppAsyncClient>();
+
+  auto isAdjChanged = client->semifuture_longPollKvStoreAdjArea(
+      kTestingAreaName, thrift::KeyVals{});
+  checkUntilTimeout(
+      [&]() { return handler_->getNumPendingLongPollReqs() == 1; },
+      std::chrono::seconds(5),
+      std::chrono::milliseconds(10));
+
+  handler_->stop();
+  EXPECT_FALSE(std::move(isAdjChanged).within(std::chrono::seconds(5)).get());
+
+  client.reset();
+  runner.reset();
 }
 
 int
