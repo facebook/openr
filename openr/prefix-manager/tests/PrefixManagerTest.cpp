@@ -235,7 +235,9 @@ class PrefixManagerTestFixture : public testing::Test {
     }
     auto readValue = reader.get().value();
     if (expectedPrefixType.has_value()) {
-      EXPECT_EQ(readValue.prefixType, expectedPrefixType.value());
+      EXPECT_EQ(
+          DecisionRouteUpdate::prefixTypeBit(expectedPrefixType.value()),
+          readValue.prefixTypes);
     }
     return readValue.toThrift();
   }

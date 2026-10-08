@@ -202,9 +202,9 @@ main(int argc, char** argv) {
    * element regardless of Decision's consumption rate.
    *
    * PrefixManager only ever emits INCREMENTAL updates here, so in practice
-   * every push takes the merge path. `prefixType` is accounting metadata that
-   * does not affect how Decision applies the routes, so the merge simply keeps
-   * the newest label.
+   * every push takes the merge path. `prefixTypes` does not affect how
+   * Decision applies the routes; it is ORed on merge so the initialization
+   * event for every prefix type (e.g. CONFIG) survives coalescing.
    *
    * NOTE: the coalescer runs under the reader queue's lock, so it must stay
    * cheap. This queue has a single producer (PrefixManager), so there is no

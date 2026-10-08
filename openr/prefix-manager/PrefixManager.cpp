@@ -343,7 +343,7 @@ void
 PrefixManager::buildOriginatedPrefixes(
     const std::vector<thrift::OriginatedPrefix>& prefixes) {
   DecisionRouteUpdate routeUpdatesForDecision;
-  routeUpdatesForDecision.prefixType = thrift::PrefixType::CONFIG;
+  setPrefixType(routeUpdatesForDecision, thrift::PrefixType::CONFIG);
 
   for (const auto& prefix : prefixes) {
     auto network = folly::IPAddress::createNetwork(*prefix.prefix());
@@ -403,7 +403,7 @@ PrefixManager::getBestPrefixEntry(
 void
 PrefixManager::sendStaticUnicastRoutes(thrift::PrefixType prefixType) {
   DecisionRouteUpdate routeUpdatesForDecision;
-  routeUpdatesForDecision.prefixType = prefixType;
+  setPrefixType(routeUpdatesForDecision, prefixType);
 
   /*
    * During initialization, when PrefixManager receives prefixes of a particular
@@ -1531,7 +1531,7 @@ PrefixManager::processOriginatedPrefixes() {
   std::vector<PrefixEntry> advertisedPrefixes{};
   std::vector<thrift::PrefixEntry> withdrawnPrefixes{};
   DecisionRouteUpdate routeUpdatesForDecision;
-  routeUpdatesForDecision.prefixType = thrift::PrefixType::CONFIG;
+  setPrefixType(routeUpdatesForDecision, thrift::PrefixType::CONFIG);
 
   for (auto& [network, route] : originatedPrefixDb_) {
     if (route.shouldAdvertise()) {

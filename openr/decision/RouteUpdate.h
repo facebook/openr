@@ -51,10 +51,26 @@ struct DecisionRouteUpdate {
   folly::F14FastSet<int32_t> mplsRoutesToDelete;
 
   /*
-   * Optional prefix type whose unicast/label routes are included in the struct.
-   * Used in OpenR initialization process.
+   * Bitmask of prefix types whose initial routes are included in the struct,
+   * one bit per thrift::PrefixType value (e.g. CONFIG = 8 sets bit 8). Merging
+   * ORs the masks so coalescing never drops a type that Decision's
+   * initialization process is waiting for.
+   *
+   * 32 bits are enough: the highest thrift::PrefixType value is 25 (TYPE_5,
+   * one of the reserved placeholders), and only CONFIG is set today. A new
+   * type has the unused values 11-20 and the placeholders to take first. If a
+   * value of 32 or more is ever added, the static_assert below fails the
+   * build, and this field should be widened to uint64_t.
    */
-  std::optional<thrift::PrefixType> prefixType{std::nullopt};
+  uint32_t prefixTypes{0};
+  static_assert(
+      static_cast<uint32_t>(
+          apache::thrift::TEnumTraits<thrift::PrefixType>::max()) < 32);
+
+  static constexpr uint32_t
+  prefixTypeBit(thrift::PrefixType prefixType) {
+    return uint32_t{1} << static_cast<uint32_t>(prefixType);
+  }
 
   // Optional perf events associated with this route update
   std::optional<thrift::PerfEvents> perfEvents{std::nullopt};
@@ -127,9 +143,7 @@ struct DecisionRouteUpdate {
     if (other.perfEvents.has_value()) {
       perfEvents = std::move(other.perfEvents);
     }
-    if (other.prefixType.has_value()) {
-      prefixType = other.prefixType;
-    }
+    prefixTypes |= other.prefixTypes;
   }
 
   /**
@@ -252,6 +266,20 @@ struct DecisionRouteUpdate {
 };
 
 /*
+ * Mark `update` as carrying routes of `prefixType`. Types already set are kept,
+ * e.g. setting VIP on a CONFIG update leaves both set.
+ */
+inline void
+setPrefixType(DecisionRouteUpdate& update, thrift::PrefixType prefixType) {
+  update.prefixTypes |= DecisionRouteUpdate::prefixTypeBit(prefixType);
+}
+
+inline bool
+isPrefixType(thrift::PrefixType prefixType, const DecisionRouteUpdate& update) {
+  return update.prefixTypes & DecisionRouteUpdate::prefixTypeBit(prefixType);
+}
+
+/*
  * Preserve the distinction between an authoritative whole-table snapshot and
  * a delta produced by recomputing routes. Only a genuine FULL_SYNC may replace
  * the pending queue entry; every incremental update must be folded into it so
@@ -261,6 +289,7 @@ inline bool
 coalesceDecisionRouteUpdates(
     DecisionRouteUpdate& existing, DecisionRouteUpdate& incoming) {
   if (incoming.type == DecisionRouteUpdate::FULL_SYNC) {
+    incoming.prefixTypes |= existing.prefixTypes;
     existing = std::move(incoming);
   } else {
     existing.mergeInPlace(std::move(incoming));

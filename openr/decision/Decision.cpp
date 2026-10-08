@@ -281,14 +281,12 @@ Decision::Decision(
           if (maybeThriftPub.hasError()) {
             break;
           }
-          const auto prefixType = maybeThriftPub.value().prefixType;
-          if (prefixType.has_value()) {
-            XLOGF(
-                DBG2,
-                "Received static routes update of prefix type {}",
-                apache::thrift::util::enumNameSafe<thrift::PrefixType>(
-                    prefixType.value()));
-          }
+          const auto prefixTypes = maybeThriftPub.value().prefixTypes;
+          XLOGF_IF(
+              DBG2,
+              prefixTypes != 0,
+              "Received static routes update with prefix type mask {:#x}",
+              prefixTypes);
           processStaticRoutesUpdate(std::move(maybeThriftPub).value());
         }
         XLOG(DBG1, "[Exit] Static routes update task finished");
@@ -1000,16 +998,13 @@ Decision::processStaticRoutesUpdate(DecisionRouteUpdate&& routeUpdate) {
 
   rebuildRoutesDebounced_();
 
-  auto prefixType = routeUpdate.prefixType;
-  if (prefixType.has_value() &&
-      unreceivedRouteTypes_.erase(prefixType.value())) {
+  if (isPrefixType(thrift::PrefixType::CONFIG, routeUpdate) &&
+      unreceivedRouteTypes_.erase(thrift::PrefixType::CONFIG)) {
     // Received initial route of prefix type in OpenR initialization process.
     XLOGF(
         INFO,
-        "[Initialization] Received {} static routes for prefix type {}.",
-        routeUpdate.size(),
-        apache::thrift::util::enumNameSafe<thrift::PrefixType>(
-            prefixType.value()));
+        "[Initialization] Received {} static routes for prefix type CONFIG.",
+        routeUpdate.size());
     triggerInitialBuildRoutes();
   }
 }

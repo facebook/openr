@@ -139,31 +139,30 @@ TEST(DecisionRouteUpdateMerge, DisjointPreserved) {
 }
 
 /*
- * perfEvents/prefixType take the later update's value when set, and are
- * retained from the base when the later update leaves them unset.
+ * perfEvents take the later update's value when set, and are retained from the
+ * base when the later update leaves them unset. Prefix types are retained from
+ * the base and taken from the later update.
  */
 TEST(DecisionRouteUpdateMerge, MetadataLatestWinsButRetainsWhenUnset) {
   // Base has metadata, next does not -> retained.
   {
     DecisionRouteUpdate base;
     base.perfEvents = thrift::PerfEvents{};
-    base.prefixType = thrift::PrefixType::BGP;
+    setPrefixType(base, thrift::PrefixType::BGP);
     DecisionRouteUpdate next; // no metadata
     base.mergeInPlace(std::move(next));
     EXPECT_TRUE(base.perfEvents.has_value());
-    ASSERT_TRUE(base.prefixType.has_value());
-    EXPECT_EQ(thrift::PrefixType::BGP, *base.prefixType);
+    EXPECT_TRUE(isPrefixType(thrift::PrefixType::BGP, base));
   }
   // Next has metadata -> overrides.
   {
     DecisionRouteUpdate base; // no metadata
     DecisionRouteUpdate next;
     next.perfEvents = thrift::PerfEvents{};
-    next.prefixType = thrift::PrefixType::VIP;
+    setPrefixType(next, thrift::PrefixType::VIP);
     base.mergeInPlace(std::move(next));
     EXPECT_TRUE(base.perfEvents.has_value());
-    ASSERT_TRUE(base.prefixType.has_value());
-    EXPECT_EQ(thrift::PrefixType::VIP, *base.prefixType);
+    EXPECT_TRUE(isPrefixType(thrift::PrefixType::VIP, base));
   }
 }
 
@@ -464,25 +463,91 @@ TEST(CoalesceIncrementalRouteUpdates, BoundsSnoopBacklogAtTwo) {
 }
 
 /*
- * `prefixType` is accounting metadata: it does not change how Decision applies
- * the routes, so a merge keeps whichever label arrived last. An update that
- * carries no label leaves the pending one alone, since there is no newer label
- * to take.
+ * A merge adds the incoming update's prefix type without dropping the pending
+ * one. An update that carries no type leaves the pending types alone.
  */
-TEST(DecisionRouteUpdateMerge, PrefixTypeTakesNewestLabel) {
+TEST(DecisionRouteUpdateMerge, PrefixTypeMergeKeepsEveryLabel) {
   DecisionRouteUpdate base;
-  base.prefixType = thrift::PrefixType::CONFIG;
+  setPrefixType(base, thrift::PrefixType::CONFIG);
 
   DecisionRouteUpdate typed;
-  typed.prefixType = thrift::PrefixType::VIP;
+  setPrefixType(typed, thrift::PrefixType::VIP);
   base.mergeInPlace(std::move(typed));
-  ASSERT_TRUE(base.prefixType.has_value());
-  EXPECT_EQ(thrift::PrefixType::VIP, *base.prefixType);
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::VIP, base));
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, base));
 
   DecisionRouteUpdate untyped;
   base.mergeInPlace(std::move(untyped));
-  ASSERT_TRUE(base.prefixType.has_value());
-  EXPECT_EQ(thrift::PrefixType::VIP, *base.prefixType);
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::VIP, base));
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, base));
+}
+
+/*
+ * Decision's initialization waits on specific prefix types, so a merge must
+ * keep every type either side carried, in either order.
+ */
+TEST(DecisionRouteUpdateMerge, PrefixTypesAccumulate) {
+  // CONFIG first, then another type and an untyped update.
+  {
+    DecisionRouteUpdate base;
+    setPrefixType(base, thrift::PrefixType::CONFIG);
+
+    DecisionRouteUpdate typed;
+    setPrefixType(typed, thrift::PrefixType::RIB);
+    base.mergeInPlace(std::move(typed));
+
+    DecisionRouteUpdate untyped;
+    base.mergeInPlace(std::move(untyped));
+
+    EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, base));
+    EXPECT_TRUE(isPrefixType(thrift::PrefixType::RIB, base));
+    EXPECT_FALSE(isPrefixType(thrift::PrefixType::VIP, base));
+  }
+  // Untyped first, then CONFIG.
+  {
+    DecisionRouteUpdate base;
+    DecisionRouteUpdate config;
+    setPrefixType(config, thrift::PrefixType::CONFIG);
+    base.mergeInPlace(std::move(config));
+
+    EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, base));
+  }
+}
+
+/*
+ * Only a CONFIG-typed update satisfies Decision's CONFIG initialization wait.
+ */
+TEST(DecisionRouteUpdateMerge, IsPrefixTypeConfigOnlyForConfig) {
+  DecisionRouteUpdate untyped;
+  EXPECT_FALSE(isPrefixType(thrift::PrefixType::CONFIG, untyped));
+
+  DecisionRouteUpdate rib;
+  setPrefixType(rib, thrift::PrefixType::RIB);
+  EXPECT_FALSE(isPrefixType(thrift::PrefixType::CONFIG, rib));
+
+  setPrefixType(rib, thrift::PrefixType::CONFIG);
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, rib));
+}
+
+/*
+ * A FULL_SYNC replaces the pending element's routes, but must not erase prefix
+ * types the pending element was carrying.
+ */
+TEST(CoalesceDecisionRouteUpdates, FullSyncKeepsPendingPrefixTypes) {
+  const auto p1 = folly::IPAddress::createNetwork("10.0.1.0/24");
+  DecisionRouteUpdate pending;
+  setPrefixType(pending, thrift::PrefixType::CONFIG);
+  pending.addRouteToUpdate(makeUnicast(p1, 1));
+
+  DecisionRouteUpdate fullSync;
+  fullSync.type = DecisionRouteUpdate::FULL_SYNC;
+  fullSync.addRouteToUpdate(makeUnicast("10.0.2.0/24", 1));
+
+  EXPECT_TRUE(coalesceDecisionRouteUpdates(pending, fullSync));
+
+  EXPECT_EQ(DecisionRouteUpdate::FULL_SYNC, pending.type);
+  EXPECT_EQ(0, pending.unicastRoutesToUpdate.count(p1));
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, pending));
 }
 
 /*
@@ -490,7 +555,7 @@ TEST(DecisionRouteUpdateMerge, PrefixTypeTakesNewestLabel) {
  * producer mix: a typed initialization update, a burst of untyped steady-state
  * churn, then a second typed update. Static route updates carry no FULL_SYNC in
  * practice, so the whole backlog collapses to a single element whatever the
- * prefix-type mix, and every route survives.
+ * prefix-type mix, and every route and prefix type survives.
  */
 TEST(CoalesceDecisionRouteUpdates, StaticRouteBacklogCollapsesToOneElement) {
   messaging::ReplicateQueue<DecisionRouteUpdate> q;
@@ -500,7 +565,7 @@ TEST(CoalesceDecisionRouteUpdates, StaticRouteBacklogCollapsesToOneElement) {
   constexpr size_t kPushes = 50;
 
   DecisionRouteUpdate configUpdate;
-  configUpdate.prefixType = thrift::PrefixType::CONFIG;
+  setPrefixType(configUpdate, thrift::PrefixType::CONFIG);
   configUpdate.addRouteToUpdate(makeUnicast("10.0.1.0/24", 1));
   q.push(std::move(configUpdate));
 
@@ -511,7 +576,7 @@ TEST(CoalesceDecisionRouteUpdates, StaticRouteBacklogCollapsesToOneElement) {
   }
 
   DecisionRouteUpdate vipUpdate;
-  vipUpdate.prefixType = thrift::PrefixType::VIP;
+  setPrefixType(vipUpdate, thrift::PrefixType::VIP);
   vipUpdate.addRouteToUpdate(makeUnicast("10.0.3.0/24", 1));
   q.push(std::move(vipUpdate));
 
@@ -521,16 +586,17 @@ TEST(CoalesceDecisionRouteUpdates, StaticRouteBacklogCollapsesToOneElement) {
   const auto merged = decision.get().value();
   // Every route survives the collapse...
   EXPECT_EQ(3, merged.unicastRoutesToUpdate.size());
-  // ...and the newest label wins.
-  ASSERT_TRUE(merged.prefixType.has_value());
-  EXPECT_EQ(thrift::PrefixType::VIP, *merged.prefixType);
+  // ...and so does every prefix type.
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, merged));
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::VIP, merged));
 
   q.close();
 }
 
 /*
- * Interleaving prefix types does not defeat the bound: the label is not part of
- * the merge decision, so an A,B,A,B stream still settles at one element.
+ * Interleaving prefix types does not defeat the bound: prefix types are not
+ * part of the merge decision, so an A,B,A,B stream still settles at one
+ * element.
  */
 TEST(CoalesceDecisionRouteUpdates, InterleavedPrefixTypesStayBounded) {
   messaging::ReplicateQueue<DecisionRouteUpdate> q;
@@ -539,8 +605,9 @@ TEST(CoalesceDecisionRouteUpdates, InterleavedPrefixTypesStayBounded) {
   constexpr size_t kPushes = 100;
   for (size_t i = 0; i < kPushes; ++i) {
     DecisionRouteUpdate update;
-    update.prefixType =
-        (i % 2 == 0) ? thrift::PrefixType::CONFIG : thrift::PrefixType::VIP;
+    setPrefixType(
+        update,
+        (i % 2 == 0) ? thrift::PrefixType::CONFIG : thrift::PrefixType::VIP);
     update.addRouteToUpdate(makeUnicast(makeTestPrefix(i), 1));
     q.push(std::move(update));
   }
@@ -549,9 +616,8 @@ TEST(CoalesceDecisionRouteUpdates, InterleavedPrefixTypesStayBounded) {
 
   const auto merged = decision.get().value();
   EXPECT_EQ(kPushes, merged.unicastRoutesToUpdate.size());
-  // Last push was odd-indexed -> VIP.
-  ASSERT_TRUE(merged.prefixType.has_value());
-  EXPECT_EQ(thrift::PrefixType::VIP, *merged.prefixType);
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::CONFIG, merged));
+  EXPECT_TRUE(isPrefixType(thrift::PrefixType::VIP, merged));
 
   q.close();
 }

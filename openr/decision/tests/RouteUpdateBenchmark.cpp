@@ -33,11 +33,11 @@
  *  - UniqueDeletes: withdrawals, which reconcile against the pending element's
  *                 delete set. Guards the O(N^2)-under-the-lock regression that
  *                 D117840303 fixed by making the delete fields F14FastSet.
- *  - AlternatingTypes: updates whose prefixType flips every push. prefixType is
- *                 accounting metadata that does not change how Decision applies
- *                 the routes, so the merge just keeps the newest label and this
- *                 collapses like every other shape. Kept as its own shape to
- *                 show that label churn costs nothing.
+ *  - AlternatingTypes: updates whose prefix type flips every push. Prefix
+ *                 types are ORed on merge and do not change how Decision
+ *                 applies the routes, so this collapses like every other
+ *                 shape. Kept as its own shape to show that type churn costs
+ *                 nothing.
  *
  * Backlog depth is reported per shape below the timings.
  */
@@ -69,8 +69,9 @@ makeUpdate(Shape shape, size_t i) {
     update.unicastRoutesToDelete.emplace(makeTestPrefix(i));
     break;
   case Shape::AlternatingTypes:
-    update.prefixType =
-        (i % 2 == 0) ? thrift::PrefixType::CONFIG : thrift::PrefixType::VIP;
+    setPrefixType(
+        update,
+        (i % 2 == 0) ? thrift::PrefixType::CONFIG : thrift::PrefixType::VIP);
     update.addRouteToUpdate(makeUnicast(makeTestPrefix(i % kNumHotKeys), 1));
     break;
   }

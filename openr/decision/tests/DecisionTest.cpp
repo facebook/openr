@@ -3367,7 +3367,7 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
 
         // Received static unicast routes for config originated prefixes.
         DecisionRouteUpdate configStaticRoutes;
-        configStaticRoutes.prefixType = thrift::PrefixType::CONFIG;
+        setPrefixType(configStaticRoutes, thrift::PrefixType::CONFIG);
 
         configStaticRoutes.addRouteToUpdate(RibUnicastEntry(
             toIPNetwork(addr1V4),
@@ -3386,7 +3386,7 @@ TEST_F(InitialRibBuildTestFixture, PrefixWithVipRoutes) {
 
         // Received static unicast routes for VIP prefixes.
         DecisionRouteUpdate vipStaticRoutes;
-        vipStaticRoutes.prefixType = thrift::PrefixType::VIP;
+        setPrefixType(vipStaticRoutes, thrift::PrefixType::VIP);
         vipStaticRoutes.addRouteToUpdate(RibUnicastEntry(
             toIPNetwork(addr2V4),
             {},
