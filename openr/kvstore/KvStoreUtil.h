@@ -16,7 +16,12 @@
 
 #include <fb303/ExportType.h>
 
+#include <folly/Portability.h>
+#include <folly/Try.h>
 #include <folly/container/F14Map.h>
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+#include <folly/coro/safe/NowTask.h>
+#endif
 #include <folly/io/async/AsyncSocket.h>
 #include <openr/common/Constants.h>
 #include <openr/common/ExponentialBackoff.h>
@@ -147,6 +152,10 @@ namespace detail {
 template <typename ThriftType>
 ThriftType parseThriftValue(thrift::Value const& value);
 
+bool tryMergePublicationResult(
+    thrift::KeyVals& merged,
+    const folly::Try<thrift::Publication>& publicationResult);
+
 // positive int/infinity marker (current also a positive int)
 bool isValidTtl(int64_t val);
 
@@ -210,6 +219,7 @@ dumpAllWithPrefixMultipleAndParse(
 template <typename ThriftDecodeType, typename ClientType>
 folly::F14FastMap<std::string /* key */, ThriftDecodeType>
 dumpAllWithPrefixMultipleAndParse(
+    folly::EventBase& evb,
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const std::string& prefix);
@@ -257,6 +267,23 @@ KvStoreDumpWithConnectionMeta<ClientType> dumpAllWithThriftClientFromMultiple(
     const AreaId& area,
     const std::vector<std::unique_ptr<ClientType>>& clients,
     const KeyPrefixes& keyPrefixes);
+
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+/*
+ * Asynchronous interface for fetching multiple prefixes from the store; the
+ * underlying client *must* be thread safe as this function does not own
+ * execution. Do *not* use clients based on raw Rocket channels.
+ *
+ * Returns a `now_task`, which must be awaited in the expression that creates
+ * it, so passing temporaries by reference is safe.
+ */
+template <typename ClientType, StringRange KeyPrefixes>
+folly::coro::now_task<KvStoreDumpWithConnectionMeta<ClientType>>
+co_dumpAllWithThriftClientFromMultiple(
+    const AreaId& area,
+    const std::vector<std::unique_ptr<ClientType>>& clients,
+    const KeyPrefixes& keyPrefixes);
+#endif // FOLLY_HAS_IMMOVABLE_COROUTINES
 
 /*
  * This is the util method to merge the key-values publication to the existing

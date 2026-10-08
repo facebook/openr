@@ -15,6 +15,31 @@
 #include <openr/kvstore/KvStoreUtil.h>
 
 namespace openr {
+namespace detail {
+
+bool
+tryMergePublicationResult(
+    thrift::KeyVals& merged,
+    const folly::Try<thrift::Publication>& publicationResult) {
+  if (publicationResult.hasException()) {
+    XLOGF(
+        ERR,
+        "Exception: {}",
+        folly::exceptionStr(publicationResult.exception()));
+    return false;
+  }
+  // safe to deref, at worst empty
+  const auto& keyVals = *publicationResult.value().keyVals();
+  const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
+  XLOGF(
+      DBG3,
+      "Received kvstore publication with: {} key-vals. Incurred {} key-val updates.",
+      keyVals.size(),
+      deltaPub.size());
+  return true;
+}
+
+} // namespace detail
 namespace {
 
 constexpr std::string_view kRecvToAdvertiseAvg = "kvstore.recv_to_advertise_ms";

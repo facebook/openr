@@ -5,6 +5,12 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <folly/ExceptionWrapper.h>
+#include <folly/Portability.h>
+#include <folly/Try.h>
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+#include <folly/coro/GtestHelpers.h>
+#endif
 #include <folly/init/Init.h>
 #include <folly/io/async/ScopedEventBaseThread.h>
 #include <gmock/gmock.h>
@@ -19,6 +25,36 @@
 using namespace openr;
 using ::testing::IsFalse;
 using ::testing::IsTrue;
+
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+namespace {
+
+class TestKvStoreClient {
+ public:
+  explicit TestKvStoreClient(folly::Try<thrift::Publication> result)
+      : result_(std::move(result)) {}
+
+  folly::coro::Task<thrift::Publication>
+  co_getKvStoreKeyValsFilteredArea(
+      const thrift::KeyDumpParams& params, const AreaId&) {
+    keysWereSet_ =
+        apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+            params.keys());
+    co_return std::move(result_).value();
+  }
+
+  bool
+  keysWereSet() const {
+    return keysWereSet_;
+  }
+
+ private:
+  folly::Try<thrift::Publication> result_;
+  bool keysWereSet_{false};
+};
+
+} // namespace
+#endif // FOLLY_HAS_IMMOVABLE_COROUTINES
 
 class MultipleKvStoreTestFixture : public ::testing::Test {
  public:
@@ -478,6 +514,54 @@ TEST_F(MultipleKvStoreTestFixture, dumpAllWithClientsTest) {
     ASSERT_TRUE(pub.empty());
   }
 }
+
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+CO_TEST(KvStoreUtil, coDumpAllWithClientsMergesResultsAndReportsFailures) {
+  const thrift::Value value1 = createThriftValue(1, "node1", "value1");
+  const thrift::Value value2 = createThriftValue(1, "node2", "value2");
+  thrift::Publication publication1;
+  publication1.keyVals()->emplace("key1", value1);
+  thrift::Publication publication2;
+  publication2.keyVals()->emplace("key2", value2);
+
+  std::vector<std::unique_ptr<TestKvStoreClient>> clients;
+  clients.emplace_back(
+      std::make_unique<TestKvStoreClient>(
+          folly::Try<thrift::Publication>{std::move(publication1)}));
+  clients.emplace_back(
+      std::make_unique<TestKvStoreClient>(folly::Try<thrift::Publication>{
+          folly::make_exception_wrapper<std::runtime_error>(
+              "request failed")}));
+  clients.emplace_back(
+      std::make_unique<TestKvStoreClient>(
+          folly::Try<thrift::Publication>{std::move(publication2)}));
+  auto* failedClient = clients[1].get();
+
+  const std::vector<std::string> noPrefixes;
+  const auto result = co_await co_dumpAllWithThriftClientFromMultiple(
+      kTestingAreaName, clients, noPrefixes);
+
+  thrift::KeyVals expectedKeyVals;
+  expectedKeyVals.emplace("key1", value1);
+  expectedKeyVals.emplace("key2", value2);
+  EXPECT_EQ(expectedKeyVals, result.keyVals);
+  std::vector<TestKvStoreClient*> expectedFailedClients;
+  expectedFailedClients.push_back(failedClient);
+  EXPECT_EQ(expectedFailedClients, result.failedClients);
+  EXPECT_FALSE(clients[0]->keysWereSet());
+
+  thrift::Publication filteredPublication;
+  std::vector<std::unique_ptr<TestKvStoreClient>> filteredClients;
+  filteredClients.emplace_back(
+      std::make_unique<TestKvStoreClient>(
+          folly::Try<thrift::Publication>{std::move(filteredPublication)}));
+  // GCC 12 miscompiles initializer_list temporaries spanning a co_await
+  const std::vector<std::string> prefixes{"prefix"};
+  co_await co_dumpAllWithThriftClientFromMultiple(
+      kTestingAreaName, filteredClients, prefixes);
+  EXPECT_TRUE(filteredClients[0]->keysWereSet());
+}
+#endif // FOLLY_HAS_IMMOVABLE_COROUTINES
 
 /*
  *

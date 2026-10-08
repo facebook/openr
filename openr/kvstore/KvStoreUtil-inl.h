@@ -8,6 +8,11 @@
 #include <ranges>
 #include <span>
 
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+#include <folly/coro/Collect.h>
+#include <folly/coro/Task.h>
+#include <folly/coro/safe/NowTask.h>
+#endif
 #include <folly/gen/Base.h>
 #include <folly/logging/xlog.h>
 #include <openr/common/OpenrClient.h>
@@ -199,33 +204,19 @@ dumpAllWithThriftClientFromMultiple(
     return std::make_pair(std::nullopt, unreachableAddrs);
   }
 
-  folly::collectAll(calls).via(&evb).thenValue([&](std::vector<folly::Try<
-                                                       openr::thrift::
-                                                           Publication>>&&
-                                                       results) {
-    XLOGF(
-        DBG1,
-        "Merge key-vals from {} different Open/R instances.",
-        results.size());
-
-    // loop semifuture collection to merge all values
-    for (auto& result : results) {
-      // folly::Try will contain either value or exception
-      if (result.hasException()) {
-        LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
-      } else if (result.hasValue()) {
-        auto keyVals = *result.value().keyVals();
-        const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
-
+  folly::collectAll(calls).via(&evb).thenValue(
+      [&](std::vector<folly::Try<openr::thrift::Publication>>&& results) {
         XLOGF(
-            DBG3,
-            "Received kvstore publication with: {} key-vals. Incurred {} key-val updates.",
-            keyVals.size(),
-            deltaPub.size());
-      }
-    }
-    evb.terminateLoopSoon();
-  });
+            DBG1,
+            "Merge key-vals from {} different Open/R instances.",
+            results.size());
+
+        // loop semifuture collection to merge all values
+        for (auto& result : results) {
+          detail::tryMergePublicationResult(merged, result);
+        }
+        evb.terminateLoopSoon();
+      });
 
   // magic happens here
   evb.loopForever();
@@ -267,19 +258,8 @@ dumpAllWithThriftClientFromMultiple(
   // order of inputs preserved
   size_t clientIdx = 0;
   for (const auto& result : folly::collectAll(calls).via(&evb).getVia(&evb)) {
-    // folly::Try will contain either value or exception
-    if (result.hasException()) {
-      LOG(ERROR) << "Exception: " << folly::exceptionStr(result.exception());
+    if (!detail::tryMergePublicationResult(merged, result)) {
       failedClients.push_back(clients[clientIdx].get());
-    } else if (result.hasValue()) {
-      auto keyVals = *result.value().keyVals();
-      const auto deltaPub = *mergeKeyValues(merged, keyVals).keyVals();
-
-      XLOGF(
-          DBG3,
-          "Received kvstore publication with: {} key-vals. Incurred {} key-val updates.",
-          keyVals.size(),
-          deltaPub.size());
     }
     ++clientIdx;
   }
@@ -294,5 +274,45 @@ dumpAllWithThriftClientFromMultiple(
 
   return {merged, std::move(failedClients)};
 }
+
+#if FOLLY_HAS_IMMOVABLE_COROUTINES
+template <typename ClientType, StringRange KeyPrefixes>
+folly::coro::now_task<KvStoreDumpWithConnectionMeta<ClientType>>
+co_dumpAllWithThriftClientFromMultiple(
+    const AreaId& area,
+    const std::vector<std::unique_ptr<ClientType>>& clients,
+    const KeyPrefixes& keyPrefixes) {
+  std::vector<folly::coro::Task<thrift::Publication>> calls;
+  calls.reserve(clients.size());
+  thrift::KeyVals merged;
+
+  thrift::KeyDumpParams params;
+  if (!keyPrefixes.empty()) {
+    params.keys() = {keyPrefixes.begin(), keyPrefixes.end()};
+  }
+
+  const auto startTime = std::chrono::steady_clock::now();
+  for (const auto& client : clients) {
+    calls.emplace_back(client->co_getKvStoreKeyValsFilteredArea(params, area));
+  }
+
+  std::vector<ClientType*> failedClients;
+  auto results = co_await folly::coro::collectAllTryRange(std::move(calls));
+  for (size_t clientIdx = 0; clientIdx < results.size(); ++clientIdx) {
+    if (!detail::tryMergePublicationResult(merged, results[clientIdx])) {
+      failedClients.push_back(clients[clientIdx].get());
+    }
+  }
+
+  const auto elapsedTime =
+      std::chrono::duration_cast<std::chrono::milliseconds>(
+          std::chrono::steady_clock::now() - startTime)
+          .count();
+  XLOGF(DBG1, "Took: {}ms to retrieve KvStore snapshot", elapsedTime);
+
+  co_return KvStoreDumpWithConnectionMeta<ClientType>{
+      std::move(merged), std::move(failedClients)};
+}
+#endif // FOLLY_HAS_IMMOVABLE_COROUTINES
 
 } // namespace openr
