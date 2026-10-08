@@ -393,7 +393,6 @@ TEST_F(KvStoreTestFixture, DumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix4), 1);
 }
 
-#if FOLLY_HAS_COROUTINES
 CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   // Create and start KvStore.
   const std::string nodeId = "node-for-dump";
@@ -483,7 +482,6 @@ CO_TEST_F(KvStoreTestFixture, CoDumpKeysWithPrefix) {
   EXPECT_EQ(keysFromStore.count(prefix3), 1);
   EXPECT_EQ(keysFromStore.count(prefix4), 1);
 }
-#endif
 
 /**
  * Verify KvStore publishes kvStoreSynced signal even when receiving empty peers
