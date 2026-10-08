@@ -14,12 +14,9 @@
 #include <folly/gen/Base.h>
 #include <folly/init/Init.h>
 
-#if FOLLY_HAS_COROUTINES
-#include <folly/coro/BlockingWait.h>
 #include <folly/coro/Collect.h>
 #include <folly/coro/Generator.h>
 #include <folly/coro/Task.h>
-#endif
 
 #include <openr/common/Constants.h>
 #include <openr/common/MplsUtil.h>
@@ -209,7 +206,6 @@ checkUntilTimeout(
   }
 }
 
-#if FOLLY_HAS_COROUTINES
 /*
  * Util function to validate if the given node has received all events
  */
@@ -226,5 +222,4 @@ folly::coro::Task<void> co_waitForConvergence(
     const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
     const std::vector<std::unique_ptr<::openr::KvStoreWrapper<
         apache::thrift::Client<::openr::thrift::KvStoreService>>>>& stores);
-#endif
 } // namespace openr

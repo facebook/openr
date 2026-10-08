@@ -722,6 +722,14 @@ if(BUILD_TESTS)
     EXPECTED_SOURCE_COUNT ${OPENR_TEST_SUPPORT_EXPECTED_SOURCE_COUNT}
   )
 
+  add_openr_test(OpenrTestUtilsCoroTest openr_test_utils_coro_test
+    SOURCES openr/tests/utils/UtilsCoroTest.cpp
+    LIBRARIES
+      openr_test_utils
+      Folly::folly
+    DESTINATION sbin/tests/openr/tests/utils
+  )
+
   set(
     OPENR_COMMON_TEST_LIBRARIES
     openr_common

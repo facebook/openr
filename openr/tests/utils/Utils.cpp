@@ -464,7 +464,6 @@ generateTopo(
   }
 }
 
-#if FOLLY_HAS_COROUTINES
 folly::coro::Task<void>
 co_validateNodeKey(
     const folly::F14FastMap<std::string, ::openr::thrift::Value>& events,
@@ -502,6 +501,5 @@ co_waitForConvergence(
       }(),
       ::detail::kMaxConcurrency);
 }
-#endif
 
 } // namespace openr
