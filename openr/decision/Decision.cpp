@@ -423,6 +423,16 @@ Decision::getDecisionRouteDb(std::string nodeName) {
   return sf;
 }
 
+folly::coro::Task<StaticUnicastRoutes>
+Decision::co_getStaticUnicastRoutes() {
+  co_return co_await co_withExecutor(getEvb(), co_getStaticUnicastRoutesImpl());
+}
+
+folly::coro::Task<StaticUnicastRoutes>
+Decision::co_getStaticUnicastRoutesImpl() {
+  co_return spfSolver_->getStaticUnicastRoutes();
+}
+
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>>
 Decision::getDecisionAdjacenciesFiltered(thrift::AdjacenciesFilter filter) {
   folly::Promise<std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>> p;

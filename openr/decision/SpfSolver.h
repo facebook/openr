@@ -128,6 +128,11 @@ class SpfSolver {
           unicastRoutesToUpdate,
       const folly::F14FastSet<folly::CIDRNetwork>& unicastRoutesToDelete);
 
+  const StaticUnicastRoutes&
+  getStaticUnicastRoutes() const {
+    return staticUnicastRoutes_;
+  }
+
   /*
    * Build route database using given prefix and link states for a given
    * router, myNodeName

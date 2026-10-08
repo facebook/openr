@@ -13,6 +13,7 @@
 #include <fmt/core.h>
 
 #include <folly/IPAddress.h>
+#include <folly/container/F14Map.h>
 #include <folly/container/F14Set.h>
 
 #include <openr/common/LsdbUtil.h>
@@ -20,8 +21,8 @@
 #include <openr/if/gen-cpp2/Types_types.h>
 
 /*
- * Builders shared by RouteUpdateTest and RouteUpdateBenchmark so the two cannot
- * drift in how they generate prefixes and RIB entries.
+ * Builders and checks shared by route update tests and RouteUpdateBenchmark so
+ * they cannot drift in how they generate prefixes and RIB entries.
  */
 namespace openr {
 
@@ -54,6 +55,35 @@ makeUnicast(const folly::CIDRNetwork& network, int numNextHops) {
 inline RibUnicastEntry
 makeUnicast(const std::string& cidr, int numNextHops) {
   return makeUnicast(folly::IPAddress::createNetwork(cidr), numNextHops);
+}
+
+/*
+ * Empty when `expected` and `actual` hold the same routes. Otherwise one line
+ * per differing prefix, e.g. "extra 10.0.3.0/24" for a route that `actual`
+ * should have withdrawn.
+ */
+inline std::string
+describeUnicastRouteDiff(
+    const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>& expected,
+    const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>& actual) {
+  std::string diff;
+  for (const auto& [prefix, route] : expected) {
+    const auto it = actual.find(prefix);
+    if (it == actual.end()) {
+      diff += fmt::format(
+          "missing {}\n", folly::IPAddress::networkToString(prefix));
+    } else if (!(it->second == route)) {
+      diff += fmt::format(
+          "different {}\n", folly::IPAddress::networkToString(prefix));
+    }
+  }
+  for (const auto& [prefix, _] : actual) {
+    if (!expected.contains(prefix)) {
+      diff +=
+          fmt::format("extra {}\n", folly::IPAddress::networkToString(prefix));
+    }
+  }
+  return diff;
 }
 
 inline RibMplsEntry

@@ -6,7 +6,11 @@
  */
 
 #include <array>
+#include <cstdint>
+#include <functional>
+#include <random>
 
+#include <fmt/core.h>
 #include <gtest/gtest.h>
 
 #include <folly/IPAddress.h>
@@ -14,6 +18,7 @@
 
 #include <openr/common/LsdbUtil.h>
 #include <openr/decision/RouteUpdate.h>
+#include <openr/decision/SpfSolver.h>
 #include <openr/decision/tests/RouteUpdateTestUtils.h>
 #include <openr/messaging/ReplicateQueue.h>
 
@@ -670,6 +675,163 @@ TEST(CoalesceDecisionRouteUpdates, AccumulatesAndResurrectsDeletes) {
 
 TEST(CoalesceIncrementalRouteUpdates, AccumulatesAndResurrectsDeletes) {
   expectAccumulatesAndResurrectsDeletes(coalesceIncrementalRouteUpdates);
+}
+
+namespace {
+
+/*
+ * Describes one queue's consumer for the coalescing equivalence check. A new
+ * queue only needs its own message generator and apply function.
+ */
+template <typename Message, typename State>
+struct CoalescingEquivalenceSpec {
+  std::function<Message(std::mt19937&)> generateMessage;
+  // Applies one message to consumer state, the way the real consumer does.
+  std::function<void(State&, Message&&)> applyMessage;
+  std::function<bool(Message&, Message&)> coalesce;
+  std::function<void(const State& reference, const State& coalesced)>
+      expectEquivalent;
+};
+
+/*
+ * Pushes one random stream into a queue with a plain reader and a coalescing
+ * reader. The coalescing reader is drained a few messages at a time at random
+ * points, so its backlog merges by varying amounts, as with a slow consumer.
+ * Whenever both readers are fully drained, the state built from the coalesced
+ * stream must equal the state built from the plain stream.
+ */
+template <typename Message, typename State>
+void
+expectCoalescingEquivalent(
+    const CoalescingEquivalenceSpec<Message, State>& spec,
+    uint32_t seed,
+    size_t numPushes) {
+  std::mt19937 rng(seed);
+  messaging::ReplicateQueue<Message> q;
+  auto plain = q.getReader("plain");
+  auto coalesced = q.getReader("coalesced", spec.coalesce);
+  State referenceState;
+  State coalescedState;
+  size_t plainReads{0};
+  size_t coalescedReads{0};
+
+  auto drain = [&spec](
+                   messaging::RQueue<Message>& reader,
+                   State& state,
+                   size_t& reads,
+                   size_t maxReads) {
+    for (size_t i = 0; i < maxReads && reader.size() > 0; ++i) {
+      spec.applyMessage(state, reader.get().value());
+      ++reads;
+    }
+  };
+  auto drainBothAndCompare = [&]() {
+    drain(plain, referenceState, plainReads, SIZE_MAX);
+    drain(coalesced, coalescedState, coalescedReads, SIZE_MAX);
+    spec.expectEquivalent(referenceState, coalescedState);
+  };
+
+  for (size_t i = 0; i < numPushes; ++i) {
+    q.push(spec.generateMessage(rng));
+    if (rng() % 4 == 0) {
+      drain(coalesced, coalescedState, coalescedReads, rng() % 3);
+    }
+    if (rng() % 16 == 0) {
+      drainBothAndCompare();
+    }
+  }
+  drainBothAndCompare();
+
+  EXPECT_EQ(numPushes, plainReads);
+  // Guards against a stream that never let the coalescing reader merge.
+  EXPECT_LT(coalescedReads, plainReads);
+  q.close();
+}
+
+// The parts of Decision::processStaticRoutesUpdate that change state.
+struct StaticRouteConsumerState {
+  SpfSolver solver{"node-1", /*enableV4=*/true};
+  uint32_t receivedPrefixTypes{0};
+};
+
+/*
+ * Random adds, nexthop changes and withdrawals over a few prefixes, so the
+ * same prefix is updated and withdrawn many times. Like PrefixManager, never
+ * puts one prefix in both the update and delete sets of a single update.
+ */
+DecisionRouteUpdate
+generateStaticRouteUpdate(std::mt19937& rng) {
+  constexpr size_t kNumPrefixes{8};
+  DecisionRouteUpdate update;
+  const size_t numOps = 1 + rng() % 3;
+  for (size_t i = 0; i < numOps; ++i) {
+    const auto prefix = makeTestPrefix(rng() % kNumPrefixes);
+    if (update.unicastRoutesToUpdate.contains(prefix) ||
+        update.unicastRoutesToDelete.contains(prefix)) {
+      continue;
+    }
+    if (rng() % 2 == 0) {
+      update.addRouteToUpdate(makeUnicast(prefix, 1 + rng() % 4));
+    } else {
+      update.unicastRoutesToDelete.emplace(prefix);
+    }
+  }
+  /*
+   * PrefixManager only tags CONFIG today; RIB is mixed in so that a merge
+   * dropping one of two different types is caught.
+   */
+  switch (rng() % 8) {
+  case 0:
+    setPrefixType(update, thrift::PrefixType::CONFIG);
+    break;
+  case 1:
+    setPrefixType(update, thrift::PrefixType::RIB);
+    break;
+  default:
+    break;
+  }
+  return update;
+}
+
+} // namespace
+
+/*
+ * For the PrefixManager->Decision static route reader, coalescing must leave
+ * Decision with exactly the static routes, including no withdrawn ones, and
+ * the prefix types it would have had reading every update.
+ */
+TEST(CoalescingEquivalence, StaticRouteUpdates) {
+  const CoalescingEquivalenceSpec<DecisionRouteUpdate, StaticRouteConsumerState>
+      spec{
+          .generateMessage = generateStaticRouteUpdate,
+          .applyMessage =
+              [](StaticRouteConsumerState& state,
+                 DecisionRouteUpdate&& update) {
+                state.solver.updateStaticUnicastRoutes(
+                    update.unicastRoutesToUpdate, update.unicastRoutesToDelete);
+                state.receivedPrefixTypes |= update.prefixTypes;
+              },
+          .coalesce = coalesceDecisionRouteUpdates,
+          .expectEquivalent =
+              [](const StaticRouteConsumerState& reference,
+                 const StaticRouteConsumerState& coalesced) {
+                EXPECT_EQ(
+                    "",
+                    describeUnicastRouteDiff(
+                        reference.solver.getStaticUnicastRoutes(),
+                        coalesced.solver.getStaticUnicastRoutes()));
+                EXPECT_EQ(
+                    reference.receivedPrefixTypes,
+                    coalesced.receivedPrefixTypes);
+              },
+      };
+
+  constexpr uint32_t kNumSeeds{50};
+  constexpr size_t kPushesPerSeed{500};
+  for (uint32_t seed = 0; seed < kNumSeeds; ++seed) {
+    SCOPED_TRACE(fmt::format("seed {}", seed));
+    expectCoalescingEquivalent(spec, seed, kPushesPerSeed);
+  }
 }
 
 } // namespace openr

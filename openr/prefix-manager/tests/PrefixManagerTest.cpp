@@ -7,8 +7,10 @@
 
 #include <folly/IPAddress.h>
 #include <folly/container/F14Map.h>
+#include <folly/coro/BlockingWait.h>
 #include <folly/init/Init.h>
 #include <folly/logging/xlog.h>
+#include <folly/synchronization/Baton.h>
 #include <glog/logging.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -19,7 +21,10 @@
 #include <openr/common/NetworkUtil.h>
 #include <openr/common/Util.h>
 #include <openr/config/Config.h>
+#include <openr/decision/Decision.h>
 #include <openr/decision/RibEntry.h>
+#include <openr/decision/RouteUpdate.h>
+#include <openr/decision/tests/RouteUpdateTestUtils.h>
 #include <openr/if/gen-cpp2/Network_types.h>
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
@@ -3088,6 +3093,252 @@ TEST_F(PrefixManagerTestFixture, WithdrawPrefix) {
       });
 
   evb.run();
+}
+
+/*
+ * Runs a real Decision on PrefixManager's static route queue, through a reader
+ * with or without coalescing (the test parameter), so the routes PrefixManager
+ * has published can be compared with the static routes Decision holds.
+ */
+class StaticRouteCoalescingFixture : public RouteOriginationFixture,
+                                     public testing::WithParamInterface<bool> {
+ public:
+  void
+  SetUp() override {
+    // As in Main.cpp, the reader exists before PrefixManager publishes.
+    decisionStaticRoutesReader_.emplace(staticRouteUpdatesQueue.getReader(
+        "decision", GetParam() ? coalesceDecisionRouteUpdates : nullptr));
+    RouteOriginationFixture::SetUp();
+  }
+
+  void
+  TearDown() override {
+    decisionPeerUpdatesQueue_.close();
+    decisionKvStoreUpdatesQueue_.close();
+    decisionRouteUpdatesQueue_.close();
+    decisionKvRequestQueue_.close();
+    staticRouteUpdatesQueue.close();
+    if (decision_) {
+      decision_->stop();
+      decisionThread_->join();
+    }
+    RouteOriginationFixture::TearDown();
+  }
+
+  void
+  startDecision() {
+    decision_ = std::make_shared<Decision>(
+        config,
+        decisionPeerUpdatesQueue_.getReader(),
+        decisionKvStoreUpdatesQueue_.getReader(),
+        std::move(decisionStaticRoutesReader_).value(),
+        decisionRouteUpdatesQueue_,
+        decisionKvRequestQueue_);
+    decisionThread_ = std::make_unique<std::thread>([this]() {
+      XLOG(INFO, "Decision thread starting");
+      decision_->run();
+      XLOG(INFO, "Decision thread finishing");
+    });
+    decision_->waitUntilRunning();
+  }
+
+  void
+  setSupportingRoute(bool present) {
+    DecisionRouteUpdate update;
+    if (present) {
+      update.addRouteToUpdate(supportingRouteV4_);
+    } else {
+      update.unicastRoutesToDelete.emplace(supportingRouteV4_.prefix);
+    }
+    fibRouteUpdatesQueue.push(std::move(update));
+  }
+
+  /*
+   * Waits for PrefixManager to have published (or withdrawn) the originated
+   * v4 route, so a later comparison cannot pass against a stale state.
+   */
+  void
+  waitForPublishedV4(bool published) {
+    const auto deadline =
+        std::chrono::steady_clock::now() + kStaticRouteSyncTimeout;
+    while (
+        folly::coro::blockingWait(prefixManager->co_getPublishedStaticRoutes())
+            .contains(v4Network_) != published) {
+      if (std::chrono::steady_clock::now() > deadline) {
+        ADD_FAILURE() << "PrefixManager never reached published=" << published
+                      << " for " << v4Prefix_;
+        return;
+      }
+      std::this_thread::yield();
+    }
+  }
+
+  /*
+   * Decision applies updates asynchronously, so this waits for it to hold
+   * exactly PrefixManager's published routes and fails if it never does.
+   * Returns Decision's static routes.
+   */
+  StaticUnicastRoutes
+  expectDecisionMatchesPublished() {
+    const auto deadline =
+        std::chrono::steady_clock::now() + kStaticRouteSyncTimeout;
+    std::string diff;
+    while (true) {
+      const auto published = folly::coro::blockingWait(
+          prefixManager->co_getPublishedStaticRoutes());
+      auto received =
+          folly::coro::blockingWait(decision_->co_getStaticUnicastRoutes());
+      diff = describeUnicastRouteDiff(published, received);
+      if (diff.empty()) {
+        return received;
+      }
+      if (std::chrono::steady_clock::now() > deadline) {
+        ADD_FAILURE() << "Decision static routes differ from PrefixManager's "
+                      << "published routes:\n"
+                      << diff;
+        return received;
+      }
+      std::this_thread::yield();
+    }
+  }
+
+  size_t
+  decisionReaderBacklog() {
+    for (const auto& stats : staticRouteUpdatesQueue.getReplicationStats()) {
+      if (stats.queueId == "decision") {
+        return stats.size;
+      }
+    }
+    ADD_FAILURE() << "No decision reader on staticRouteUpdatesQueue";
+    return 0;
+  }
+
+ protected:
+  static constexpr std::chrono::seconds kStaticRouteSyncTimeout{5};
+
+  // Supports v4Prefix_, whose minimum_supporting_routes is 1.
+  const RibUnicastEntry supportingRouteV4_{
+      folly::IPAddress::createNetwork("192.108.0.8/30"),
+      {nh_v4},
+      createPrefixEntry(toIpPrefix("192.108.0.8/30")),
+      Constants::kDefaultArea.toString()};
+
+  std::optional<messaging::RQueue<DecisionRouteUpdate>>
+      decisionStaticRoutesReader_;
+  messaging::ReplicateQueue<PeerEvent> decisionPeerUpdatesQueue_;
+  messaging::ReplicateQueue<KvStorePublication> decisionKvStoreUpdatesQueue_;
+  messaging::ReplicateQueue<DecisionRouteUpdate> decisionRouteUpdatesQueue_;
+  messaging::ReplicateQueue<KeyValueRequest> decisionKvRequestQueue_;
+  std::shared_ptr<Decision> decision_;
+  std::unique_ptr<std::thread> decisionThread_;
+};
+
+INSTANTIATE_TEST_SUITE_P(
+    QueueCoalescing,
+    StaticRouteCoalescingFixture,
+    testing::Bool(),
+    [](const testing::TestParamInfo<bool>& info) {
+      return info.param ? "Coalesced" : "Plain";
+    });
+
+/*
+ * Decision starts only after a history of advertisements and withdrawals, so
+ * the whole history is queued for it at once. With coalescing it reads a
+ * single merged update, which must still leave it with exactly the routes
+ * PrefixManager has published.
+ */
+TEST_P(StaticRouteCoalescingFixture, QueuedHistoryConverges) {
+  // Startup published v4 as a drop route, then withdrew it for lack of support.
+  waitForPublishedV4(false);
+
+  constexpr int kCycles{3};
+  for (int i = 0; i < kCycles; ++i) {
+    setSupportingRoute(true);
+    waitForPublishedV4(true);
+    setSupportingRoute(false);
+    waitForPublishedV4(false);
+  }
+  setSupportingRoute(true);
+  waitForPublishedV4(true);
+
+  if (GetParam()) {
+    EXPECT_EQ(1, decisionStaticRoutesReader_->size());
+  } else {
+    EXPECT_LT(1, decisionStaticRoutesReader_->size());
+  }
+
+  startDecision();
+  const auto received = expectDecisionMatchesPublished();
+  EXPECT_TRUE(received.contains(v4Network_));
+}
+
+/*
+ * Decision holds no v4 route, then stalls while v4 is advertised, withdrawn,
+ * advertised and withdrawn again. With coalescing, the queued updates merge
+ * into one, which must still carry the final withdrawal.
+ */
+TEST_P(StaticRouteCoalescingFixture, WithdrawalMergedWhileDecisionStalled) {
+  startDecision();
+  waitForPublishedV4(false);
+  EXPECT_FALSE(expectDecisionMatchesPublished().contains(v4Network_));
+
+  folly::Baton<> stalled;
+  folly::Baton<> release;
+  decision_->runInEventBaseThread([&]() {
+    stalled.post();
+    release.wait();
+  });
+  stalled.wait();
+
+  /*
+   * Decision's static route fiber is already waiting for a message, so the
+   * first advertisement is handed to it directly and the rest are queued.
+   * Decision then holds v4 unless the merged queued update withdraws it.
+   */
+  setSupportingRoute(true);
+  waitForPublishedV4(true);
+  setSupportingRoute(false);
+  waitForPublishedV4(false);
+  setSupportingRoute(true);
+  waitForPublishedV4(true);
+  setSupportingRoute(false);
+  waitForPublishedV4(false);
+
+  if (GetParam()) {
+    EXPECT_EQ(1, decisionReaderBacklog());
+  } else {
+    EXPECT_LE(3, decisionReaderBacklog());
+  }
+  release.post();
+
+  EXPECT_FALSE(expectDecisionMatchesPublished().contains(v4Network_));
+}
+
+/*
+ * Decision runs throughout. Each advertisement and withdrawal must reach it,
+ * including a burst of support flaps sent without waiting in between, which
+ * PrefixManager may publish while Decision still has updates queued.
+ */
+TEST_P(StaticRouteCoalescingFixture, LiveUpdatesConverge) {
+  startDecision();
+  waitForPublishedV4(false);
+  EXPECT_FALSE(expectDecisionMatchesPublished().contains(v4Network_));
+
+  setSupportingRoute(true);
+  waitForPublishedV4(true);
+  EXPECT_TRUE(expectDecisionMatchesPublished().contains(v4Network_));
+
+  setSupportingRoute(false);
+  waitForPublishedV4(false);
+  EXPECT_FALSE(expectDecisionMatchesPublished().contains(v4Network_));
+
+  constexpr int kFlaps{20};
+  for (int i = 0; i < kFlaps; ++i) {
+    setSupportingRoute(true);
+    setSupportingRoute(false);
+  }
+  waitForPublishedV4(false);
+  EXPECT_FALSE(expectDecisionMatchesPublished().contains(v4Network_));
 }
 
 int

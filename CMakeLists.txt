@@ -1035,6 +1035,7 @@ if(BUILD_TESTS)
       openr_decision_structs
       openr_lsdb_util
       openr_messaging
+      openr_spf_solver
       Folly::folly
     DESTINATION sbin/tests/openr/decision
   )
@@ -1194,6 +1195,7 @@ if(BUILD_TESTS)
       openr/prefix-manager/tests/PrefixManagerTest.cpp
     LIBRARIES
       openr_prefix_manager
+      openr_decision
       openr_kvstore_wrapper
       openr_test_utils
       openr_config

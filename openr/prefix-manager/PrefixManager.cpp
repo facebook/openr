@@ -1084,6 +1084,23 @@ PrefixManager::getAreaAdvertisedRoutes(
   return std::move(sf);
 }
 
+folly::coro::Task<folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>>
+PrefixManager::co_getPublishedStaticRoutes() {
+  co_return co_await co_withExecutor(
+      getEvb(), co_getPublishedStaticRoutesImpl());
+}
+
+folly::coro::Task<folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>>
+PrefixManager::co_getPublishedStaticRoutesImpl() {
+  folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry> routes;
+  for (const auto& [prefix, status] : advertiseStatus_) {
+    if (status.publishedRoute.has_value()) {
+      routes.emplace(prefix, status.publishedRoute.value());
+    }
+  }
+  co_return routes;
+}
+
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
 PrefixManager::getOriginatedPrefixes() {
   folly::Promise<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>> p;

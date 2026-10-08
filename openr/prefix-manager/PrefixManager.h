@@ -9,6 +9,7 @@
 
 #include <folly/IPAddress.h>
 #include <folly/container/F14Map.h>
+#include <folly/coro/Task.h>
 #include <folly/futures/Future.h>
 #include <folly/gen/Base.h>
 
@@ -130,6 +131,13 @@ class PrefixManager final : public OpenrEventBase {
   folly::SemiFuture<std::unique_ptr<std::vector<thrift::OriginatedPrefixEntry>>>
   getOriginatedPrefixes();
 
+  /*
+   * Retrieve the static unicast routes currently published to Decision, i.e.
+   * the net effect of every update pushed to staticRouteUpdatesQueue.
+   */
+  folly::coro::Task<folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>>
+  co_getPublishedStaticRoutes();
+
   /**
    * Helper functinon used in getAreaAdvertisedRoutes()
    * Filter routes with 1. <type> attribute
@@ -201,6 +209,9 @@ class PrefixManager final : public OpenrEventBase {
       apache::thrift::optional_field_ref<thrift::PrefixType&> typeFilter);
 
  private:
+  folly::coro::Task<folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>>
+  co_getPublishedStaticRoutesImpl();
+
   // initialize counters
   void initCounters() noexcept;
 

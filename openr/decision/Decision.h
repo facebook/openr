@@ -9,6 +9,7 @@
 
 #include <folly/IPAddress.h>
 #include <folly/container/F14Map.h>
+#include <folly/coro/Task.h>
 #include <folly/futures/Future.h>
 #include <folly/io/async/AsyncTimeout.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
@@ -165,6 +166,12 @@ class Decision : public OpenrEventBase {
       std::string nodeName = "");
 
   /*
+   * Retrieve the static unicast routes received from PrefixManager, before
+   * they are merged with computed routes into the RIB.
+   */
+  folly::coro::Task<StaticUnicastRoutes> co_getStaticUnicastRoutes();
+
+  /*
    * Retrieve AdjacencyDatabase for all nodes in all areas.
    * DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas
    * as well.
@@ -214,6 +221,8 @@ class Decision : public OpenrEventBase {
 
  private:
   friend class DecisionTestFixture;
+
+  folly::coro::Task<StaticUnicastRoutes> co_getStaticUnicastRoutesImpl();
 
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
