@@ -176,7 +176,18 @@ class OpenrFixture : public ::testing::Test {
  * waiting. Test will verify Open/R reach INITIALIZED state ultimately.
  */
 TEST_F(OpenrFixture, InitializationWithStandaloneNode) {
-  fb303::fbData->resetAllData();
+  // build initialization key for counter check
+  auto initializedEvent = static_cast<thrift::InitializationEvent>(
+      int(openr::thrift::InitializationEvent::INITIALIZED));
+  auto counterKey = fmt::format(
+      Constants::kInitEventCounterFormat,
+      apache::thrift::util::enumNameSafe(initializedEvent));
+  /*
+   * Clear only this counter. resetAllData() would also drop quantile stats
+   * registered at startup (e.g. process.cpu.peak_pct) for the rest of the
+   * process, failing later tests run in the same binary (as CTest does).
+   */
+  fb303::fbData->clearCounter(counterKey);
 
   auto openr = createOpenr("initialization", false /* enable_v4 */);
   openr->run();
@@ -184,12 +195,6 @@ TEST_F(OpenrFixture, InitializationWithStandaloneNode) {
 
   OpenrEventBase evb;
   evb.scheduleTimeout(std::chrono::seconds(20), [&]() {
-    // build initialization key for counter check
-    auto initializedEvent = static_cast<thrift::InitializationEvent>(
-        int(openr::thrift::InitializationEvent::INITIALIZED));
-    auto counterKey = fmt::format(
-        Constants::kInitEventCounterFormat,
-        apache::thrift::util::enumNameSafe(initializedEvent));
     EXPECT_TRUE(fb303::fbData->hasCounter(counterKey));
     EXPECT_GE(fb303::fbData->getCounter(counterKey), 0);
 
