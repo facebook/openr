@@ -12,7 +12,13 @@ from openr.thrift.KvStore.thrift_types import (
     Publication,
     Value,
 )
-from openr.thrift.Network.thrift_types import BinaryAddress, IpPrefix, PrefixType
+from openr.thrift.Network.thrift_types import (
+    BinaryAddress,
+    IpPrefix,
+    NextHopThrift,
+    PrefixType,
+    UnicastRoute,
+)
 from openr.thrift.OpenrConfig.thrift_types import (
     PrefixForwardingAlgorithm,
     PrefixForwardingType,
@@ -21,6 +27,7 @@ from openr.thrift.OpenrCtrl.thrift_types import (
     NodeAndArea,
     ReceivedRoute,
     ReceivedRouteDetail,
+    UnicastRouteDetail,
 )
 from openr.thrift.Types.thrift_types import (
     Adjacency,
@@ -407,6 +414,7 @@ MOCKED_INIT_EVENTS_PASS = {
 
 EXPECTED_VALIDATE_OUTPUT_OK = """\
 [Decision] Initialization Event Check: PASS
+[Decision] Static Route Table For Decision And Prefixmgr Match Check: PASS
 [Decision] Running validation checks on area: area1
 [Decision] Adj Table For Decision And Kvstore Match Check: PASS
 [Decision] Prefix Table For Decision And Kvstore Match Check: PASS
@@ -418,6 +426,7 @@ EXPECTED_VALIDATE_OUTPUT_OK = """\
 EXPECTED_VALIDATE_OUTPUT_NO_PUBLISH = """\
 [Decision] Initialization Event Check: FAIL
 RIB_COMPUTED event is not published
+[Decision] Static Route Table For Decision And Prefixmgr Match Check: PASS
 [Decision] Running validation checks on area: area1
 [Decision] Adj Table For Decision And Kvstore Match Check: PASS
 [Decision] Prefix Table For Decision And Kvstore Match Check: PASS
@@ -426,6 +435,52 @@ RIB_COMPUTED event is not published
 [Decision] Prefix Table For Decision And Kvstore Match Check: PASS
 """
 
+
+## Fixtures for the static route check in decision validate
+
+
+def _static_route(addr: bytes, nexthop: bytes) -> UnicastRouteDetail:
+    return UnicastRouteDetail(
+        unicastRoute=UnicastRoute(
+            dest=IpPrefix(prefixAddress=BinaryAddress(addr=addr), prefixLength=24),
+            nextHops=[NextHopThrift(address=BinaryAddress(addr=nexthop))],
+        )
+    )
+
+
+# 10.1.1.0/24 via 10.0.0.1
+STATIC_ROUTES_OK = [_static_route(b"\n\x01\x01\x00", b"\n\x00\x00\x01")]
+
+# 10.1.1.0/24 via 10.0.0.2, plus 10.2.2.0/24
+STATIC_ROUTES_MISMATCH = [
+    _static_route(b"\n\x01\x01\x00", b"\n\x00\x00\x02"),
+    _static_route(b"\n\x02\x02\x00", b"\n\x00\x00\x01"),
+]
+
+EXPECTED_VALIDATE_OUTPUT_STATIC_ROUTE_MISMATCH = """\
+[Decision] Initialization Event Check: PASS
+[Decision] Static Route Table For Decision And Prefixmgr Match Check: FAIL
+10.2.2.0/24 in Decision but not published by PrefixMgr
+10.1.1.0/24 differs between PrefixMgr and Decision
+[Decision] Running validation checks on area: area1
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: area2
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+"""
+
+EXPECTED_VALIDATE_OUTPUT_STATIC_ROUTE_UNSUPPORTED = """\
+[Decision] Initialization Event Check: PASS
+[Decision] Static Route Table For Decision And Prefixmgr Match Check: SKIPPED
+Not supported by this Open/R version
+[Decision] Running validation checks on area: area1
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+[Decision] Running validation checks on area: area2
+[Decision] Adj Table For Decision And Kvstore Match Check: PASS
+[Decision] Prefix Table For Decision And Kvstore Match Check: PASS
+"""
 
 ## Fixtures for testing received-routes JSON
 

@@ -446,6 +446,23 @@ service OpenrCtrl extends KvStore.KvStoreService {
   );
 
   /**
+   * Get the static unicast routes PrefixManager has published to Decision,
+   * i.e. the net effect of every static route update it has sent.
+   */
+  list<UnicastRouteDetail> getPrefixMgrPublishedStaticRoutes() throws (
+    1: OpenrError error,
+  );
+
+  /**
+   * Get the static unicast routes Decision has received from PrefixManager,
+   * before they are merged with computed routes into the RIB. Once Decision
+   * has caught up, these equal getPrefixMgrPublishedStaticRoutes().
+   */
+  list<UnicastRouteDetail> getDecisionStaticRoutes() throws (
+    1: OpenrError error,
+  );
+
+  /**
    * Get a list of active stream subscribers
    */
   list<StreamSubscriberInfo> getSubscriberInfo(1: i64 type);

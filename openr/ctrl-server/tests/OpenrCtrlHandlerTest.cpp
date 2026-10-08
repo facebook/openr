@@ -473,6 +473,32 @@ TEST_F(OpenrCtrlFixture, PrefixManagerApis) {
   }
 }
 
+CO_TEST_F(OpenrCtrlFixture, StaticRouteApis) {
+  auto& client = getOpenrCtrlClient();
+
+  // This config originates no prefixes, so PrefixManager publishes nothing.
+  auto published = co_await client.co_getPrefixMgrPublishedStaticRoutes();
+  EXPECT_EQ(0, published.size());
+
+  const auto prefix = toIpPrefix("10.1.0.0/16");
+  DecisionRouteUpdate update;
+  update.addRouteToUpdate(RibUnicastEntry(
+      toIPNetwork(prefix), {createNextHop(toBinaryAddress("fe80::1"))}));
+  staticRoutesUpdatesQueue_.push(std::move(update));
+
+  // Decision applies the update asynchronously.
+  const auto deadline =
+      std::chrono::steady_clock::now() + std::chrono::seconds(5);
+  auto routes = co_await client.co_getDecisionStaticRoutes();
+  while (routes.empty() && std::chrono::steady_clock::now() < deadline) {
+    std::this_thread::yield();
+    routes = co_await client.co_getDecisionStaticRoutes();
+  }
+  CO_ASSERT_EQ(1, routes.size());
+  EXPECT_EQ(prefix, *routes.at(0).unicastRoute()->dest());
+  EXPECT_EQ(1, routes.at(0).unicastRoute()->nextHops()->size());
+}
+
 TEST_F(OpenrCtrlFixture, RouteApis) {
   {
     auto db = handler_->semifuture_getRouteDb().get();

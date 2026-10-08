@@ -5,6 +5,7 @@
 # LICENSE file in the root directory of this source tree.
 
 
+import asyncio
 import ipaddress
 import sys
 from collections import defaultdict
@@ -23,6 +24,7 @@ from openr.thrift.Network import thrift_types as network_types
 from openr.thrift.OpenrCtrl import thrift_types as ctrl_types
 from openr.thrift.OpenrCtrlCpp.thrift_clients import OpenrCtrlCpp as OpenrCtrlCppClient
 from openr.thrift.Types import thrift_types as openr_types
+from thrift.python.exceptions import ApplicationError, ApplicationErrorType
 from thrift.python.serializer import deserialize
 
 
@@ -475,6 +477,20 @@ class PathCmd(OpenrCtrlCmd):
 
 
 class DecisionValidateCmd(OpenrCtrlCmd):
+    # The static route check reads PrefixManager and Decision in two separate
+    # calls, so a route change in between looks like a mismatch. Only a
+    # mismatch that persists across all attempts fails the check.
+    STATIC_ROUTE_CHECK_ATTEMPTS = 3
+    STATIC_ROUTE_CHECK_RETRY_INTERVAL_S = 1.0
+    STATIC_ROUTE_CHECK_TITLE = (
+        "static route table for decision and prefixmgr match check"
+    )
+    STATIC_ROUTE_DIFF_MESSAGES = {
+        "missing_in_decision": "{} published by PrefixMgr but not in Decision",
+        "extra_in_decision": "{} in Decision but not published by PrefixMgr",
+        "different": "{} differs between PrefixMgr and Decision",
+    }
+
     async def _run(
         self,
         client: OpenrCtrlCppClient.Async,
@@ -504,6 +520,8 @@ class DecisionValidateCmd(OpenrCtrlCmd):
 
         if not init_is_pass:
             errors += 1
+
+        errors += await self.validate_static_routes(client, json_opt)
 
         # ATTN: validate cmd can run against specified area.
         # By default, it runs against ALL areas.
@@ -569,6 +587,84 @@ class DecisionValidateCmd(OpenrCtrlCmd):
             )
 
         return errors
+
+    async def validate_static_routes(
+        self, client: OpenrCtrlCppClient.Async, json_opt: bool
+    ) -> int:
+        """
+        Checks that Decision holds exactly the static routes PrefixManager has
+        published to it. Returns 0 on pass or skip, 1 on failure.
+        """
+        try:
+            diff = await self.get_static_route_diff(client)
+            for _ in range(self.STATIC_ROUTE_CHECK_ATTEMPTS - 1):
+                if not any(diff.values()):
+                    break
+                await asyncio.sleep(self.STATIC_ROUTE_CHECK_RETRY_INTERVAL_S)
+                diff = await self.get_static_route_diff(client)
+        except ApplicationError as e:
+            if e.type != ApplicationErrorType.UNKNOWN_METHOD:
+                raise
+            skipped = click.style("SKIPPED", bg="yellow", fg="black")
+            click.echo(
+                click.style(
+                    f"[Decision] {self.STATIC_ROUTE_CHECK_TITLE.title()}: {skipped}",
+                    bold=True,
+                )
+            )
+            click.echo("Not supported by this Open/R version")
+            return 0
+
+        is_pass = not any(diff.values())
+        click.echo(
+            self.validation_result_str(
+                "decision", self.STATIC_ROUTE_CHECK_TITLE, is_pass
+            )
+        )
+        if is_pass:
+            return 0
+
+        if json_opt:
+            utils.print_json(diff)
+        else:
+            for kind, prefixes in diff.items():
+                for prefix in prefixes:
+                    click.echo(self.STATIC_ROUTE_DIFF_MESSAGES[kind].format(prefix))
+        return 1
+
+    async def get_static_route_diff(
+        self, client: OpenrCtrlCppClient.Async
+    ) -> dict[str, list[str]]:
+        published = self.index_static_routes(
+            await client.getPrefixMgrPublishedStaticRoutes()
+        )
+        received = self.index_static_routes(await client.getDecisionStaticRoutes())
+        return {
+            "missing_in_decision": sorted(published.keys() - received.keys()),
+            "extra_in_decision": sorted(received.keys() - published.keys()),
+            "different": sorted(
+                prefix
+                for prefix in published.keys() & received.keys()
+                if published[prefix] != received[prefix]
+            ),
+        }
+
+    def index_static_routes(
+        self, routes: Sequence[ctrl_types.UnicastRouteDetail]
+    ) -> dict[str, tuple[Any, ...]]:
+        """
+        Keys routes by prefix. Nexthops are compared as a set because the two
+        modules may list them in different orders.
+        """
+        return {
+            ipnetwork.sprint_prefix(route.unicastRoute.dest): (
+                frozenset(route.unicastRoute.nextHops),
+                route.unicastRoute.adminDistance,
+                route.unicastRoute.counterID,
+                route.bestRoute,
+            )
+            for route in routes
+        }
 
     async def get_dbs(
         self, client: OpenrCtrlCppClient.Async, area: str

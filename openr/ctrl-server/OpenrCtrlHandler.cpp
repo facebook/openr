@@ -29,6 +29,17 @@ namespace {
 
 constexpr auto kKvStoreNotInitializedError = "KvStore is not initialized";
 
+std::unique_ptr<std::vector<thrift::UnicastRouteDetail>>
+toUnicastRouteDetails(
+    const folly::F14FastMap<folly::CIDRNetwork, RibUnicastEntry>& routes) {
+  auto details = std::make_unique<std::vector<thrift::UnicastRouteDetail>>();
+  details->reserve(routes.size());
+  for (const auto& [_, route] : routes) {
+    details->emplace_back(route.toThriftDetail());
+  }
+  return details;
+}
+
 } // namespace
 
 OpenrCtrlHandler::OpenrCtrlHandler(
@@ -743,6 +754,20 @@ OpenrCtrlHandler::semifuture_getRouteDbComputed(
     std::unique_ptr<std::string> nodeName) {
   CHECK(decision_);
   return decision_->getDecisionRouteDb(*nodeName);
+}
+
+folly::coro::Task<std::unique_ptr<std::vector<thrift::UnicastRouteDetail>>>
+OpenrCtrlHandler::co_getPrefixMgrPublishedStaticRoutes() {
+  XCHECK(prefixManager_);
+  co_return toUnicastRouteDetails(
+      co_await prefixManager_->co_getPublishedStaticRoutes());
+}
+
+folly::coro::Task<std::unique_ptr<std::vector<thrift::UnicastRouteDetail>>>
+OpenrCtrlHandler::co_getDecisionStaticRoutes() {
+  XCHECK(decision_);
+  co_return toUnicastRouteDetails(
+      co_await decision_->co_getStaticUnicastRoutes());
 }
 
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>

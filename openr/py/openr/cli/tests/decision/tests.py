@@ -9,11 +9,12 @@ from copy import deepcopy
 from typing import Optional
 from unittest.mock import AsyncMock, patch
 
-from click.testing import CliRunner
+from click.testing import CliRunner, Result
 from later.unittest import TestCase
 from openr.py.openr.cli.clis import decision
-from openr.py.openr.cli.commands.decision import PathCmd
+from openr.py.openr.cli.commands.decision import DecisionValidateCmd, PathCmd
 from openr.py.openr.cli.tests import helpers
+from thrift.python.exceptions import ApplicationError, ApplicationErrorType
 
 from .fixtures import (
     AREA_SUMMARIES,
@@ -24,10 +25,14 @@ from .fixtures import (
     EXPECTED_ROUTES_RECEIVED_JSON,
     EXPECTED_VALIDATE_OUTPUT_NO_PUBLISH,
     EXPECTED_VALIDATE_OUTPUT_OK,
+    EXPECTED_VALIDATE_OUTPUT_STATIC_ROUTE_MISMATCH,
+    EXPECTED_VALIDATE_OUTPUT_STATIC_ROUTE_UNSUPPORTED,
     KVSTORE_KEYVALS_OK,
     MOCKED_INIT_EVENTS_PASS,
     MOCKED_RECEIVED_ROUTES,
     RECEIVED_ROUTES_DB_OK,
+    STATIC_ROUTES_MISMATCH,
+    STATIC_ROUTES_OK,
 )
 
 
@@ -73,6 +78,13 @@ class CliDecisionTests(TestCase):
         mocked_returned_connection.getInitializationEvents.return_value = (
             MOCKED_INIT_EVENTS_PASS
         )
+        # Have matching static routes returned
+        mocked_returned_connection.getPrefixMgrPublishedStaticRoutes.return_value = (
+            STATIC_ROUTES_OK
+        )
+        mocked_returned_connection.getDecisionStaticRoutes.return_value = (
+            STATIC_ROUTES_OK
+        )
 
         with patch("openr.py.openr.cli.utils.utils.get_area_id", return_value=69):
             invoked_return = self.runner.invoke(
@@ -94,6 +106,94 @@ class CliDecisionTests(TestCase):
             )
         self.assertEqual(1, invoked_return.exit_code)
         self.assertEqual(EXPECTED_VALIDATE_OUTPUT_NO_PUBLISH, invoked_return.stdout)
+
+    def _mock_validate_connection(self, mocked_openr_client: AsyncMock) -> AsyncMock:
+        """Mocks a node where every decision validate check passes."""
+        connection = helpers.get_enter_thrift_asyncmock(mocked_openr_client)
+        connection.getKvStoreAreaSummary.return_value = AREA_SUMMARIES
+        connection.getDecisionAdjacenciesFiltered.return_value = DECISION_ADJ_DBS_OK
+        connection.getReceivedRoutesFiltered.return_value = RECEIVED_ROUTES_DB_OK
+        connection.getKvStoreKeyValsFilteredArea.return_value = KVSTORE_KEYVALS_OK
+        connection.getInitializationEvents.return_value = MOCKED_INIT_EVENTS_PASS
+        connection.getPrefixMgrPublishedStaticRoutes.return_value = STATIC_ROUTES_OK
+        connection.getDecisionStaticRoutes.return_value = STATIC_ROUTES_OK
+        return connection
+
+    def _invoke_validate(self) -> Result:
+        with (
+            patch("openr.py.openr.cli.utils.utils.get_area_id", return_value=69),
+            patch.object(DecisionValidateCmd, "STATIC_ROUTE_CHECK_RETRY_INTERVAL_S", 0),
+        ):
+            return self.runner.invoke(
+                decision.DecisionValidateCli.validate,
+                [],
+                catch_exceptions=False,
+            )
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_decision_validate_static_route_mismatch(
+        self, mocked_openr_client: AsyncMock
+    ) -> None:
+        connection = self._mock_validate_connection(mocked_openr_client)
+        connection.getDecisionStaticRoutes.return_value = STATIC_ROUTES_MISMATCH
+
+        invoked_return = self._invoke_validate()
+
+        self.assertEqual(1, invoked_return.exit_code)
+        self.assertEqual(
+            EXPECTED_VALIDATE_OUTPUT_STATIC_ROUTE_MISMATCH, invoked_return.stdout
+        )
+        self.assertEqual(
+            DecisionValidateCmd.STATIC_ROUTE_CHECK_ATTEMPTS,
+            connection.getDecisionStaticRoutes.await_count,
+        )
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_decision_validate_static_route_transient_mismatch(
+        self, mocked_openr_client: AsyncMock
+    ) -> None:
+        """A mismatch that clears on retry, e.g. Decision catching up, passes."""
+        connection = self._mock_validate_connection(mocked_openr_client)
+        connection.getDecisionStaticRoutes.side_effect = [
+            STATIC_ROUTES_MISMATCH,
+            STATIC_ROUTES_OK,
+        ]
+
+        invoked_return = self._invoke_validate()
+
+        self.assertEqual(0, invoked_return.exit_code)
+        self.assertEqual(EXPECTED_VALIDATE_OUTPUT_OK, invoked_return.stdout)
+        self.assertEqual(2, connection.getDecisionStaticRoutes.await_count)
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_decision_validate_static_route_unsupported(
+        self, mocked_openr_client: AsyncMock
+    ) -> None:
+        """An Open/R binary without the static route APIs skips the check."""
+        connection = self._mock_validate_connection(mocked_openr_client)
+        connection.getPrefixMgrPublishedStaticRoutes.side_effect = ApplicationError(
+            ApplicationErrorType.UNKNOWN_METHOD, "unknown method"
+        )
+
+        invoked_return = self._invoke_validate()
+
+        self.assertEqual(0, invoked_return.exit_code)
+        self.assertEqual(
+            EXPECTED_VALIDATE_OUTPUT_STATIC_ROUTE_UNSUPPORTED, invoked_return.stdout
+        )
+
+    @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
+    def test_decision_validate_static_route_other_error_raises(
+        self, mocked_openr_client: AsyncMock
+    ) -> None:
+        """Only a missing API is skipped; other server errors still surface."""
+        connection = self._mock_validate_connection(mocked_openr_client)
+        connection.getDecisionStaticRoutes.side_effect = ApplicationError(
+            ApplicationErrorType.INTERNAL_ERROR, "boom"
+        )
+
+        with self.assertRaises(ApplicationError):
+            self._invoke_validate()
 
     @patch(helpers.COMMANDS_GET_OPENR_CTRL_CPP_CLIENT)
     def test_decision_received_routes_json(
