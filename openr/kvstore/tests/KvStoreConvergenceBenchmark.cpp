@@ -8,7 +8,6 @@
 #include <folly/Benchmark.h>
 #include <folly/container/F14Map.h>
 
-#if FOLLY_HAS_COROUTINES
 #include <folly/coro/BlockingWait.h>
 #include <folly/logging/Init.h>
 #include <folly/logging/xlog.h>
@@ -745,15 +744,11 @@ BENCHMARK_RELATIVE_NAMED_PARAM(
 
 BENCHMARK_DRAW_LINE();
 
-#endif
-
 int
 main(int argc, char** argv) {
   facebook::initFacebook(&argc, &argv);
 
-#if FOLLY_HAS_COROUTINES
   folly::runBenchmarks();
-#endif
 
   return 0;
 };
