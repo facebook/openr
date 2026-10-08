@@ -686,37 +686,6 @@ KvStore<ClientType>::co_dumpKvStoreHashes(
 }
 
 template <class ClientType>
-folly::SemiFuture<folly::Unit>
-KvStore<ClientType>::semifuture_setKvStoreKeyVals(
-    std::string area, thrift::KeySetParams keySetParams) {
-  folly::Promise<folly::Unit> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        keySetParams = std::move(keySetParams),
-                        area]() mutable {
-    XLOGF(
-        DBG3,
-        "Set key requested for AREA: {}, by sender: {}, at time: {}",
-        area,
-        (keySetParams.senderId().has_value() ? keySetParams.senderId().value()
-                                             : ""),
-        (keySetParams.timestamp_ms().has_value()
-             ? folly::to<std::string>(keySetParams.timestamp_ms().value())
-             : ""));
-    try {
-      auto& kvStoreDb = getAreaDbOrThrow(area, "setKvStoreKeyVals");
-      kvStoreDb.setKeyVals(std::move(keySetParams), false /* remote update */);
-      // ready to return
-      p.setValue();
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
-    }
-  });
-  return sf;
-}
-
-template <class ClientType>
 folly::coro::Task<folly::Unit>
 KvStore<ClientType>::co_setKvStoreKeyVals(
     std::string area, thrift::KeySetParams keySetParams) {
@@ -851,12 +820,21 @@ KvStore<ClientType>::co_unsetSelfOriginatedKey(
 }
 
 template <class ClientType>
+thrift::SetKeyValsResult
+KvStore<ClientType>::setKvStoreKeyValsImpl(
+    std::string const& area,
+    thrift::KeySetParams keySetParams,
+    std::string const& caller) {
+  auto& kvStoreDb = getAreaDbOrThrow(area, caller);
+  return kvStoreDb.setKeyVals(
+      std::move(keySetParams), false /* remote update */);
+}
+
+template <class ClientType>
 folly::coro::Task<thrift::SetKeyValsResult>
 KvStore<ClientType>::co_setKvStoreKeyValsInternal(
     std::string area, thrift::KeySetParams keySetParams) {
-  auto& kvStoreDb = getAreaDbOrThrow(area, __FUNCTION__);
-  co_return kvStoreDb.setKeyVals(
-      std::move(keySetParams), false /* remote update */);
+  co_return setKvStoreKeyValsImpl(area, std::move(keySetParams), __FUNCTION__);
 }
 
 template <class ClientType>

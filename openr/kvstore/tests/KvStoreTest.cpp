@@ -211,6 +211,23 @@ CO_TEST_F(KvStoreTestFixture, BasicGetKey) {
   EXPECT_EQ(wrapperValue->value(), value);
 }
 
+TEST_F(KvStoreTestFixture, SetKeyAfterStopReturnsFalse) {
+  auto* kvStore = createKvStore(getTestKvConf("set-key-after-stop-node"));
+  kvStore->run();
+  kvStore->stop();
+
+  EXPECT_FALSE(
+      kvStore->setKey(kTestingAreaName, "set-key-after-stop", thrift::Value{}));
+}
+
+TEST_F(KvStoreTestFixture, SetKeyWithUnknownAreaReturnsFalse) {
+  auto* kvStore = createKvStore(getTestKvConf("set-key-unknown-area-node"));
+  kvStore->run();
+
+  EXPECT_FALSE(kvStore->setKey(
+      AreaId{"unknown-area"}, "set-key-unknown-area", thrift::Value{}));
+}
+
 CO_TEST_F(KvStoreTestFixture, SelfOriginatedKeyApis) {
   const std::string nodeId = "self-originated-key-node";
   auto* kvStore = createKvStore(getTestKvConf(nodeId));

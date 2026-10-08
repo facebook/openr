@@ -111,12 +111,31 @@ KvStoreWrapper<ClientType>::setKey(
   params.keyVals()->emplace(std::move(key), std::move(value));
   params.nodeIds().from_optional(std::move(nodeIds));
 
-  try {
-    kvStore_->semifuture_setKvStoreKeyVals(area, std::move(params)).get();
-  } catch (std::exception const& e) {
-    XLOGF(ERR, "Exception to set key in kvstore: {}", folly::exceptionStr(e));
+  if (!kvStore_->isRunning()) {
+    XLOG(ERR, "Cannot set key after KvStore has stopped.");
     return false;
   }
+
+  const std::string caller{__FUNCTION__};
+  std::exception_ptr error;
+  kvStore_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this,
+       area = area,
+       params = std::move(params),
+       &caller,
+       &error]() mutable noexcept {
+        try {
+          kvStore_->setKvStoreKeyValsImpl(area, std::move(params), caller);
+        } catch (...) {
+          error = std::current_exception();
+        }
+      });
+  if (error) {
+    XLOGF(
+        ERR, "Exception to set key in kvstore: {}", folly::exceptionStr(error));
+    return false;
+  }
+
   return true;
 }
 
