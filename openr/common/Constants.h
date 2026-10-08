@@ -44,6 +44,7 @@ class Constants {
 
   static constexpr auto kInitEventCounterFormat =
       "initialization.{}.duration_ms";
+  static constexpr auto kGetSingleAreaCounter = "ctrl.get_single_area";
 
   // default interval to publish to monitor
   static constexpr std::chrono::seconds kCounterSubmitInterval{5};

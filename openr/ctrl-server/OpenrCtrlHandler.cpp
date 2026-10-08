@@ -549,9 +549,9 @@ OpenrCtrlHandler::getInitializationDurationMs() {
 }
 
 std::unique_ptr<std::string>
-OpenrCtrlHandler::getSingleAreaOrThrow(std::string const& caller) {
+OpenrCtrlHandler::getSingleAreaOrThrow() {
   fb303::fbData->addStatValue(
-      fmt::format("ctrl.get_single_area.{}", caller), 1, fb303::COUNT);
+      Constants::kGetSingleAreaCounter, 1, fb303::COUNT);
   auto const& areas = config_->getAreas();
   if (1 != areas.size()) {
     throw thrift::OpenrError(
@@ -773,7 +773,7 @@ OpenrCtrlHandler::co_getDecisionStaticRoutes() {
 folly::SemiFuture<std::unique_ptr<thrift::AdjDbs>>
 OpenrCtrlHandler::semifuture_getDecisionAdjacencyDbs() {
   auto filter = std::make_unique<thrift::AdjacenciesFilter>();
-  filter->selectAreas() = {*getSingleAreaOrThrow("getDecisionAdjacencyDbs")};
+  filter->selectAreas() = {*getSingleAreaOrThrow()};
   return semifuture_getDecisionAdjacenciesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
                          adjDbs) mutable {
@@ -876,7 +876,7 @@ OpenrCtrlHandler::semifuture_resetRecvToAdvertiseMax() {
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyVals(
     std::unique_ptr<std::vector<std::string>> filterKeys) {
-  auto area = getSingleAreaOrThrow(__FUNCTION__);
+  auto area = getSingleAreaOrThrow();
   co_return co_await co_getKvStoreKeyValsImpl(
       std::move(*filterKeys), std::move(*area), __FUNCTION__);
 }
@@ -907,7 +907,7 @@ OpenrCtrlHandler::co_getKvStoreKeyValsImpl(
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreKeyValsFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  auto area = getSingleAreaOrThrow(__FUNCTION__);
+  auto area = getSingleAreaOrThrow();
   co_return co_await co_getKvStoreKeyValsFilteredImpl(
       std::move(*filter), std::move(*area), __FUNCTION__);
 }
@@ -942,7 +942,7 @@ OpenrCtrlHandler::co_getKvStoreKeyValsFilteredImpl(
 folly::coro::Task<std::unique_ptr<thrift::Publication>>
 OpenrCtrlHandler::co_getKvStoreHashFiltered(
     std::unique_ptr<thrift::KeyDumpParams> filter) {
-  auto area = getSingleAreaOrThrow(__FUNCTION__);
+  auto area = getSingleAreaOrThrow();
   co_return co_await co_getKvStoreHashFilteredImpl(
       std::move(*filter), std::move(*area), __FUNCTION__);
 }
@@ -1042,7 +1042,7 @@ folly::SemiFuture<bool>
 OpenrCtrlHandler::semifuture_longPollKvStoreAdj(
     std::unique_ptr<thrift::KeyVals> snapshot) {
   return semifuture_longPollKvStoreAdjArea(
-      getSingleAreaOrThrow("longPollKvStoreAdj"), std::move(snapshot));
+      getSingleAreaOrThrow(), std::move(snapshot));
 }
 
 folly::SemiFuture<bool>
@@ -1125,7 +1125,7 @@ OpenrCtrlHandler::semifuture_longPollKvStoreAdjArea(
 
 folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
 OpenrCtrlHandler::co_getKvStorePeers() {
-  auto area = getSingleAreaOrThrow(__FUNCTION__);
+  auto area = getSingleAreaOrThrow();
   co_return co_await co_getKvStorePeersImpl(std::move(*area));
 }
 
@@ -1271,7 +1271,7 @@ folly::SemiFuture<apache::thrift::ResponseAndServerStream<
 OpenrCtrlHandler::semifuture_subscribeAndGetKvStoreFiltered(
     std::unique_ptr<thrift::KeyDumpParams> dumpParams) {
   auto selectAreas = std::make_unique<std::set<std::string>>();
-  selectAreas->insert(*getSingleAreaOrThrow("subscribeAndGetKvStoreFiltered"));
+  selectAreas->insert(*getSingleAreaOrThrow());
   return semifuture_subscribeAndGetAreaKvStores(
              std::move(dumpParams), std::move(selectAreas))
       .deferValue([](apache::thrift::ResponseAndServerStream<
@@ -1541,7 +1541,7 @@ folly::SemiFuture<std::unique_ptr<thrift::AdjacencyDatabase>>
 OpenrCtrlHandler::semifuture_getLinkMonitorAdjacencies() {
   CHECK(linkMonitor_);
   auto filter = std::make_unique<thrift::AdjacenciesFilter>();
-  filter->selectAreas() = {*getSingleAreaOrThrow("getLinkMonitorAdjacencies")};
+  filter->selectAreas() = {*getSingleAreaOrThrow()};
   return semifuture_getLinkMonitorAdjacenciesFiltered(std::move(filter))
       .deferValue([](std::unique_ptr<std::vector<thrift::AdjacencyDatabase>>&&
                          dbs) mutable {

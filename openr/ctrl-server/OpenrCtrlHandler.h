@@ -624,7 +624,7 @@ class OpenrCtrlHandler final : public thrift::OpenrCtrlCppSvIf,
    * returns the single area name configured for this node or throws if not
    * eaxclty 1 area is configured
    */
-  std::unique_ptr<std::string> getSingleAreaOrThrow(std::string const& caller);
+  std::unique_ptr<std::string> getSingleAreaOrThrow();
 
   folly::coro::Task<std::unique_ptr<thrift::Publication>>
   co_getKvStoreKeyValsImpl(

@@ -8,6 +8,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <fb303/ServiceData.h>
 #include <folly/container/F14Map.h>
 #include <folly/coro/FutureUtil.h>
 #include <folly/coro/GtestHelpers.h>
@@ -394,6 +395,23 @@ CO_TEST_F(OpenrCtrlFixture, GetKvStorePeersRequiresSingleArea) {
   CO_ASSERT_THROW(
       co_await getOpenrCtrlClient().co_getKvStorePeers(),
       apache::thrift::TApplicationException);
+}
+
+CO_TEST_F(OpenrCtrlFixture, SingleAreaCompatibilityCounter) {
+  const auto counterKey =
+      std::string{Constants::kGetSingleAreaCounter} + ".count";
+  const auto counterBefore =
+      facebook::fb303::fbData->getCounterIfExists(counterKey).value_or(0);
+  const thrift::KeyDumpParams filter;
+
+  CO_ASSERT_THROW(
+      co_await getOpenrCtrlClient().co_getKvStoreKeyValsFiltered(filter),
+      apache::thrift::TApplicationException);
+  CO_ASSERT_THROW(
+      co_await getOpenrCtrlClient().co_getKvStorePeers(),
+      apache::thrift::TApplicationException);
+
+  EXPECT_EQ(counterBefore + 2, facebook::fb303::fbData->getCounter(counterKey));
 }
 
 TEST_F(OpenrCtrlFixture, InitializationApis) {
