@@ -461,7 +461,21 @@ KvStoreWrapper<ClientType>::getPeerFlaps(
 template <class ClientType>
 folly::F14FastMap<std::string /* peerName */, thrift::PeerSpec>
 KvStoreWrapper<ClientType>::getPeers(AreaId const& area) {
-  auto peers = *(kvStore_->semifuture_getKvStorePeers(area).get());
+  thrift::PeersMap peers;
+  std::exception_ptr error;
+  const std::string caller{__FUNCTION__};
+  kvStore_->getEvb()->runImmediatelyOrRunInEventBaseThreadAndWait(
+      [this, area, &caller, &error, &peers]() noexcept {
+        try {
+          peers = kvStore_->getKvStorePeersImpl(area, caller);
+        } catch (...) {
+          error = std::current_exception();
+        }
+      });
+  if (error) {
+    std::rethrow_exception(error);
+  }
+
   return folly::F14FastMap<std::string, thrift::PeerSpec>(
       peers.begin(), peers.end());
 }

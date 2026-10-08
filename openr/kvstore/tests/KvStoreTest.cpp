@@ -284,6 +284,18 @@ CO_TEST_F(KvStoreTestFixture, SelfOriginatedKeyTasksRejectInvalidArea) {
       thrift::KvStoreError);
 }
 
+CO_TEST_F(KvStoreTestFixture, GetPeersRejectsUnknownArea) {
+  auto kvStore = createKvStore(getTestKvConf("node-for-peer-query"));
+  kvStore->run();
+  const std::string peerDumpCounter{"kvstore.cmd_peer_dump.count"};
+  const auto peerDumpCountBefore = fb303::fbData->getCounter(peerDumpCounter);
+
+  CO_ASSERT_THROW(
+      kvStore->getPeers(AreaId{"missing-area"}), thrift::KvStoreError);
+  EXPECT_EQ(
+      peerDumpCountBefore + 1, fb303::fbData->getCounter(peerDumpCounter));
+}
+
 /**
  * Validate retrieval of all key-values matching a given prefix.
  */

@@ -117,8 +117,8 @@ folly::SemiFuture<std::unique_ptr<SelfOriginatedKeyVals>>
  * @params: area => area to dump KvStore peers from
  * @return: thrift::PeersMap => map of peers KvStore is subscribed to
  */
-folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-  semifuture_getKvStorePeers(std::string area);
+folly::coro::Task<std::unique_ptr<thrift::PeersMap>>
+co_getKvStorePeers(std::string area);
 
 /*
  * @params: area => area to add/update KvStore peers to

@@ -986,26 +986,6 @@ KvStore<ClientType>::semifuture_getKvStorePeerFlaps(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<thrift::PeersMap>>
-KvStore<ClientType>::semifuture_getKvStorePeers(std::string area) {
-  folly::Promise<std::unique_ptr<thrift::PeersMap>> p;
-  auto sf = p.getSemiFuture();
-  runInEventBaseThread([this, p = std::move(p), area]() mutable {
-    XLOGF(DBG2, "Peer dump requested for AREA: {}", area);
-    try {
-      p.setValue(
-          std::make_unique<thrift::PeersMap>(
-              getAreaDbOrThrow(area, "semifuture_getKvStorePeers")
-                  .dumpPeers()));
-      fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
-    }
-  });
-  return sf;
-}
-
-template <class ClientType>
 folly::coro::Task<std::vector<thrift::KvStoreAreaSummary>>
 KvStore<ClientType>::co_getKvStoreAreaSummaryImpl(
     std::set<std::string> selectAreas) {
@@ -1063,11 +1043,18 @@ KvStore<ClientType>::semifuture_addUpdateKvStorePeers(
 }
 
 template <class ClientType>
-folly::coro::Task<thrift::PeersMap>
-KvStore<ClientType>::co_getKvStorePeersInternal(std::string area) {
+thrift::PeersMap
+KvStore<ClientType>::getKvStorePeersImpl(
+    std::string const& area, std::string const& caller) {
   XLOGF(DBG2, "Peer dump requested for AREA: {}", area);
   fb303::fbData->addStatValue("kvstore.cmd_peer_dump", 1, fb303::COUNT);
-  co_return getAreaDbOrThrow(area, __FUNCTION__).dumpPeers();
+  return getAreaDbOrThrow(area, caller).dumpPeers();
+}
+
+template <class ClientType>
+folly::coro::Task<thrift::PeersMap>
+KvStore<ClientType>::co_getKvStorePeersInternal(std::string area) {
+  co_return getKvStorePeersImpl(area, __FUNCTION__);
 }
 
 template <class ClientType>
