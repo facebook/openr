@@ -26,11 +26,33 @@ namespace {
  * PrefixGenerator::randIpv6() uses.
  */
 constexpr uint8_t kUlaFirstByte = 0xfc;
+constexpr uint8_t kPrivateIpv4FirstByte = 10;
 
 constexpr size_t kSha256Bytes = 32;
+constexpr size_t kIpv4Bytes = 4;
 constexpr size_t kIpv6Bytes = 16;
 
+std::array<uint8_t, kSha256Bytes>
+sha256(const std::string& input) {
+  std::array<uint8_t, kSha256Bytes> digest{};
+  folly::ssl::OpenSSLHash::sha256(
+      folly::MutableByteRange(digest.data(), digest.size()),
+      folly::ByteRange(folly::StringPiece(input)));
+  return digest;
+}
+
 } // namespace
+
+folly::IPAddressV4
+DeterministicPrefixGenerator::deriveIpv4Address(
+    uint64_t seed, const std::string& nodeName, uint32_t index) {
+  const auto digest =
+      sha256(fmt::format("ipv4|{}|{}|{}", seed, nodeName, index));
+  const std::array<uint8_t, kIpv4Bytes> addrBytes{
+      kPrivateIpv4FirstByte, digest[0], digest[1], digest[2]};
+  return folly::IPAddressV4::fromBinary(
+      folly::ByteRange(addrBytes.data(), addrBytes.size()));
+}
 
 folly::IPAddressV6
 DeterministicPrefixGenerator::deriveAddress(
@@ -42,10 +64,7 @@ DeterministicPrefixGenerator::deriveAddress(
    */
   const auto input = fmt::format("{}|{}|{}", seed, nodeName, index);
 
-  std::array<uint8_t, kSha256Bytes> digest{};
-  folly::ssl::OpenSSLHash::sha256(
-      folly::MutableByteRange(digest.data(), digest.size()),
-      folly::ByteRange(folly::StringPiece(input)));
+  const auto digest = sha256(input);
 
   std::array<uint8_t, kIpv6Bytes> addrBytes{};
   addrBytes[0] = kUlaFirstByte;
@@ -54,6 +73,24 @@ DeterministicPrefixGenerator::deriveAddress(
 
   return folly::IPAddressV6::fromBinary(
       folly::ByteRange(addrBytes.data(), addrBytes.size()));
+}
+
+std::vector<thrift::IpPrefix>
+DeterministicPrefixGenerator::generateIpv4(
+    uint64_t seed,
+    const std::string& nodeName,
+    uint32_t numPrefixes,
+    uint8_t bitMaskLen) {
+  std::vector<thrift::IpPrefix> ipPrefixes;
+  ipPrefixes.reserve(numPrefixes);
+
+  for (uint32_t index = 0; index < numPrefixes; ++index) {
+    const auto prefix =
+        deriveIpv4Address(seed, nodeName, index).mask(bitMaskLen);
+    ipPrefixes.push_back(toIpPrefix(std::make_pair(prefix, bitMaskLen)));
+  }
+
+  return ipPrefixes;
 }
 
 std::vector<thrift::IpPrefix>

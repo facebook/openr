@@ -111,6 +111,35 @@
       "why": "masking to /48 leaves a longer trailing zero run"
     }
   ],
+  "ipv4Derivation": [
+    {
+      "seed": "12345",
+      "node": "leaf-0",
+      "index": 0,
+      "bitMaskLen": 32,
+      "address": "10.228.11.37",
+      "key": "prefix:leaf-0:[10.228.11.37/32]",
+      "why": "baseline IPv4 derivation"
+    },
+    {
+      "seed": "7",
+      "node": "leaf-3",
+      "index": 1,
+      "bitMaskLen": 32,
+      "address": "10.12.9.14",
+      "key": "prefix:leaf-3:[10.12.9.14/32]",
+      "why": "seed, node, and index all participate in the IPv4 domain"
+    },
+    {
+      "seed": "18446744073709551615",
+      "node": "eb-site-19",
+      "index": 10,
+      "bitMaskLen": 32,
+      "address": "10.27.20.242",
+      "key": "prefix:eb-site-19:[10.27.20.242/32]",
+      "why": "uint64 maximum and multi-segment node name"
+    }
+  ],
   "addressFormatting": [
     {
       "bytesHex": "fc000001000000000000000200030004",
@@ -149,4 +178,3 @@
     }
   ]
 }
-

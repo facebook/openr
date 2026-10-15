@@ -40,7 +40,9 @@ const std::string kGoldenResource =
     "openr/tests/scale/tests/testdata/seeded_prefix_golden.json";
 
 constexpr uint8_t kHostMaskLen = 128;
+constexpr uint8_t kIpv4HostMaskLen = 32;
 constexpr uint8_t kUlaFirstByte = 0xfc;
+constexpr uint8_t kPrivateIpv4FirstByte = 10;
 
 folly::dynamic
 loadGolden() {
@@ -59,6 +61,22 @@ prefixKeyFor(
     uint8_t bitMaskLen) {
   const auto prefix =
       DeterministicPrefixGenerator::deriveAddress(seed, nodeName, index)
+          .mask(bitMaskLen);
+  return PrefixKey(
+             nodeName,
+             folly::CIDRNetwork(folly::IPAddress(prefix), bitMaskLen),
+             Constants::kDefaultArea.toString())
+      .getPrefixKeyV2();
+}
+
+std::string
+ipv4PrefixKeyFor(
+    uint64_t seed,
+    const std::string& nodeName,
+    uint32_t index,
+    uint8_t bitMaskLen) {
+  const auto prefix =
+      DeterministicPrefixGenerator::deriveIpv4Address(seed, nodeName, index)
           .mask(bitMaskLen);
   return PrefixKey(
              nodeName,
@@ -105,6 +123,26 @@ TEST(DeterministicPrefixGeneratorTest, ReproducesGoldenDerivationVectors) {
         prefixKeyFor(seed, nodeName, index, bitMaskLen))
         << "seed=" << seed << " node=" << nodeName << " index=" << index << " /"
         << static_cast<int>(bitMaskLen) << ": " << why;
+  }
+}
+
+TEST(DeterministicPrefixGeneratorTest, ReproducesGoldenIpv4DerivationVectors) {
+  const auto golden = loadGolden();
+  ASSERT_FALSE(golden["ipv4Derivation"].empty());
+
+  for (const auto& entry : golden["ipv4Derivation"]) {
+    const auto seed = folly::to<uint64_t>(entry["seed"].asString());
+    const auto nodeName = entry["node"].asString();
+    const auto index = folly::to<uint32_t>(entry["index"].asInt());
+    const auto bitMaskLen = folly::to<uint8_t>(entry["bitMaskLen"].asInt());
+
+    const auto address =
+        DeterministicPrefixGenerator::deriveIpv4Address(seed, nodeName, index)
+            .mask(bitMaskLen);
+    EXPECT_EQ(entry["address"].asString(), address.str());
+    EXPECT_EQ(
+        entry["key"].asString(),
+        ipv4PrefixKeyFor(seed, nodeName, index, bitMaskLen));
   }
 }
 
@@ -189,6 +227,26 @@ TEST(DeterministicPrefixGeneratorTest, EveryAddressIsUniqueLocal) {
         DeterministicPrefixGenerator::deriveAddress(42, "leaf-0", index);
     EXPECT_EQ(kUlaFirstByte, address.bytes()[0]) << "index=" << index;
   }
+}
+
+TEST(DeterministicPrefixGeneratorTest, EveryIpv4AddressIsPrivate) {
+  for (uint32_t index = 0; index < 256; ++index) {
+    const auto address =
+        DeterministicPrefixGenerator::deriveIpv4Address(42, "leaf-0", index);
+    EXPECT_EQ(kPrivateIpv4FirstByte, address.bytes()[0]) << "index=" << index;
+  }
+}
+
+TEST(DeterministicPrefixGeneratorTest, GeneratesRequestedIpv4Count) {
+  EXPECT_TRUE(
+      DeterministicPrefixGenerator::generateIpv4(
+          7, "leaf-3", 0, kIpv4HostMaskLen)
+          .empty());
+  EXPECT_EQ(
+      11,
+      DeterministicPrefixGenerator::generateIpv4(
+          7, "leaf-3", 11, kIpv4HostMaskLen)
+          .size());
 }
 
 TEST(DeterministicPrefixGeneratorTest, MasksEveryPrefixToRequestedLength) {

@@ -28,7 +28,8 @@ namespace {
  * Scale-tester prefixes are host routes. The masked address is what lands in
  * the KvStore key, so an off-box tool deriving key names must mask identically.
  */
-constexpr uint8_t kScalePrefixMaskLen = 128;
+constexpr uint8_t kScaleIpv4PrefixMaskLen = 32;
+constexpr uint8_t kScaleIpv6PrefixMaskLen = 128;
 
 } // namespace
 
@@ -112,20 +113,33 @@ TopologyGenerator::generatePrefixes(
     const std::string& nodeName,
     int numPrefixes,
     PrefixGenerator& prefixGen,
-    int64_t prefixSeed) {
+    int64_t prefixSeed,
+    bool generateIpv4Prefixes) {
   std::vector<thrift::PrefixEntry> prefixes;
-  prefixes.reserve(numPrefixes);
+  prefixes.reserve(numPrefixes * (generateIpv4Prefixes ? 2 : 1));
   /*
    * Seed 0 is reserved to mean "keep drawing random prefixes", so the default
    * path stays exactly what it was before the seed existed.
    */
   auto ipPrefixes = prefixSeed == 0
-      ? prefixGen.ipv6PrefixGenerator(numPrefixes, kScalePrefixMaskLen)
+      ? prefixGen.ipv6PrefixGenerator(numPrefixes, kScaleIpv6PrefixMaskLen)
       : DeterministicPrefixGenerator::generate(
             static_cast<uint64_t>(prefixSeed),
             nodeName,
             numPrefixes,
-            kScalePrefixMaskLen);
+            kScaleIpv6PrefixMaskLen);
+
+  if (generateIpv4Prefixes) {
+    auto ipv4Prefixes = prefixSeed == 0
+        ? prefixGen.ipv4PrefixGenerator(numPrefixes, kScaleIpv4PrefixMaskLen)
+        : DeterministicPrefixGenerator::generateIpv4(
+              static_cast<uint64_t>(prefixSeed),
+              nodeName,
+              numPrefixes,
+              kScaleIpv4PrefixMaskLen);
+    ipPrefixes.insert(
+        ipPrefixes.end(), ipv4Prefixes.begin(), ipv4Prefixes.end());
+  }
 
   for (const auto& ipPrefix : ipPrefixes) {
     prefixes.push_back(createPrefixEntry(

@@ -10,9 +10,15 @@
 
 #pragma once
 
+#include <folly/IPAddressV4.h>
+
 namespace openr {
 class PrefixGenerator {
  public:
+  // Generate random IPv4 IpPrefixes.
+  static std::vector<thrift::IpPrefix> ipv4PrefixGenerator(
+      const uint32_t numOfPrefixes, const uint8_t bitMaskLen);
+
   // Generate random IpPrefixes
   static std::vector<thrift::IpPrefix> ipv6PrefixGenerator(
       const uint32_t numOfPrefixes, const uint8_t bitMaskLen);
@@ -22,6 +28,9 @@ class PrefixGenerator {
       const uint8_t numOfNextHops, const std::string& ifname);
 
  private:
+  // Generate random IPv4 in 10.0.0.0/8.
+  static folly::IPAddressV4 randIpv4();
+
   // Generate random Ipv6
   static folly::IPAddressV6 randIpv6();
 

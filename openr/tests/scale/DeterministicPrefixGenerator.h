@@ -11,6 +11,7 @@
 #include <string>
 #include <vector>
 
+#include <folly/IPAddressV4.h>
 #include <folly/IPAddressV6.h>
 
 #include <openr/if/gen-cpp2/Network_types.h>
@@ -48,6 +49,13 @@ namespace openr {
 class DeterministicPrefixGenerator {
  public:
   /*
+   * The unmasked IPv4 address for one (seed, nodeName, index). The derivation
+   * uses an explicit "ipv4" domain separator and stays inside 10.0.0.0/8.
+   */
+  static folly::IPAddressV4 deriveIpv4Address(
+      uint64_t seed, const std::string& nodeName, uint32_t index);
+
+  /*
    * The unmasked address for one (seed, nodeName, index). index is 0-based.
    */
   static folly::IPAddressV6 deriveAddress(
@@ -59,6 +67,12 @@ class DeterministicPrefixGenerator {
    * caller changing bitMaskLen changes the key names.
    */
   static std::vector<thrift::IpPrefix> generate(
+      uint64_t seed,
+      const std::string& nodeName,
+      uint32_t numPrefixes,
+      uint8_t bitMaskLen);
+
+  static std::vector<thrift::IpPrefix> generateIpv4(
       uint64_t seed,
       const std::string& nodeName,
       uint32_t numPrefixes,

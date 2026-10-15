@@ -177,7 +177,8 @@ class TopologyGenerator {
       const std::string& nodeName,
       int numPrefixes,
       PrefixGenerator& prefixGen,
-      int64_t prefixSeed);
+      int64_t prefixSeed,
+      bool generateIpv4Prefixes = false);
 
   /*
    * Helper to get interface name between two routers.

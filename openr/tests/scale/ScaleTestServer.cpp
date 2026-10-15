@@ -81,7 +81,17 @@ DEFINE_int32(
     "Number of eb-site nodes (0 = none). Each site connects to num_leaves/num_sites leaves");
 
 DEFINE_int32(
-    num_prefixes_per_node, 11, "Number of prefixes each router advertises");
+    num_prefixes_per_node,
+    11,
+    "Number of IPv6 prefixes each router advertises. When "
+    "--generate_ipv4_prefixes is set, the same number of IPv4 prefixes is "
+    "advertised in addition");
+
+DEFINE_bool(
+    generate_ipv4_prefixes,
+    false,
+    "Generate the same number of IPv4 /32 prefixes as IPv6 /128 prefixes per "
+    "router");
 
 DEFINE_int64(
     prefix_seed,
@@ -148,6 +158,23 @@ namespace {
 
 constexpr std::string_view kUsageScubaDataset{
     "dc_routing_openr_scale_test_usage"};
+
+std::pair<size_t, size_t>
+countPrefixFamilies(const openr::Topology& topology) {
+  size_t ipv4Count = 0;
+  size_t ipv6Count = 0;
+  for (const auto& routerEntry : topology.routers) {
+    const auto& router = routerEntry.second;
+    for (const auto& entry : router.advertisedPrefixes) {
+      if (openr::toIPAddress(*entry.prefix()->prefixAddress()).isV4()) {
+        ++ipv4Count;
+      } else {
+        ++ipv6Count;
+      }
+    }
+  }
+  return {ipv4Count, ipv6Count};
+}
 
 /*
  * Node ID for the DUT router entry in the topology. Chosen to be well
@@ -460,7 +487,11 @@ main(int argc, char** argv) {
       INFO,
       "  Areas:           {}",
       FLAGS_areas.empty() ? "(single, area 0)" : FLAGS_areas);
-  XLOGF(INFO, "  Prefixes/node:   {}", FLAGS_num_prefixes_per_node);
+  XLOGF(
+      INFO,
+      "  Prefixes/node:   {} IPv6, {} IPv4",
+      FLAGS_num_prefixes_per_node,
+      FLAGS_generate_ipv4_prefixes ? FLAGS_num_prefixes_per_node : 0);
   XLOGF(
       INFO,
       "  Interfaces:      {}",
@@ -577,6 +608,7 @@ main(int argc, char** argv) {
           .numPods = FLAGS_num_pods,
           .numPrefixesPerNode = FLAGS_num_prefixes_per_node,
           .numSites = FLAGS_num_sites,
+          .generateIpv4Prefixes = FLAGS_generate_ipv4_prefixes,
           .prefixSeed = FLAGS_prefix_seed,
       });
   if (!maybeTopology.has_value()) {
@@ -651,6 +683,13 @@ main(int argc, char** argv) {
         topology.getRouterCount(),
         topology.getTotalAdjacencyCount());
   }
+
+  const auto [ipv4PrefixCount, ipv6PrefixCount] = countPrefixFamilies(topology);
+  XLOGF(
+      INFO,
+      "Generated advertised prefixes: {} IPv4, {} IPv6",
+      ipv4PrefixCount,
+      ipv6PrefixCount);
 
   /*
    * Connect to DUT

@@ -7,9 +7,20 @@
 
 #include <openr/tests/mocks/PrefixGenerator.h>
 
+#include <array>
+
 #include <folly/Random.h>
 
 namespace openr {
+
+folly::IPAddressV4
+PrefixGenerator::randIpv4() {
+  std::array<uint8_t, 4> randomBytes{};
+  randomBytes[0] = 10;
+  folly::Random::secureRandom(randomBytes.data() + 1, randomBytes.size() - 1);
+  return folly::IPAddressV4::fromBinary(
+      folly::ByteRange(randomBytes.data(), randomBytes.size()));
+}
 
 folly::IPAddressV6
 PrefixGenerator::randIpv6() {
@@ -28,6 +39,20 @@ PrefixGenerator::randIpv6() {
   // Return IPV6
   return folly::IPAddressV6::fromBinary(
       folly::StringPiece(randomBytesAsString));
+}
+
+std::vector<thrift::IpPrefix>
+PrefixGenerator::ipv4PrefixGenerator(
+    const uint32_t numOfPrefixes, const uint8_t bitMaskLen) {
+  std::vector<thrift::IpPrefix> ipPrefixes;
+  ipPrefixes.reserve(numOfPrefixes);
+
+  for (uint32_t iteration = 0; iteration < numOfPrefixes; iteration++) {
+    auto prefix = randIpv4().mask(bitMaskLen);
+    ipPrefixes.push_back(toIpPrefix(std::make_pair(prefix, bitMaskLen)));
+  }
+
+  return ipPrefixes;
 }
 
 std::vector<thrift::IpPrefix>
