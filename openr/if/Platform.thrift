@@ -280,6 +280,40 @@ struct RouteState {
   1: list<FibRoute> routes;
 }
 
+// One next-hop group name the cache has handed out, and the next-hops the
+// routes holding it resolve through.
+struct NhgName {
+  1: string nhgName;
+  2: i32 refCount;
+  3: list<NextHopEntry> vias;
+}
+
+// NhgNameCache state: the names in use and the counter new names come from.
+struct NhgNameCacheState {
+  1: list<NhgName> nhgNames;
+  2: i64 nhgNameCreationCounter;
+  3: list<string> deletedNhgNames;
+  4: i64 deletedNhgNameCacheCapacity;
+}
+
+// What the driver believes the forwarding plane holds.
+struct FibMirrorState {
+  // Every route the mirror holds, and the next-hop group it resolves
+  // through. Prefixes are rendered as "<address>/<length>".
+  1: map<string, string> routeToNhgName;
+  2: list<string> unusedNhgNames;
+  3: i64 nhgCount;
+  4: bool isNhgProgrammingPaused;
+  // Programming of new next-hop groups pauses once this many are programmed.
+  // INT32_MAX when there is no limit.
+  5: i32 numNhgsHighWaterMark;
+  // Programming of new next-hop groups resumes once the number needed falls
+  // below this. INT32_MAX when there is no limit.
+  6: i32 numNhgsLowWaterMark;
+  // True while the driver is reconciling nhg routes after a pause.
+  7: bool isReconciling;
+}
+
 // NextHopGroup cache state
 struct NextHopGroupCacheState {
   1: list<NextHopGroup> nextHopGroups;
@@ -293,7 +327,12 @@ struct NextHopGroupCacheState {
 // Complete cached FIB state including routes and nexthop groups
 struct FibCachedStateResponse {
   1: RouteState routeState;
+  @thrift.Deprecated{
+    message = "Use 'nhgNameCacheState' and 'fibMirrorState' instead",
+  }
   2: NextHopGroupCacheState nextHopGroupCacheState;
+  3: NhgNameCacheState nhgNameCacheState;
+  4: FibMirrorState fibMirrorState;
 }
 
 service NeighborListenerClientForFibagent {
