@@ -15,7 +15,9 @@ from openr.tests.scale.scripts.scale_key_names import (
     adj_key_name,
     bbf_simple_node_names,
     derive_address,
+    derive_ipv4_address,
     expected_key_set,
+    ipv4_prefix_key_name,
     prefix_key_name,
     prefix_key_names,
     SCALE_PREFIX_MASK_LEN,
@@ -65,6 +67,26 @@ class ScaleKeyNamesTest(unittest.TestCase):
                     seed, entry["node"], entry["index"], entry["bitMaskLen"]
                 )
                 self.assertEqual(entry["key"], key)
+
+    def test_reproduces_golden_ipv4_derivation_vectors(self) -> None:
+        derivation = _load_golden()["ipv4Derivation"]
+        self.assertTrue(derivation)
+
+        for entry in derivation:
+            seed = int(entry["seed"])
+            with self.subTest(
+                seed=seed,
+                node=entry["node"],
+                index=entry["index"],
+            ):
+                self.assertEqual(
+                    entry["address"],
+                    str(derive_ipv4_address(seed, entry["node"], entry["index"])),
+                )
+                self.assertEqual(
+                    entry["key"],
+                    ipv4_prefix_key_name(seed, entry["node"], entry["index"]),
+                )
 
     def test_formats_addresses_per_rfc5952(self) -> None:
         """Zero-run compression is the one place inet_ntop and ipaddress could
@@ -178,6 +200,32 @@ class ScaleKeyNamesTest(unittest.TestCase):
         self.assertEqual(4068, len(keys))
         prefix_keys = {key for key in keys if key.startswith("prefix:")}
         self.assertEqual(3729, len(prefix_keys))
+
+    def test_production_dual_family_key_set_size(self) -> None:
+        names = bbf_simple_node_names(
+            num_spines=_PRODUCTION_NUM_SPINES,
+            num_leaves=_PRODUCTION_NUM_LEAVES,
+            num_control_nodes=_PRODUCTION_NUM_CONTROL_NODES,
+            num_sites=_PRODUCTION_NUM_SITES,
+            dut_role=_PRODUCTION_DUT_ROLE,
+        )
+        keys = expected_key_set(
+            names,
+            seed=12345,
+            prefixes_per_node=_PRODUCTION_PREFIXES_PER_NODE,
+            generate_ipv4_prefixes=True,
+        )
+        prefix_keys = {key for key in keys if key.startswith("prefix:")}
+        ipv4 = {
+            key
+            for key in prefix_keys
+            if ipaddress.ip_network(key.rsplit("[", 1)[1][:-1]).version == 4
+        }
+        ipv6 = prefix_keys - ipv4
+
+        self.assertEqual(7797, len(keys))
+        self.assertEqual(3729, len(ipv4))
+        self.assertEqual(3729, len(ipv6))
         self.assertEqual(339, len(keys) - len(prefix_keys))
 
     def test_expected_key_set_has_no_collisions_across_nodes(self) -> None:

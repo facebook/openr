@@ -35,10 +35,18 @@ PREFIX_KEY_MARKER = "prefix:"
 # TopologyGenerator.cpp: kScalePrefixMaskLen. Scale-tester prefixes are host
 # routes, and the masked address is what lands in the key name.
 SCALE_PREFIX_MASK_LEN = 128
+SCALE_IPV4_PREFIX_MASK_LEN = 32
 
 # DeterministicPrefixGenerator.cpp: kUlaFirstByte. Keeps derived addresses in
 # fc00::/8, matching PrefixGenerator's convention.
 _ULA_FIRST_BYTE = 0xFC
+_PRIVATE_IPV4_FIRST_BYTE = 10
+
+
+def derive_ipv4_address(seed: int, node_name: str, index: int) -> ipaddress.IPv4Address:
+    """Mirror the scale tester's domain-separated IPv4 derivation."""
+    digest = hashlib.sha256(f"ipv4|{seed}|{node_name}|{index}".encode()).digest()
+    return ipaddress.IPv4Address(bytes([_PRIVATE_IPV4_FIRST_BYTE]) + digest[:3])
 
 
 def derive_address(seed: int, node_name: str, index: int) -> ipaddress.IPv6Address:
@@ -85,6 +93,18 @@ def prefix_key_names(
     ]
 
 
+def ipv4_prefix_key_name(seed: int, node_name: str, index: int) -> str:
+    """The IPv4 ``prefix:`` key published when IPv4 generation is enabled."""
+    address = derive_ipv4_address(seed, node_name, index)
+    return f"{PREFIX_KEY_MARKER}{node_name}:[{address}/{SCALE_IPV4_PREFIX_MASK_LEN}]"
+
+
+def ipv4_prefix_key_names(seed: int, node_name: str, num_prefixes: int) -> t.List[str]:
+    return [
+        ipv4_prefix_key_name(seed, node_name, index) for index in range(num_prefixes)
+    ]
+
+
 def adj_key_name(node_name: str) -> str:
     """The ``adj:`` key the injector will publish for one node."""
     return f"{ADJ_KEY_MARKER}{node_name}"
@@ -121,6 +141,7 @@ def expected_key_set(
     seed: int,
     prefixes_per_node: int,
     bit_mask_len: int = SCALE_PREFIX_MASK_LEN,
+    generate_ipv4_prefixes: bool = False,
 ) -> t.Set[str]:
     """Every KvStore key the injector will publish, by exact name.
 
@@ -132,4 +153,6 @@ def expected_key_set(
     for node_name in node_names:
         keys.add(adj_key_name(node_name))
         keys.update(prefix_key_names(seed, node_name, prefixes_per_node, bit_mask_len))
+        if generate_ipv4_prefixes:
+            keys.update(ipv4_prefix_key_names(seed, node_name, prefixes_per_node))
     return keys
