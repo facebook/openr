@@ -46,8 +46,11 @@ KvStorePublisher::publish(const thrift::Publication& pub) {
   if (!(selectAreas_.empty() || selectAreas_.count(*pub.area()))) {
     return;
   }
-  if ((!filter_.keys().has_value() || (*filter_.keys()).empty()) &&
-      (!filter_.originatorIds().is_set() ||
+  if ((!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+           filter_.keys()) ||
+       (*filter_.keys()).empty()) &&
+      (!apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+           filter_.originatorIds()) ||
        (*filter_.originatorIds()).empty()) &&
       !*filter_.ignoreTtl() && !*filter_.doNotPublishValue()) {
     /*
