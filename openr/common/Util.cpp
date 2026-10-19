@@ -212,7 +212,8 @@ toString(const thrift::KeyDumpParams& filter) {
   }
   result << std::endl;
   result << "ignore ttl: " << *filter.ignoreTtl() << std::endl;
-  if (filter.keys().has_value()) {
+  if (apache::thrift::is_non_optional_field_set_manually_or_by_serializer(
+          filter.keys())) {
     result << "keys: ";
     for (const auto& i : *filter.keys()) {
       result << i << " ";
