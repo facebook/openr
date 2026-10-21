@@ -7,7 +7,6 @@
 
 #include <openr/tests/scale/DutMonitor.h>
 
-#include <fmt/format.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/logging/xlog.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>

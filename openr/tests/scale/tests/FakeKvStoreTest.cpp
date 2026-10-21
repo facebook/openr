@@ -13,7 +13,6 @@
 #include <openr/tests/scale/FakeKvStoreHandler.h>
 #include <openr/tests/scale/FakeKvStoreManager.h>
 #include <openr/tests/scale/KvStoreDataBuilder.h>
-#include <openr/tests/scale/TopologyGenerator.h>
 #include <openr/tests/scale/VirtualRouter.h>
 #include <openr/tests/scale/facebook/BbfTopologyGenerator.h>
 

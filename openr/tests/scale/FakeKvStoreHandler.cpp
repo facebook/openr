@@ -7,7 +7,6 @@
 
 #include <openr/tests/scale/FakeKvStoreHandler.h>
 
-#include <fmt/format.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/kvstore/KvStoreUtil.h>
