@@ -23,6 +23,7 @@ macro(openr_add_main_util_library)
       openr_util
       openr_ctrl_handler
       openr_fib
+      openr_kvstore_peer_ingress_limit
       openr_watchdog
       Folly::folly
       FBThrift::thriftcpp2

@@ -13,6 +13,7 @@
 #include <openr/if/gen-cpp2/KvStoreService.h>
 #include <openr/if/gen-cpp2/KvStore_types.h>
 #include <openr/kvstore/KvStore.h>
+#include <openr/kvstore/KvStorePeerIngressLimit.h>
 
 namespace openr {
 
@@ -31,7 +32,10 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
                                     public facebook::fb303::BaseService {
  public:
   KvStoreServiceHandler(
-      const std::string& nodeName, KvStore<ClientType>* kvStore);
+      const std::string& nodeName,
+      KvStore<ClientType>* kvStore,
+      std::shared_ptr<OpenrIngressKvStoreBackpressure>
+          openrIngressKvStoreBackpressure = nullptr);
 
   /*
    * util function to return node name
@@ -112,16 +116,34 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
       std::unique_ptr<std::string> area) override;
 
  private:
+  /*
+   * Must run before the handler's first co_await: the request context is
+   * only set while the handler starts on the Thrift thread.
+   */
+  std::unique_ptr<
+      OpenrIngressKvStoreBackpressure::OpenrIngressKvStorePendingMergeGuard>
+  trackOpenrIngressKvStorePendingMergeBytes();
+
   const std::string nodeName_;
   KvStore<ClientType>* kvStore_{nullptr};
+  /*
+   * Set only for the dedicated KvStore peer server; null on the OpenrCtrl
+   * server, whose requests are not counted.
+   */
+  const std::shared_ptr<OpenrIngressKvStoreBackpressure>
+      openrIngressKvStoreBackpressure_;
 
 }; // class KvStoreServiceHandler
 
 template <class ClientType>
 std::shared_ptr<KvStoreServiceHandler<ClientType>>
 createKvStoreServiceHandler(
-    const std::string& nodeName, KvStore<ClientType>* kvStore) {
-  return std::make_shared<KvStoreServiceHandler<ClientType>>(nodeName, kvStore);
+    const std::string& nodeName,
+    KvStore<ClientType>* kvStore,
+    std::shared_ptr<OpenrIngressKvStoreBackpressure>
+        openrIngressKvStoreBackpressure = nullptr) {
+  return std::make_shared<KvStoreServiceHandler<ClientType>>(
+      nodeName, kvStore, std::move(openrIngressKvStoreBackpressure));
 }
 
 } // namespace openr

@@ -14,6 +14,7 @@
 #include <openr/common/Util.h>
 #include <openr/ctrl-server/OpenrCtrlHandler.h>
 #include <openr/fib/Fib.h>
+#include <openr/kvstore/KvStorePeerIngressLimit.h>
 #include <openr/watchdog/Watchdog.h>
 
 namespace openr {
@@ -73,14 +74,27 @@ std::shared_ptr<apache::thrift::ThriftServer> setUpThriftServer(
     int32_t port);
 
 /**
+ * Create Open/R's TCP backpressure for the KvStore peer server.
+ */
+std::shared_ptr<OpenrIngressKvStoreBackpressure>
+createOpenrIngressKvStoreBackpressure();
+
+/**
  * Apply the aggregate ingress-memory bound to the dedicated KvStore peer
  * server on port 2028. All peer connections share the 128 MiB budget; this
  * does not reserve a per-peer share or identify the largest consumer.
  *
+ * Peer connections are paused through openrIngressKvStoreBackpressure first,
+ * so the bound only closes connections that backpressure did not hold back.
+ * Also shortens how long stopping the server waits for in-flight requests.
+ * Call before serve().
+ *
  * Do not apply these settings to the OpenrCtrl server on port 2018.
  */
 void configureKvStorePeerThriftServerMemoryLimits(
-    apache::thrift::ThriftServer& server);
+    apache::thrift::ThriftServer& server,
+    std::shared_ptr<OpenrIngressKvStoreBackpressure>
+        openrIngressKvStoreBackpressure);
 
 void waitTillStart(std::shared_ptr<apache::thrift::ThriftServer> server);
 

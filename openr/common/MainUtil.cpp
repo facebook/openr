@@ -99,9 +99,29 @@ setUpThriftServer(
   return server;
 }
 
+std::shared_ptr<OpenrIngressKvStoreBackpressure>
+createOpenrIngressKvStoreBackpressure() {
+  static_assert(
+      Constants::kOpenrIngressKvStoreResumeBelowGlobalBytes <=
+      Constants::kOpenrIngressKvStorePauseAboveGlobalBytes);
+  static_assert(
+      Constants::kOpenrIngressKvStoreMaxPauseDuration <
+      Constants::kServiceProcTimeout);
+  return std::make_shared<OpenrIngressKvStoreBackpressure>(
+      OpenrIngressKvStoreLimits{
+          .pauseAboveGlobalBytes =
+              Constants::kOpenrIngressKvStorePauseAboveGlobalBytes,
+          .resumeBelowGlobalBytes =
+              Constants::kOpenrIngressKvStoreResumeBelowGlobalBytes,
+          .maxPauseDuration = Constants::kOpenrIngressKvStoreMaxPauseDuration,
+      });
+}
+
 void
 configureKvStorePeerThriftServerMemoryLimits(
-    apache::thrift::ThriftServer& server) {
+    apache::thrift::ThriftServer& server,
+    std::shared_ptr<OpenrIngressKvStoreBackpressure>
+        openrIngressKvStoreBackpressure) {
   /*
    * This server has one IO worker, so every peer connection draws from the
    * same ingress-memory counter. fbthrift stops reading from and drains/closes
@@ -111,8 +131,17 @@ configureKvStorePeerThriftServerMemoryLimits(
    * this is connection-level load shedding rather than per-peer fairness or
    * sustained TCP backpressure.
    */
-  server.setIngressMemoryLimit(Constants::kKvStorePeerIngressMemoryLimitBytes);
+  server.setIngressMemoryLimit(
+      Constants::kThriftIngressKvStoreGlobalLimitBytes);
   server.setMinPayloadSizeToEnforceIngressMemoryLimit(0);
+
+  /*
+   * serve() appends the default Rocket routing handler after this one, and
+   * the first handler that accepts a connection owns it.
+   */
+  server.addRoutingHandler(
+      std::make_unique<KvStorePeerRoutingHandler>(
+          server, std::move(openrIngressKvStoreBackpressure)));
 }
 
 void

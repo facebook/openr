@@ -583,16 +583,20 @@ main(int argc, char** argv) {
   startEventBase(
       allThreads, orderedEvbs, watchdog, "ctrl_evb", std::move(ctrlOpenrEvb));
 
+  std::shared_ptr<OpenrIngressKvStoreBackpressure>
+      openrIngressKvStoreBackpressure;
   std::shared_ptr<apache::thrift::AsyncProcessorFactory> kvStorePeerHandler;
   std::shared_ptr<apache::thrift::ThriftServer> kvStorePeerServer;
   std::thread kvStorePeerServerThread;
   const auto kvStorePeerPort = config->getKvStorePeerPort();
   if (kvStorePeerPort.has_value()) {
-    kvStorePeerHandler =
-        createKvStoreServiceHandler(config->getNodeName(), kvStore);
+    openrIngressKvStoreBackpressure = createOpenrIngressKvStoreBackpressure();
+    kvStorePeerHandler = createKvStoreServiceHandler(
+        config->getNodeName(), kvStore, openrIngressKvStoreBackpressure);
     kvStorePeerServer = setUpThriftServer(
         config, kvStorePeerHandler, sslContext, *kvStorePeerPort);
-    configureKvStorePeerThriftServerMemoryLimits(*kvStorePeerServer);
+    configureKvStorePeerThriftServerMemoryLimits(
+        *kvStorePeerServer, openrIngressKvStoreBackpressure);
     kvStorePeerServerThread = std::thread([&]() noexcept {
       folly::setThreadName("openr-KvStore");
       XLOGF(
@@ -636,6 +640,7 @@ main(int argc, char** argv) {
   kvStorePublicationsDispatcherQueue->close();
 
   if (kvStorePeerServer) {
+    openrIngressKvStoreBackpressure->stopPausing();
     kvStorePeerServer->stop();
     kvStorePeerServerThread.join();
     kvStorePeerServer.reset();

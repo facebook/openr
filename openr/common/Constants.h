@@ -317,12 +317,47 @@ class Constants {
   static constexpr int32_t kKvStorePeerPort{2028};
 
   /*
-   * Aggregate 134,217,728-byte (128 MiB) ingress-memory budget shared by all
-   * connections to the dedicated KvStore peer Thrift server; this does not
-   * reserve a per-peer share.
+   * fbthrift's ingress-memory budget for the dedicated KvStore peer Thrift
+   * server: 128 MiB shared by all peer connections together, with no per-peer
+   * share. fbthrift counts a frame only while it is being parsed. When a frame
+   * pushes the total over this, fbthrift stops reading, drains and closes that
+   * connection, and the peer falls back to a full sync. Open/R's backpressure
+   * below is meant to act first, so this is the last resort.
    */
-  static constexpr size_t kKvStorePeerIngressMemoryLimitBytes{
+  static constexpr size_t kThriftIngressKvStoreGlobalLimitBytes{
       128 * 1024 * 1024};
+
+  /*
+   * Open/R TCP backpressure on the dedicated KvStore peer Thrift server.
+   *
+   * Pending-merge bytes are the received bytes of peer requests that have been
+   * handed to KvStore and are not merged yet, summed over all peers. While they
+   * are above kOpenrIngressKvStorePauseAboveGlobalBytes, peer connections stop
+   * being read: the kernel receive buffer fills and TCP flow control stops the
+   * peer sending, without closing the connection. Kept below
+   * kThriftIngressKvStoreGlobalLimitBytes so pausing starts before fbthrift
+   * closes connections.
+   *
+   * Byte values are received sizes, which are compressed when the peer
+   * compresses. All values are placeholders until sized against production
+   * data.
+   */
+  static constexpr size_t kOpenrIngressKvStorePauseAboveGlobalBytes{
+      64 * 1024 * 1024};
+  /*
+   * Paused connections resume once pending-merge bytes drop below this. The gap
+   * to kOpenrIngressKvStorePauseAboveGlobalBytes keeps connections from pausing
+   * and resuming on every request.
+   */
+  static constexpr size_t kOpenrIngressKvStoreResumeBelowGlobalBytes{
+      32 * 1024 * 1024};
+  /*
+   * Longest a connection stays paused, even if bytes stay high. Kept under
+   * kServiceProcTimeout, the peers' RPC timeout, so a request the peer sent
+   * before the pause still gets its reply in time.
+   */
+  static constexpr std::chrono::milliseconds
+      kOpenrIngressKvStoreMaxPauseDuration{1000};
 
   // Thrift server's queue timeout
   static constexpr std::chrono::milliseconds kThriftServerQueueTimeout{1000};

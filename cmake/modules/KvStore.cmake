@@ -7,8 +7,11 @@
 set(OPENR_KVSTORE_SOURCES openr/kvstore/KvStorePublisher.cpp)
 set(OPENR_KVSTORE_UTIL_SOURCES openr/kvstore/KvStoreUtil.cpp)
 set(OPENR_KVSTORE_WRAPPER_SOURCES openr/kvstore/KvStoreWrapper.cpp)
+set(OPENR_KVSTORE_PEER_INGRESS_LIMIT_SOURCES
+  openr/kvstore/KvStorePeerIngressLimit.cpp
+)
 
-set(OPENR_KVSTORE_EXPECTED_SOURCE_COUNT 3)
+set(OPENR_KVSTORE_EXPECTED_SOURCE_COUNT 4)
 
 # Create KvStore's header-only and compiled targets in dependency order.
 #
@@ -66,11 +69,25 @@ macro(openr_add_kvstore_libraries)
   )
   add_library(OpenR::kvstore ALIAS openr_kvstore)
 
+  # Buck2 target: //openr/kvstore:kvstore-peer-ingress-limit
+  openr_add_library(
+    NAME openr_kvstore_peer_ingress_limit
+    SOURCES ${OPENR_KVSTORE_PEER_INGRESS_LIMIT_SOURCES}
+    PRIVATE_DEPENDENCIES fb303::fb303
+    PUBLIC_DEPENDENCIES
+      Folly::folly
+      FBThrift::thriftcpp2
+  )
+  add_library(
+    OpenR::kvstore_peer_ingress_limit ALIAS openr_kvstore_peer_ingress_limit
+  )
+
   add_library(openr_kvstore_service_handler INTERFACE)
   target_link_libraries(
     openr_kvstore_service_handler
     INTERFACE
       openr_kvstore
+      openr_kvstore_peer_ingress_limit
       kv_store_cpp2
       fb303::fb303
       FBThrift::thriftcpp2
