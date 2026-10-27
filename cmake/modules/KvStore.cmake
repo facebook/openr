@@ -69,12 +69,16 @@ macro(openr_add_kvstore_libraries)
   )
   add_library(OpenR::kvstore ALIAS openr_kvstore)
 
+  add_library(openr_kvstore_ingress_observer INTERFACE)
+  add_library(OpenR::kvstore_ingress_observer ALIAS openr_kvstore_ingress_observer)
+
   # Buck2 target: //openr/kvstore:kvstore-peer-ingress-limit
   openr_add_library(
     NAME openr_kvstore_peer_ingress_limit
     SOURCES ${OPENR_KVSTORE_PEER_INGRESS_LIMIT_SOURCES}
-    PRIVATE_DEPENDENCIES fb303::fb303
     PUBLIC_DEPENDENCIES
+      openr_kvstore_ingress_observer
+      fb303::fb303
       Folly::folly
       FBThrift::thriftcpp2
   )

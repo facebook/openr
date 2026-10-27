@@ -28,16 +28,33 @@ KvStoreServiceHandler<ClientType>::KvStoreServiceHandler(
 }
 
 template <class ClientType>
+size_t
+KvStoreServiceHandler<ClientType>::recordPeerAndGetRequestWireBytes(
+    const thrift::KeySetParams& setParams) {
+  auto* requestContext = getRequestContext();
+  if (!requestContext) {
+    return 0;
+  }
+  auto* connection = requestContext->getConnectionContext();
+  if (openrIngressKvStoreBackpressure_ && connection) {
+    openrIngressKvStoreBackpressure_->recordSenderId(
+        *connection, setParams.senderId().value_or(""));
+  }
+  return requestContext->getWiredRequestBytes();
+}
+
+template <class ClientType>
 std::unique_ptr<
     OpenrIngressKvStoreBackpressure::OpenrIngressKvStorePendingMergeGuard>
-KvStoreServiceHandler<ClientType>::trackOpenrIngressKvStorePendingMergeBytes() {
-  const auto* requestContext = getRequestContext();
-  if (!openrIngressKvStoreBackpressure_ || !requestContext) {
+KvStoreServiceHandler<ClientType>::trackOpenrIngressKvStorePendingMergeBytes(
+    const thrift::KeySetParams& setParams) {
+  if (!openrIngressKvStoreBackpressure_) {
     return nullptr;
   }
   return openrIngressKvStoreBackpressure_
       ->trackOpenrIngressKvStorePendingMergeBytes(
-          requestContext->getWiredRequestBytes());
+          setParams.senderId().value_or(""),
+          recordPeerAndGetRequestWireBytes(setParams));
 }
 
 /*
@@ -86,9 +103,8 @@ folly::coro::Task<void>
 KvStoreServiceHandler<ClientType>::co_setKvStoreKeyVals(
     std::unique_ptr<thrift::KeySetParams> setParams,
     std::unique_ptr<std::string> area) {
-  // Keeps this request's bytes counted until the merge below finishes.
   [[maybe_unused]] const auto openrIngressKvStorePendingMergeGuard =
-      trackOpenrIngressKvStorePendingMergeBytes();
+      trackOpenrIngressKvStorePendingMergeBytes(*setParams);
   co_await kvStore_->co_setKvStoreKeyVals(
       std::move(*area), std::move(*setParams));
   co_return;
@@ -101,7 +117,7 @@ KvStoreServiceHandler<ClientType>::co_setKvStoreKeyValues(
     std::unique_ptr<std::string> area) {
   // Keeps this request's bytes counted until the merge below finishes.
   [[maybe_unused]] const auto openrIngressKvStorePendingMergeGuard =
-      trackOpenrIngressKvStorePendingMergeBytes();
+      trackOpenrIngressKvStorePendingMergeBytes(*setParams);
   co_return co_await kvStore_->co_setKvStoreKeyValues(
       std::move(*area), std::move(*setParams));
 }

@@ -330,17 +330,18 @@ class Constants {
   /*
    * Open/R TCP backpressure on the dedicated KvStore peer Thrift server.
    *
-   * Pending-merge bytes are the received bytes of peer requests that have been
-   * handed to KvStore and are not merged yet, summed over all peers. While they
-   * are above kOpenrIngressKvStorePauseAboveGlobalBytes, peer connections stop
-   * being read: the kernel receive buffer fills and TCP flow control stops the
-   * peer sending, without closing the connection. Kept below
-   * kThriftIngressKvStoreGlobalLimitBytes so pausing starts before fbthrift
-   * closes connections.
+   * Pending-merge bytes are what peer updates hold until KvStore has merged
+   * them; queued bytes are requests waiting for the Thrift CPU worker. While
+   * the two together, summed over all peers, are above
+   * kOpenrIngressKvStorePauseAboveGlobalBytes, connections of peers holding
+   * more than a fair share stop being read: the kernel receive buffer fills and
+   * TCP flow control stops the peer sending, without closing the connection.
+   * Kept below kThriftIngressKvStoreGlobalLimitBytes so pausing starts before
+   * fbthrift closes connections.
    *
-   * Byte values are received sizes, which are compressed when the peer
-   * compresses. All values are placeholders until sized against production
-   * data.
+   * Requests count at their received size, which is compressed when the peer
+   * compresses; updates KvStore coalesces while busy count at their decoded
+   * size. All values are placeholders until sized against production data.
    */
   static constexpr size_t kOpenrIngressKvStorePauseAboveGlobalBytes{
       64 * 1024 * 1024};
@@ -358,6 +359,17 @@ class Constants {
    */
   static constexpr std::chrono::milliseconds
       kOpenrIngressKvStoreMaxPauseDuration{1000};
+
+  /*
+   * Per peer: received bytes of its requests waiting for the peer server's
+   * Thrift CPU worker. Once a peer's waiting requests reach this, its new
+   * requests are rejected; the request that crosses it is still admitted, so
+   * a single request larger than this is not rejected forever. Applies to
+   * compressed data: requests wait in that queue as received, compressed when
+   * the peer compresses.
+   */
+  static constexpr size_t kOpenrIngressKvStoreQueuedPeerLimitBytes{
+      8 * 1024 * 1024};
 
   // Thrift server's queue timeout
   static constexpr std::chrono::milliseconds kThriftServerQueueTimeout{1000};

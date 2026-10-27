@@ -114,6 +114,8 @@ createOpenrIngressKvStoreBackpressure() {
           .resumeBelowGlobalBytes =
               Constants::kOpenrIngressKvStoreResumeBelowGlobalBytes,
           .maxPauseDuration = Constants::kOpenrIngressKvStoreMaxPauseDuration,
+          .queuedPeerLimitBytes =
+              Constants::kOpenrIngressKvStoreQueuedPeerLimitBytes,
       });
 }
 
@@ -139,6 +141,7 @@ configureKvStorePeerThriftServerMemoryLimits(
    * serve() appends the default Rocket routing handler after this one, and
    * the first handler that accepts a connection owns it.
    */
+  openrIngressKvStoreBackpressure->installRequestPile(server);
   server.addRoutingHandler(
       std::make_unique<KvStorePeerRoutingHandler>(
           server, std::move(openrIngressKvStoreBackpressure)));

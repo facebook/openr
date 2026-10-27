@@ -34,6 +34,7 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
   KvStoreServiceHandler(
       const std::string& nodeName,
       KvStore<ClientType>* kvStore,
+      // Set on the dedicated peer Thrift server only
       std::shared_ptr<OpenrIngressKvStoreBackpressure>
           openrIngressKvStoreBackpressure = nullptr);
 
@@ -117,12 +118,15 @@ class KvStoreServiceHandler final : public thrift::KvStoreServiceSvIf,
 
  private:
   /*
-   * Must run before the handler's first co_await: the request context is
-   * only set while the handler starts on the Thrift thread.
+   * Both must run before the handler's first co_await: the request context
+   * is only set while the handler starts on the Thrift thread.
    */
+  size_t recordPeerAndGetRequestWireBytes(
+      const thrift::KeySetParams& setParams);
   std::unique_ptr<
       OpenrIngressKvStoreBackpressure::OpenrIngressKvStorePendingMergeGuard>
-  trackOpenrIngressKvStorePendingMergeBytes();
+  trackOpenrIngressKvStorePendingMergeBytes(
+      const thrift::KeySetParams& setParams);
 
   const std::string nodeName_;
   KvStore<ClientType>* kvStore_{nullptr};
