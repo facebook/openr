@@ -10,6 +10,7 @@
 
 #include <folly/ExceptionWrapper.h>
 #include <folly/container/F14Map.h>
+#include <folly/coro/BlockingWait.h>
 #include <folly/futures/Promise.h>
 #include <folly/logging/xlog.h>
 
@@ -171,9 +172,10 @@ KvStoreWrapper<ClientType>::setKeys(
 template <class ClientType>
 bool
 KvStoreWrapper<ClientType>::injectThriftFailure(
-    AreaId const& area, std::string const& peerName) {
+    AreaId const& area, std::string const& peerName, bool isTimeout) {
   try {
-    kvStore_->semifuture_injectThriftFailure(area, peerName);
+    folly::coro::blockingWait(
+        kvStore_->co_injectThriftFailure(area, peerName, isTimeout));
   } catch (std::exception const& e) {
     XLOGF(
         ERR,

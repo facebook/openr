@@ -237,7 +237,8 @@ class KvStoreDb {
       std::string const& peerName,
       std::string const& type,
       folly::fbstring const& exceptionStr,
-      std::chrono::steady_clock::time_point startTime);
+      std::chrono::steady_clock::time_point startTime,
+      bool isTimeout = false);
 
  private:
   // disable copying
@@ -1052,8 +1053,8 @@ class KvStore final : public OpenrEventBase {
   folly::coro::Task<std::unique_ptr<thrift::SetKeyValsResult>>
   co_setKvStoreKeyValues(std::string area, thrift::KeySetParams keySetParams);
 
-  folly::SemiFuture<std::unique_ptr<bool>> semifuture_injectThriftFailure(
-      std::string area, std::string peerName);
+  folly::coro::Task<folly::Unit> co_injectThriftFailure(
+      std::string area, std::string peerName, bool isTimeout = false);
 
   folly::SemiFuture<bool>
   semifuture_checkInitialSelfOriginatedKeysTimerScheduled();
@@ -1184,6 +1185,9 @@ class KvStore final : public OpenrEventBase {
 
   folly::coro::Task<folly::Unit> co_unsetSelfOriginatedKeyInternal(
       std::string area, thrift::KeySetParams keySetParams);
+
+  folly::coro::Task<folly::Unit> co_injectThriftFailureInternal(
+      std::string area, std::string peerName, bool isTimeout);
 
   // Define an empty string to keep the linter happy.
   static inline const std::string kEmptyString;

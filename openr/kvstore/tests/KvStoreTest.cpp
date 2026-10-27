@@ -6,12 +6,16 @@
  */
 
 #include <fb303/ServiceData.h>
+#include <folly/ExceptionWrapper.h>
 #include <folly/container/F14Map.h>
 #include <folly/coro/GtestHelpers.h>
 #include <folly/init/Init.h>
+#include <folly/io/async/AsyncSocketException.h>
 #include <folly/logging/xlog.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp/TApplicationException.h>
+#include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/common/Util.h>
@@ -281,6 +285,16 @@ CO_TEST_F(KvStoreTestFixture, SelfOriginatedKeyTasksRejectInvalidArea) {
   CO_ASSERT_THROW(
       co_await kvStore->getKvStore()->co_unsetSelfOriginatedKey(
           invalidArea, std::move(unsetParams)),
+      thrift::KvStoreError);
+}
+
+CO_TEST_F(KvStoreTestFixture, InjectThriftFailureRejectsInvalidArea) {
+  auto* kvStore = createKvStore(getTestKvConf("inject-failure-invalid-area"));
+  kvStore->run();
+
+  CO_ASSERT_THROW(
+      co_await kvStore->getKvStore()->co_injectThriftFailure(
+          "invalid-area", "peer"),
       thrift::KvStoreError);
 }
 
@@ -823,8 +837,8 @@ TEST_F(KvStoreTestFixture, PeerResyncWithConfiguredBackoff) {
   EXPECT_EQ(1, cmpPeers.size());
   EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
 
-  storeA->injectThriftFailure(kTestingAreaName, "storeB");
   auto start = std::chrono::steady_clock::now();
+  storeA->injectThriftFailure(kTestingAreaName, "storeB");
 
   cmpPeers = storeA->getPeers(kTestingAreaName);
   EXPECT_EQ(1, cmpPeers.size());
@@ -905,8 +919,8 @@ TEST_F(KvStoreTestFixture, PeerResyncWithEqualConfiguredBackoff) {
   EXPECT_EQ(1, cmpPeers.size());
   EXPECT_EQ(*cmpPeers["storeB"].state(), thrift::KvStorePeerState::INITIALIZED);
 
-  storeA->injectThriftFailure(kTestingAreaName, "storeB");
   auto start = std::chrono::steady_clock::now();
+  storeA->injectThriftFailure(kTestingAreaName, "storeB");
 
   cmpPeers = storeA->getPeers(kTestingAreaName);
   EXPECT_EQ(1, cmpPeers.size());
@@ -5740,6 +5754,95 @@ CO_TEST_F(KvStoreTestFixture, DumpKvStoreHashesFabricScope) {
     EXPECT_THAT(dump.count(fabricPrefixKey), Eq(1));
     EXPECT_THAT(dump.count(nonFabricKey), Eq(1));
   }
+}
+
+/*
+ * Only a client receive timeout may feed kvstore.thrift.num_*_timeout; every
+ * other failure stays in the generic thrift-failure counters.
+ */
+TEST(KvStoreTimeoutClassification, IdentifiesReceiveTimeouts) {
+  using apache::thrift::TApplicationException;
+  using apache::thrift::transport::TTransportException;
+
+  // Rocket client: no reply within the channel timeout.
+  EXPECT_TRUE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<TTransportException>(
+              TTransportException::TIMED_OUT)));
+
+  // Connection-setup timeouts.
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<TTransportException>(
+              folly::AsyncSocketException(
+                  folly::AsyncSocketException::TIMED_OUT,
+                  "connect timed out after 500ms"))));
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<TTransportException>(
+              folly::AsyncSocketException(
+                  folly::AsyncSocketException::TIMED_OUT,
+                  "SSL connect timed out after 1000ms"))));
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<TTransportException>(
+              TTransportException::TIMED_OUT, "Server version not reported")));
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<folly::AsyncSocketException>(
+              folly::AsyncSocketException::TIMED_OUT,
+              "connect timed out after 500ms")));
+
+  // Server-side shedding (QUEUE_TIMEOUT, TASK_EXPIRED).
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<TApplicationException>(
+              TApplicationException::TIMEOUT)));
+
+  // Non-timeout failures.
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<TTransportException>(
+              TTransportException::NOT_OPEN, "Transport not open")));
+  EXPECT_FALSE(
+      detail::isTimeoutException(
+          folly::make_exception_wrapper<std::runtime_error>(
+              "injected thrift failure")));
+}
+
+/*
+ * Every timed-out exchange increments kvstore.thrift.num_full_sync_timeout,
+ * including repeated timeouts from a peer that keeps timing out. A non-timeout
+ * failure increments only the generic failure count.
+ */
+TEST_F(KvStoreTestFixture, TimeoutCounterCountsEveryTimeout) {
+  fb303::fbData->resetAllData();
+
+  auto* storeA = createKvStore(getTestKvConf("storeA"));
+  auto* storeB = createKvStore(getTestKvConf("storeB"));
+  storeA->run();
+  storeB->run();
+
+  EXPECT_TRUE(storeA->addPeer(
+      kTestingAreaName, storeB->getNodeId(), storeB->getPeerSpec()));
+  EXPECT_TRUE(storeB->addPeer(
+      kTestingAreaName, storeA->getNodeId(), storeA->getPeerSpec()));
+  waitForAllPeersInitialized();
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.thrift.num_full_sync_timeout.count"), Eq(0));
+
+  EXPECT_TRUE(storeA->injectThriftFailure(
+      kTestingAreaName, "storeB", /*isTimeout=*/true));
+  EXPECT_TRUE(storeA->injectThriftFailure(
+      kTestingAreaName, "storeB", /*isTimeout=*/true));
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.thrift.num_full_sync_timeout.count"), Eq(2));
+
+  EXPECT_TRUE(storeA->injectThriftFailure(kTestingAreaName, "storeB"));
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.thrift.num_full_sync_timeout.count"), Eq(2));
+  EXPECT_THAT(
+      getCounterOrZero("kvstore.thrift.num_full_sync_failure.count"), Eq(3));
 }
 
 int

@@ -6,11 +6,13 @@
  */
 
 #include <algorithm>
+#include <cctype>
 
 #include <fb303/ServiceData.h>
 #include <folly/compression/Compression.h>
 #include <folly/io/async/SSLContext.h>
 #include <folly/logging/xlog.h>
+#include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/GeneratedCodeHelper.h>
 
 #include <openr/common/Constants.h>
@@ -48,6 +50,35 @@ class FloodResponseCallback final
  private:
   folly::Promise<folly::Unit> promise_;
 };
+
+/*
+ * Classify a KvStore thrift RPC failure as a receive timeout: the peer did not
+ * reply within kServiceProcTimeout. The Rocket client reports that expiry as a
+ * bare TTransportException::TIMED_OUT ("TTransportException: Timed out").
+ *
+ * TIMED_OUT also carries connection-setup timeouts, which stay in the generic
+ * thrift-failure counters: socket and SSL connect timeouts converted from
+ * AsyncSocketException ("connect timed out after 500ms", "SSL connect timed
+ * out after 1000ms") and the Rocket setup timeout ("Server version not
+ * reported"). TApplicationException::TIMEOUT is the peer's server shedding
+ * the request (QUEUE_TIMEOUT, TASK_EXPIRED), not a client receive timeout.
+ */
+inline bool
+isTimeoutException(const folly::exception_wrapper& ew) {
+  const auto* ex =
+      ew.get_exception<apache::thrift::transport::TTransportException>();
+  if (!ex ||
+      ex->getType() !=
+          apache::thrift::transport::TTransportException::TIMED_OUT) {
+    return false;
+  }
+  std::string msg = ex->what();
+  std::transform(msg.begin(), msg.end(), msg.begin(), [](unsigned char c) {
+    return std::tolower(c);
+  });
+  return msg.find("connect timed out") == std::string::npos &&
+      msg.find("server version not reported") == std::string::npos;
+}
 } // namespace openr::detail
 
 namespace openr {
@@ -862,31 +893,28 @@ KvStore<ClientType>::co_setKvStoreKeyValues(
 }
 
 template <class ClientType>
-folly::SemiFuture<std::unique_ptr<bool>>
-KvStore<ClientType>::semifuture_injectThriftFailure(
-    std::string area, std::string peerName) {
-  folly::Promise<std::unique_ptr<bool>> p;
-  auto sf = p.getSemiFuture();
-  const auto startTime = std::chrono::steady_clock::now();
-  runInEventBaseThread([this,
-                        p = std::move(p),
-                        peerName = std::move(peerName),
-                        area = std::move(area),
-                        startTime = startTime]() mutable {
-    try {
-      bool r = true;
-      auto& kvStoreDb = getAreaDbOrThrow(area, "disconnectPeer");
-      kvStoreDb.processThriftFailure(
-          peerName,
-          Constants::kTypeFullSync.toString(), /* type */
-          "injected thrift failure", /* exception string */
-          startTime);
-      p.setValue(std::make_unique<bool>(std::move(r)));
-    } catch (thrift::KvStoreError const& e) {
-      p.setException(e);
-    }
-  });
-  return sf;
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_injectThriftFailureInternal(
+    std::string area, std::string peerName, bool isTimeout) {
+  auto& kvStoreDb = getAreaDbOrThrow(area, "co_injectThriftFailure");
+  kvStoreDb.processThriftFailure(
+      peerName,
+      Constants::kTypeFullSync.toString(), /* type */
+      "injected thrift failure", /* exception string */
+      std::chrono::steady_clock::now(),
+      isTimeout);
+  co_return folly::Unit();
+}
+
+template <class ClientType>
+folly::coro::Task<folly::Unit>
+KvStore<ClientType>::co_injectThriftFailure(
+    std::string area, std::string peerName, bool isTimeout) {
+  co_await co_withExecutor(
+      getEvb(),
+      co_injectThriftFailureInternal(
+          std::move(area), std::move(peerName), isTimeout));
+  co_return folly::Unit();
 }
 
 /*
@@ -1247,6 +1275,10 @@ KvStore<ClientType>::initGlobalCounters() {
           "kvstore.thrift.num_{}_failure", Constants::kTypeFullSync.toString()),
       fb303::COUNT);
   fb303::fbData->addStatExportType(
+      fmt::format(
+          "kvstore.thrift.num_{}_timeout", Constants::kTypeFullSync.toString()),
+      fb303::COUNT);
+  fb303::fbData->addStatExportType(
       fmt::format("kvstore.thrift.num_{}", Constants::kTypeFloodPub.toString()),
       fb303::COUNT);
   fb303::fbData->addStatExportType(
@@ -1256,6 +1288,10 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       fmt::format(
           "kvstore.thrift.num_{}_failure", Constants::kTypeFloodPub.toString()),
+      fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      fmt::format(
+          "kvstore.thrift.num_{}_timeout", Constants::kTypeFloodPub.toString()),
       fb303::COUNT);
   fb303::fbData->addStatExportType(
       fmt::format(
@@ -1270,6 +1306,11 @@ KvStore<ClientType>::initGlobalCounters() {
   fb303::fbData->addStatExportType(
       fmt::format(
           "kvstore.thrift.num_{}_failure",
+          Constants::kTypeFinalizedFullSync.toString()),
+      fb303::COUNT);
+  fb303::fbData->addStatExportType(
+      fmt::format(
+          "kvstore.thrift.num_{}_timeout",
           Constants::kTypeFinalizedFullSync.toString()),
       fb303::COUNT);
 
@@ -1781,6 +1822,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  * kvstore.thrift.num_missing_keys: # of missing keys from syncing with peer;
  * kvstore.thrift.num_full_sync_success: # of successful full-sync performed;
  * kvstore.thrift.num_full_sync_failure: # of failed full-sync performed;
+ * kvstore.thrift.num_full_sync_timeout: # of full-sync reqs that timed out
+ * waiting for the peer (no reply within kServiceProcTimeout);
  * kvstore.thrift.full_sync_duration_ms: avg time elapsed for a full-sync req;
  *
  * kvstore.thrift.num_flood_pub: # of flooding req issued;
@@ -1790,6 +1833,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  *
  * kvstore.thrift.num_flood_pub_failure: # of failed flooding req
  * performed;
+ * kvstore.thrift.num_flood_pub_timeout: # of flooding reqs that timed out
+ * waiting for the peer;
  *
  * kvstore.thrift.flood_pub_duration_ms: avg time elapsed for a
  * flooding req;
@@ -1797,6 +1842,8 @@ KvStoreDb<ClientType>::KvStorePeer::getOrCreateThriftClient(
  * kvstore.thrift.num_finalized_sync: # of finalized finalized-sync performed;
  * kvstore.thrift.num_finalized_sync_success: # of successful finalized-sync;
  * kvstore.thrift.num_finalized_sync_failure: # of failed finalized-sync;
+ * kvstore.thrift.num_finalized_sync_timeout: # of finalized-sync reqs that
+ * timed out waiting for the peer;
  * kvstore.thrift.finalized_sync_duration_ms: avg time elapsed for a req;
  */
 template <class ClientType>
@@ -2720,7 +2767,8 @@ KvStoreDb<ClientType>::requestThriftPeerSync() {
               peer,
               Constants::kTypeFullSync.toString(),
               fmt::format("FULL_SYNC failure with {}, {}", peer, ew.what()),
-              startTime);
+              startTime,
+              detail::isTimeoutException(ew));
         });
 
     /*
@@ -2924,7 +2972,8 @@ KvStoreDb<ClientType>::processThriftFailure(
     std::string const& peerName,
     std::string const& type,
     folly::fbstring const& exceptionStr,
-    std::chrono::steady_clock::time_point startTime) {
+    std::chrono::steady_clock::time_point startTime,
+    bool isTimeout) {
   auto endTime = std::chrono::steady_clock::now();
   auto timeDelta = std::chrono::duration_cast<std::chrono::milliseconds>(
       endTime - startTime);
@@ -2932,6 +2981,10 @@ KvStoreDb<ClientType>::processThriftFailure(
   // record telemetry for thrift calls
   fb303::fbData->addStatValue(
       fmt::format("kvstore.thrift.num_{}_failure", type), 1, fb303::COUNT);
+  if (isTimeout) {
+    fb303::fbData->addStatValue(
+        fmt::format("kvstore.thrift.num_{}_timeout", type), 1, fb303::COUNT);
+  }
   fb303::fbData->addStatValue(
       fmt::format("kvstore.thrift.{}_duration_ms", type),
       timeDelta.count(),
@@ -3405,7 +3458,8 @@ KvStoreDb<ClientType>::finalizeFullSync(
                 Constants::kTypeFinalizedFullSync.toString(),
                 fmt::format(
                     "FINALIZED_SYNC failure with {}, {}", senderId, ew.what()),
-                startTime);
+                startTime,
+                detail::isTimeoutException(ew));
           });
 }
 
@@ -3934,7 +3988,8 @@ KvStoreDb<ClientType>::sendSerializedFloodToPeer(
                       "FLOOD_PUB failure with {}, {}",
                       peerName,
                       t.exception().what()),
-                  startTime);
+                  startTime,
+                  detail::isTimeoutException(t.exception()));
             } else {
               const auto timeDelta =
                   std::chrono::duration_cast<std::chrono::milliseconds>(
