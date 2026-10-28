@@ -7,6 +7,7 @@
 
 #include <openr/tests/e2e/SyntheticPeer.h>
 
+#include <cerrno>
 #include <chrono>
 #include <cstdint>
 #include <map>
@@ -19,6 +20,7 @@
 #include <folly/io/async/AsyncServerSocket.h>
 #include <folly/io/async/AsyncSocket.h>
 #include <folly/io/async/EventBase.h>
+#include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 #include <thrift/lib/cpp2/protocol/Serializer.h>
 #include <thrift/lib/cpp2/server/ThriftServer.h>
@@ -178,14 +180,26 @@ class SyntheticPeer::Impl final {
     params.nodeIds() = std::vector<std::string>{config_.peerName};
     params.senderId() = config_.peerName;
 
-    folly::EventBase eventBase;
-    auto socket = folly::AsyncSocket::newSocket(
-        &eventBase, kLoopback, config_.dutKvStorePort, kRpcTimeoutMs);
-    auto channel =
-        apache::thrift::RocketClientChannel::newChannel(std::move(socket));
-    channel->setTimeout(kRpcTimeoutMs);
-    apache::thrift::Client<thrift::KvStoreService> client{std::move(channel)};
-    client.sync_setKvStoreKeyVals(params, kArea);
+    for (int attempt = 0; attempt < 3; ++attempt) {
+      folly::EventBase eventBase;
+      auto socket = folly::AsyncSocket::newSocket(
+          &eventBase, kLoopback, config_.dutKvStorePort, kRpcTimeoutMs);
+      auto channel =
+          apache::thrift::RocketClientChannel::newChannel(std::move(socket));
+      channel->setTimeout(kRpcTimeoutMs);
+      apache::thrift::Client<thrift::KvStoreService> client{std::move(channel)};
+      try {
+        client.sync_setKvStoreKeyVals(params, kArea);
+        return;
+      } catch (const apache::thrift::transport::TTransportException& ex) {
+        if (attempt == 2 ||
+            (ex.getType() !=
+                 apache::thrift::transport::TTransportException::TIMED_OUT &&
+             ex.getErrno() != ECONNRESET)) {
+          throw;
+        }
+      }
+    }
   }
 
   bool
