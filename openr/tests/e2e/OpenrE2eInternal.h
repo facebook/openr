@@ -10,6 +10,7 @@
 #include <chrono>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -17,11 +18,13 @@
 #include <folly/io/async/EventBase.h>
 
 #include <openr/if/gen-cpp2/OpenrCtrlCppAsyncClient.h>
+#include <openr/tests/e2e/KvStoreVersionStore.h>
 #include <openr/tests/e2e/OpenrE2e.h>
 #include <openr/tests/e2e/OpenrKvStoreService.h>
 #include <openr/tests/e2e/OpenrQueueBundle.h>
 #include <openr/tests/e2e/SyntheticPeer.h>
 #include <openr/tests/e2e/TestPlatform.h>
+#include <openr/tests/e2e/Topology.h>
 
 namespace openr {
 class MockIoProvider;
@@ -35,6 +38,7 @@ using E2eCtrlClient = apache::thrift::Client<thrift::OpenrCtrl>;
 class OpenrE2eLab::Impl final {
  public:
   explicit Impl(std::string nodeName);
+  explicit Impl(const Topology& topology);
   ~Impl();
 
   void addPeer(const std::string& name);
@@ -91,6 +95,8 @@ class OpenrE2eLab::Impl final {
   folly::EventBase controlEventBase_;
   std::unique_ptr<E2eCtrlClient> controlClient_;
   std::map<std::string, Peer> peers_;
+  std::optional<Topology> topology_;
+  KvStoreVersionStore topologyVersions_;
   bool started_{false};
   bool stopped_{false};
 };

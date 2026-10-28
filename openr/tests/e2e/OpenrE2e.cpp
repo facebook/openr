@@ -9,6 +9,7 @@
 
 #include <chrono>
 #include <memory>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -21,6 +22,7 @@
 #include <openr/config/Config.h>
 #include <openr/tests/e2e/OpenrE2eConfig.h>
 #include <openr/tests/e2e/OpenrModuleGraph.h>
+#include <openr/tests/e2e/TopologyAreaConfig.h>
 #include <openr/tests/mocks/MockIoProvider.h>
 
 namespace openr::e2e {
@@ -106,7 +108,8 @@ OpenrE2eLab::Impl::addPeer(const std::string& name) {
       kvStoreService_.port(),
       ioProvider_,
       "0",
-      {}});
+      {},
+      entry.peerIfName});
   const auto& joined = peers_.emplace(name, std::move(entry)).first->second;
   if (!started_) {
     return;
@@ -138,11 +141,16 @@ OpenrE2eLab::Impl::start() {
   try {
     ConnectedIfPairs links;
     IfNameAndifIndex interfaces;
+    std::set<std::string> registered;
     for (const auto& [_, p] : peers_) {
       links[p.dutIfName].emplace_back(p.peerIfName, 0);
       links[p.peerIfName].emplace_back(p.dutIfName, 0);
-      interfaces.emplace_back(p.dutIfName, p.dutIfIndex);
-      interfaces.emplace_back(p.peerIfName, p.peerIfIndex);
+      if (registered.emplace(p.dutIfName).second) {
+        interfaces.emplace_back(p.dutIfName, p.dutIfIndex);
+      }
+      if (registered.emplace(p.peerIfName).second) {
+        interfaces.emplace_back(p.peerIfName, p.peerIfIndex);
+      }
     }
     ioProvider_->setConnectedPairs(std::move(links));
     ioProvider_->addIfNameIfIndex(interfaces);
@@ -151,11 +159,22 @@ OpenrE2eLab::Impl::start() {
     for (auto& [_, p] : peers_) {
       p.synthetic->start();
     }
-    auto config = std::make_shared<Config>(makeOpenrE2eConfig(
+    auto settings = makeOpenrE2eConfig(
         nodeName_,
         platform_.fibPort(),
         kvStoreService_.port(),
-        platform_.persistentStorePath()));
+        platform_.persistentStorePath(),
+        topology_
+            ? makeTopologyAreaConfigs(*topology_, topology_->node(nodeName_))
+            : std::vector<thrift::AreaConfig>{});
+    if (topology_) {
+      settings.link_monitor_config()->static_interface_metrics() =
+          makeTopologyInterfaceMetrics(*topology_, topology_->node(nodeName_));
+    }
+    if (topology_ && topology_->node(nodeName_).customizeConfig) {
+      topology_->node(nodeName_).customizeConfig(settings);
+    }
+    auto config = std::make_shared<Config>(std::move(settings));
     graph_ = std::make_unique<OpenrModuleGraph>(
         std::move(config),
         queues_,

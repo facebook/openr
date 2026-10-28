@@ -34,6 +34,7 @@ struct SyntheticPeerConfig {
   std::shared_ptr<MockIoProvider> ioProvider;
   std::string area{"0"};
   std::optional<thrift::KeyVals> initialKeyVals;
+  std::string transportIfName;
 };
 
 class SyntheticPeer final {

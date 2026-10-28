@@ -32,6 +32,7 @@
 #include <openr/if/gen-cpp2/KvStoreServiceAsyncClient.h>
 #include <openr/tests/mocks/MockIoProvider.h>
 #include <openr/tests/scale/FakeKvStoreHandler.h>
+#include <openr/tests/scale/MockSparkIo.h>
 #include <openr/tests/scale/SparkFaker.h>
 
 namespace openr::e2e {
@@ -39,6 +40,36 @@ namespace {
 
 constexpr char kLoopback[] = "::1";
 constexpr uint32_t kRpcTimeoutMs{5000};
+
+class E2eSparkIo final : public MockSparkIo {
+ public:
+  E2eSparkIo(
+      std::shared_ptr<MockIoProvider> ioProvider, std::string transportIfName)
+      : MockSparkIo(std::move(ioProvider)),
+        transportIfName_{std::move(transportIfName)} {}
+
+  void
+  registerCallback(
+      const std::string& ifName, PacketCallback callback) override {
+    MockSparkIo::registerCallback(
+        transportIfName_,
+        [ifName, callback = std::move(callback)](
+            const std::string& srcIfName,
+            const std::string&,
+            const folly::IPAddress& srcAddr,
+            const std::string& packet) {
+          callback(srcIfName, ifName, srcAddr, packet);
+        });
+  }
+
+  void
+  addInterface(const std::string&, int ifIndex) override {
+    MockSparkIo::addInterface(transportIfName_, ifIndex);
+  }
+
+ private:
+  std::string transportIfName_;
+};
 
 SyntheticPeerConfig
 validate(SyntheticPeerConfig config) {
@@ -96,7 +127,10 @@ class SyntheticPeer::Impl final {
             config_.initialKeyVals ? std::move(*config_.initialKeyVals)
                                    : makeInitialKeys(config_),
             config_.area)},
-        sparkFaker_{config_.ioProvider} {
+        sparkFaker_{std::make_shared<E2eSparkIo>(
+            config_.ioProvider,
+            config_.transportIfName.empty() ? config_.peerIfName
+                                            : config_.transportIfName)} {
     kvStoreSocket_ =
         folly::AsyncServerSocket::UniquePtr{new folly::AsyncServerSocket()};
     kvStoreSocket_->setEnableReuseAddr(false);

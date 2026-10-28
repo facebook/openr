@@ -15,9 +15,12 @@
 
 namespace openr::e2e {
 
+class Topology;
+
 class OpenrE2eLab final {
  public:
   explicit OpenrE2eLab(std::string nodeName);
+  explicit OpenrE2eLab(const Topology& topology);
   ~OpenrE2eLab();
 
   OpenrE2eLab(const OpenrE2eLab&) = delete;
