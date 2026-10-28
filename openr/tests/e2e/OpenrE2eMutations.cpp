@@ -11,10 +11,10 @@
 #include <stdexcept>
 #include <string>
 #include <utility>
-#include <vector>
 
 #include <folly/IPAddress.h>
 
+#include <openr/tests/e2e/DirectMutationPlanner.h>
 #include <openr/tests/e2e/TopologyMaterializer.h>
 #include <openr/tests/e2e/TopologyMutator.h>
 #include <openr/tests/mocks/MockIoProvider.h>
@@ -90,21 +90,40 @@ OpenrE2eLab::Impl::mutateTopology(TopologyMutation change) {
   if (!topology_) {
     throw std::logic_error("Named topology changes require a topology lab");
   }
-  std::vector<TopologyMutation> changes;
-  changes.emplace_back(std::move(change));
-  auto result = TopologyMutator::apply(*topology_, changes);
+  auto result = TopologyMutator::apply(*topology_, {std::move(change)});
   TopologyMaterializer materializer{topologyVersions_};
   const auto updates =
       materializer.diff(*topology_, result.topology, result.affectedNodes);
 
-  if (const auto* metric = std::get_if<SetLinkMetric>(&changes.front());
-      metric && metric->node &&
-      topology_->node(*metric->node).kind == NodeKind::REAL) {
-    const auto& link = result.topology.link(metric->link);
-    const auto& endpoint =
-        link.first.nodeName == *metric->node ? link.first : link.second;
-    controlClient_->sync_setInterfaceMetric(
-        endpoint.interfaceName, metric->metric);
+  for (const auto& action : planDirectMutations(*topology_, result.topology)) {
+    if (action.target != DirectActionTarget::NODE || action.node != nodeName_) {
+      continue;
+    }
+    if (const auto* metric = std::get_if<SetLinkMetric>(&action.mutation)) {
+      const auto& link = result.topology.link(metric->link);
+      const auto& endpoint =
+          link.first.nodeName == nodeName_ ? link.first : link.second;
+      controlClient_->sync_setInterfaceMetric(
+          endpoint.interfaceName, metric->metric);
+    } else if (
+        const auto* overload = std::get_if<SetLinkOverload>(&action.mutation)) {
+      const auto& link = result.topology.link(overload->link);
+      const auto& endpoint =
+          link.first.nodeName == nodeName_ ? link.first : link.second;
+      if (overload->overloaded) {
+        controlClient_->sync_setInterfaceOverload(endpoint.interfaceName);
+      } else {
+        controlClient_->sync_unsetInterfaceOverload(endpoint.interfaceName);
+      }
+    } else if (
+        const auto* nodeOverload =
+            std::get_if<SetNodeOverload>(&action.mutation)) {
+      if (nodeOverload->overloaded) {
+        controlClient_->sync_setNodeOverload();
+      } else {
+        controlClient_->sync_unsetNodeOverload();
+      }
+    }
   }
 
   bool connectionsChanged{false};
@@ -157,6 +176,17 @@ void
 OpenrE2eLab::setLinkMetric(
     const std::string& link, const std::string& endpoint, std::int32_t metric) {
   impl_->mutateTopology(SetLinkMetric{link, endpoint, metric});
+}
+
+void
+OpenrE2eLab::setLinkOverload(
+    const std::string& link, const std::string& endpoint, bool overloaded) {
+  impl_->mutateTopology(SetLinkOverload{link, endpoint, overloaded});
+}
+
+void
+OpenrE2eLab::setNodeOverload(const std::string& node, bool overloaded) {
+  impl_->mutateTopology(SetNodeOverload{node, overloaded});
 }
 
 void

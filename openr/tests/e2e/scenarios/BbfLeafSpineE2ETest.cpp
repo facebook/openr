@@ -60,7 +60,7 @@ TEST(BbfLeafSpineE2ETest, SpineUplinkLossKeepsEbLoopbackReachable) {
       kEbLoopback, {"eb01-s001", "eb01-s002"}, kTimeout));
 }
 
-TEST(BbfLeafSpineE2ETest, LinkCostMovesEbLoopbackRoute) {
+TEST(BbfLeafSpineE2ETest, LinkCostAndHardDrainsMoveEbLoopbackRoute) {
   OpenrE2eLab lab{bbfLeafSpine()};
   lab.start();
 
@@ -71,6 +71,18 @@ TEST(BbfLeafSpineE2ETest, LinkCostMovesEbLoopbackRoute) {
   lab.setLinkMetric("spine1-leaf3", "eb01-s001", 50);
   ASSERT_TRUE(lab.awaitProgrammedRoute(kEbLoopback, {"eb01-s002"}, kTimeout));
   lab.setLinkMetric("spine1-leaf3", "eb01-s001", 1);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(
+      kEbLoopback, {"eb01-s001", "eb01-s002"}, kTimeout));
+
+  lab.setNodeOverload("eb01-s001", /*overloaded=*/true);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kEbLoopback, {"eb01-s002"}, kTimeout));
+  lab.setNodeOverload("eb01-s001", /*overloaded=*/false);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(
+      kEbLoopback, {"eb01-s001", "eb01-s002"}, kTimeout));
+
+  lab.setLinkOverload("leaf1-spine1", "eb01-l001", /*overloaded=*/true);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kEbLoopback, {"eb01-s002"}, kTimeout));
+  lab.setLinkOverload("leaf1-spine1", "eb01-l001", /*overloaded=*/false);
   EXPECT_TRUE(lab.awaitProgrammedRoute(
       kEbLoopback, {"eb01-s001", "eb01-s002"}, kTimeout));
 }

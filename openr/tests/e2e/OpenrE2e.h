@@ -52,6 +52,9 @@ class OpenrE2eLab final {
       const std::string& link,
       const std::string& endpoint,
       std::int32_t metric);
+  void setLinkOverload(
+      const std::string& link, const std::string& endpoint, bool overloaded);
+  void setNodeOverload(const std::string& node, bool overloaded);
   void clearLinkMetric(const std::string& peer);
 
   bool awaitAdjacency(

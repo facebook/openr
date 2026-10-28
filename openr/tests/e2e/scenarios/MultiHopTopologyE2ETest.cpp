@@ -134,5 +134,45 @@ TEST(MultiHopTopologyE2ETest, NamedPeerPrefixArrivesAndWithdraws) {
   EXPECT_TRUE(lab.awaitRouteAbsent(kPrefix, kTimeout));
 }
 
+TEST(MultiHopTopologyE2ETest, PeerAndInterfaceOverloadRerouteTraffic) {
+  LinkOptions direct;
+  direct.name = "r1-s1";
+  LinkOptions viaFirst;
+  viaFirst.name = "s1-dst";
+  LinkOptions viaSecond;
+  viaSecond.metric = 20;
+  const auto topology = TopologyBuilder{"overload"}
+                            .realNode("r1")
+                            .syntheticNode("s1")
+                            .syntheticNode("s2")
+                            .syntheticNode("dst")
+                            .prefix("dst", "2001:db8:600::/64")
+                            .link("r1", "s1", direct)
+                            .link("r1", "s2")
+                            .link("s1", "dst", viaFirst)
+                            .link("s2", "dst", viaSecond)
+                            .build();
+  OpenrE2eLab lab{topology};
+  lab.start();
+
+  constexpr std::chrono::seconds kTimeout{30};
+  constexpr char kPrefix[] = "2001:db8:600::/64";
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+  lab.setNodeOverload("s1", /*overloaded=*/true);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+  lab.setNodeOverload("s1", /*overloaded=*/false);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+
+  lab.setLinkOverload("s1-dst", "s1", /*overloaded=*/true);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+  lab.setLinkOverload("s1-dst", "s1", /*overloaded=*/false);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+
+  lab.setLinkOverload("r1-s1", "r1", /*overloaded=*/true);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+  lab.setLinkOverload("r1-s1", "r1", /*overloaded=*/false);
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+}
+
 } // namespace
 } // namespace openr::e2e
