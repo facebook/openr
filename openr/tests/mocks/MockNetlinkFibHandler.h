@@ -159,13 +159,12 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   std::atomic<size_t> delMplsRoutesCount_{0};
   std::atomic<bool> isHealthy_{true};
 
-  // A baton for synchronization
-  folly::Baton<> updateUnicastRoutesBaton_;
-  folly::Baton<> deleteUnicastRoutesBaton_;
-  folly::Baton<> syncFibBaton_;
-  folly::Baton<> updateMplsRoutesBaton_;
-  folly::Baton<> deleteMplsRoutesBaton_;
-  folly::Baton<> syncMplsFibBaton_;
+  messaging::RWQueue<folly::Unit> updateUnicastRoutesEvents_;
+  messaging::RWQueue<folly::Unit> deleteUnicastRoutesEvents_;
+  messaging::RWQueue<folly::Unit> syncFibEvents_;
+  messaging::RWQueue<folly::Unit> updateMplsRoutesEvents_;
+  messaging::RWQueue<folly::Unit> deleteMplsRoutesEvents_;
+  messaging::RWQueue<folly::Unit> syncMplsFibEvents_;
 
   /*
    * We use queue for signalling & waiting for unhealthy exceptions as it can

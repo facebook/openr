@@ -63,10 +63,10 @@ MockNetlinkFibHandler::addUnicastRoutes(
                              toIPAddress(*nh.address()));
                        }) |
         as<folly::F14FastSet<std::pair<std::string, folly::IPAddress>>>();
-    unicastRouteDb->emplace(prefix, newNextHops);
+    unicastRouteDb->insert_or_assign(prefix, std::move(newNextHops));
   }
   addRoutesCount_ += routes->size() - failedPrefixes.size();
-  updateUnicastRoutesBaton_.post();
+  updateUnicastRoutesEvents_.push(folly::Unit{});
 
   // Throw FibUpdateError if applicable
   if (failedPrefixes.size()) {
@@ -92,7 +92,7 @@ MockNetlinkFibHandler::deleteUnicastRoutes(
     unicastRouteDb->erase(myPrefix);
   }
   delRoutesCount_ += prefixes->size();
-  deleteUnicastRoutesBaton_.post();
+  deleteUnicastRoutesEvents_.push(folly::Unit{});
 }
 
 void
@@ -128,7 +128,7 @@ MockNetlinkFibHandler::syncFib(
     unicastRouteDb->emplace(prefix, newNextHops);
   }
   ++fibSyncCount_;
-  syncFibBaton_.post();
+  syncFibEvents_.push(folly::Unit{});
 
   /*
    * Identify dirty prefixes that are not part of Unicast route db nor failed
@@ -177,7 +177,7 @@ MockNetlinkFibHandler::addMplsRoutes(
         *route.topLabel(), std::move(*route.nextHops()));
   }
   addMplsRoutesCount_ += routes->size() - failedLabels.size();
-  updateMplsRoutesBaton_.post();
+  updateMplsRoutesEvents_.push(folly::Unit{});
 
   // Throw FibUpdateError if applicable
   if (failedLabels.size()) {
@@ -200,7 +200,7 @@ MockNetlinkFibHandler::deleteMplsRoutes(
     mplsRouteDb->erase(label);
   }
   delMplsRoutesCount_ += labels->size();
-  deleteMplsRoutesBaton_.post();
+  deleteMplsRoutesEvents_.push(folly::Unit{});
 }
 
 void
@@ -225,7 +225,7 @@ MockNetlinkFibHandler::syncMplsFib(
     mplsRouteDb->emplace(*route.topLabel(), std::move(*route.nextHops()));
   }
   ++fibMplsSyncCount_;
-  syncMplsFibBaton_.post();
+  syncMplsFibEvents_.push(folly::Unit{});
 
   /*
    * Identify dirty labels that are not part of MPLS route db nor of failed MPLS
@@ -298,38 +298,32 @@ MockNetlinkFibHandler::getMplsRouteTableByClient(
 
 void
 MockNetlinkFibHandler::waitForUpdateUnicastRoutes() {
-  updateUnicastRoutesBaton_.wait();
-  updateUnicastRoutesBaton_.reset();
+  updateUnicastRoutesEvents_.get();
 };
 
 void
 MockNetlinkFibHandler::waitForDeleteUnicastRoutes() {
-  deleteUnicastRoutesBaton_.wait();
-  deleteUnicastRoutesBaton_.reset();
+  deleteUnicastRoutesEvents_.get();
 }
 
 void
 MockNetlinkFibHandler::waitForSyncFib() {
-  syncFibBaton_.wait();
-  syncFibBaton_.reset();
+  syncFibEvents_.get();
 }
 
 void
 MockNetlinkFibHandler::waitForUpdateMplsRoutes() {
-  updateMplsRoutesBaton_.wait();
-  updateMplsRoutesBaton_.reset();
+  updateMplsRoutesEvents_.get();
 };
 
 void
 MockNetlinkFibHandler::waitForDeleteMplsRoutes() {
-  deleteMplsRoutesBaton_.wait();
-  deleteMplsRoutesBaton_.reset();
+  deleteMplsRoutesEvents_.get();
 }
 
 void
 MockNetlinkFibHandler::waitForSyncMplsFib() {
-  syncMplsFibBaton_.wait();
-  syncMplsFibBaton_.reset();
+  syncMplsFibEvents_.get();
 }
 
 void
