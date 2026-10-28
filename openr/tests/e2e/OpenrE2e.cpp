@@ -204,6 +204,12 @@ OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
 }
 
 void
+OpenrE2eLab::Impl::restartFibService() {
+  requireStarted();
+  platform_.restartFibService();
+}
+
+void
 OpenrE2eLab::Impl::setLinkMetric(const std::string& name, std::int32_t metric) {
   requireStarted();
   controlClient_->sync_setInterfaceMetric(peer(name).dutIfName, metric);
@@ -253,6 +259,11 @@ OpenrE2eLab::withdrawLocalPrefix(const std::string& cidr) {
 void
 OpenrE2eLab::setLinkUp(const std::string& peer, bool isUp) {
   impl_->setLinkUp(peer, isUp);
+}
+
+void
+OpenrE2eLab::restartFibService() {
+  impl_->restartFibService();
 }
 
 void

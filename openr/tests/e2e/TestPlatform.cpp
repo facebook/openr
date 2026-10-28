@@ -78,6 +78,14 @@ TestPlatform::stop() {
   }
 }
 
+void
+TestPlatform::restartFibService() {
+  if (!running_) {
+    throw std::logic_error("FibService is not running");
+  }
+  fibHandler_->restart();
+}
+
 uint16_t
 TestPlatform::fibPort() const {
   if (!running_) {

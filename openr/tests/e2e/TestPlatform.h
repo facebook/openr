@@ -45,6 +45,7 @@ class TestPlatform final {
 
   void start();
   void stop();
+  void restartFibService();
 
   uint16_t fibPort() const;
   const std::string& persistentStorePath() const;
