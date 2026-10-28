@@ -51,8 +51,8 @@ makeOpenrE2eConfig(
   spark.hello_time_s() = 1;
   spark.fastinit_hello_time_ms() = 20;
   spark.keepalive_time_s() = 1;
-  spark.hold_time_s() = 2;
-  spark.graceful_restart_time_s() = 6;
+  spark.hold_time_s() = 30;
+  spark.graceful_restart_time_s() = 40;
   return config;
 }
 
