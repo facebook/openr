@@ -183,9 +183,12 @@ OpenrE2eLab::Impl::stop() {
   stopped_ = true;
   controlClient_.reset();
   for (auto& [_, p] : peers_) {
-    p.synthetic->stop();
+    p.synthetic->stopSpark();
   }
   graph_.reset();
+  for (auto& [_, p] : peers_) {
+    p.synthetic->stop();
+  }
   peers_.clear();
   platform_.stop();
 }

@@ -41,6 +41,7 @@ class SyntheticPeer final {
   SyntheticPeer& operator=(const SyntheticPeer&) = delete;
 
   void start();
+  void stopSpark();
   void stop();
   void advertisePrefix(const std::string& cidr);
   void withdrawPrefix(const std::string& cidr);

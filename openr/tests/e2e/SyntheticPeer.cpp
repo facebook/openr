@@ -141,12 +141,17 @@ class SyntheticPeer::Impl final {
   }
 
   void
+  stopSpark() {
+    sparkFaker_.stop();
+  }
+
+  void
   stop() {
     if (stopped_) {
       return;
     }
     stopped_ = true;
-    sparkFaker_.stop();
+    stopSpark();
     kvStoreThread_.reset();
     kvStoreServer_.reset();
   }
@@ -224,6 +229,11 @@ SyntheticPeer::~SyntheticPeer() = default;
 void
 SyntheticPeer::start() {
   impl_->start();
+}
+
+void
+SyntheticPeer::stopSpark() {
+  impl_->stopSpark();
 }
 
 void
