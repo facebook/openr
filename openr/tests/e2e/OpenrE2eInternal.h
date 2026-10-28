@@ -54,6 +54,7 @@ class OpenrE2eLab::Impl final {
   void advertiseLocalPrefix(const std::string& cidr);
   void withdrawLocalPrefix(const std::string& cidr);
   void setLinkUp(const std::string& peer, bool isUp);
+  void setPeerState(const std::string& node, bool isUp);
   void restartFibService();
   void setFibServiceAvailable(bool isAvailable);
   void setLinkMetric(const std::string& peer, std::int32_t metric);

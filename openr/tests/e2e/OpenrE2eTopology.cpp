@@ -101,7 +101,7 @@ OpenrE2eLab::Impl::Impl(const Topology& topology)
     entry.peerV6 = ipv6Address(synthetic);
     entry.area = synthetic.area;
     entry.linkName = linkName;
-    entry.linkUp = operational;
+    entry.linkUp = operational && topology_->node(name).operational;
     SyntheticPeerConfig config;
     config.nodeName = nodeName_;
     config.peerName = name;

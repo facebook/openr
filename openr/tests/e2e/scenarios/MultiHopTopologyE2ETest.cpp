@@ -174,5 +174,26 @@ TEST(MultiHopTopologyE2ETest, PeerAndInterfaceOverloadRerouteTraffic) {
   EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
 }
 
+TEST(MultiHopTopologyE2ETest, RemoteDestinationFailureWithdrawsRoute) {
+  constexpr char kPrefix[] = "2001:db8:800::/64";
+  const auto topology = TopologyBuilder{"destination-failure"}
+                            .realNode("r1")
+                            .syntheticNode("s1")
+                            .syntheticNode("dst")
+                            .prefix("dst", kPrefix)
+                            .link("r1", "s1")
+                            .link("s1", "dst")
+                            .build();
+  OpenrE2eLab lab{topology};
+  lab.start();
+
+  constexpr std::chrono::seconds kTimeout{30};
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+  lab.setPeerState("dst", /*isUp=*/false);
+  ASSERT_TRUE(lab.awaitRouteAbsent(kPrefix, kTimeout));
+  lab.setPeerState("dst", /*isUp=*/true);
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+}
+
 } // namespace
 } // namespace openr::e2e

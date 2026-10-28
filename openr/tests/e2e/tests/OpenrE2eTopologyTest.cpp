@@ -7,6 +7,8 @@
 
 #include <gtest/gtest.h>
 
+#include <stdexcept>
+
 #include <openr/tests/e2e/OpenrE2e.h>
 #include <openr/tests/e2e/TopologyBuilder.h>
 
@@ -54,6 +56,19 @@ TEST(OpenrE2eTopologyTest, RequiresRealRouter) {
   const auto topology =
       TopologyBuilder{"missing-router"}.syntheticNode("s1").build();
   EXPECT_THROW(OpenrE2eLab{topology}, TopologyError);
+}
+
+TEST(OpenrE2eTopologyTest, PeerStateRejectsRealOrUnknownNode) {
+  const auto topology = TopologyBuilder{"peer-state-contract"}
+                            .realNode("r1")
+                            .syntheticNode("s1")
+                            .link("r1", "s1")
+                            .build();
+  OpenrE2eLab lab{topology};
+  lab.start();
+
+  EXPECT_THROW(lab.setPeerState("r1", false), std::invalid_argument);
+  EXPECT_THROW(lab.setPeerState("missing", false), TopologyError);
 }
 
 } // namespace

@@ -39,5 +39,35 @@ TEST(SharedSegmentE2ETest, TwoPeersOnOneLanProvideIndependentNextHops) {
   EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
 }
 
+TEST(SharedSegmentE2ETest, OnePeerFailsAndRecoversOnSharedLan) {
+  const auto topology = TopologyBuilder{"shared-peer-failure"}
+                            .realNode("r1")
+                            .syntheticNode("s1")
+                            .syntheticNode("s2")
+                            .sharedSegment("lan", {"r1", "s1", "s2"})
+                            .build();
+  OpenrE2eLab lab{topology};
+  lab.start();
+
+  constexpr std::chrono::seconds kTimeout{30};
+  constexpr char kPrefix[] = "2001:db8:700::/64";
+  lab.advertisePrefix("s1", kPrefix);
+  lab.advertisePrefix("s2", kPrefix);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1", "s2"}, kTimeout));
+
+  lab.setPeerState("s1", /*isUp=*/false);
+  ASSERT_TRUE(lab.awaitAdjacency(
+      "s1", /*isUp=*/false, kTimeout + std::chrono::seconds{10}));
+  ASSERT_TRUE(lab.awaitAdjacency("s2", /*isUp=*/true, kTimeout));
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+  lab.setPeerState("s1", /*isUp=*/true);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1", "s2"}, kTimeout));
+
+  lab.setLinkUp("s1", /*isUp=*/false);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+  lab.setLinkUp("s1", /*isUp=*/true);
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1", "s2"}, kTimeout));
+}
+
 } // namespace
 } // namespace openr::e2e

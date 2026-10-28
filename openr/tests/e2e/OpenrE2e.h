@@ -44,6 +44,7 @@ class OpenrE2eLab final {
   void withdrawLocalPrefix(const std::string& cidr);
   void setLinkUp(const std::string& peer, bool isUp);
   void setLinkState(const std::string& link, bool isUp);
+  void setPeerState(const std::string& node, bool isUp);
   void setPartition(const std::vector<std::string>& links, bool isPartitioned);
   void restartFibService();
   void setFibServiceAvailable(bool isAvailable);

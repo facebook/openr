@@ -7,6 +7,7 @@
 
 #include <openr/tests/e2e/OpenrE2eInternal.h>
 
+#include <algorithm>
 #include <map>
 #include <stdexcept>
 #include <string>
@@ -78,10 +79,29 @@ OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
   requireStarted();
   const auto& p = peer(name);
   if (topology_ && !p.linkName.empty()) {
-    mutateTopology(SetLinkState{p.linkName, isUp});
+    const auto& links = topology_->links();
+    const bool isNamedLink =
+        std::any_of(links.begin(), links.end(), [&](const auto& link) {
+          return link.name == p.linkName;
+        });
+    if (isNamedLink) {
+      mutateTopology(SetLinkState{p.linkName, isUp});
+    } else {
+      setPeerState(name, isUp);
+    }
     return;
   }
   platform_.setLink(p.dutIfName, p.dutIfIndex, isUp);
+}
+
+void
+OpenrE2eLab::Impl::setPeerState(const std::string& node, bool isUp) {
+  requireStarted();
+  if (!topology_ || topology_->node(node).kind != NodeKind::SYNTHETIC) {
+    throw std::invalid_argument(
+        "Peer state requires a synthetic topology node");
+  }
+  mutateTopology(SetNodeState{node, isUp});
 }
 
 void
@@ -127,17 +147,20 @@ OpenrE2eLab::Impl::mutateTopology(TopologyMutation change) {
   }
 
   bool connectionsChanged{false};
-  for (const auto& link : topology_->links()) {
-    const auto& next = result.topology.link(link.name);
-    if (link.operational == next.operational) {
-      continue;
+  for (auto& [name, peer] : peers_) {
+    bool shouldConnect = result.topology.node(name).operational;
+    const auto& links = result.topology.links();
+    const auto link =
+        std::find_if(links.begin(), links.end(), [&](const auto& item) {
+          return item.name == peer.linkName;
+        });
+    if (link != links.end()) {
+      shouldConnect = shouldConnect && link->operational;
     }
-    for (auto& [_, peer] : peers_) {
-      if (peer.linkName == link.name) {
-        peer.linkUp = next.operational;
-        peer.synthetic->setOperational(peer.linkUp);
-        connectionsChanged = true;
-      }
+    if (peer.linkUp != shouldConnect) {
+      peer.linkUp = shouldConnect;
+      peer.synthetic->setOperational(shouldConnect);
+      connectionsChanged = true;
     }
   }
   if (connectionsChanged) {
@@ -192,6 +215,11 @@ OpenrE2eLab::setNodeOverload(const std::string& node, bool overloaded) {
 void
 OpenrE2eLab::setLinkState(const std::string& link, bool isUp) {
   impl_->mutateTopology(SetLinkState{link, isUp});
+}
+
+void
+OpenrE2eLab::setPeerState(const std::string& node, bool isUp) {
+  impl_->setPeerState(node, isUp);
 }
 
 void
