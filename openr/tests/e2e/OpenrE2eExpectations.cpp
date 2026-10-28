@@ -39,7 +39,14 @@ awaitUntil(std::chrono::milliseconds timeout, Predicate&& ready) {
     if (ready(deadline)) {
       return true;
     }
-    std::this_thread::yield();
+    const auto now = Clock::now();
+    if (now < deadline) {
+      // Snapshot-only external APIs require paced, deadline-bounded probes.
+
+      // NOLINTNEXTLINE(facebook-hte-BadCall-sleep_until)
+      std::this_thread::sleep_until(
+          std::min(deadline, now + std::chrono::milliseconds{5}));
+    }
   } while (Clock::now() < deadline);
   return false;
 }
