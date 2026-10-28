@@ -210,6 +210,12 @@ OpenrE2eLab::Impl::restartFibService() {
 }
 
 void
+OpenrE2eLab::Impl::setFibServiceAvailable(bool isAvailable) {
+  requireStarted();
+  platform_.setFibServiceAvailable(isAvailable);
+}
+
+void
 OpenrE2eLab::Impl::setLinkMetric(const std::string& name, std::int32_t metric) {
   requireStarted();
   controlClient_->sync_setInterfaceMetric(peer(name).dutIfName, metric);
@@ -264,6 +270,11 @@ OpenrE2eLab::setLinkUp(const std::string& peer, bool isUp) {
 void
 OpenrE2eLab::restartFibService() {
   impl_->restartFibService();
+}
+
+void
+OpenrE2eLab::setFibServiceAvailable(bool isAvailable) {
+  impl_->setFibServiceAvailable(isAvailable);
 }
 
 void

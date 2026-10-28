@@ -39,5 +39,35 @@ TEST(TestPlatformTest, FibServiceRespondsThroughARealThriftSocket) {
   platform.stop();
 }
 
+TEST(TestPlatformTest, FibServiceOutageRestoresTheSamePort) {
+  messaging::ReplicateQueue<fbnl::NetlinkEvent> netlinkEvents;
+  TestPlatform platform("router", netlinkEvents);
+  platform.start();
+
+  const auto port = platform.fibPort();
+  folly::EventBase eventBase;
+  auto socket = folly::AsyncSocket::newSocket(&eventBase, "::1", port, 1000);
+  auto channel =
+      apache::thrift::RocketClientChannel::newChannel(std::move(socket));
+  apache::thrift::Client<thrift::FibService> client(std::move(channel));
+  EXPECT_EQ(1, client.sync_aliveSince());
+
+  platform.setFibServiceAvailable(false);
+  EXPECT_THROW(client.sync_aliveSince(), std::exception);
+  EXPECT_EQ(port, platform.fibPort());
+
+  platform.setFibServiceAvailable(true);
+  auto restoredSocket =
+      folly::AsyncSocket::newSocket(&eventBase, "::1", port, 1000);
+  auto restoredChannel = apache::thrift::RocketClientChannel::newChannel(
+      std::move(restoredSocket));
+  apache::thrift::Client<thrift::FibService> restoredClient(
+      std::move(restoredChannel));
+  EXPECT_EQ(1, restoredClient.sync_aliveSince());
+
+  netlinkEvents.close();
+  platform.stop();
+}
+
 } // namespace
 } // namespace openr::e2e

@@ -33,6 +33,7 @@ class OpenrE2eLab final {
   void withdrawLocalPrefix(const std::string& cidr);
   void setLinkUp(const std::string& peer, bool isUp);
   void restartFibService();
+  void setFibServiceAvailable(bool isAvailable);
   void setLinkMetric(const std::string& peer, std::int32_t metric);
   void clearLinkMetric(const std::string& peer);
 
@@ -48,6 +49,8 @@ class OpenrE2eLab final {
       const std::vector<std::string>& viaPeers,
       std::chrono::milliseconds timeout);
   bool awaitRouteAbsent(
+      const std::string& cidr, std::chrono::milliseconds timeout);
+  bool awaitComputedRoute(
       const std::string& cidr, std::chrono::milliseconds timeout);
 
  private:

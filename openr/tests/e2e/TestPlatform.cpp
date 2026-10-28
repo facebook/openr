@@ -53,6 +53,22 @@ TestPlatform::start() {
     throw std::logic_error("TestPlatform cannot be restarted");
   }
   started_ = true;
+  startFibServer();
+  running_ = true;
+}
+
+void
+TestPlatform::startFibServer() {
+  if (fibServerThread_) {
+    return;
+  }
+  if (!fibSocket_) {
+    fibSocket_ =
+        folly::AsyncServerSocket::UniquePtr{new folly::AsyncServerSocket()};
+    fibSocket_->setReusePortEnabled(true);
+    fibSocket_->bind(
+        std::vector<folly::IPAddress>{folly::IPAddress{"::1"}}, fibPort_);
+  }
   fibServer_ = std::make_shared<apache::thrift::ThriftServer>();
   fibServer_->setNumIOWorkerThreads(1);
   fibServer_->setNumAcceptThreads(1);
@@ -61,17 +77,21 @@ TestPlatform::start() {
   fibServer_->useExistingSocket(std::move(fibSocket_));
   fibServerThread_ =
       std::make_unique<apache::thrift::util::ScopedServerThread>(fibServer_);
-  running_ = true;
 }
 
 void
-TestPlatform::stop() {
+TestPlatform::stopFibServer() {
   if (fibServerThread_) {
     fibServerThread_->stop();
     fibServerThread_->join();
     fibServerThread_.reset();
   }
   fibServer_.reset();
+}
+
+void
+TestPlatform::stop() {
+  stopFibServer();
   if (running_) {
     fibHandler_->stop();
     running_ = false;
@@ -84,6 +104,18 @@ TestPlatform::restartFibService() {
     throw std::logic_error("FibService is not running");
   }
   fibHandler_->restart();
+}
+
+void
+TestPlatform::setFibServiceAvailable(bool isAvailable) {
+  if (!running_) {
+    throw std::logic_error("FibService is not running");
+  }
+  if (isAvailable) {
+    startFibServer();
+  } else {
+    stopFibServer();
+  }
 }
 
 uint16_t

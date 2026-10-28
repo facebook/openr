@@ -16,6 +16,7 @@
 #include <utility>
 #include <vector>
 
+#include <thrift/lib/cpp/TApplicationException.h>
 #include <thrift/lib/cpp/transport/TTransportException.h>
 #include <thrift/lib/cpp2/async/RpcOptions.h>
 
@@ -149,6 +150,42 @@ OpenrE2eLab::Impl::awaitRouteAbsent(
 }
 
 bool
+OpenrE2eLab::Impl::awaitComputedRoute(
+    const std::string& cidr, std::chrono::milliseconds timeout) {
+  requireStarted();
+  const auto target = folly::IPAddress::createNetwork(cidr);
+  return awaitUntil(timeout, [&](Clock::time_point deadline) {
+    apache::thrift::RpcOptions options;
+    options.setTimeout(
+        std::max(
+            std::chrono::milliseconds{1},
+            std::chrono::duration_cast<std::chrono::milliseconds>(
+                deadline - Clock::now())));
+    thrift::RouteDatabase routes;
+    try {
+      controlClient_->sync_getRouteDbComputed(options, routes, "");
+    } catch (const apache::thrift::transport::TTransportException& error) {
+      if (error.getType() !=
+          apache::thrift::transport::TTransportException::TIMED_OUT) {
+        throw;
+      }
+      return false;
+    } catch (const apache::thrift::TApplicationException& error) {
+      if (error.getType() != apache::thrift::TApplicationException::TIMEOUT) {
+        throw;
+      }
+      return false;
+    }
+    return std::any_of(
+        routes.unicastRoutes()->begin(),
+        routes.unicastRoutes()->end(),
+        [&](const auto& route) {
+          return toIPNetwork(*route.dest()) == target;
+        });
+  });
+}
+
+bool
 OpenrE2eLab::awaitAdjacency(
     const std::string& peer, bool isUp, std::chrono::milliseconds timeout) {
   return impl_->awaitAdjacency(peer, isUp, timeout);
@@ -175,6 +212,12 @@ bool
 OpenrE2eLab::awaitRouteAbsent(
     const std::string& cidr, std::chrono::milliseconds timeout) {
   return impl_->awaitRouteAbsent(cidr, timeout);
+}
+
+bool
+OpenrE2eLab::awaitComputedRoute(
+    const std::string& cidr, std::chrono::milliseconds timeout) {
+  return impl_->awaitComputedRoute(cidr, timeout);
 }
 
 } // namespace openr::e2e

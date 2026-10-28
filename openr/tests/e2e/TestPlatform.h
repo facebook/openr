@@ -46,6 +46,7 @@ class TestPlatform final {
   void start();
   void stop();
   void restartFibService();
+  void setFibServiceAvailable(bool isAvailable);
 
   uint16_t fibPort() const;
   const std::string& persistentStorePath() const;
@@ -63,6 +64,9 @@ class TestPlatform final {
   FibUpdateCounts fibUpdateCounts() const;
 
  private:
+  void startFibServer();
+  void stopFibServer();
+
   folly::test::TemporaryDirectory stateDirectory_;
   std::string persistentStorePath_;
   folly::EventBase netlinkEventBase_;
