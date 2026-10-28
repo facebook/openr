@@ -82,6 +82,8 @@ class OpenrE2eLab::Impl final {
     std::string peerV6;
     std::unique_ptr<SyntheticPeer> synthetic;
     std::string area{"0"};
+    std::string linkName;
+    bool linkUp{true};
   };
 
   const Peer& peer(const std::string& name) const;

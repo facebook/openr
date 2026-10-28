@@ -15,8 +15,20 @@
 
 #include <openr/tests/e2e/TopologyMaterializer.h>
 #include <openr/tests/e2e/TopologyMutator.h>
+#include <openr/tests/mocks/MockIoProvider.h>
 
 namespace openr::e2e {
+
+void
+OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
+  requireStarted();
+  const auto& p = peer(name);
+  if (topology_ && !p.linkName.empty()) {
+    mutateTopology(SetLinkState{p.linkName, isUp});
+    return;
+  }
+  platform_.setLink(p.dutIfName, p.dutIfIndex, isUp);
+}
 
 void
 OpenrE2eLab::Impl::mutateTopology(TopologyMutation change) {
@@ -41,6 +53,37 @@ OpenrE2eLab::Impl::mutateTopology(TopologyMutation change) {
         endpoint.interfaceName, metric->metric);
   }
 
+  bool connectionsChanged{false};
+  for (const auto& link : topology_->links()) {
+    const auto& next = result.topology.link(link.name);
+    if (link.operational == next.operational) {
+      continue;
+    }
+    for (auto& [_, peer] : peers_) {
+      if (peer.linkName == link.name) {
+        peer.linkUp = next.operational;
+        peer.synthetic->setOperational(peer.linkUp);
+        connectionsChanged = true;
+      }
+    }
+  }
+  if (connectionsChanged) {
+    ConnectedIfPairs links;
+    std::map<std::string, bool> interfaceUp;
+    for (const auto& [_, peer] : peers_) {
+      interfaceUp[peer.dutIfName] |= peer.linkUp;
+      if (peer.linkUp) {
+        links[peer.dutIfName].emplace_back(peer.peerIfName, 0);
+        links[peer.peerIfName].emplace_back(peer.dutIfName, 0);
+      }
+    }
+    ioProvider_->setConnectedPairs(std::move(links));
+    for (const auto& [_, peer] : peers_) {
+      platform_.setLink(
+          peer.dutIfName, peer.dutIfIndex, interfaceUp.at(peer.dutIfName));
+    }
+  }
+
   std::map<std::string, thrift::KeyVals> byArea;
   for (const auto& update : updates) {
     if (update.value) {
@@ -60,6 +103,22 @@ void
 OpenrE2eLab::setLinkMetric(
     const std::string& link, const std::string& endpoint, std::int32_t metric) {
   impl_->mutateTopology(SetLinkMetric{link, endpoint, metric});
+}
+
+void
+OpenrE2eLab::setLinkState(const std::string& link, bool isUp) {
+  impl_->mutateTopology(SetLinkState{link, isUp});
+}
+
+void
+OpenrE2eLab::setLinkUp(const std::string& peer, bool isUp) {
+  impl_->setLinkUp(peer, isUp);
+}
+
+void
+OpenrE2eLab::setPartition(
+    const std::vector<std::string>& links, bool isPartitioned) {
+  impl_->mutateTopology(SetPartition{links, isPartitioned});
 }
 
 } // namespace openr::e2e

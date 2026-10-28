@@ -184,6 +184,14 @@ class SyntheticPeer::Impl final {
   }
 
   void
+  setOperational(bool operational) {
+    if (!(operational ? sparkFaker_.recoverNeighbor(config_.peerName)
+                      : sparkFaker_.failNeighbor(config_.peerName))) {
+      throw std::logic_error("Synthetic Spark neighbor was not registered");
+    }
+  }
+
+  void
   stop() {
     if (stopped_) {
       return;
@@ -299,6 +307,11 @@ SyntheticPeer::stopSpark() {
 void
 SyntheticPeer::stop() {
   impl_->stop();
+}
+
+void
+SyntheticPeer::setOperational(bool operational) {
+  impl_->setOperational(operational);
 }
 
 void

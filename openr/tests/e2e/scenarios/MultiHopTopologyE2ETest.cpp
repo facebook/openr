@@ -41,38 +41,73 @@ TEST(MultiHopTopologyE2ETest, InitialRouterMetricSelectsProgrammedNextHop) {
   EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
 }
 
-TEST(MultiHopTopologyE2ETest, RemoteMetricChangeMovesProgrammedNextHop) {
+constexpr char kMultiHopPrefix[] = "2001:db8:100::/64";
+
+Topology
+multiHopTopology() {
+  LinkOptions toFirst;
+  toFirst.name = "r1-s1";
+  LinkOptions toSecond;
+  toSecond.name = "r1-s2";
   LinkOptions viaFirst;
   viaFirst.name = "s1-dst";
   viaFirst.metric = 1;
   LinkOptions viaSecond;
   viaSecond.name = "s2-dst";
   viaSecond.metric = 20;
-  constexpr char kPrefix[] = "2001:db8:100::/64";
-  const auto topology = TopologyBuilder{"multi-hop"}
-                            .realNode("r1")
-                            .syntheticNode("s1")
-                            .syntheticNode("s2")
-                            .syntheticNode("dst")
-                            .prefix("dst", kPrefix)
-                            .link("r1", "s1")
-                            .link("r1", "s2")
-                            .link("s1", "dst", viaFirst)
-                            .link("s2", "dst", viaSecond)
-                            .build();
-  OpenrE2eLab lab{topology};
+  return TopologyBuilder{"multi-hop"}
+      .realNode("r1")
+      .syntheticNode("s1")
+      .syntheticNode("s2")
+      .syntheticNode("dst")
+      .prefix("dst", kMultiHopPrefix)
+      .link("r1", "s1", toFirst)
+      .link("r1", "s2", toSecond)
+      .link("s1", "dst", viaFirst)
+      .link("s2", "dst", viaSecond)
+      .build();
+}
+
+TEST(MultiHopTopologyE2ETest, RemoteMetricChangeMovesProgrammedNextHop) {
+  OpenrE2eLab lab{multiHopTopology()};
   lab.start();
 
   constexpr std::chrono::seconds kTimeout{30};
   ASSERT_TRUE(lab.awaitAdjacency("s1", /*isUp=*/true, kTimeout));
   ASSERT_TRUE(lab.awaitAdjacency("s2", /*isUp=*/true, kTimeout));
-  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
 
   lab.setLinkMetric("s1-dst", "s1", 50);
-  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s2"}, kTimeout));
 
   lab.setLinkMetric("s1-dst", "s1", 1);
-  EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
+}
+
+TEST(MultiHopTopologyE2ETest, RemoteLinkFailureMovesProgrammedNextHop) {
+  OpenrE2eLab lab{multiHopTopology()};
+  lab.start();
+
+  constexpr std::chrono::seconds kTimeout{30};
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
+
+  lab.setLinkState("r1-s1", /*isUp=*/false);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s2"}, kTimeout));
+  lab.setLinkState("r1-s1", /*isUp=*/true);
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
+}
+
+TEST(MultiHopTopologyE2ETest, RemotePartitionWithdrawsAndRestoresRoute) {
+  OpenrE2eLab lab{multiHopTopology()};
+  lab.start();
+
+  constexpr std::chrono::seconds kTimeout{30};
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
+
+  lab.setPartition({"s1-dst", "s2-dst"}, /*isPartitioned=*/true);
+  ASSERT_TRUE(lab.awaitRouteAbsent(kMultiHopPrefix, kTimeout));
+  lab.setPartition({"s1-dst", "s2-dst"}, /*isPartitioned=*/false);
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
 }
 
 } // namespace

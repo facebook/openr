@@ -48,6 +48,7 @@ class SyntheticPeer final {
   void start();
   void stopSpark();
   void stop();
+  void setOperational(bool operational);
   void advertisePrefix(const std::string& cidr);
   void withdrawPrefix(const std::string& cidr);
   void publishKeyVals(const std::string& area, thrift::KeyVals keyVals);

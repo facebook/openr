@@ -83,7 +83,9 @@ OpenrE2eLab::Impl::Impl(const Topology& topology)
     return name;
   };
   const auto attach = [&](const LinkEndpointSpec& real,
-                          const LinkEndpointSpec& synthetic) {
+                          const LinkEndpointSpec& synthetic,
+                          const std::string& linkName,
+                          bool operational) {
     const auto name = synthetic.nodeName;
     if (peers_.count(name)) {
       throw TopologyError(
@@ -98,6 +100,8 @@ OpenrE2eLab::Impl::Impl(const Topology& topology)
     entry.dutV6 = ipv6Address(real);
     entry.peerV6 = ipv6Address(synthetic);
     entry.area = synthetic.area;
+    entry.linkName = linkName;
+    entry.linkUp = operational;
     SyntheticPeerConfig config;
     config.nodeName = nodeName_;
     config.peerName = name;
@@ -123,7 +127,9 @@ OpenrE2eLab::Impl::Impl(const Topology& topology)
     if (firstReal != secondReal) {
       attach(
           firstReal ? link.first : link.second,
-          firstReal ? link.second : link.first);
+          firstReal ? link.second : link.first,
+          link.name,
+          link.operational);
     }
   }
   for (const auto& segment : topology_->segments()) {
@@ -136,7 +142,7 @@ OpenrE2eLab::Impl::Impl(const Topology& topology)
     }
     for (const auto& endpoint : segment.endpoints) {
       if (endpoint.nodeName != nodeName_) {
-        attach(*real, endpoint);
+        attach(*real, endpoint, segment.name, true);
       }
     }
   }

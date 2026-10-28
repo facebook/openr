@@ -8,6 +8,7 @@
 #include <openr/tests/e2e/OpenrE2eInternal.h>
 
 #include <chrono>
+#include <map>
 #include <memory>
 #include <set>
 #include <stdexcept>
@@ -96,7 +97,9 @@ OpenrE2eLab::Impl::addPeer(const std::string& name) {
       "fe80::" + std::to_string(100 + index),
       "fe80::" + std::to_string(200 + index),
       {},
-      "0"};
+      "0",
+      "",
+      true};
   entry.synthetic = std::make_unique<SyntheticPeer>(SyntheticPeerConfig{
       nodeName_,
       entry.name,
@@ -123,8 +126,10 @@ OpenrE2eLab::Impl::addPeer(const std::string& name) {
 
   ConnectedIfPairs links;
   for (const auto& [_, p] : peers_) {
-    links[p.dutIfName].emplace_back(p.peerIfName, 0);
-    links[p.peerIfName].emplace_back(p.dutIfName, 0);
+    if (p.linkUp) {
+      links[p.dutIfName].emplace_back(p.peerIfName, 0);
+      links[p.peerIfName].emplace_back(p.dutIfName, 0);
+    }
   }
   ioProvider_->setConnectedPairs(std::move(links));
 
@@ -144,8 +149,10 @@ OpenrE2eLab::Impl::start() {
     IfNameAndifIndex interfaces;
     std::set<std::string> registered;
     for (const auto& [_, p] : peers_) {
-      links[p.dutIfName].emplace_back(p.peerIfName, 0);
-      links[p.peerIfName].emplace_back(p.dutIfName, 0);
+      if (p.linkUp) {
+        links[p.dutIfName].emplace_back(p.peerIfName, 0);
+        links[p.peerIfName].emplace_back(p.dutIfName, 0);
+      }
       if (registered.emplace(p.dutIfName).second) {
         interfaces.emplace_back(p.dutIfName, p.dutIfIndex);
       }
@@ -187,8 +194,12 @@ OpenrE2eLab::Impl::start() {
 
     reconnectControlClient();
 
+    std::map<std::string, bool> interfaceUp;
     for (const auto& [_, p] : peers_) {
-      platform_.setLink(p.dutIfName, p.dutIfIndex, true);
+      interfaceUp[p.dutIfName] |= p.linkUp;
+    }
+    for (const auto& [_, p] : peers_) {
+      platform_.setLink(p.dutIfName, p.dutIfIndex, interfaceUp.at(p.dutIfName));
       platform_.setAddress(p.dutIfName, p.dutV6 + "/64", true);
     }
   } catch (...) {
@@ -243,13 +254,6 @@ OpenrE2eLab::Impl::withdrawLocalPrefix(const std::string& cidr) {
   const std::vector<thrift::PrefixEntry> entries{
       createPrefixEntry(toIpPrefix(folly::IPAddress::createNetwork(cidr)))};
   controlClient_->sync_withdrawPrefixes(entries);
-}
-
-void
-OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
-  requireStarted();
-  const auto& p = peer(name);
-  platform_.setLink(p.dutIfName, p.dutIfIndex, isUp);
 }
 
 void
@@ -312,11 +316,6 @@ OpenrE2eLab::advertiseLocalPrefix(const std::string& cidr) {
 void
 OpenrE2eLab::withdrawLocalPrefix(const std::string& cidr) {
   impl_->withdrawLocalPrefix(cidr);
-}
-
-void
-OpenrE2eLab::setLinkUp(const std::string& peer, bool isUp) {
-  impl_->setLinkUp(peer, isUp);
 }
 
 void
