@@ -183,6 +183,27 @@ class SyntheticPeer::Impl final {
     client.sync_setKvStoreKeyVals(params, kArea);
   }
 
+  bool
+  receivedPrefix(
+      const std::string& nodeName,
+      const folly::CIDRNetwork& prefix,
+      bool isAdvertised) const {
+    const auto key = PrefixKey(nodeName, prefix, kArea).getPrefixKeyV2();
+    const auto keys = handler_->getKvStore();
+    const auto it = keys.find(key);
+    if (it == keys.end() || !it->second.value().has_value()) {
+      return false;
+    }
+
+    apache::thrift::CompactSerializer serializer;
+    const auto database = readThriftObjStr<thrift::PrefixDatabase>(
+        *it->second.value(), serializer);
+    return *database.thisNodeName() == nodeName &&
+        database.prefixEntries()->size() == 1 &&
+        toIPNetwork(*database.prefixEntries()->front().prefix()) == prefix &&
+        *database.deletePrefix() != isAdvertised;
+  }
+
   const SyntheticPeerConfig config_;
   const std::shared_ptr<FakeKvStoreHandler> handler_;
   SparkFaker sparkFaker_;
@@ -218,6 +239,14 @@ SyntheticPeer::advertisePrefix(const std::string& cidr) {
 void
 SyntheticPeer::withdrawPrefix(const std::string& cidr) {
   impl_->publishPrefix(cidr, true);
+}
+
+bool
+SyntheticPeer::receivedPrefix(
+    const std::string& nodeName,
+    const folly::CIDRNetwork& prefix,
+    bool isAdvertised) const {
+  return impl_->receivedPrefix(nodeName, prefix, isAdvertised);
 }
 
 const std::string&

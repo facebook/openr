@@ -11,6 +11,8 @@
 #include <memory>
 #include <string>
 
+#include <folly/IPAddress.h>
+
 namespace openr {
 class MockIoProvider;
 }
@@ -42,6 +44,10 @@ class SyntheticPeer final {
   void stop();
   void advertisePrefix(const std::string& cidr);
   void withdrawPrefix(const std::string& cidr);
+  bool receivedPrefix(
+      const std::string& nodeName,
+      const folly::CIDRNetwork& prefix,
+      bool isAdvertised) const;
 
   const std::string& dutIfName() const;
   const std::string& peerV6Address() const;

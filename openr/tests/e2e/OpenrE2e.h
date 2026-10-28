@@ -28,10 +28,17 @@ class OpenrE2eLab final {
 
   void advertisePrefix(const std::string& peer, const std::string& cidr);
   void withdrawPrefix(const std::string& peer, const std::string& cidr);
+  void advertiseLocalPrefix(const std::string& cidr);
+  void withdrawLocalPrefix(const std::string& cidr);
   void setLinkUp(const std::string& peer, bool isUp);
 
   bool awaitAdjacency(
       const std::string& peer, bool isUp, std::chrono::milliseconds timeout);
+  bool awaitPeerPrefix(
+      const std::string& peer,
+      const std::string& cidr,
+      bool isAdvertised,
+      std::chrono::milliseconds timeout);
   bool awaitProgrammedRoute(
       const std::string& cidr,
       const std::vector<std::string>& viaPeers,

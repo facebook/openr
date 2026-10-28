@@ -16,6 +16,8 @@
 #include <folly/io/async/AsyncSocket.h>
 #include <thrift/lib/cpp2/async/RocketClientChannel.h>
 
+#include <openr/common/LsdbUtil.h>
+#include <openr/common/NetworkUtil.h>
 #include <openr/config/Config.h>
 #include <openr/tests/e2e/OpenrE2eConfig.h>
 #include <openr/tests/e2e/OpenrModuleGraph.h>
@@ -179,6 +181,22 @@ OpenrE2eLab::Impl::withdrawPrefix(
 }
 
 void
+OpenrE2eLab::Impl::advertiseLocalPrefix(const std::string& cidr) {
+  requireStarted();
+  const std::vector<thrift::PrefixEntry> entries{
+      createPrefixEntry(toIpPrefix(folly::IPAddress::createNetwork(cidr)))};
+  controlClient_->sync_advertisePrefixes(entries);
+}
+
+void
+OpenrE2eLab::Impl::withdrawLocalPrefix(const std::string& cidr) {
+  requireStarted();
+  const std::vector<thrift::PrefixEntry> entries{
+      createPrefixEntry(toIpPrefix(folly::IPAddress::createNetwork(cidr)))};
+  controlClient_->sync_withdrawPrefixes(entries);
+}
+
+void
 OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
   requireStarted();
   const auto& p = peer(name);
@@ -208,6 +226,16 @@ OpenrE2eLab::advertisePrefix(const std::string& peer, const std::string& cidr) {
 void
 OpenrE2eLab::withdrawPrefix(const std::string& peer, const std::string& cidr) {
   impl_->withdrawPrefix(peer, cidr);
+}
+
+void
+OpenrE2eLab::advertiseLocalPrefix(const std::string& cidr) {
+  impl_->advertiseLocalPrefix(cidr);
+}
+
+void
+OpenrE2eLab::withdrawLocalPrefix(const std::string& cidr) {
+  impl_->withdrawLocalPrefix(cidr);
 }
 
 void

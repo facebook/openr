@@ -88,6 +88,20 @@ OpenrE2eLab::Impl::awaitAdjacency(
 }
 
 bool
+OpenrE2eLab::Impl::awaitPeerPrefix(
+    const std::string& name,
+    const std::string& cidr,
+    bool isAdvertised,
+    std::chrono::milliseconds timeout) {
+  requireStarted();
+  const auto& p = peer(name);
+  const auto prefix = folly::IPAddress::createNetwork(cidr);
+  return awaitUntil(timeout, [&](Clock::time_point) {
+    return p.synthetic->receivedPrefix(nodeName_, prefix, isAdvertised);
+  });
+}
+
+bool
 OpenrE2eLab::Impl::awaitProgrammedRoute(
     const std::string& cidr,
     const std::vector<std::string>& viaPeers,
@@ -138,6 +152,15 @@ bool
 OpenrE2eLab::awaitAdjacency(
     const std::string& peer, bool isUp, std::chrono::milliseconds timeout) {
   return impl_->awaitAdjacency(peer, isUp, timeout);
+}
+
+bool
+OpenrE2eLab::awaitPeerPrefix(
+    const std::string& peer,
+    const std::string& cidr,
+    bool isAdvertised,
+    std::chrono::milliseconds timeout) {
+  return impl_->awaitPeerPrefix(peer, cidr, isAdvertised, timeout);
 }
 
 bool
