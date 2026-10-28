@@ -106,6 +106,12 @@ TestPlatform::restartFibService() {
   fibHandler_->restart();
 }
 
+bool
+TestPlatform::waitForFibServiceKeepaliveCalls(
+    std::size_t count, std::chrono::milliseconds timeout) const {
+  return fibHandler_->waitForAliveSinceCalls(count, timeout);
+}
+
 void
 TestPlatform::setFibServiceAvailable(bool isAvailable) {
   if (!running_) {

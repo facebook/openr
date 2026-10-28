@@ -252,7 +252,20 @@ int64_t
 MockNetlinkFibHandler::aliveSince() {
   int64_t res = 0;
   startTime_.withRLock([&](auto& startTime) { res = startTime; });
+  {
+    std::lock_guard<std::mutex> lock(aliveSinceMutex_);
+    ++aliveSinceCallCount_;
+  }
+  aliveSinceCondition_.notify_all();
   return res;
+}
+
+bool
+MockNetlinkFibHandler::waitForAliveSinceCalls(
+    size_t count, std::chrono::milliseconds timeout) const {
+  std::unique_lock<std::mutex> lock(aliveSinceMutex_);
+  return aliveSinceCondition_.wait_for(
+      lock, timeout, [&] { return aliveSinceCallCount_.load() >= count; });
 }
 
 void
@@ -350,6 +363,7 @@ MockNetlinkFibHandler::stop() {
   unicastRouteDb_->clear();
   mplsRouteDb_->clear();
   fibSyncCount_ = 0;
+  aliveSinceCallCount_ = 0;
   addRoutesCount_ = 0;
   delRoutesCount_ = 0;
   fibMplsSyncCount_ = 0;
@@ -367,6 +381,7 @@ MockNetlinkFibHandler::restart() {
     startTime += 1; // Always increment on restart for unique number
   });
   fibSyncCount_ = 0;
+  aliveSinceCallCount_ = 0;
   addRoutesCount_ = 0;
   delRoutesCount_ = 0;
   fibMplsSyncCount_ = 0;

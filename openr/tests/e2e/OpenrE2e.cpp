@@ -206,6 +206,9 @@ OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
 void
 OpenrE2eLab::Impl::restartFibService() {
   requireStarted();
+  if (!platform_.waitForFibServiceKeepaliveCalls(2, std::chrono::seconds{10})) {
+    throw std::runtime_error("FibService keepalive did not initialize");
+  }
   platform_.restartFibService();
 }
 

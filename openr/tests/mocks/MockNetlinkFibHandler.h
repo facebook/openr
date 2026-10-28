@@ -7,6 +7,11 @@
 
 #pragma once
 
+#include <atomic>
+#include <chrono>
+#include <condition_variable>
+#include <mutex>
+
 #include <folly/IPAddress.h>
 
 #include <openr/if/gen-cpp2/FibService.h>
@@ -79,6 +84,12 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
   void waitForUnhealthyException(size_t count = 1);
 
   int64_t aliveSince() override;
+  size_t
+  getAliveSinceCallCount() const {
+    return aliveSinceCallCount_.load();
+  }
+  bool waitForAliveSinceCalls(
+      size_t count, std::chrono::milliseconds timeout) const;
 
   void getRouteTableByClient(
       std::vector<openr::thrift::UnicastRoute>& routes,
@@ -152,6 +163,9 @@ class MockNetlinkFibHandler final : public thrift::FibServiceSvIf {
 
   // Stats
   std::atomic<size_t> fibSyncCount_{0};
+  std::atomic<size_t> aliveSinceCallCount_{0};
+  mutable std::mutex aliveSinceMutex_;
+  mutable std::condition_variable aliveSinceCondition_;
   std::atomic<size_t> addRoutesCount_{0};
   std::atomic<size_t> delRoutesCount_{0};
   std::atomic<size_t> fibMplsSyncCount_{0};

@@ -7,6 +7,7 @@
 
 #include <gtest/gtest.h>
 
+#include <chrono>
 #include <utility>
 
 #include <folly/io/async/AsyncSocket.h>
@@ -31,7 +32,14 @@ TEST(TestPlatformTest, FibServiceRespondsThroughARealThriftSocket) {
       apache::thrift::RocketClientChannel::newChannel(std::move(socket));
   apache::thrift::Client<thrift::FibService> client(std::move(channel));
 
+  EXPECT_FALSE(platform.waitForFibServiceKeepaliveCalls(
+      2, std::chrono::milliseconds{0}));
   EXPECT_EQ(1, client.sync_aliveSince());
+  EXPECT_FALSE(platform.waitForFibServiceKeepaliveCalls(
+      2, std::chrono::milliseconds{0}));
+  EXPECT_EQ(1, client.sync_aliveSince());
+  EXPECT_TRUE(platform.waitForFibServiceKeepaliveCalls(
+      2, std::chrono::milliseconds{0}));
   EXPECT_TRUE(platform.fibRoutes().empty());
   EXPECT_EQ(0, platform.fibUpdateCounts().addedRoutes);
 

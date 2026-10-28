@@ -7,6 +7,7 @@
 
 #pragma once
 
+#include <chrono>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -46,6 +47,8 @@ class TestPlatform final {
   void start();
   void stop();
   void restartFibService();
+  bool waitForFibServiceKeepaliveCalls(
+      std::size_t count, std::chrono::milliseconds timeout) const;
   void setFibServiceAvailable(bool isAvailable);
 
   uint16_t fibPort() const;
