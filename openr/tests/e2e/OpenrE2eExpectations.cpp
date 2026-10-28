@@ -8,6 +8,7 @@
 #include <openr/tests/e2e/OpenrE2eInternal.h>
 
 #include <algorithm>
+#include <cerrno>
 #include <chrono>
 #include <set>
 #include <stdexcept>
@@ -79,11 +80,18 @@ OpenrE2eLab::Impl::awaitAdjacency(
     try {
       controlClient_->sync_getNeighbors(options, neighbors);
     } catch (const apache::thrift::transport::TTransportException& error) {
-      if (error.getType() ==
-          apache::thrift::transport::TTransportException::TIMED_OUT) {
-        return false;
+      using TransportError = apache::thrift::transport::TTransportException;
+      const auto type = error.getType();
+      if (type != TransportError::TIMED_OUT &&
+          type != TransportError::NOT_OPEN &&
+          type != TransportError::END_OF_FILE &&
+          type != TransportError::NETWORK_ERROR &&
+          (type != TransportError::INTERNAL_ERROR ||
+           error.getErrno() != ECONNRESET)) {
+        throw;
       }
-      throw;
+      reconnectControlClient();
+      return false;
     }
     const bool established = std::any_of(
         neighbors.begin(), neighbors.end(), [&](const auto& neighbor) {

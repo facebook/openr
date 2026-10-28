@@ -79,6 +79,7 @@ class OpenrE2eLab::Impl final {
 
   const Peer& peer(const std::string& name) const;
   void requireStarted() const;
+  void reconnectControlClient();
   bool hasProgrammedPrefix(const folly::CIDRNetwork& prefix) const;
 
   std::string nodeName_;

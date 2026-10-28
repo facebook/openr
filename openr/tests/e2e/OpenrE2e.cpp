@@ -61,6 +61,15 @@ OpenrE2eLab::Impl::requireStarted() const {
   }
 }
 
+void
+OpenrE2eLab::Impl::reconnectControlClient() {
+  controlClient_.reset();
+  auto socket = folly::AsyncSocket::newSocket(
+      &controlEventBase_, "::1", graph_->controlPort(), 5000);
+  controlClient_ = std::make_unique<E2eCtrlClient>(
+      apache::thrift::RocketClientChannel::newChannel(std::move(socket)));
+}
+
 OpenrE2eLab::OpenrE2eLab(std::string nodeName)
     : impl_{std::make_unique<Impl>(std::move(nodeName))} {}
 
@@ -154,10 +163,7 @@ OpenrE2eLab::Impl::start() {
         /*manageIoProvider=*/true);
     graph_->start();
 
-    auto socket = folly::AsyncSocket::newSocket(
-        &controlEventBase_, "::1", graph_->controlPort(), 5000);
-    controlClient_ = std::make_unique<E2eCtrlClient>(
-        apache::thrift::RocketClientChannel::newChannel(std::move(socket)));
+    reconnectControlClient();
 
     for (const auto& [_, p] : peers_) {
       platform_.setLink(p.dutIfName, p.dutIfIndex, true);
