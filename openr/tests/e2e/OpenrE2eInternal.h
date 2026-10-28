@@ -45,8 +45,12 @@ class OpenrE2eLab::Impl final {
   void addPeer(const std::string& name);
   void start();
   void stop();
-  void advertisePrefix(const std::string& peer, const std::string& cidr);
-  void withdrawPrefix(const std::string& peer, const std::string& cidr);
+  void advertisePrefix(
+      const std::string& node, const std::string& cidr, PrefixOptions options);
+  void withdrawPrefix(
+      const std::string& node,
+      const std::string& cidr,
+      const PrefixOptions& options);
   void advertiseLocalPrefix(const std::string& cidr);
   void withdrawLocalPrefix(const std::string& cidr);
   void setLinkUp(const std::string& peer, bool isUp);

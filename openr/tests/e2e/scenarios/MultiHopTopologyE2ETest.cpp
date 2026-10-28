@@ -110,5 +110,29 @@ TEST(MultiHopTopologyE2ETest, RemotePartitionWithdrawsAndRestoresRoute) {
   EXPECT_TRUE(lab.awaitProgrammedRoute(kMultiHopPrefix, {"s1"}, kTimeout));
 }
 
+TEST(MultiHopTopologyE2ETest, NamedPeerPrefixArrivesAndWithdraws) {
+  const auto topology = TopologyBuilder{"dynamic-prefix"}
+                            .realNode("r1")
+                            .syntheticNode("s1")
+                            .syntheticNode("dst")
+                            .link("r1", "s1")
+                            .link("s1", "dst")
+                            .build();
+  OpenrE2eLab lab{topology};
+  lab.start();
+
+  constexpr std::chrono::seconds kTimeout{30};
+  constexpr char kPrefix[] = "2001:db8:300::/64";
+  ASSERT_TRUE(lab.awaitAdjacency("s1", /*isUp=*/true, kTimeout));
+  PrefixOptions options;
+  options.area = "0";
+  options.tags = {"customer"};
+  lab.advertisePrefix("dst", kPrefix, options);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+
+  lab.withdrawPrefix("dst", kPrefix, options);
+  EXPECT_TRUE(lab.awaitRouteAbsent(kPrefix, kTimeout));
+}
+
 } // namespace
 } // namespace openr::e2e

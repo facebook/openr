@@ -227,20 +227,6 @@ OpenrE2eLab::Impl::stop() {
 }
 
 void
-OpenrE2eLab::Impl::advertisePrefix(
-    const std::string& name, const std::string& cidr) {
-  requireStarted();
-  peer(name).synthetic->advertisePrefix(cidr);
-}
-
-void
-OpenrE2eLab::Impl::withdrawPrefix(
-    const std::string& name, const std::string& cidr) {
-  requireStarted();
-  peer(name).synthetic->withdrawPrefix(cidr);
-}
-
-void
 OpenrE2eLab::Impl::advertiseLocalPrefix(const std::string& cidr) {
   requireStarted();
   const std::vector<thrift::PrefixEntry> entries{
@@ -296,16 +282,6 @@ OpenrE2eLab::start() {
 void
 OpenrE2eLab::stop() {
   impl_->stop();
-}
-
-void
-OpenrE2eLab::advertisePrefix(const std::string& peer, const std::string& cidr) {
-  impl_->advertisePrefix(peer, cidr);
-}
-
-void
-OpenrE2eLab::withdrawPrefix(const std::string& peer, const std::string& cidr) {
-  impl_->withdrawPrefix(peer, cidr);
 }
 
 void

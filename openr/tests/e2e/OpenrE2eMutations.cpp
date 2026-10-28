@@ -13,11 +13,65 @@
 #include <utility>
 #include <vector>
 
+#include <folly/IPAddress.h>
+
 #include <openr/tests/e2e/TopologyMaterializer.h>
 #include <openr/tests/e2e/TopologyMutator.h>
 #include <openr/tests/mocks/MockIoProvider.h>
 
 namespace openr::e2e {
+
+void
+OpenrE2eLab::Impl::advertisePrefix(
+    const std::string& name, const std::string& cidr, PrefixOptions options) {
+  requireStarted();
+  if (!topology_) {
+    if (options.area || !options.tags.empty() ||
+        options.type != thrift::PrefixType::LOOPBACK) {
+      throw std::invalid_argument("Prefix options require a topology lab");
+    }
+    peer(name).synthetic->advertisePrefix(cidr);
+    return;
+  }
+  const auto& node = topology_->node(name);
+  if (node.kind == NodeKind::REAL) {
+    throw std::invalid_argument("Use advertiseLocalPrefix for the real router");
+  }
+  mutateTopology(
+      AdvertisePrefix{
+          name,
+          PrefixSpec{
+              folly::IPAddress::createNetwork(cidr),
+              options.type,
+              options.area.value_or(node.areas.front()),
+              std::move(options.tags)}});
+}
+
+void
+OpenrE2eLab::Impl::withdrawPrefix(
+    const std::string& name,
+    const std::string& cidr,
+    const PrefixOptions& options) {
+  requireStarted();
+  if (!topology_) {
+    if (options.area || !options.tags.empty() ||
+        options.type != thrift::PrefixType::LOOPBACK) {
+      throw std::invalid_argument("Prefix options require a topology lab");
+    }
+    peer(name).synthetic->withdrawPrefix(cidr);
+    return;
+  }
+  const auto& node = topology_->node(name);
+  if (node.kind == NodeKind::REAL) {
+    throw std::invalid_argument("Use withdrawLocalPrefix for the real router");
+  }
+  mutateTopology(
+      WithdrawPrefix{
+          name,
+          folly::IPAddress::createNetwork(cidr),
+          options.area.value_or(node.areas.front()),
+          options.type});
+}
 
 void
 OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
@@ -119,6 +173,30 @@ void
 OpenrE2eLab::setPartition(
     const std::vector<std::string>& links, bool isPartitioned) {
   impl_->mutateTopology(SetPartition{links, isPartitioned});
+}
+
+void
+OpenrE2eLab::advertisePrefix(const std::string& node, const std::string& cidr) {
+  impl_->advertisePrefix(node, cidr, {});
+}
+
+void
+OpenrE2eLab::advertisePrefix(
+    const std::string& node, const std::string& cidr, PrefixOptions options) {
+  impl_->advertisePrefix(node, cidr, std::move(options));
+}
+
+void
+OpenrE2eLab::withdrawPrefix(const std::string& node, const std::string& cidr) {
+  impl_->withdrawPrefix(node, cidr, {});
+}
+
+void
+OpenrE2eLab::withdrawPrefix(
+    const std::string& node,
+    const std::string& cidr,
+    const PrefixOptions& options) {
+  impl_->withdrawPrefix(node, cidr, options);
 }
 
 } // namespace openr::e2e
