@@ -68,8 +68,8 @@ OpenrE2eLab::~OpenrE2eLab() = default;
 
 void
 OpenrE2eLab::Impl::addPeer(const std::string& name) {
-  if (started_ || stopped_) {
-    throw std::logic_error("Add peers before starting Open/R E2E lab");
+  if (stopped_) {
+    throw std::logic_error("Open/R E2E lab has stopped");
   }
   if (name.empty() || name == nodeName_ || peers_.count(name)) {
     throw std::invalid_argument("Open/R E2E peer name must be unique");
@@ -96,7 +96,25 @@ OpenrE2eLab::Impl::addPeer(const std::string& name) {
       entry.peerV6,
       kvStoreService_.port(),
       ioProvider_});
-  peers_.emplace(name, std::move(entry));
+  const auto& joined = peers_.emplace(name, std::move(entry)).first->second;
+  if (!started_) {
+    return;
+  }
+
+  ioProvider_->addIfNameIfIndex(
+      {{joined.dutIfName, joined.dutIfIndex},
+       {joined.peerIfName, joined.peerIfIndex}});
+  joined.synthetic->start();
+
+  ConnectedIfPairs links;
+  for (const auto& [_, p] : peers_) {
+    links[p.dutIfName].emplace_back(p.peerIfName, 0);
+    links[p.peerIfName].emplace_back(p.dutIfName, 0);
+  }
+  ioProvider_->setConnectedPairs(std::move(links));
+
+  platform_.setLink(joined.dutIfName, joined.dutIfIndex, true);
+  platform_.setAddress(joined.dutIfName, joined.dutV6 + "/64", true);
 }
 
 void
