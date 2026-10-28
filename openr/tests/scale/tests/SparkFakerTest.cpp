@@ -5,13 +5,76 @@
  * LICENSE file in the root directory of this source tree.
  */
 
+#include <chrono>
+#include <future>
+#include <mutex>
+#include <thread>
+#include <vector>
+
 #include <folly/logging/xlog.h>
 #include <gtest/gtest.h>
+#include <thrift/lib/cpp2/protocol/Serializer.h>
 
 #include <openr/tests/mocks/MockIoProvider.h>
 #include <openr/tests/scale/SparkFaker.h>
 
 namespace openr {
+namespace {
+
+class BlockingSparkIo final : public SparkIoInterface {
+ public:
+  std::future<void>
+  firstSendEntered() {
+    return firstSendEntered_.get_future();
+  }
+
+  void
+  releaseFirstSend() {
+    releaseFirstSend_.set_value();
+  }
+
+  std::vector<std::string>
+  packets() const {
+    std::lock_guard<std::mutex> lock(mutex_);
+    return packets_;
+  }
+
+  void
+  sendPacket(
+      int,
+      const folly::IPAddress&,
+      const std::string& packet,
+      std::chrono::milliseconds) override {
+    size_t count;
+    {
+      std::lock_guard<std::mutex> lock(mutex_);
+      packets_.push_back(packet);
+      count = packets_.size();
+    }
+    if (count == 1) {
+      firstSendEntered_.set_value();
+      firstSendReleased_.wait();
+    }
+  }
+
+  void
+  registerCallback(const std::string&, PacketCallback) override {}
+  void
+  startReceiving() override {}
+  void
+  stopReceiving() override {}
+  void
+  addInterface(const std::string&, int) override {}
+
+ private:
+  mutable std::mutex mutex_;
+  std::vector<std::string> packets_;
+  std::promise<void> firstSendEntered_;
+  std::promise<void> releaseFirstSend_;
+  std::future<void> firstSendReleased_{releaseFirstSend_.get_future()};
+};
+
+} // namespace
 
 class SparkFakerTest : public ::testing::Test {
  protected:
@@ -183,6 +246,116 @@ TEST_F(SparkFakerTest, HandleDutPacket) {
    * state, but if no crash, it works)
    */
   SUCCEED();
+}
+
+TEST(SparkFakerIoTest, InboundHandshakeKeepsStateAccessibleAndSendOrder) {
+  auto io = std::make_shared<BlockingSparkIo>();
+  SparkFaker faker{io};
+  faker.addNeighbor("spine", "spine-if", 100, "fe80::1", "dut-if", 1);
+
+  thrift::SparkHelloMsg hello;
+  hello.nodeName() = "dut";
+  hello.ifName() = "dut-if";
+  hello.seqNum() = 1;
+  hello.sentTsInUs() = 1;
+  thrift::ReflectedNeighborInfo reflected;
+  reflected.seqNum() = 1;
+  hello.neighborInfos()["spine"] = std::move(reflected);
+  thrift::SparkHelloPacket helloPacket;
+  helloPacket.helloMsg() = std::move(hello);
+
+  auto entered = io->firstSendEntered();
+  std::thread helloThread(
+      [&] { faker.handleDutPacket("spine-if", helloPacket); });
+  EXPECT_EQ(
+      std::future_status::ready, entered.wait_for(std::chrono::seconds{5}));
+
+  auto state = std::async(
+      std::launch::async, [&] { return faker.getNeighborState("spine"); });
+  const bool stateReady =
+      state.wait_for(std::chrono::seconds{2}) == std::future_status::ready;
+  EXPECT_TRUE(stateReady);
+  if (stateReady) {
+    EXPECT_EQ(thrift::SparkNeighState::NEGOTIATE, state.get());
+  }
+
+  thrift::SparkHandshakeMsg handshake;
+  handshake.nodeName() = "dut";
+  handshake.neighborNodeName() = "spine";
+  handshake.isAdjEstablished() = false;
+  thrift::SparkHelloPacket handshakePacket;
+  handshakePacket.handshakeMsg() = std::move(handshake);
+  auto confirmation = std::async(std::launch::async, [&] {
+    faker.handleDutPacket("spine-if", handshakePacket);
+    return faker.getNeighborState("spine");
+  });
+  const bool confirmedBeforeRelease =
+      confirmation.wait_for(std::chrono::seconds{2}) ==
+      std::future_status::ready;
+  EXPECT_TRUE(confirmedBeforeRelease);
+  if (confirmedBeforeRelease) {
+    EXPECT_EQ(thrift::SparkNeighState::ESTABLISHED, confirmation.get());
+    EXPECT_EQ(1, io->packets().size());
+  }
+
+  io->releaseFirstSend();
+  helloThread.join();
+  if (!stateReady) {
+    EXPECT_EQ(
+        std::future_status::ready, state.wait_for(std::chrono::seconds{5}));
+  }
+  if (!confirmedBeforeRelease) {
+    EXPECT_EQ(
+        std::future_status::ready,
+        confirmation.wait_for(std::chrono::seconds{5}));
+  }
+
+  const auto sent = io->packets();
+  ASSERT_EQ(2, sent.size());
+  const auto first =
+      apache::thrift::CompactSerializer::deserialize<thrift::SparkHelloPacket>(
+          sent.front());
+  const auto second =
+      apache::thrift::CompactSerializer::deserialize<thrift::SparkHelloPacket>(
+          sent.back());
+  ASSERT_TRUE(first.handshakeMsg().has_value());
+  ASSERT_TRUE(second.handshakeMsg().has_value());
+  EXPECT_FALSE(*first.handshakeMsg()->isAdjEstablished());
+  EXPECT_TRUE(*second.handshakeMsg()->isAdjEstablished());
+}
+
+TEST(SparkFakerIoTest, PeriodicHelloKeepsNeighborControlsResponsive) {
+  auto io = std::make_shared<BlockingSparkIo>();
+  SparkFaker faker{io};
+  faker.addNeighbor("spine", "spine-if", 100, "fe80::1", "dut-if", 1);
+
+  auto entered = io->firstSendEntered();
+  faker.start();
+  EXPECT_EQ(
+      std::future_status::ready, entered.wait_for(std::chrono::seconds{5}));
+
+  auto count =
+      std::async(std::launch::async, [&] { return faker.getNeighborCount(); });
+  const bool countReady =
+      count.wait_for(std::chrono::seconds{2}) == std::future_status::ready;
+  EXPECT_TRUE(countReady);
+  if (countReady) {
+    EXPECT_EQ(1, count.get());
+  }
+
+  io->releaseFirstSend();
+  faker.stop();
+  if (!countReady) {
+    EXPECT_EQ(
+        std::future_status::ready, count.wait_for(std::chrono::seconds{5}));
+  }
+
+  const auto sent = io->packets();
+  ASSERT_FALSE(sent.empty());
+  const auto first =
+      apache::thrift::CompactSerializer::deserialize<thrift::SparkHelloPacket>(
+          sent.front());
+  EXPECT_TRUE(first.helloMsg().has_value());
 }
 
 } // namespace openr

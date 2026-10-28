@@ -8,7 +8,10 @@
 #pragma once
 
 #include <atomic>
+#include <deque>
 #include <memory>
+#include <mutex>
+#include <optional>
 #include <string>
 #include <thread>
 #include <vector>
@@ -142,6 +145,7 @@ class SparkFaker {
    */
   size_t
   getNeighborCount() const {
+    std::lock_guard<std::mutex> lock(neighborsMutex_);
     return neighbors_.size();
   }
 
@@ -218,18 +222,15 @@ class SparkFaker {
       const std::string& packet);
 
   /*
-   * Process a DUT packet for a specific neighbor
-   */
-  void handleDutPacketForNeighbor(
-      FakeNeighbor& neighbor, const thrift::SparkHelloPacket& packet);
-
-  /*
    * Register callbacks with MockIoProvider for bidirectional communication
    * Called automatically in start() after neighbors are added
    */
   void registerCallbacks();
 
  private:
+  void handleDutPacketForNeighbor(
+      FakeNeighbor& neighbor, const thrift::SparkHelloPacket& packet);
+
   /*
    * Build SparkHelloMsg for a neighbor
    */
@@ -266,13 +267,31 @@ class SparkFaker {
    */
   void runLoop();
 
+  void flushPendingPackets();
+
   /*
    * Process state machine for a single neighbor
    */
   void processNeighbor(FakeNeighbor& neighbor);
 
   std::shared_ptr<SparkIoInterface> io_;
+  mutable std::mutex neighborsMutex_;
   std::vector<FakeNeighbor> neighbors_;
+  struct PendingSend {
+    int dutIfIndex;
+    folly::IPAddress srcAddr;
+    std::string packet;
+  };
+  std::deque<PendingSend> pendingSends_;
+  bool flushing_{false};
+  struct ReceivedPacket {
+    std::string srcIfName;
+    std::string dstIfName;
+    folly::IPAddress srcAddr;
+    std::string packet;
+  };
+  std::mutex receivedPacketsMutex_;
+  std::deque<ReceivedPacket> receivedPackets_;
 
   std::atomic<bool> running_{false};
   std::unique_ptr<std::thread> thread_;

@@ -38,6 +38,7 @@ SparkFaker::addNeighbor(
     const std::string& dutIfName,
     int dutIfIndex,
     const std::string& v4Addr) {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   FakeNeighbor neighbor;
   neighbor.nodeName = nodeName;
   neighbor.ifName = ifName;
@@ -86,7 +87,7 @@ SparkFaker::start() {
 
   thread_ = std::make_unique<std::thread>([this]() { runLoop(); });
 
-  XLOGF(DBG1, "SparkFaker: Started with {} neighbors", neighbors_.size());
+  XLOGF(DBG1, "SparkFaker: Started with {} neighbors", getNeighborCount());
 }
 
 void
@@ -110,6 +111,7 @@ SparkFaker::stop() {
 
 bool
 SparkFaker::failNeighbor(const std::string& nodeName) {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   for (auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       neighbor.failed = true;
@@ -126,6 +128,7 @@ SparkFaker::failNeighbor(const std::string& nodeName) {
 
 bool
 SparkFaker::recoverNeighbor(const std::string& nodeName) {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   for (auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       neighbor.failed = false;
@@ -148,6 +151,7 @@ SparkFaker::recoverNeighbor(const std::string& nodeName) {
 
 std::optional<thrift::SparkNeighState>
 SparkFaker::getNeighborState(const std::string& nodeName) const {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   for (const auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       return neighbor.state;
@@ -158,6 +162,7 @@ SparkFaker::getNeighborState(const std::string& nodeName) const {
 
 bool
 SparkFaker::setNeighborCtrlPort(const std::string& nodeName, uint16_t port) {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   for (auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       neighbor.ctrlPort = port;
@@ -172,6 +177,7 @@ SparkFaker::setNeighborCtrlPort(const std::string& nodeName, uint16_t port) {
 bool
 SparkFaker::setNeighborArea(
     const std::string& nodeName, const std::string& area) {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   for (auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       neighbor.area = area;
@@ -185,6 +191,7 @@ SparkFaker::setNeighborArea(
 
 std::optional<std::string>
 SparkFaker::getNeighborArea(const std::string& nodeName) const {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   for (const auto& neighbor : neighbors_) {
     if (neighbor.nodeName == nodeName) {
       return neighbor.area;
@@ -273,14 +280,10 @@ SparkFaker::sendHello(FakeNeighbor& neighbor) {
 
   auto packet = writeThriftObjStr(pkt, serializer_);
 
-  /*
-   * Send packet via SparkIoInterface targeting the DUT's interface
-   */
-  io_->sendPacket(
-      neighbor.dutIfIndex,
-      folly::IPAddress(neighbor.v6Addr),
-      packet,
-      std::chrono::milliseconds(0));
+  pendingSends_.push_back(
+      {neighbor.dutIfIndex,
+       folly::IPAddress(neighbor.v6Addr),
+       std::move(packet)});
 
   neighbor.lastHelloTime = std::chrono::steady_clock::now();
   stats_.hellosSent++;
@@ -310,11 +313,10 @@ SparkFaker::sendHandshake(FakeNeighbor& neighbor) {
 
   auto packet = writeThriftObjStr(pkt, serializer_);
 
-  io_->sendPacket(
-      neighbor.dutIfIndex,
-      folly::IPAddress(neighbor.v6Addr),
-      packet,
-      std::chrono::milliseconds(0));
+  pendingSends_.push_back(
+      {neighbor.dutIfIndex,
+       folly::IPAddress(neighbor.v6Addr),
+       std::move(packet)});
 
   stats_.handshakesSent++;
   neighbor.lastHandshakeTime = std::chrono::steady_clock::now();
@@ -338,11 +340,10 @@ SparkFaker::sendHeartbeat(FakeNeighbor& neighbor) {
 
   auto packet = writeThriftObjStr(pkt, serializer_);
 
-  io_->sendPacket(
-      neighbor.dutIfIndex,
-      folly::IPAddress(neighbor.v6Addr),
-      packet,
-      std::chrono::milliseconds(0));
+  pendingSends_.push_back(
+      {neighbor.dutIfIndex,
+       folly::IPAddress(neighbor.v6Addr),
+       std::move(packet)});
 
   neighbor.lastHeartbeatTime = std::chrono::steady_clock::now();
   stats_.heartbeatsSent++;
@@ -357,31 +358,70 @@ SparkFaker::sendHeartbeat(FakeNeighbor& neighbor) {
 }
 
 void
-SparkFaker::handleDutPacket(
-    const std::string& ifName, const thrift::SparkHelloPacket& packet) {
-  /*
-   * Dispatch to ALL neighbors whose ifName matches.
-   * For MockSparkIo: each neighbor has a unique ifName, so this finds one.
-   * For RealSparkIo: the receive loop calls each neighbor's callback
-   * separately, so ifName matches one specific neighbor per call.
-   */
-  bool found = false;
-  for (auto& n : neighbors_) {
-    if (n.ifName != ifName) {
-      continue;
+SparkFaker::flushPendingPackets() {
+  {
+    std::lock_guard<std::mutex> lock(neighborsMutex_);
+    if (flushing_) {
+      return;
     }
-    found = true;
-    handleDutPacketForNeighbor(n, packet);
+    flushing_ = true;
   }
 
-  if (!found) {
-    if (XLOG_IS_ON(DBG2)) {
-      XLOGF(
-          DBG2,
-          "[SPARK-FAKER] WARN: Received packet on unknown interface {}",
-          ifName);
+  try {
+    while (true) {
+      std::optional<PendingSend> pending;
+      {
+        std::lock_guard<std::mutex> lock(neighborsMutex_);
+        if (pendingSends_.empty()) {
+          flushing_ = false;
+          return;
+        }
+        pending.emplace(std::move(pendingSends_.front()));
+        pendingSends_.pop_front();
+      }
+      io_->sendPacket(
+          pending->dutIfIndex,
+          pending->srcAddr,
+          pending->packet,
+          std::chrono::milliseconds(0));
+    }
+  } catch (...) {
+    std::lock_guard<std::mutex> lock(neighborsMutex_);
+    flushing_ = false;
+    throw;
+  }
+}
+
+void
+SparkFaker::handleDutPacket(
+    const std::string& ifName, const thrift::SparkHelloPacket& packet) {
+  {
+    std::lock_guard<std::mutex> lock(neighborsMutex_);
+    /*
+     * Dispatch to ALL neighbors whose ifName matches.
+     * For MockSparkIo: each neighbor has a unique ifName, so this finds one.
+     * For RealSparkIo: the receive loop calls each neighbor's callback
+     * separately, so ifName matches one specific neighbor per call.
+     */
+    bool found = false;
+    for (auto& n : neighbors_) {
+      if (n.ifName != ifName) {
+        continue;
+      }
+      found = true;
+      handleDutPacketForNeighbor(n, packet);
+    }
+
+    if (!found) {
+      if (XLOG_IS_ON(DBG2)) {
+        XLOGF(
+            DBG2,
+            "[SPARK-FAKER] WARN: Received packet on unknown interface {}",
+            ifName);
+      }
     }
   }
+  flushPendingPackets();
 }
 
 void
@@ -621,12 +661,26 @@ SparkFaker::runLoop() {
   XLOG(DBG1, "SparkFaker: runLoop started");
 
   while (running_.load()) {
+    std::deque<ReceivedPacket> packets;
+    {
+      std::lock_guard<std::mutex> lock(receivedPacketsMutex_);
+      packets.swap(receivedPackets_);
+    }
+    for (const auto& packet : packets) {
+      handleRawDutPacket(
+          packet.srcIfName, packet.dstIfName, packet.srcAddr, packet.packet);
+    }
+
     /*
      * Process each fake neighbor
      */
-    for (auto& neighbor : neighbors_) {
-      processNeighbor(neighbor);
+    {
+      std::lock_guard<std::mutex> lock(neighborsMutex_);
+      for (auto& neighbor : neighbors_) {
+        processNeighbor(neighbor);
+      }
     }
+    flushPendingPackets();
 
     /*
      * Sleep briefly to avoid busy-spinning
@@ -639,6 +693,7 @@ SparkFaker::runLoop() {
 
 void
 SparkFaker::registerCallbacks() {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   /*
    * For each neighbor, register a callback to receive packets sent
    * from DUT to that neighbor's interface.
@@ -651,7 +706,8 @@ SparkFaker::registerCallbacks() {
             const std::string& dstIfName,
             const folly::IPAddress& srcAddr,
             const std::string& packet) {
-          handleRawDutPacket(srcIfName, dstIfName, srcAddr, packet);
+          std::lock_guard<std::mutex> lock(receivedPacketsMutex_);
+          receivedPackets_.push_back({srcIfName, dstIfName, srcAddr, packet});
         });
     XLOGF(DBG2, "SparkFaker: Registered callback for {}", neighbor.ifName);
   }
@@ -668,7 +724,8 @@ SparkFaker::handleRawDutPacket(
    */
   try {
     auto ioBuf = folly::IOBuf::wrapBuffer(packet.data(), packet.size());
-    auto pkt = readThriftObj<thrift::SparkHelloPacket>(*ioBuf, serializer_);
+    apache::thrift::CompactSerializer serializer;
+    auto pkt = readThriftObj<thrift::SparkHelloPacket>(*ioBuf, serializer);
 
     /*
      * Use dstIfName (the real interface we received on) for dispatch,
@@ -697,6 +754,7 @@ SparkFaker::handleRawDutPacket(
 
 std::string
 SparkFaker::getNeighborStatusReport() const {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   std::string report = "\n=== SparkFaker Neighbor Status ===\n";
   report += fmt::format(
       "{:<20} {:<15} {:<20} {:<10}\n",
@@ -719,6 +777,7 @@ SparkFaker::getNeighborStatusReport() const {
 
 std::vector<SparkFaker::NeighborView>
 SparkFaker::getNeighborViews() const {
+  std::lock_guard<std::mutex> lock(neighborsMutex_);
   std::vector<NeighborView> out;
   out.reserve(neighbors_.size());
   for (const auto& neighbor : neighbors_) {
@@ -749,7 +808,7 @@ SparkFaker::getStatsReport() const {
       stats_.heartbeatsReceived.load(),
       stats_.parseErrors.load(),
       stats_.neighborsEstablished.load(),
-      neighbors_.size());
+      getNeighborCount());
 }
 
 } // namespace openr
