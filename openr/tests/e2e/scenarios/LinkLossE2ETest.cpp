@@ -36,5 +36,26 @@ TEST(OpenrE2eTest, LinkLossRemovesOnlyFailedPeersRoute) {
   EXPECT_TRUE(lab.awaitProgrammedRoute(kBetaPrefix, {"beta"}, kTimeout));
 }
 
+TEST(OpenrE2eTest, RestoredLinkRestoresRemotePrefixRoute) {
+  OpenrE2eLab lab{"dut"};
+  lab.addPeer("spine");
+  lab.start();
+
+  constexpr std::chrono::milliseconds kTimeout{60'000};
+  constexpr char kPrefix[] = "2001:db8:60::/64";
+
+  ASSERT_TRUE(lab.awaitAdjacency("spine", /*isUp=*/true, kTimeout));
+  lab.advertisePrefix("spine", kPrefix);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"spine"}, kTimeout));
+
+  lab.setLinkUp("spine", /*isUp=*/false);
+  ASSERT_TRUE(lab.awaitAdjacency("spine", /*isUp=*/false, kTimeout));
+  ASSERT_TRUE(lab.awaitRouteAbsent(kPrefix, kTimeout));
+
+  lab.setLinkUp("spine", /*isUp=*/true);
+  ASSERT_TRUE(lab.awaitAdjacency("spine", /*isUp=*/true, kTimeout));
+  EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"spine"}, kTimeout));
+}
+
 } // namespace
 } // namespace openr::e2e
