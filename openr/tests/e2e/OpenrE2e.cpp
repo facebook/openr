@@ -204,6 +204,18 @@ OpenrE2eLab::Impl::setLinkUp(const std::string& name, bool isUp) {
 }
 
 void
+OpenrE2eLab::Impl::setLinkMetric(const std::string& name, std::int32_t metric) {
+  requireStarted();
+  controlClient_->sync_setInterfaceMetric(peer(name).dutIfName, metric);
+}
+
+void
+OpenrE2eLab::Impl::clearLinkMetric(const std::string& name) {
+  requireStarted();
+  controlClient_->sync_unsetInterfaceMetric(peer(name).dutIfName);
+}
+
+void
 OpenrE2eLab::addPeer(const std::string& name) {
   impl_->addPeer(name);
 }
@@ -241,6 +253,16 @@ OpenrE2eLab::withdrawLocalPrefix(const std::string& cidr) {
 void
 OpenrE2eLab::setLinkUp(const std::string& peer, bool isUp) {
   impl_->setLinkUp(peer, isUp);
+}
+
+void
+OpenrE2eLab::setLinkMetric(const std::string& peer, std::int32_t metric) {
+  impl_->setLinkMetric(peer, metric);
+}
+
+void
+OpenrE2eLab::clearLinkMetric(const std::string& peer) {
+  impl_->clearLinkMetric(peer);
 }
 
 } // namespace openr::e2e
