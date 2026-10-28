@@ -37,7 +37,6 @@
 namespace openr::e2e {
 namespace {
 
-constexpr char kArea[] = "0";
 constexpr char kLoopback[] = "::1";
 constexpr uint32_t kRpcTimeoutMs{5000};
 
@@ -48,7 +47,7 @@ validate(SyntheticPeerConfig config) {
       config.peerIfName.empty() || config.dutIfIndex <= 0 ||
       config.peerIfIndex <= 0 || config.dutV6Address.empty() ||
       config.peerV6Address.empty() || config.dutKvStorePort == 0 ||
-      !config.ioProvider) {
+      !config.ioProvider || config.area.empty()) {
     throw std::invalid_argument(
         "Synthetic peer needs a real node, link, and KvStore port");
   }
@@ -74,7 +73,7 @@ makeInitialKeys(const SyntheticPeerConfig& config) {
       {adjacency},
       /*nodeLabel=*/50000 + config.peerIfIndex,
       /*overLoadBit=*/false,
-      kArea);
+      config.area);
   apache::thrift::CompactSerializer serializer;
   thrift::KeyVals keys;
   keys.emplace(
@@ -93,7 +92,10 @@ class SyntheticPeer::Impl final {
   explicit Impl(SyntheticPeerConfig config)
       : config_{validate(std::move(config))},
         handler_{std::make_shared<FakeKvStoreHandler>(
-            config_.peerName, makeInitialKeys(config_), kArea)},
+            config_.peerName,
+            config_.initialKeyVals ? std::move(*config_.initialKeyVals)
+                                   : makeInitialKeys(config_),
+            config_.area)},
         sparkFaker_{config_.ioProvider} {
     kvStoreSocket_ =
         folly::AsyncServerSocket::UniquePtr{new folly::AsyncServerSocket()};
@@ -111,7 +113,7 @@ class SyntheticPeer::Impl final {
         config_.peerV6Address,
         config_.dutIfName,
         config_.dutIfIndex);
-    if (!sparkFaker_.setNeighborArea(config_.peerName, kArea) ||
+    if (!sparkFaker_.setNeighborArea(config_.peerName, config_.area) ||
         !sparkFaker_.setNeighborCtrlPort(config_.peerName, kvStorePort_)) {
       throw std::logic_error("Spark peer was not registered");
     }
@@ -159,24 +161,19 @@ class SyntheticPeer::Impl final {
   }
 
   void
-  publishPrefix(const std::string& cidr, bool withdraw) {
+  publishKeyVals(const std::string& area, thrift::KeyVals keyVals) {
     if (!started_ || stopped_) {
       throw std::logic_error("Synthetic peer is not running");
     }
-    const auto prefix = folly::IPAddress::createNetwork(cidr);
-    const auto prefixText = folly::IPAddress::networkToString(prefix);
-    const auto found = prefixVersions_.find(prefixText);
-    if (withdraw && found == prefixVersions_.end()) {
-      throw std::invalid_argument("Cannot withdraw an unadvertised prefix");
+    if (area != config_.area) {
+      throw std::invalid_argument(
+          "Synthetic peer has no KvStore in area " + area);
     }
-    const auto version = ++prefixVersions_[prefixText];
-    const auto entry = createPrefixEntry(toIpPrefix(prefix));
-    auto [key, value] =
-        createPrefixKeyValue(config_.peerName, version, entry, kArea, withdraw);
-    handler_->updateKey(key, value);
-
+    for (const auto& [key, value] : keyVals) {
+      handler_->updateKey(key, value);
+    }
     thrift::KeySetParams params;
-    params.keyVals() = thrift::KeyVals{{std::move(key), std::move(value)}};
+    params.keyVals() = std::move(keyVals);
     params.nodeIds() = std::vector<std::string>{config_.peerName};
     params.senderId() = config_.peerName;
 
@@ -189,7 +186,7 @@ class SyntheticPeer::Impl final {
       channel->setTimeout(kRpcTimeoutMs);
       apache::thrift::Client<thrift::KvStoreService> client{std::move(channel)};
       try {
-        client.sync_setKvStoreKeyVals(params, kArea);
+        client.sync_setKvStoreKeyVals(params, area);
         return;
       } catch (const apache::thrift::transport::TTransportException& ex) {
         if (attempt == 2 ||
@@ -202,12 +199,27 @@ class SyntheticPeer::Impl final {
     }
   }
 
+  void
+  publishPrefix(const std::string& cidr, bool withdraw) {
+    const auto prefix = folly::IPAddress::createNetwork(cidr);
+    const auto prefixText = folly::IPAddress::networkToString(prefix);
+    const auto found = prefixVersions_.find(prefixText);
+    if (withdraw && found == prefixVersions_.end()) {
+      throw std::invalid_argument("Cannot withdraw an unadvertised prefix");
+    }
+    const auto version = ++prefixVersions_[prefixText];
+    const auto entry = createPrefixEntry(toIpPrefix(prefix));
+    auto [key, value] = createPrefixKeyValue(
+        config_.peerName, version, entry, config_.area, withdraw);
+    publishKeyVals(config_.area, {{std::move(key), std::move(value)}});
+  }
+
   bool
   receivedPrefix(
       const std::string& nodeName,
       const folly::CIDRNetwork& prefix,
       bool isAdvertised) const {
-    const auto key = PrefixKey(nodeName, prefix, kArea).getPrefixKeyV2();
+    const auto key = PrefixKey(nodeName, prefix, config_.area).getPrefixKeyV2();
     const auto keys = handler_->getKvStore();
     const auto it = keys.find(key);
     if (it == keys.end() || !it->second.value().has_value()) {
@@ -223,7 +235,7 @@ class SyntheticPeer::Impl final {
         *database.deletePrefix() != isAdvertised;
   }
 
-  const SyntheticPeerConfig config_;
+  SyntheticPeerConfig config_;
   const std::shared_ptr<FakeKvStoreHandler> handler_;
   SparkFaker sparkFaker_;
   folly::AsyncServerSocket::UniquePtr kvStoreSocket_;
@@ -263,6 +275,12 @@ SyntheticPeer::advertisePrefix(const std::string& cidr) {
 void
 SyntheticPeer::withdrawPrefix(const std::string& cidr) {
   impl_->publishPrefix(cidr, true);
+}
+
+void
+SyntheticPeer::publishKeyVals(
+    const std::string& area, thrift::KeyVals keyVals) {
+  impl_->publishKeyVals(area, std::move(keyVals));
 }
 
 bool

@@ -9,9 +9,11 @@
 
 #include <cstdint>
 #include <memory>
+#include <optional>
 #include <string>
 
 #include <folly/IPAddress.h>
+#include <openr/if/gen-cpp2/KvStore_types.h>
 
 namespace openr {
 class MockIoProvider;
@@ -30,6 +32,8 @@ struct SyntheticPeerConfig {
   std::string peerV6Address;
   uint16_t dutKvStorePort{0};
   std::shared_ptr<MockIoProvider> ioProvider;
+  std::string area{"0"};
+  std::optional<thrift::KeyVals> initialKeyVals;
 };
 
 class SyntheticPeer final {
@@ -45,6 +49,7 @@ class SyntheticPeer final {
   void stop();
   void advertisePrefix(const std::string& cidr);
   void withdrawPrefix(const std::string& cidr);
+  void publishKeyVals(const std::string& area, thrift::KeyVals keyVals);
   bool receivedPrefix(
       const std::string& nodeName,
       const folly::CIDRNetwork& prefix,

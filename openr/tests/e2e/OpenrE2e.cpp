@@ -104,7 +104,9 @@ OpenrE2eLab::Impl::addPeer(const std::string& name) {
       entry.dutV6,
       entry.peerV6,
       kvStoreService_.port(),
-      ioProvider_});
+      ioProvider_,
+      "0",
+      {}});
   const auto& joined = peers_.emplace(name, std::move(entry)).first->second;
   if (!started_) {
     return;
