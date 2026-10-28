@@ -28,7 +28,7 @@ makeOpenrE2eConfig(
   auto config = getBasicOpenrConfig(
       nodeName,
       {createAreaConfig("0", {".*"}, {".*"})},
-      /*enableV4=*/true,
+      /*enableV4=*/false,
       /*dryrun=*/false);
   config.fib_port() = fibPort;
   config.thrift_server()->openr_ctrl_port() = kvStorePort;

@@ -20,6 +20,7 @@ TEST(OpenrE2eConfigTest, UsesExternalServicePortsAndSingleArea) {
       makeOpenrE2eConfig("router", 42001, 42002, "/tmp/router-test.bin");
 
   EXPECT_FALSE(*config.dryrun());
+  EXPECT_FALSE(*config.enable_v4());
   EXPECT_EQ(42001, *config.fib_port());
   EXPECT_EQ(42002, *config.thrift_server()->kvstore_peer_port());
   ASSERT_EQ(1, config.areas()->size());

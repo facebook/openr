@@ -510,9 +510,7 @@ LinkMonitor::neighborUpEvent(
     // peer address used for KvStore external sync over thrift
     peerAddr = fmt::format("{}%{}", toString(neighborAddrV6), localIfName);
   } else {
-    // TODO: address value of peerAddr under system test environment
-    peerAddr =
-        fmt::format("{}%{}", Constants::kPlatformHost.toString(), localIfName);
+    peerAddr = Constants::kPlatformHost.toString();
   }
   CHECK(!peerAddr.empty()) << "Got empty peerAddr";
 
