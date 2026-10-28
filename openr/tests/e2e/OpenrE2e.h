@@ -38,6 +38,10 @@ class OpenrE2eLab final {
   void restartFibService();
   void setFibServiceAvailable(bool isAvailable);
   void setLinkMetric(const std::string& peer, std::int32_t metric);
+  void setLinkMetric(
+      const std::string& link,
+      const std::string& endpoint,
+      std::int32_t metric);
   void clearLinkMetric(const std::string& peer);
 
   bool awaitAdjacency(

@@ -95,7 +95,8 @@ OpenrE2eLab::Impl::addPeer(const std::string& name) {
       static_cast<int>(101 + 2 * index),
       "fe80::" + std::to_string(100 + index),
       "fe80::" + std::to_string(200 + index),
-      {}};
+      {},
+      "0"};
   entry.synthetic = std::make_unique<SyntheticPeer>(SyntheticPeerConfig{
       nodeName_,
       entry.name,

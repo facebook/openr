@@ -25,6 +25,7 @@
 #include <openr/tests/e2e/SyntheticPeer.h>
 #include <openr/tests/e2e/TestPlatform.h>
 #include <openr/tests/e2e/Topology.h>
+#include <openr/tests/e2e/TopologyMutationTypes.h>
 
 namespace openr {
 class MockIoProvider;
@@ -53,6 +54,7 @@ class OpenrE2eLab::Impl final {
   void setFibServiceAvailable(bool isAvailable);
   void setLinkMetric(const std::string& peer, std::int32_t metric);
   void clearLinkMetric(const std::string& peer);
+  void mutateTopology(TopologyMutation change);
   bool awaitAdjacency(
       const std::string& peer, bool isUp, std::chrono::milliseconds timeout);
   bool awaitPeerPrefix(
@@ -79,6 +81,7 @@ class OpenrE2eLab::Impl final {
     std::string dutV6;
     std::string peerV6;
     std::unique_ptr<SyntheticPeer> synthetic;
+    std::string area{"0"};
   };
 
   const Peer& peer(const std::string& name) const;

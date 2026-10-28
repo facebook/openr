@@ -97,6 +97,7 @@ OpenrE2eLab::Impl::Impl(const Topology& topology)
     entry.peerIfIndex = indexOf(name, synthetic.interfaceName);
     entry.dutV6 = ipv6Address(real);
     entry.peerV6 = ipv6Address(synthetic);
+    entry.area = synthetic.area;
     SyntheticPeerConfig config;
     config.nodeName = nodeName_;
     config.peerName = name;

@@ -41,7 +41,7 @@ TEST(MultiHopTopologyE2ETest, InitialRouterMetricSelectsProgrammedNextHop) {
   EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
 }
 
-TEST(MultiHopTopologyE2ETest, ProgramsDestinationViaShortestPath) {
+TEST(MultiHopTopologyE2ETest, RemoteMetricChangeMovesProgrammedNextHop) {
   LinkOptions viaFirst;
   viaFirst.name = "s1-dst";
   viaFirst.metric = 1;
@@ -66,6 +66,12 @@ TEST(MultiHopTopologyE2ETest, ProgramsDestinationViaShortestPath) {
   constexpr std::chrono::seconds kTimeout{30};
   ASSERT_TRUE(lab.awaitAdjacency("s1", /*isUp=*/true, kTimeout));
   ASSERT_TRUE(lab.awaitAdjacency("s2", /*isUp=*/true, kTimeout));
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
+
+  lab.setLinkMetric("s1-dst", "s1", 50);
+  ASSERT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s2"}, kTimeout));
+
+  lab.setLinkMetric("s1-dst", "s1", 1);
   EXPECT_TRUE(lab.awaitProgrammedRoute(kPrefix, {"s1"}, kTimeout));
 }
 
