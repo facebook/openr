@@ -8,6 +8,7 @@
 #pragma once
 
 #include <list>
+#include <mutex>
 
 #include <folly/io/async/EventBase.h>
 
@@ -108,6 +109,8 @@ class MockNetlinkProtocolSocket : public NetlinkProtocolSocket {
   }
 
  private:
+  std::mutex stateMutex_;
+
   /*
    * map<ifIndex -> Link>
    * NOTE: using map for ordered entries

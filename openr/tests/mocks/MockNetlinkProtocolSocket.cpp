@@ -157,21 +157,25 @@ MockNetlinkProtocolSocket::getRoutes(const fbnl::Route& filter) {
 
 folly::SemiFuture<int>
 MockNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
-  // Search for addr list of interface index (it must exists)
-  auto it = ifAddrs_.find(addr.getIfIndex());
-  if (it == ifAddrs_.end() || !addr.getPrefix().has_value()) {
-    return folly::SemiFuture<int>(-ENXIO); // No such device or address
-  }
-
-  // Find if existing. Return EEXIST
-  for (auto addrIt = it->second.begin(); addrIt != it->second.end(); ++addrIt) {
-    if (addrIt->getPrefix() == addr.getPrefix()) {
-      return folly::SemiFuture<int>(-EEXIST);
+  {
+    std::lock_guard<std::mutex> guard(stateMutex_);
+    // Search for addr list of interface index (it must exists)
+    auto it = ifAddrs_.find(addr.getIfIndex());
+    if (it == ifAddrs_.end() || !addr.getPrefix().has_value()) {
+      return folly::SemiFuture<int>(-ENXIO); // No such device or address
     }
-  }
 
-  // Non existing address. Add
-  it->second.emplace_back(addr); // Add
+    // Find if existing. Return EEXIST
+    for (auto addrIt = it->second.begin(); addrIt != it->second.end();
+         ++addrIt) {
+      if (addrIt->getPrefix() == addr.getPrefix()) {
+        return folly::SemiFuture<int>(-EEXIST);
+      }
+    }
+
+    // Non existing address. Add
+    it->second.emplace_back(addr); // Add
+  }
 
   // Publish update via queue
   activeQueue_.push(addr);
@@ -180,30 +184,39 @@ MockNetlinkProtocolSocket::addIfAddress(const fbnl::IfAddress& addr) {
 
 folly::SemiFuture<int>
 MockNetlinkProtocolSocket::deleteIfAddress(const fbnl::IfAddress& addr) {
-  // Search for addr list of interface index (it must exists)
-  auto it = ifAddrs_.find(addr.getIfIndex());
-  if (it == ifAddrs_.end() || !addr.getPrefix().has_value()) {
-    return folly::SemiFuture<int>(-ENXIO); // No such device or address
-  }
+  {
+    std::lock_guard<std::mutex> guard(stateMutex_);
+    // Search for addr list of interface index (it must exists)
+    auto it = ifAddrs_.find(addr.getIfIndex());
+    if (it == ifAddrs_.end() || !addr.getPrefix().has_value()) {
+      return folly::SemiFuture<int>(-ENXIO); // No such device or address
+    }
 
-  // Find & delete
-  for (auto addrIt = it->second.begin(); addrIt != it->second.end(); ++addrIt) {
-    if (addrIt->getPrefix() == addr.getPrefix()) {
-      it->second.erase(addrIt);
+    // Find & delete
+    bool removed = false;
+    for (auto addrIt = it->second.begin(); addrIt != it->second.end();
+         ++addrIt) {
+      if (addrIt->getPrefix() == addr.getPrefix()) {
+        it->second.erase(addrIt);
+        removed = true;
+        break;
+      }
+    }
 
-      // Publish update via queue
-      activeQueue_.push(addr);
-      return folly::SemiFuture<int>(0);
+    if (!removed) {
+      return folly::SemiFuture<int>(-EADDRNOTAVAIL);
     }
   }
 
-  // Address not available for deletion
-  return folly::SemiFuture<int>(-EADDRNOTAVAIL);
+  // Publish update via queue
+  activeQueue_.push(addr);
+  return folly::SemiFuture<int>(0);
 }
 
 folly::SemiFuture<folly::Expected<std::vector<fbnl::IfAddress>, int>>
 MockNetlinkProtocolSocket::getAllIfAddresses() {
   std::vector<fbnl::IfAddress> addrs;
+  std::lock_guard<std::mutex> guard(stateMutex_);
   for (auto& [_, addrs_] : ifAddrs_) {
     addrs.insert(addrs.end(), addrs_.begin(), addrs_.end());
   }
@@ -212,11 +225,14 @@ MockNetlinkProtocolSocket::getAllIfAddresses() {
 
 folly::SemiFuture<int>
 MockNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
-  // Add or update link
-  links_[link.getIfIndex()] = link;
+  {
+    std::lock_guard<std::mutex> guard(stateMutex_);
+    // Add or update link
+    links_[link.getIfIndex()] = link;
 
-  // Create entry in ifAddr_ for link if doesn't exists
-  ifAddrs_.emplace(link.getIfIndex(), std::list<fbnl::IfAddress>());
+    // Create entry in ifAddr_ for link if doesn't exists
+    ifAddrs_.emplace(link.getIfIndex(), std::list<fbnl::IfAddress>());
+  }
 
   // Publish update via queue
   activeQueue_.push(link);
@@ -227,7 +243,8 @@ MockNetlinkProtocolSocket::addLink(const fbnl::Link& link) {
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Link>, int>>
 MockNetlinkProtocolSocket::getAllLinks() {
   std::vector<fbnl::Link> links;
-  links.reserve(links.size());
+  std::lock_guard<std::mutex> guard(stateMutex_);
+  links.reserve(links_.size());
   for (auto& [_, link] : links_) {
     links.emplace_back(link);
   }
@@ -236,11 +253,14 @@ MockNetlinkProtocolSocket::getAllLinks() {
 
 folly::SemiFuture<int>
 MockNetlinkProtocolSocket::addNeighbor(const fbnl::Neighbor& nbr) {
-  // Add or update neighbor
-  nbrs_.insert_or_assign(nbr.getIfIndex(), nbr);
+  {
+    std::lock_guard<std::mutex> guard(stateMutex_);
+    // Add or update neighbor
+    nbrs_.insert_or_assign(nbr.getIfIndex(), nbr);
 
-  // Create entry in ifAddr_ for nbr if doesn't exists
-  ifAddrs_.emplace(nbr.getIfIndex(), std::list<fbnl::IfAddress>());
+    // Create entry in ifAddr_ for nbr if doesn't exists
+    ifAddrs_.emplace(nbr.getIfIndex(), std::list<fbnl::IfAddress>());
+  }
 
   // Publish update via queue
   activeQueue_.push(nbr);
@@ -251,6 +271,7 @@ MockNetlinkProtocolSocket::addNeighbor(const fbnl::Neighbor& nbr) {
 folly::SemiFuture<folly::Expected<std::vector<fbnl::Neighbor>, int>>
 MockNetlinkProtocolSocket::getAllNeighbors() {
   std::vector<fbnl::Neighbor> neighbors;
+  std::lock_guard<std::mutex> guard(stateMutex_);
   neighbors.reserve(nbrs_.size());
   for (auto& [_, neighbor] : nbrs_) {
     neighbors.emplace_back(neighbor);
