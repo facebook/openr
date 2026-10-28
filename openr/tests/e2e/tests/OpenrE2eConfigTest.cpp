@@ -43,5 +43,28 @@ TEST(OpenrE2eConfigTest, RejectsMissingExternalBoundary) {
       makeOpenrE2eConfig("router", 42001, 42002, ""), std::invalid_argument);
 }
 
+TEST(OpenrE2eConfigTest, PreservesAreaSpecificNeighborAndInterfacePatterns) {
+  thrift::AreaConfig pod;
+  pod.area_id() = "pod";
+  pod.include_interface_regexes() = {"^if_r1_s1$"};
+  pod.neighbor_regexes() = {"^s1$"};
+  thrift::AreaConfig plane;
+  plane.area_id() = "plane";
+  plane.include_interface_regexes() = {"^if_r1_s2$"};
+  plane.neighbor_regexes() = {"^s2$"};
+
+  const auto config =
+      makeOpenrE2eConfig("r1", 42001, 42002, "/tmp/r1-test.bin", {pod, plane});
+
+  ASSERT_EQ(2, config.areas()->size());
+  EXPECT_EQ("pod", *config.areas()->at(0).area_id());
+  EXPECT_EQ(
+      std::vector<std::string>{"^if_r1_s1$"},
+      *config.areas()->at(0).include_interface_regexes());
+  EXPECT_EQ(
+      std::vector<std::string>{"^s2$"},
+      *config.areas()->at(1).neighbor_regexes());
+}
+
 } // namespace
 } // namespace openr::e2e

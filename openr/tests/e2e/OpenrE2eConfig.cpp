@@ -18,18 +18,19 @@ makeOpenrE2eConfig(
     const std::string& nodeName,
     uint16_t fibPort,
     uint16_t kvStorePort,
-    const std::string& persistentStorePath) {
+    const std::string& persistentStorePath,
+    std::vector<thrift::AreaConfig> areas) {
   if (nodeName.empty() || fibPort == 0 || kvStorePort == 0 ||
       persistentStorePath.empty()) {
     throw std::invalid_argument(
         "Open/R E2E requires a node, ports, and state path");
   }
 
+  if (areas.empty()) {
+    areas.push_back(createAreaConfig("0", {".*"}, {".*"}));
+  }
   auto config = getBasicOpenrConfig(
-      nodeName,
-      {createAreaConfig("0", {".*"}, {".*"})},
-      /*enableV4=*/false,
-      /*dryrun=*/false);
+      nodeName, areas, /*enableV4=*/false, /*dryrun=*/false);
   config.fib_port() = fibPort;
   config.thrift_server()->openr_ctrl_port() = kvStorePort;
   config.thrift_server()->kvstore_peer_port() = kvStorePort;

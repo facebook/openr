@@ -9,6 +9,7 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
 
 #include <openr/if/gen-cpp2/OpenrConfig_types.h>
 
@@ -18,6 +19,7 @@ thrift::OpenrConfig makeOpenrE2eConfig(
     const std::string& nodeName,
     uint16_t fibPort,
     uint16_t kvStorePort,
-    const std::string& persistentStorePath);
+    const std::string& persistentStorePath,
+    std::vector<thrift::AreaConfig> areas = {});
 
 } // namespace openr::e2e
