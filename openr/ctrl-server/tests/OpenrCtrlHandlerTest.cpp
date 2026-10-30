@@ -588,6 +588,111 @@ TEST_F(OpenrCtrlFixture, DrainStateApis) {
   ASSERT_FALSE(state->drained_interfaces());
 }
 
+CO_TEST_F(OpenrCtrlFixture, ComputedAdjacenciesForwardAreaFilter) {
+  constexpr int32_t kMetric{10};
+  constexpr int32_t kAdjLabel{0};
+  constexpr int32_t kNodeLabel{0};
+  constexpr int32_t kLinkMetricIncrement{37};
+  constexpr int64_t kVersion{1};
+  constexpr size_t kNodesPerArea{2};
+  const std::string peerName{"computed-peer"};
+  const std::string missingPeerName{"missing-peer"};
+  const std::string localIfName{"local/peer"};
+  const std::string peerIfName{"peer/local"};
+  auto forwardAdj = createAdjacency(
+      peerName,
+      localIfName,
+      peerIfName,
+      "fe80::2",
+      "192.0.2.2",
+      kMetric,
+      kAdjLabel);
+  forwardAdj.linkMetricIncrementVal() = kLinkMetricIncrement;
+  auto reverseAdj = createAdjacency(
+      nodeName_,
+      peerIfName,
+      localIfName,
+      "fe80::1",
+      "192.0.2.1",
+      kMetric,
+      kAdjLabel);
+  reverseAdj.isOverloaded() = true;
+  const auto partialAdj = createAdjacency(
+      missingPeerName,
+      "local/missing",
+      "missing/local",
+      "fe80::3",
+      "192.0.2.3",
+      kMetric,
+      kAdjLabel);
+  const auto rawLocalDb = createAdjDb(
+      nodeName_, {forwardAdj, partialAdj}, kNodeLabel, false, kSpineAreaId);
+  const auto peerDb =
+      createAdjDb(peerName, {reverseAdj}, kNodeLabel, false, kSpineAreaId);
+  auto planeLocalDb = rawLocalDb;
+  planeLocalDb.area() = kPlaneAreaId;
+  auto planePeerDb = peerDb;
+  planePeerDb.area() = kPlaneAreaId;
+
+  decision->waitUntilRunning();
+  peerUpdatesQueue_.push(PeerEvent{});
+  apache::thrift::CompactSerializer serializer;
+  for (const auto& db : {rawLocalDb, peerDb, planeLocalDb, planePeerDb}) {
+    CO_ASSERT_TRUE(kvStoreWrapper_->setKey(
+        AreaId(*db.area()),
+        Constants::kAdjDbMarker.toString() + *db.thisNodeName(),
+        createThriftValue(
+            kVersion, *db.thisNodeName(), writeThriftObjStr(db, serializer))));
+  }
+
+  /**
+   * Wait for Decision to ingest both areas before testing RPC projection.
+   */
+  const thrift::AdjacenciesFilter allAreas;
+  const auto deadline =
+      std::chrono::steady_clock::now() + kKvStorePublicationTimeout;
+  while (true) {
+    const auto raw =
+        co_await getOpenrCtrlClient().co_getDecisionAreaAdjacenciesFiltered(
+            allAreas);
+    if (raw.count(kSpineAreaId) && raw.count(kPlaneAreaId) &&
+        raw.at(kSpineAreaId).size() == kNodesPerArea &&
+        raw.at(kPlaneAreaId).size() == kNodesPerArea) {
+      EXPECT_THAT(
+          raw.at(kSpineAreaId),
+          testing::UnorderedElementsAre(rawLocalDb, peerDb));
+      break;
+    }
+    CO_ASSERT_TRUE(std::chrono::steady_clock::now() < deadline);
+  }
+
+  auto computedLocalDb = rawLocalDb;
+  computedLocalDb.adjacencies() = {forwardAdj};
+  computedLocalDb.adjacencies()->front().isOverloaded() = true;
+  thrift::AdjacenciesFilter filter;
+  filter.selectAreas() = kSpineOnlySet;
+  const auto computed =
+      co_await getOpenrCtrlClient().co_getDecisionAreaAdjacenciesComputed(
+          filter);
+  CO_ASSERT_EQ(1, computed.size());
+  EXPECT_THAT(
+      computed.at(kSpineAreaId),
+      testing::UnorderedElementsAre(computedLocalDb, peerDb));
+  const auto decisionComputed =
+      co_await decision->co_getDecisionAreaAdjacenciesComputed(filter);
+  EXPECT_EQ(*decisionComputed, computed);
+
+  const auto allComputed =
+      co_await getOpenrCtrlClient().co_getDecisionAreaAdjacenciesComputed(
+          allAreas);
+  EXPECT_EQ(2, allComputed.size());
+  filter.selectAreas() = {"unknown-area"};
+  const auto unknown =
+      co_await getOpenrCtrlClient().co_getDecisionAreaAdjacenciesComputed(
+          filter);
+  EXPECT_TRUE(unknown.empty());
+}
+
 TEST_F(OpenrCtrlFixture, DecisionApis) {
   {
     auto dbs = handler_

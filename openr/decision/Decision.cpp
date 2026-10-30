@@ -477,6 +477,32 @@ Decision::getDecisionAreaAdjacenciesFiltered(thrift::AdjacenciesFilter filter) {
   return sf;
 }
 
+folly::coro::Task<std::unique_ptr<
+    std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+Decision::co_getDecisionAreaAdjacenciesComputed(
+    thrift::AdjacenciesFilter filter) {
+  co_return co_await co_withExecutor(
+      getEvb(), co_getDecisionAreaAdjacenciesComputedImpl(std::move(filter)));
+}
+
+folly::coro::Task<std::unique_ptr<
+    std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+Decision::co_getDecisionAreaAdjacenciesComputedImpl(
+    thrift::AdjacenciesFilter filter) {
+  auto res = std::make_unique<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>();
+  const auto& selectAreas = filter.selectAreas().ensure();
+  for (auto const& [area, linkState] : areaLinkStates_) {
+    if (selectAreas.empty() || selectAreas.count(area)) {
+      auto databases = linkState.getAdjacencyDatabasesComputed();
+      if (!databases.empty()) {
+        res->emplace(area, std::move(databases));
+      }
+    }
+  }
+  co_return res;
+}
+
 folly::SemiFuture<std::unique_ptr<std::vector<thrift::ReceivedRouteDetail>>>
 Decision::getReceivedRoutesFiltered(thrift::ReceivedRouteFilter filter) {
   auto [p, sf] = folly::makePromiseContract<

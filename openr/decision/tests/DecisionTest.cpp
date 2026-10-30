@@ -14,8 +14,11 @@
 #include <folly/Optional.h>
 #include <folly/Random.h>
 #include <folly/container/F14Map.h>
+#include <folly/coro/FutureUtil.h>
+#include <folly/coro/GtestHelpers.h>
 #include <folly/futures/Promise.h>
 #include <folly/init/Init.h>
+#include <folly/testing/TestUtil.h>
 #include <gflags/gflags.h>
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -84,6 +87,14 @@ class DecisionTestFixture : public ::testing::Test {
     auto tConfig = createConfig();
     config = std::make_shared<Config>(tConfig);
 
+    /**
+     * Override default rib policy file with a fixture-owned temporary
+     * directory. This ensures stress run will use different file for each run.
+     * Leave the file absent before Decision starts.
+     */
+    FLAGS_rib_policy_file =
+        (ribPolicyDir_.path() / kRibPolicyFileName).string();
+
     decision = make_shared<Decision>(
         config,
         peerUpdatesQueue.getReader(),
@@ -102,14 +113,6 @@ class DecisionTestFixture : public ::testing::Test {
     // Reset initial KvStore sync event as not sent.
     kvStoreSyncEventSent = false;
     adjacencyDbSyncEventSent = false;
-
-    /*
-     * Override default rib policy file with file based on thread id.
-     * This ensures stress run will use different file for each run.
-     */
-    FLAGS_rib_policy_file = fmt::format(
-        "/dev/shm/rib_policy.txt.{}",
-        std::hash<std::thread::id>{}(std::this_thread::get_id()));
 
     // Publish initial peers.
     publishInitialPeers();
@@ -336,6 +339,14 @@ class DecisionTestFixture : public ::testing::Test {
    *
    */
 
+  static constexpr auto kRibPolicyFileName = "rib_policy.txt";
+
+  /**
+   * Declared before Decision so its directory outlives teardown and
+   * destruction.
+   */
+  folly::test::TemporaryDirectory ribPolicyDir_;
+
   /*
    * Thrift serializer object for serializing/deserializing of thrift objects
    * to/from bytes
@@ -394,6 +405,146 @@ TEST_F(DecisionTestFixture, StopDecisionWithoutInitialPeers) {
 
   // decision module could stop.
   decision->stop();
+}
+
+TEST_F(DecisionTestFixture, RibPolicyFileIsInitiallyAbsent) {
+  EXPECT_FALSE(folly::fs::exists(FLAGS_rib_policy_file));
+  EXPECT_THROW(decision->getRibPolicy().get(), thrift::OpenrError);
+}
+
+class DecisionComputedAdjacenciesTestFixture : public DecisionTestFixture {
+ protected:
+  void
+  SetUp() override {
+    DecisionTestFixture::SetUp();
+    auto forwardAdj = adj12;
+    forwardAdj.linkMetricIncrementVal() = kLinkMetricIncrement;
+    auto reverseAdj = adj21;
+    reverseAdj.isOverloaded() = true;
+    rawLocalDb_ = createAdjDb(kLocalNode, {forwardAdj, adj13}, kLocalNodeLabel);
+    peerDb_ = createAdjDb(kPeerNode, {reverseAdj}, kPeerNodeLabel);
+    otherAreaLocalDb_ =
+        createAdjDb(kLocalNode, {adj13}, kLocalNodeLabel, false, kOtherArea);
+    otherAreaPeerDb_ = createAdjDb(
+        kOtherAreaPeerNode,
+        {adj31},
+        kOtherAreaPeerNodeLabel,
+        false,
+        kOtherArea);
+
+    const auto localAdjKey = Constants::kAdjDbMarker.toString() + kLocalNode;
+    const auto peerAdjKey = Constants::kAdjDbMarker.toString() + kPeerNode;
+    const auto otherAreaPeerAdjKey =
+        Constants::kAdjDbMarker.toString() + kOtherAreaPeerNode;
+
+    sendKvPublication(createThriftPublication(
+        {{localAdjKey,
+          createThriftValue(
+              kVersion,
+              kLocalNode,
+              writeThriftObjStr(rawLocalDb_, serializer))},
+         {peerAdjKey,
+          createThriftValue(
+              kVersion, kPeerNode, writeThriftObjStr(peerDb_, serializer))},
+         createPrefixKeyValue(kLocalNode, kVersion, addr1)},
+        {}));
+    recvRouteUpdates();
+    sendKvPublication(createThriftPublication(
+        {{localAdjKey,
+          createThriftValue(
+              kVersion,
+              kLocalNode,
+              writeThriftObjStr(otherAreaLocalDb_, serializer))},
+         {otherAreaPeerAdjKey,
+          createThriftValue(
+              kVersion,
+              kOtherAreaPeerNode,
+              writeThriftObjStr(otherAreaPeerDb_, serializer))},
+         createPrefixKeyValue(kOtherAreaPeerNode, kVersion, addr3, kOtherArea)},
+        {},
+        {},
+        {},
+        kOtherArea));
+    recvRouteUpdates();
+
+    computedLocalDb_ = rawLocalDb_;
+    computedLocalDb_.adjacencies() = {forwardAdj};
+    computedLocalDb_.adjacencies()->front().isOverloaded() = true;
+  }
+
+  static constexpr int64_t kVersion{1};
+  static constexpr int32_t kLinkMetricIncrement{37};
+  static constexpr int32_t kLocalNodeLabel{1};
+  static constexpr int32_t kPeerNodeLabel{2};
+  static constexpr int32_t kOtherAreaPeerNodeLabel{3};
+  const std::string kLocalNode{"1"};
+  const std::string kPeerNode{"2"};
+  const std::string kOtherAreaPeerNode{"3"};
+  const std::string kOtherArea{"computed-area-B"};
+  thrift::AdjacencyDatabase rawLocalDb_;
+  thrift::AdjacencyDatabase peerDb_;
+  thrift::AdjacencyDatabase otherAreaLocalDb_;
+  thrift::AdjacencyDatabase otherAreaPeerDb_;
+  thrift::AdjacencyDatabase computedLocalDb_;
+};
+
+CO_TEST_F(DecisionTestFixture, ComputedAdjacenciesEmptyState) {
+  const auto computed =
+      co_await decision->co_getDecisionAreaAdjacenciesComputed();
+  EXPECT_TRUE(computed->empty());
+}
+
+CO_TEST_F(DecisionComputedAdjacenciesTestFixture, ComputedAdjacenciesAllAreas) {
+  const auto computed =
+      co_await decision->co_getDecisionAreaAdjacenciesComputed();
+  CO_ASSERT_EQ(2, computed->size());
+  EXPECT_THAT(
+      computed->at(kTestingAreaName),
+      UnorderedElementsAre(computedLocalDb_, peerDb_));
+  EXPECT_THAT(
+      computed->at(kOtherArea),
+      UnorderedElementsAre(otherAreaLocalDb_, otherAreaPeerDb_));
+
+  thrift::AdjacenciesFilter emptyFilter;
+  emptyFilter.selectAreas() = {};
+  const auto explicitlyEmpty =
+      co_await decision->co_getDecisionAreaAdjacenciesComputed(emptyFilter);
+  EXPECT_EQ(*computed, *explicitlyEmpty);
+
+  /**
+   * Raw APIs retain the one-sided adjacency and the local overload bit.
+   */
+  const auto raw = co_await folly::coro::toTask(
+      decision->getDecisionAreaAdjacenciesFiltered());
+  EXPECT_THAT(
+      raw->at(kTestingAreaName), UnorderedElementsAre(rawLocalDb_, peerDb_));
+  const auto legacyRaw =
+      co_await folly::coro::toTask(decision->getDecisionAdjacenciesFiltered());
+  EXPECT_THAT(
+      *legacyRaw,
+      UnorderedElementsAre(
+          rawLocalDb_, peerDb_, otherAreaLocalDb_, otherAreaPeerDb_));
+}
+
+CO_TEST_F(
+    DecisionComputedAdjacenciesTestFixture, ComputedAdjacenciesSelectedArea) {
+  thrift::AdjacenciesFilter filter;
+  filter.selectAreas() = {kOtherArea};
+  const auto computed =
+      co_await decision->co_getDecisionAreaAdjacenciesComputed(filter);
+  CO_ASSERT_EQ(1, computed->size());
+  EXPECT_THAT(
+      computed->at(kOtherArea),
+      UnorderedElementsAre(otherAreaLocalDb_, otherAreaPeerDb_));
+}
+
+CO_TEST_F(
+    DecisionComputedAdjacenciesTestFixture, ComputedAdjacenciesUnknownArea) {
+  thrift::AdjacenciesFilter filter;
+  filter.selectAreas() = {"unknown-area"};
+  const auto computed =
+      co_await decision->co_getDecisionAreaAdjacenciesComputed(filter);
+  EXPECT_TRUE(computed->empty());
 }
 
 TEST_F(DecisionTestFixture, DecisionUndrainStateTest) {

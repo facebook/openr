@@ -518,18 +518,17 @@ service OpenrCtrl extends KvStore.KvStoreService {
   //
 
   /**
-   * Get default area adjacency databases of all nodes, representing default
-   * area topology from Decision module. This represents currently active nodes
-   * (includes bi-directional check)
+   * Get raw default area adjacency databases of all nodes from Decision,
+   * including partial and one-sided advertisements.
    * only selects default area adj DBs. Deprecated, perfer
    * getDecisionAdjacenciesFiltered()
    */
   Types.AdjDbs getDecisionAdjacencyDbs() throws (1: OpenrError error);
 
   /**
-   * Get adjacency databases of all nodes. NOTE: for ABRs, there can be more
+   * Get raw adjacency databases of all nodes. NOTE: for ABRs, there can be more
    * than one AdjDb for a node (one per area)
-   * (includes bi-directional check)
+   * Includes partial and one-sided advertisements.
    *
    * DEPRECATED. Perfer getDecisionAreaAdjacenciesFiltered to return the areas as well.
    */
@@ -538,11 +537,21 @@ service OpenrCtrl extends KvStore.KvStoreService {
   ) throws (1: OpenrError error);
 
   /**
-   * Get map<area_name, list<adjacency databases>> of all nodes.
+   * Get map<area_name, list<raw adjacency databases>> of all nodes.
    * NOTE: for ABRs, there can be more than one AdjDb for a node (one per area).
-   * (includes bi-directional check)
+   * Includes partial and one-sided advertisements.
    */
   map<string, list<Types.AdjacencyDatabase>> getDecisionAreaAdjacenciesFiltered(
+    1: AdjacenciesFilter filter,
+  ) throws (1: OpenrError error);
+
+  /**
+   * Get area adjacency databases projected from Decision's computed links.
+   * Empty selectAreas selects all areas; unknown areas have no entry.
+   * Adjacency overload includes both link ends. Node overload and advertised
+   * adjacency fields are preserved.
+   */
+  map<string, list<Types.AdjacencyDatabase>> getDecisionAreaAdjacenciesComputed(
     1: AdjacenciesFilter filter,
   ) throws (1: OpenrError error);
 

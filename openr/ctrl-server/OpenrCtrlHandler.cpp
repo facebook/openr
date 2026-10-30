@@ -801,6 +801,15 @@ OpenrCtrlHandler::semifuture_getDecisionAreaAdjacenciesFiltered(
   return decision_->getDecisionAreaAdjacenciesFiltered(std::move(*filter));
 }
 
+folly::coro::Task<std::unique_ptr<
+    std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+OpenrCtrlHandler::co_getDecisionAreaAdjacenciesComputed(
+    std::unique_ptr<thrift::AdjacenciesFilter> filter) {
+  CHECK(decision_);
+  co_return co_await decision_->co_getDecisionAreaAdjacenciesComputed(
+      std::move(*filter));
+}
+
 /*
  *
  * Dispatcher APIs

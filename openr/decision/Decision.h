@@ -186,6 +186,14 @@ class Decision : public OpenrEventBase {
       std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
   getDecisionAreaAdjacenciesFiltered(thrift::AdjacenciesFilter filter = {});
 
+  /**
+   * Retrieve area adjacency databases projected from computed links.
+   * Empty selectAreas selects all areas; unknown areas have no entry.
+   */
+  folly::coro::Task<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+  co_getDecisionAreaAdjacenciesComputed(thrift::AdjacenciesFilter filter = {});
+
   /*
    * Retrieve received routes along with best route selection output.
    */
@@ -223,6 +231,10 @@ class Decision : public OpenrEventBase {
   friend class DecisionTestFixture;
 
   folly::coro::Task<StaticUnicastRoutes> co_getStaticUnicastRoutesImpl();
+
+  folly::coro::Task<std::unique_ptr<
+      std::map<std::string, std::vector<thrift::AdjacencyDatabase>>>>
+  co_getDecisionAreaAdjacenciesComputedImpl(thrift::AdjacenciesFilter filter);
 
   Decision(Decision const&) = delete;
   Decision& operator=(Decision const&) = delete;
