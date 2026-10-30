@@ -288,6 +288,14 @@ class LinkState {
     return adjacencyDatabases_;
   }
 
+  /**
+   * Return copies of the advertised databases containing only computed links.
+   * Preserve adjacency order, advertised peer names, and all other fields,
+   * combining local and peer interface overload on each selected adjacency.
+   * Node overload and empty databases are preserved independently of usability.
+   */
+  std::vector<thrift::AdjacencyDatabase> getAdjacencyDatabasesComputed() const;
+
   /*
    * check if path A is part of path B.
    * Example:

@@ -86,6 +86,85 @@ LinkState::linksFromNode(const std::string& nodeName) const {
   return defaultEmptySet;
 }
 
+/**
+ * Build a wire-compatible projection by joining LinkState's two topology
+ * views:
+ *
+ *  - adjacencyDatabases_ contains the latest records advertised by each node.
+ *    These records preserve every Thrift field, but can contain one-sided
+ *    adjacencies that Decision did not add to its topology.
+ *  - linkMap_ contains Decision's computed bidirectional Links. A Link has
+ *    already passed the reverse-node and exact interface-pair checks, but it
+ *    does not retain every field from the advertised adjacency.
+ *
+ * For example, if A advertises A%if1 -> B%if2 and B advertises the reverse,
+ * linkMap_ contains Link(A%if1, B%if2), so both advertised records are copied
+ * to the result. If A also advertises A%if3 -> C%if4 without a reverse record,
+ * that advertisement remains in adjacencyDatabases_ but is omitted here.
+ *
+ * FabricHelper can make the advertised and computed peer names different. A
+ * leaf can advertise leaf%leafIf -> external%externalIf while the external
+ * node advertises external%externalIf -> fabricAlias%leafIf. Link construction
+ * resolves fabricAlias to leaf and stores a Link whose canonical endpoints are
+ * the concrete leaf and external node. The join below performs the same
+ * resolution for matching, then copies the original record so the returned
+ * external adjacency still exposes fabricAlias.
+ *
+ * The join is performed independently for each node:
+ *
+ *  1. Index its computed Links by
+ *     (local interface, canonical peer stored by Link, peer interface),
+ *     retaining the peer-side overload bit.
+ *  2. Copy the node's complete advertised database and clear the adjacency
+ *     list in the copy.
+ *  3. Copy each advertised adjacency whose resolved tuple is in the Link
+ *     index, preserving its order and every other advertised field.
+ *  4. Mark the copied adjacency overloaded when either endpoint interface is
+ *     overloaded.
+ *
+ * Inclusion is based on computed Link membership, not Link::isUp(). Thus
+ * interface-overloaded or otherwise unusable bidirectional Links remain
+ * visible. The copied database also preserves node overload and the remaining
+ * advertised state.
+ */
+std::vector<thrift::AdjacencyDatabase>
+LinkState::getAdjacencyDatabasesComputed() const {
+  std::vector<thrift::AdjacencyDatabase> databases;
+  databases.reserve(adjacencyDatabases_.size());
+  for (const auto& [nodeName, adjDb] : adjacencyDatabases_) {
+    const auto& links = linksFromNode(nodeName);
+    folly::F14FastMap<std::tuple<std::string, std::string, std::string>, bool>
+        peerOverloads;
+    peerOverloads.reserve(links.size());
+    for (const auto& link : links) {
+      const auto& peer = link->getOtherNodeName(nodeName);
+      peerOverloads.emplace(
+          std::make_tuple(
+              link->getIfaceFromNode(nodeName),
+              peer,
+              link->getIfaceFromNode(peer)),
+          link->getOverloadFromNode(peer));
+    }
+
+    auto& computedDb = databases.emplace_back(adjDb);
+    auto& computedAdjs = *computedDb.adjacencies();
+    computedAdjs.clear();
+    for (const auto& adj : *adjDb.adjacencies()) {
+      const auto peerOverload = peerOverloads.find(
+          std::make_tuple(
+              *adj.ifName(),
+              getRealOtherNodeName(nodeName, adj),
+              *adj.otherIfName()));
+      if (peerOverload == peerOverloads.end()) {
+        continue;
+      }
+      auto& computedAdj = computedAdjs.emplace_back(adj);
+      computedAdj.isOverloaded() = *adj.isOverloaded() || peerOverload->second;
+    }
+  }
+  return databases;
+}
+
 std::vector<std::shared_ptr<Link>>
 LinkState::orderedLinksFromNode(const std::string& nodeName) const {
   std::vector<std::shared_ptr<Link>> links;

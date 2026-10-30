@@ -19,6 +19,245 @@
 using namespace testing;
 using namespace openr;
 
+namespace {
+
+const std::string kComputedNode1{"node1"};
+const std::string kComputedNode2{"node2"};
+const std::string kComputedNode3{"node3"};
+const std::string kComputedIface1{"if1"};
+const std::string kComputedIface2{"if2"};
+const std::string kComputedIface3{"if3"};
+const std::string kComputedIface4{"if4"};
+constexpr int32_t kComputedNodeLabel = 1000;
+
+thrift::Adjacency
+createComputedTestAdjacency(
+    const std::string& otherNode,
+    const std::string& localIface,
+    const std::string& remoteIface) {
+  constexpr int32_t kMetric = 10;
+  constexpr int32_t kLabel = 100;
+  return createAdjacency(
+      otherNode,
+      localIface,
+      remoteIface,
+      "fe80::1",
+      "10.0.0.1",
+      kMetric,
+      kLabel);
+}
+
+} // namespace
+
+TEST(LinkStateTest, ComputedAdjacenciesExcludePartialLinks) {
+  const auto adj12 = createComputedTestAdjacency(
+      kComputedNode2, kComputedIface1, kComputedIface2);
+  const auto adj21 = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface2, kComputedIface1);
+  const auto adj13 = createComputedTestAdjacency(
+      kComputedNode3, kComputedIface3, kComputedIface4);
+  const auto db1 =
+      createAdjDb(kComputedNode1, {adj13, adj12}, kComputedNodeLabel);
+  const auto db2 = createAdjDb(kComputedNode2, {adj21}, kComputedNodeLabel);
+  const auto db3 = createAdjDb(kComputedNode3, {}, kComputedNodeLabel);
+  LinkState state{kTestingAreaName, kComputedNode1};
+  EXPECT_THAT(state.getAdjacencyDatabasesComputed(), IsEmpty());
+  state.updateAdjacencyDatabase(db1, kTestingAreaName);
+  state.updateAdjacencyDatabase(db2, kTestingAreaName);
+  state.updateAdjacencyDatabase(db3, kTestingAreaName);
+
+  auto expectedDb1 = db1;
+  expectedDb1.adjacencies() = {adj12};
+  EXPECT_THAT(
+      state.getAdjacencyDatabasesComputed(),
+      UnorderedElementsAre(expectedDb1, db2, db3));
+  EXPECT_EQ(db1, state.getAdjacencyDatabases().at(kComputedNode1));
+
+  state.deleteAdjacencyDatabase(kComputedNode2);
+  expectedDb1.adjacencies()->clear();
+  EXPECT_THAT(
+      state.getAdjacencyDatabasesComputed(),
+      UnorderedElementsAre(expectedDb1, db3));
+}
+
+TEST(LinkStateTest, ComputedAdjacenciesRequireExactParallelInterfacePair) {
+  const auto matching = createComputedTestAdjacency(
+      kComputedNode2, kComputedIface1, kComputedIface2);
+  const auto matchingParallel = createComputedTestAdjacency(
+      kComputedNode2, kComputedIface3, kComputedIface4);
+  auto wrongRemote = matching;
+  wrongRemote.otherIfName() = kComputedIface4;
+  auto wrongLocal = matching;
+  wrongLocal.ifName() = kComputedIface3;
+  auto wrongPeer = matching;
+  wrongPeer.otherNodeName() = kComputedNode3;
+  const auto reverse = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface2, kComputedIface1);
+  const auto reverseParallel = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface4, kComputedIface3);
+  const auto db1 = createAdjDb(
+      kComputedNode1,
+      {wrongRemote, matchingParallel, wrongLocal, wrongPeer, matching},
+      kComputedNodeLabel);
+  const auto db2 = createAdjDb(
+      kComputedNode2, {reverse, reverseParallel}, kComputedNodeLabel);
+  LinkState state{kTestingAreaName, kComputedNode1};
+  state.updateAdjacencyDatabase(db1, kTestingAreaName);
+  state.updateAdjacencyDatabase(db2, kTestingAreaName);
+
+  auto expectedDb1 = db1;
+  expectedDb1.adjacencies() = {matchingParallel, matching};
+  EXPECT_THAT(
+      state.getAdjacencyDatabasesComputed(),
+      UnorderedElementsAre(expectedDb1, db2));
+}
+
+TEST(LinkStateTest, ComputedAdjacenciesPreserveRecordsAndOrder) {
+  constexpr int32_t kLinkMetricIncrement = 73;
+  constexpr int32_t kNodeMetricIncrement = 29;
+  constexpr int64_t kTimestamp = 123456;
+  const auto adj12 = createComputedTestAdjacency(
+      kComputedNode2, kComputedIface1, kComputedIface2);
+  auto adj13 = createComputedTestAdjacency(
+      kComputedNode3, kComputedIface3, kComputedIface4);
+  adj13.linkMetricIncrementVal() = kLinkMetricIncrement;
+  adj13.timestamp() = kTimestamp;
+  adj13.nextHopV6()->ifName() = kComputedIface3;
+  const auto adj21 = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface2, kComputedIface1);
+  const auto adj31 = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface4, kComputedIface3);
+  auto db1 = createAdjDb(kComputedNode1, {adj13, adj12}, kComputedNodeLabel);
+  db1.nodeMetricIncrementVal() = kNodeMetricIncrement;
+  db1.isOverloaded() = true;
+  thrift::PerfEvent event;
+  event.nodeName() = kComputedNode1;
+  event.eventDescr() = "computed projection fixture";
+  event.unixTs() = kTimestamp;
+  thrift::PerfEvents events;
+  events.events() = {event};
+  db1.perfEvents() = events;
+  thrift::LinkStatus status;
+  status.status() = thrift::LinkStatusEnum::UP;
+  status.unixTs() = kTimestamp;
+  thrift::LinkStatusRecords records;
+  records.linkStatusMap() = {{kComputedIface3, status}};
+  db1.linkStatusRecords() = records;
+  const auto db2 = createAdjDb(kComputedNode2, {adj21}, kComputedNodeLabel);
+  const auto db3 = createAdjDb(kComputedNode3, {adj31}, kComputedNodeLabel);
+  LinkState state{kTestingAreaName, kComputedNode1};
+  state.updateAdjacencyDatabase(db1, kTestingAreaName);
+  state.updateAdjacencyDatabase(db2, kTestingAreaName);
+  state.updateAdjacencyDatabase(db3, kTestingAreaName);
+
+  EXPECT_THAT(
+      state.getAdjacencyDatabasesComputed(),
+      UnorderedElementsAre(db1, db2, db3));
+}
+
+TEST(LinkStateTest, ComputedAdjacenciesPreserveFabricAlias) {
+  const std::string fabricName{"bbf01.dfw1"};
+  const std::string leafName{"bbf01-ld001.dfw1"};
+  const std::string externalName{"eb01.rva1"};
+  thrift::FabricConfig thriftCfg;
+  thriftCfg.fabric_name() = fabricName;
+  thriftCfg.fabric_leaf_regexes() = {"bbf01-ld\\d{3}\\.dfw1"};
+  thriftCfg.fabric_spine_regexes() = {"bbf01-sp\\d{3}\\.dfw1"};
+  thriftCfg.fabric_control_regexes() = {"bbf01-lc\\d{3}\\.dfw1"};
+  FabricConfig fabricCfg(thriftCfg);
+  messaging::ReplicateQueue<KeyValueRequest> kvRequestQueue;
+  LinkState state{kTestingAreaName, externalName};
+  state.addFabricHelper(fabricCfg, externalName, kvRequestQueue);
+  auto leafToExternal = createComputedTestAdjacency(
+      externalName, kComputedIface1, kComputedIface2);
+  leafToExternal.isOverloaded() = true;
+  const auto externalToFabric =
+      createComputedTestAdjacency(fabricName, kComputedIface2, kComputedIface1);
+  const auto leafDb =
+      createAdjDb(leafName, {leafToExternal}, kComputedNodeLabel);
+  const auto externalDb =
+      createAdjDb(externalName, {externalToFabric}, kComputedNodeLabel);
+  state.updateAdjacencyDatabase(leafDb, kTestingAreaName);
+  state.updateAdjacencyDatabase(externalDb, kTestingAreaName);
+  ASSERT_THAT(state.linksFromNode(externalName), SizeIs(1));
+  EXPECT_EQ(
+      leafName,
+      (*state.linksFromNode(externalName).begin())
+          ->getOtherNodeName(externalName));
+
+  auto expectedExternalDb = externalDb;
+  expectedExternalDb.adjacencies()->front().isOverloaded() = true;
+  EXPECT_THAT(
+      state.getAdjacencyDatabasesComputed(),
+      UnorderedElementsAre(leafDb, expectedExternalDb));
+  EXPECT_EQ(externalDb, state.getAdjacencyDatabases().at(externalName));
+}
+
+TEST(LinkStateTest, ComputedAdjacenciesPropagateLocalOrPeerOverload) {
+  const auto unaffected = createComputedTestAdjacency(
+      kComputedNode3, kComputedIface3, kComputedIface4);
+  const auto unaffectedReverse = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface4, kComputedIface3);
+  const auto db3 =
+      createAdjDb(kComputedNode3, {unaffectedReverse}, kComputedNodeLabel);
+  LinkState state{kTestingAreaName, kComputedNode1};
+  state.updateAdjacencyDatabase(db3, kTestingAreaName);
+  for (const bool localOverloaded : {false, true}) {
+    for (const bool peerOverloaded : {false, true}) {
+      SCOPED_TRACE(
+          fmt::format(
+              "localOverloaded={}, peerOverloaded={}",
+              localOverloaded,
+              peerOverloaded));
+      auto local = createComputedTestAdjacency(
+          kComputedNode2, kComputedIface1, kComputedIface2);
+      local.isOverloaded() = localOverloaded;
+      auto peer = createComputedTestAdjacency(
+          kComputedNode1, kComputedIface2, kComputedIface1);
+      peer.isOverloaded() = peerOverloaded;
+      const auto db1 =
+          createAdjDb(kComputedNode1, {local, unaffected}, kComputedNodeLabel);
+      const auto db2 = createAdjDb(kComputedNode2, {peer}, kComputedNodeLabel);
+      state.updateAdjacencyDatabase(db1, kTestingAreaName);
+      state.updateAdjacencyDatabase(db2, kTestingAreaName);
+
+      auto expectedDb1 = db1;
+      auto expectedDb2 = db2;
+      expectedDb1.adjacencies()->front().isOverloaded() =
+          localOverloaded || peerOverloaded;
+      expectedDb2.adjacencies()->front().isOverloaded() =
+          localOverloaded || peerOverloaded;
+      EXPECT_THAT(
+          state.getAdjacencyDatabasesComputed(),
+          UnorderedElementsAre(expectedDb1, expectedDb2, db3));
+      EXPECT_EQ(db1, state.getAdjacencyDatabases().at(kComputedNode1));
+      EXPECT_EQ(db2, state.getAdjacencyDatabases().at(kComputedNode2));
+    }
+  }
+}
+
+TEST(LinkStateTest, ComputedAdjacenciesRetainUnusableLinksWithoutOverload) {
+  auto adj12 = createComputedTestAdjacency(
+      kComputedNode2, kComputedIface1, kComputedIface2);
+  adj12.adjOnlyUsedByOtherNode() = true;
+  const auto adj21 = createComputedTestAdjacency(
+      kComputedNode1, kComputedIface2, kComputedIface1);
+  const auto db1 = createAdjDb(kComputedNode1, {adj12}, kComputedNodeLabel);
+  const auto db2 = createAdjDb(kComputedNode2, {adj21}, kComputedNodeLabel);
+  LinkState state{kTestingAreaName, kComputedNode3};
+  state.updateAdjacencyDatabase(db1, kTestingAreaName);
+  state.updateAdjacencyDatabase(db2, kTestingAreaName);
+  ASSERT_THAT(state.linksFromNode(kComputedNode1), SizeIs(1));
+  const auto& link = *state.linksFromNode(kComputedNode1).begin();
+  EXPECT_FALSE(link->getUsability());
+  EXPECT_FALSE(link->isUp());
+  EXPECT_FALSE(link->getOverloadFromNode(kComputedNode1));
+  EXPECT_FALSE(link->getOverloadFromNode(kComputedNode2));
+
+  EXPECT_THAT(
+      state.getAdjacencyDatabasesComputed(), UnorderedElementsAre(db1, db2));
+}
+
 TEST(LinkTest, BasicOperation) {
   std::string n1 = "node1";
   auto adj1 =
