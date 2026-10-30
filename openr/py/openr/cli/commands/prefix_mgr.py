@@ -180,6 +180,7 @@ class OriginatedRoutesCmd(PrefixMgrCmd):
                 installed = prefix_entry.installed
 
             rows.append(
+                # pyrefly: ignore[invalid-argument]
                 f"{prefix_entry.prefix.prefix:<36} "
                 f"{str(tag[0]):>15} "
                 f"{len(prefix_entry.supporting_prefixes):>6} "

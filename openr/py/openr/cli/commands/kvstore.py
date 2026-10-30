@@ -217,6 +217,7 @@ class KvStoreCmdBase(OpenrCtrlCmd):
                     key,
                     value.originatorId,
                     value.version,
+                    # pyrefly: ignore[invalid-argument]
                     f"{hash_offset}{value.hash:x}",
                     printing.sprint_bytes(kv_size),
                     area_str,
@@ -461,6 +462,7 @@ class NodesCmd(KvStoreWithInitAreaCmdBase):
 
         all_kv = Publication(keyVals=key_vals)
 
+        # pyrefly: ignore[unbound-name]
         self.print_kvstore_nodes(nodes, all_kv, host_id, node_area)
 
     def get_connected_nodes(self, adj_keys: Publication, node_id: str) -> set[str]:
