@@ -11,6 +11,7 @@
 #include <gtest/gtest.h>
 
 #include <folly/Random.h>
+#include <folly/String.h>
 #include <folly/container/F14Map.h>
 #include <folly/gen/Base.h>
 #include <folly/io/async/EventBase.h>
