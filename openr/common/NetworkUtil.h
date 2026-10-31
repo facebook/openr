@@ -8,8 +8,8 @@
 #pragma once
 
 #include <fmt/core.h>
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
+#include <folly/String.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>
 #include <thrift/lib/cpp2/Thrift.h>
 

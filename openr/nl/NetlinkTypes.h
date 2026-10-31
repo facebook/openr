@@ -7,9 +7,9 @@
 
 #pragma once
 
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
+#include <folly/String.h>
 
 #include <openr/if/gen-cpp2/Types_types.h>
 #include <thrift/lib/cpp/util/EnumUtils.h>

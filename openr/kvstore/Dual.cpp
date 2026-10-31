@@ -8,6 +8,7 @@
 #include <folly/container/F14Map.h>
 #include <folly/logging/xlog.h>
 
+#include <folly/String.h>
 #include <openr/kvstore/Dual.h>
 
 namespace openr {

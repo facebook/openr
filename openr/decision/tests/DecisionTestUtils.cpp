@@ -5,7 +5,6 @@
  * LICENSE file in the root directory of this source tree.
  */
 
-#include <folly/Format.h>
 #include <folly/logging/xlog.h>
 
 #include <openr/common/Util.h>
