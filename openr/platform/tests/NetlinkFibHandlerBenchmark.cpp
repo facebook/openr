@@ -12,7 +12,6 @@
 
 #include <folly/Benchmark.h>
 #include <folly/Exception.h>
-#include <folly/Format.h>
 #include <folly/IPAddress.h>
 #include <folly/MacAddress.h>
 #include <folly/Random.h>
