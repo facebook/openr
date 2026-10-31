@@ -11,6 +11,7 @@
 #include <folly/container/F14Set.h>
 #include <stack>
 
+#include <fmt/format.h>
 #include <openr/if/gen-cpp2/Dual_types.h>
 
 namespace openr {

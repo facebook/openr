@@ -7,6 +7,7 @@
 
 #include <folly/logging/xlog.h>
 
+#include <fmt/format.h>
 #include <openr/common/Util.h>
 #include <openr/decision/tests/DecisionTestUtils.h>
 #include <openr/if/gen-cpp2/Types_types.h>

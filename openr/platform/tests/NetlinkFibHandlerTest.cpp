@@ -13,6 +13,7 @@
 #include <glog/logging.h>
 #include <gtest/gtest.h>
 
+#include <fmt/format.h>
 #include <openr/common/LsdbUtil.h>
 #include <openr/common/NetworkUtil.h>
 #include <openr/if/gen-cpp2/Platform_constants.h>
